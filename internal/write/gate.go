@@ -67,6 +67,9 @@ func gatePackets(project model.ProjectID, snapshot reduce.Snapshot, packets []mo
 			if err := gateCloseAuthority(event, sources); err != nil {
 				return nil, err
 			}
+			if err := gateSupersedeCanonical(snapshot, event); err != nil {
+				return nil, err
+			}
 			if err := gateRejectedMembers(snapshot, event, providers); err != nil {
 				return nil, err
 			}

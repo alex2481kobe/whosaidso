@@ -3,9 +3,10 @@ package write
 // U12 operations the gate enables — claim/instrument revision, trust withdrawal,
 // criterion fixing, invocation start/seal, proof, task closure, decision
 // open/revise/dispose and correction — and the post-replay checks that need
-// artifact bytes, ledger times or pending intake live here. Operations that stay
-// disabled (supersession, review, disposal) and the admission transaction
-// itself do not. Proof family evaluation lives in gate_family.go.
+// artifact bytes, ledger times or pending intake live here. Supersession and
+// artifact disposal rules live in gate_supersede.go; review stays disabled; the
+// admission transaction itself does not live here. Proof family evaluation
+// lives in gate_family.go.
 
 import (
 	"context"
@@ -34,6 +35,8 @@ func gateProofOperation(event model.TypedEvent, author model.Actor) (*model.Prov
 			return nil, admissionFault("authority-unavailable", "authority.actor", "a disposition must name the authority that ruled")
 		}
 		return nil, nil
+	case *model.Supersede, *model.ArtifactDispose:
+		return nil, gateOwnerActOperation(event)
 	case *model.TaskClose:
 		// Authority is checked against its durable carrier in gateCloseAuthority;
 		// whether the closure takes effect is checked after replay.
@@ -122,6 +125,8 @@ func gateProofArtifacts(event model.TypedEvent) []model.ArtifactRef {
 		return gateAuthorityArtifacts(event, e.Authority)
 	case *model.DecisionDispose:
 		return gateAuthorityArtifacts(event, e.Authority)
+	case *model.Supersede, *model.ArtifactDispose:
+		return gateOwnerActArtifacts(event)
 	}
 	return nil
 }

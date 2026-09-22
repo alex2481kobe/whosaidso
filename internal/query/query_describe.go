@@ -34,6 +34,7 @@ func describe(s reduce.Snapshot, fact reduce.Record) Record {
 		}
 	}
 	ref := model.RecordRef{Project: fact.Key.Project, RecordID: fact.Key.ID, Revision: fact.Key.Revision}
+	r.Supersessions = supersessionsOf(s, ref)
 	// No evidence bytes or real-world scope were checked by this read slice.
 	support, _ := s.Support(ref, reduce.SupportContext{EvidenceAvailable: reduce.TruthUnknown, ScopeApplicable: reduce.TruthUnknown})
 	if p, ok := s.Claim(id); ok {

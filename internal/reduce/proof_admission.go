@@ -147,7 +147,7 @@ func (s *state) supersede(b model.Bundle, idx int, e *model.Supersede) error {
 	if e.Prior == e.Replacement || (ok && prior.Kind != replacement.Kind) {
 		return faultAt(CodeInvalidTransition, b.Sequence, idx, "replacement", "supersession needs a different record revision of the same kind")
 	}
-	return nil
+	return s.supersedeRules(b, idx, e)
 }
 
 func matchesInvocationIntent(inv Invocation) bool {

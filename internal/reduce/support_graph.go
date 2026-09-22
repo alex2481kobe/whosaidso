@@ -219,3 +219,28 @@ func (s *state) supportLosses(target supportNode) []SupportLossFact {
 	}
 	return out
 }
+
+// DisposalLoss lists every admitted record revision whose support the disposal
+// removes: records whose own events cite the artifact, and everything that
+// depends on them. It ignores the disposal's own support_loss list, so that
+// list can be checked against it rather than trusted.
+func (s Snapshot) DisposalLoss(e model.ArtifactDispose) []model.RecordRef {
+	seen := map[supportNode]bool{}
+	cited := e
+	cited.SupportLoss = nil
+	queue := s.inner().disposalSeeds(&cited)
+	out := []model.RecordRef{}
+	for len(queue) > 0 {
+		node := queue[0]
+		queue = queue[1:]
+		if seen[node] {
+			continue
+		}
+		seen[node] = true
+		if node.kind == "record" {
+			out = append(out, model.RecordRef{Project: node.record.Project, RecordID: node.record.ID, Revision: node.record.Revision})
+		}
+		queue = append(queue, s.inner().dependents(node)...)
+	}
+	return out
+}

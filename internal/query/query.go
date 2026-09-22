@@ -78,6 +78,7 @@ type Record struct {
 	Decision       *reduce.DecisionProjection   `json:"decision,omitempty"`
 	Instrument     *reduce.InstrumentProjection `json:"instrument,omitempty"`
 	CurrentSupport reduce.Truth                 `json:"current_support,omitempty"`
+	Supersessions  []reduce.Supersession        `json:"supersessions"` // either side; the superseded record stays shown
 	Sources        []reduce.Source              `json:"sources"`
 }
 
