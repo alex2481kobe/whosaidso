@@ -237,6 +237,9 @@ func gateReference(snapshot reduce.Snapshot, ref model.Reference) (gateKey, bool
 	return gateKey{}, false
 }
 
+// gateProposal replays the proposal onto the admitted prefix. Start rules
+// (current revision, READY with BLOCKED winning, one owner per attempt id) are
+// the reducer's, so admission and replay share one implementation.
 func gateProposal(base reduce.Snapshot, project model.ProjectID, command model.ID, digest model.Digest, proposal model.Bundle) (reduce.Snapshot, error) {
 	// Validation only: Transact assigns the real envelope to the proposal.
 	validation := proposal
@@ -247,38 +250,5 @@ func gateProposal(base reduce.Snapshot, project model.ProjectID, command model.I
 	validation.Sequence = base.Watermark().Sequence + 1
 	validation.Predecessor = base.Watermark().CommandID
 	validation.RecordedAt = time.Unix(0, 0).UTC()
-	for i, raw := range proposal.Events {
-		event, err := model.DecodeEvent(raw)
-		if err != nil {
-			return reduce.Snapshot{}, err
-		}
-		start, ok := event.(*model.TaskStart)
-		if !ok {
-			continue
-		}
-		current := base
-		if i > 0 {
-			validation.Events = proposal.Events[:i]
-			current, err = reduce.Apply(base, validation)
-			if err != nil {
-				return reduce.Snapshot{}, err
-			}
-		}
-		who := reduce.Ident{Project: start.Task.Project, ID: start.Task.RecordID}
-		if revision, exists := current.CurrentRevision(who); exists && revision != start.Task.Revision {
-			return reduce.Snapshot{}, &reduce.Conflict{Target: start.Task, Expected: start.Task.Revision, Actual: revision, Sequence: validation.Sequence, EventIndex: i, Path: "task"}
-		}
-		if task, exists := current.Task(who); exists && task.Status != reduce.StatusReady {
-			return reduce.Snapshot{}, admissionFault("invalid-transition", "task.start", fmt.Sprintf("task is %s and cannot start until it is READY", task.Status))
-		}
-		for _, task := range current.Tasks() {
-			for _, attempt := range task.Attempts {
-				if attempt.Key.Attempt == start.AttemptID {
-					return reduce.Snapshot{}, admissionFault("conflict", "attempt_id", "attempt identity already belongs to a task")
-				}
-			}
-		}
-	}
-	validation.Events = proposal.Events
 	return reduce.Apply(base, validation)
 }

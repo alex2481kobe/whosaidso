@@ -264,3 +264,24 @@ func TestProofCannotBorrowAnotherRevisionsObservations(t *testing.T) {
 		t.Fatalf("revision 2 borrowed revision 1's observation: %+v", p.Status)
 	}
 }
+
+// TestAdmissionChecksInvocationConfigNames: a hand-captured start or seal
+// naming a knob the exact instrument revision never declared is refused at
+// admission, exactly as datum run refuses it before launch.
+func TestAdmissionChecksInvocationConfigNames(t *testing.T) {
+	w := newProofWorld(t, true)
+	_, start, seal := w.run(w.criterion, proofPass)
+	w.f.accept(start, seal) // control: declared (empty) surface, clean envelope
+
+	value := "fast"
+	undeclared := map[string]model.Scalar{"mode": {Type: "string", String: &value}}
+	env := w.envelope(w.criterion)
+	env.ConfigRequested = undeclared
+	w.f.refuse(w.f.request(w.f.capture(nil, &model.InvocationStart{Envelope: env})), "invalid-field")
+
+	env = w.envelope(w.criterion)
+	sealed := proofSealed(env, proofPass)
+	sealed.Envelope.ConfigEffective = proofKnown(map[string]model.Availability[model.Scalar]{"mode": proofKnown(undeclared["mode"])})
+	w.f.accept(w.f.capture(nil, &model.InvocationStart{Envelope: env}))
+	w.f.refuse(w.f.request(w.f.capture([][]byte{[]byte(proofPass)}, sealed)), "invalid-field")
+}

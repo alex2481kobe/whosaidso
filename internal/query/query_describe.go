@@ -19,7 +19,10 @@ func actor(a model.Actor) any {
 func describe(s reduce.Snapshot, fact reduce.Record) Record {
 	id := reduce.Ident{Project: fact.Key.Project, ID: fact.Key.ID}
 	r := Record{Fact: fact, Author: s.EventAuthor(fact.Origin), Sources: []reduce.Source{}}
-	if p, ok := s.Task(id); ok {
+	ref := model.RecordRef{Project: fact.Key.Project, RecordID: fact.Key.ID, Revision: fact.Key.Revision}
+	// The task view is the described revision's, so a closure node for an
+	// exact older revision never shows the current revision's prerequisites.
+	if p, ok := s.TaskAt(ref); ok {
 		outcome := string(p.Outcome)
 		if outcome == "" {
 			outcome = "UNKNOWN"
@@ -33,7 +36,6 @@ func describe(s reduce.Snapshot, fact reduce.Record) Record {
 			}
 		}
 	}
-	ref := model.RecordRef{Project: fact.Key.Project, RecordID: fact.Key.ID, Revision: fact.Key.Revision}
 	r.Supersessions = supersessionsOf(s, ref)
 	// No evidence bytes or real-world scope were checked by this read slice.
 	support, _ := s.Support(ref, reduce.SupportContext{EvidenceAvailable: reduce.TruthUnknown, ScopeApplicable: reduce.TruthUnknown})

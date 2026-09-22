@@ -186,8 +186,14 @@ func gateProofs(ctx context.Context, project store.Project, prefix []model.Bundl
 				if err := gateCriterionFrozen(prefix, before, project.ID, e.Envelope, packet.CapturedAt); err != nil {
 					return err
 				}
+				if err := gateInvocationConfig(after, e.Envelope); err != nil {
+					return err
+				}
 			case *model.InvocationSeal:
 				if err := gatePendingRealSeal(project, after, e.Envelope); err != nil {
+					return err
+				}
+				if err := gateInvocationConfig(after, e.Envelope); err != nil {
 					return err
 				}
 			case *model.ProofAdmit:
@@ -202,6 +208,17 @@ func gateProofs(ctx context.Context, project store.Project, prefix []model.Bundl
 		}
 	}
 	return nil
+}
+
+// gateInvocationConfig checks requested and effective config names against
+// the exact instrument revision whenever the ledger resolves it, so an
+// envelope captured by hand cannot skip the check datum run makes.
+func gateInvocationConfig(after reduce.Snapshot, env model.InvocationEnvelope) error {
+	instrument, ok := after.InstrumentAt(env.InstrumentRef)
+	if !ok {
+		return nil // cross-project or unresolved: the reference check owns that answer
+	}
+	return model.ValidateInvocationConfig(env, *instrument.Spec)
 }
 
 // gateCriterionFrozen: a run may name a criterion only if that criterion was

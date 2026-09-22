@@ -136,3 +136,25 @@ func TestClosureLimitCutsOnlyOptionalTopicRefs(t *testing.T) {
 		}
 	}
 }
+
+// TestClosureTaskNodeIsTheExactRevision: a consumer naming task 5 revision 1
+// must see revision 1's own prerequisites, not those of the amended revision 2.
+func TestClosureTaskNodeIsTheExactRevision(t *testing.T) {
+	p := testProject(t)
+	appendEvents(t, p, 100, testTask(6))
+	appendEvents(t, p, 101, taskWith(5, func(s *model.TaskSpec) {
+		s.Prerequisites = []model.Prerequisite{{Kind: "task-success", Target: testRef(6, 1), WaiverPolicy: "forbid"}}
+	}))
+	appendEvents(t, p, 102, &model.TaskAmend{Target: testRef(5, 1), ExpectedRevision: 1, Provenance: prov("author"),
+		Replacement: testTask(5).Spec})
+	appendEvents(t, p, 103, taskWith(7, func(s *model.TaskSpec) { s.ConstraintRefs = []model.RecordRef{testRef(5, 1)} }))
+	a := presetAnswer(t, p, Request{Command: "context", ID: testID(7)})
+	n, ok := mandatoryRefs(*a.Preset.Closure)[testRef(5, 1)]
+	if !ok || n.Task == nil || n.Current != 2 {
+		t.Fatalf("control: the constrained task must resolve with current revision 2, got %+v", n)
+	}
+	if n.Task.Revision != 1 || len(n.Task.Prerequisites) != 1 {
+		t.Fatalf("closure node for revision 1 shows revision %d with %d prerequisites; it described the current revision",
+			n.Task.Revision, len(n.Task.Prerequisites))
+	}
+}
