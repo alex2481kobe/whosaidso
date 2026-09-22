@@ -88,3 +88,71 @@ func validateCommit(format, commit, p string) error {
 	}
 	return nil
 }
+
+func lowerHex(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
+// ValidateArtifactRef checks the tagged-locator shape and every pin's path
+// safety, including corroboration, using the same rules as the schema walk.
+func ValidateArtifactRef(a ArtifactRef, path string) error {
+	switch a.Kind {
+	case "git":
+		if a.Git == nil {
+			return fault("invalid-field", path+".git", `kind "git" requires a git pin`)
+		}
+	case "content":
+		if a.Content == nil {
+			return fault("invalid-field", path+".content", `kind "content" requires a content pin`)
+		}
+	default:
+		return fault("invalid-field", path+".kind", `kind must be "git" or "content"`)
+	}
+	if a.Git != nil {
+		want := 40
+		if a.Git.ObjectFormat == "sha256" {
+			want = 64
+		} else if a.Git.ObjectFormat != "sha1" {
+			return fault("invalid-field", path+".git.object_format", `object format must be "sha1" or "sha256"`)
+		}
+		if len(a.Git.Commit) != want || !lowerHex(a.Git.Commit) {
+			// Length alone let "gggg...g" through - a true measurement of the
+			// wrong property. Found by lane E.
+			return fault("invalid-field", path+".git.commit",
+				fmt.Sprintf("commit must be %d lowercase hex characters for %s", want, a.Git.ObjectFormat))
+		}
+		if err := relativePath(a.Git.Path, path+".git.path"); err != nil {
+			return err
+		}
+	}
+	if a.Content != nil {
+		if !ValidDigest(a.Content.SHA256) {
+			return fault("invalid-field", path+".content.sha256", "not lowercase sha-256 hex")
+		}
+		if a.Content.MediaType == "" {
+			return fault("invalid-field", path+".content.media_type", "empty media type")
+		}
+		for i, locator := range a.Content.Locators {
+			if err := relativePath(locator.Path, fmt.Sprintf("%s.content.locators[%d].path", path, i)); err != nil {
+				return err
+			}
+		}
+	}
+	switch a.Selector.Kind {
+	case "whole":
+		if a.Selector.Pointer != "" {
+			return fault("invalid-field", path+".selector.pointer", `"whole" takes no pointer`)
+		}
+	case "json-pointer":
+		// The empty pointer is the JSON root and is legal.
+	default:
+		return fault("invalid-field", path+".selector.kind", `selector must be "whole" or "json-pointer"`)
+	}
+	return nil
+}

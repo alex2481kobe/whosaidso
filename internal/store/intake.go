@@ -431,7 +431,16 @@ func checkIntakePath(path string, directory bool) error {
 		return storeFault("intake-corrupt", path, "expected a real directory or regular file, never a symlink")
 	}
 	if info.Mode().Perm()&0077 != 0 {
-		return storeFault("insecure-permissions", path, "intake requires owner-only access")
+		// Reads never mutate published packets. Permission drift is recoverable
+		// without deleting, rewriting or recapturing their immutable bytes.
+		mode := "0600"
+		if directory {
+			mode = "0700"
+		}
+		quotedPath := "'" + strings.ReplaceAll(path, "'", "'\\''") + "'"
+		return storeFault("insecure-permissions", path,
+			"intake requires owner-only access; restore permissions with chmod "+mode+" "+quotedPath+
+				"; then retry the identical read or write; do not delete or recapture the packet")
 	}
 	return nil
 }

@@ -1,9 +1,46 @@
 package model
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
+
+func TestDecodeBundleWritableSequence(t *testing.T) {
+	const id ID = "01K5V8Q2220000000000000000"
+	for _, tc := range []struct {
+		sequence uint64
+		bound    string
+	}{
+		{0, "starts at 1"}, {1, ""}, {99999999, ""},
+		{100000000, "exceeds"}, {^uint64(0), "exceeds"},
+	} {
+		t.Run(fmt.Sprint(tc.sequence), func(t *testing.T) {
+			pred := ""
+			if tc.sequence > 1 {
+				pred = `,"predecessor":"01K5V8Q1110000000000000000"`
+			}
+			raw := fmt.Sprintf(`{"version":1,"project":"p","sequence":%d,"command_id":%q,
+				"request_digest":%q,"admitter":{"id":"a"},"recorded_at":"2026-09-22T00:00:00Z",
+				"packets":[],"events":[{"type":"task.create","data":{}}]%s}`,
+				tc.sequence, id, HashBytes([]byte("request")), pred)
+			_, decodeErr := DecodeBundle([]byte(raw))
+			_, nameErr := BundleName(tc.sequence, id)
+			for site, err := range map[string]error{"decode": decodeErr, "name": nameErr} {
+				if tc.bound == "" {
+					if err != nil {
+						t.Errorf("%s rejected writable sequence: %v", site, err)
+					}
+					continue
+				}
+				f, ok := err.(*Fault)
+				if !ok || f.Code != "invalid-field" || f.Path != "bundle.sequence" || !strings.Contains(f.Detail, tc.bound) {
+					t.Errorf("%s must identify crossed bound %q at bundle.sequence: %v", site, tc.bound, err)
+				}
+			}
+		})
+	}
+}
 
 // validPacketJSON builds a packet whose only defect is whatever the caller
 // injects. Every refusal case below starts from bytes that are known to pass.

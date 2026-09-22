@@ -928,3 +928,110 @@ func TestResolverNeedsAnAbsoluteRoot(t *testing.T) {
 	_, err := NewResolver("relative/root").Resolve(context.Background(), ref)
 	wantFault(t, err, "invalid-field")
 }
+
+func TestSelectMetadataOmissionAndUnavailabilityStayDistinct(t *testing.T) {
+	for _, field := range []string{"unit", "population", "denominator"} {
+		for _, tc := range []struct {
+			name, declaration string
+			parent            bool
+			state             model.AvailabilityState
+		}{
+			{"omitted", "", false, ""},
+			{"inherited", "", true, model.Known},
+			{"known", `"child"`, true, model.Known},
+			{"null blocks inheritance", `null`, true, model.Unknown},
+			{"unknown blocks inheritance", `{"state":"unknown","reason":"not measured"}`, true, model.Unknown},
+			{"blank blocks inheritance", `""`, true, model.Unknown},
+		} {
+			t.Run(field+"/"+tc.name, func(t *testing.T) {
+				declaration, parent := "", ""
+				if tc.declaration != "" {
+					declaration = `,"` + field + `":` + tc.declaration
+				}
+				if tc.parent {
+					parent = `"` + field + `":"parent",`
+				}
+				body := `{` + parent + `"reading":{"value":1` + declaration + `}}`
+				read, err := Select(resolved(t, body), model.Selector{Kind: "json-pointer", Pointer: "/reading"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				got := map[string]model.Availability[string]{"unit": read.Unit, "population": read.Population, "denominator": read.Denominator}[field]
+				if got.State != tc.state {
+					t.Fatalf("metadata state: %+v, want %q", got, tc.state)
+				}
+				if tc.state == model.Known {
+					want := "parent"
+					if tc.declaration != "" {
+						want = "child"
+					}
+					if got.Value == nil || *got.Value != want {
+						t.Fatalf("metadata value: %+v, want %q", got, want)
+					}
+				} else if got.Value != nil || !strings.Contains(got.Reason, field) {
+					t.Fatalf("unobserved metadata lost its reason: %+v", got)
+				}
+			})
+		}
+	}
+}
+
+func TestSelectSiblingReadingIsNotInheritedMetadata(t *testing.T) {
+	for _, field := range []string{"unit", "population", "denominator"} {
+		for _, member := range []string{"value", "values"} {
+			for _, explicit := range []string{"", `,"` + field + `":null`, `,"` + field + `":{"state":"unknown","reason":"not measured"}`} {
+				body := `{"` + field + `":{"` + member + `":[]},"reading":{"value":1` + explicit + `}}`
+				read, err := Select(resolved(t, body), model.Selector{Kind: "json-pointer", Pointer: "/reading"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				got := map[string]model.Availability[string]{"unit": read.Unit, "population": read.Population, "denominator": read.Denominator}[field]
+				want := model.AvailabilityState("")
+				if explicit != "" {
+					want = model.Unknown
+				}
+				if got.State != want {
+					t.Fatalf("%s: got %+v, want %q", body, got, want)
+				}
+			}
+		}
+	}
+}
+
+func TestLFSPointerVersionLine(t *testing.T) {
+	const version = "version https://git-lfs.github.com/spec/v1"
+	digest := model.HashBytes([]byte("payload"))
+	for _, tc := range []struct {
+		name, first, newline string
+		pointer              bool
+	}{
+		{"actual LF", version, "\n", true},
+		{"actual CRLF", version, "\r\n", true},
+		{"example suffix", version + "-example", "\n", false},
+		{"version ten", version + "0", "\n", false},
+		{"trailing text", version + " example", "\n", false},
+		{"embedded version", "notes: " + version, "\n", false},
+		{"later version line", "notes\n" + version, "\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := tc.first + tc.newline + "oid sha256:" + string(digest) + tc.newline + "size 7" + tc.newline
+			for _, store := range []bool{false, true} {
+				root := t.TempDir()
+				path := "out/result.txt"
+				if store {
+					path = DefaultArtifactDir + "/" + string(model.HashBytes([]byte(body)))
+				}
+				writeFile(t, root, path, body)
+				ref := contentRef(body, "text/plain", []string{"out/result.txt"}, "whole", "")
+				got, err := NewResolver(root).Resolve(context.Background(), ref)
+				if tc.pointer {
+					if err == nil || !strings.Contains(err.Error(), "LFS pointer") {
+						t.Fatalf("genuine pointer accepted (store=%v): %v", store, err)
+					}
+				} else if err != nil || string(got.Bytes) != body || got.LFSPointer {
+					t.Fatalf("ordinary text refused or changed (store=%v): %+v, %v", store, got, err)
+				}
+			}
+		})
+	}
+}

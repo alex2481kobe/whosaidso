@@ -308,6 +308,69 @@ func TestOwnerOnlyPermissions(t *testing.T) {
 	}
 }
 
+func TestIntakePermissionRecovery(t *testing.T) {
+	for _, target := range []string{"datum", "intake", "inbox", "packet", "blobs", "json", "blob"} {
+		t.Run(target, func(t *testing.T) {
+			p := intakeProject(t)
+			// Recovery commands must also work for homes containing shell syntax.
+			home := filepath.Join(os.Getenv("HOME"), "owner's $home")
+			if err := os.Mkdir(home, 0700); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("HOME", home)
+			t.Setenv("USERPROFILE", home)
+			ref := capturedControl(t, p, commandID(1), "source")
+			dir := packetDir(t, p, ref.CommandID)
+			jsonPath := filepath.Join(dir, "packet.json")
+			blobPath := filepath.Join(dir, "blobs", string(model.HashBytes([]byte("source"))))
+			paths := map[string]string{
+				"datum": filepath.Join(home, ".datum"), "intake": filepath.Join(home, ".datum", "intake"),
+				"inbox": filepath.Dir(dir), "packet": dir, "blobs": filepath.Join(dir, "blobs"),
+				"json": jsonPath, "blob": blobPath,
+			}
+			path := paths[target]
+			mode := os.FileMode(0700)
+			if target == "json" || target == "blob" {
+				mode = 0600
+			}
+			if err := os.Chmod(path, mode|0044); err != nil {
+				t.Fatal(err)
+			}
+			packets, err := ReadIntake(p, nil)
+			f, ok := err.(*model.Fault)
+			command := fmt.Sprintf("chmod %04o '%s'", mode, strings.ReplaceAll(path, "'", "'\\''"))
+			if !ok || f.Code != "insecure-permissions" || f.Path != path ||
+				!strings.Contains(f.Detail, command) || !strings.Contains(f.Detail, "retry") ||
+				!strings.Contains(f.Detail, "do not delete or recapture") || packets != nil {
+				t.Fatalf("must give exact recovery command %q and preserve packet: %v", command, err)
+			}
+			info, err := os.Stat(path)
+			if err != nil || info.Mode().Perm() != mode|0044 {
+				t.Fatalf("refused read changed permissions: %v", err)
+			}
+			if err := os.Chmod(path, mode); err != nil {
+				t.Fatal(err)
+			}
+			packets, err = ReadIntake(p, nil)
+			if err != nil || len(packets) != 1 || packets[0].CommandID != ref.CommandID {
+				t.Fatalf("recovered read: %+v, %v", packets, err)
+			}
+			data, err := os.ReadFile(jsonPath)
+			if err != nil || model.HashBytes(data) != ref.Digest {
+				t.Fatalf("packet bytes changed during recovery: %v", err)
+			}
+			data, err = os.ReadFile(blobPath)
+			if err != nil || string(data) != "source" {
+				t.Fatalf("blob bytes changed during recovery: %v", err)
+			}
+			retry, err := WriteIntake(context.Background(), p, requestFor(ref.CommandID, "source"))
+			if err != nil || retry != ref {
+				t.Fatalf("recovery changed durable identity: %+v, %v", retry, err)
+			}
+		})
+	}
+}
+
 func TestReadRefusesIncompleteOrAlteredPackets(t *testing.T) {
 	tests := []struct {
 		name string

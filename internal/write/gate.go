@@ -109,6 +109,10 @@ func gateOperation(event model.TypedEvent, author model.Actor) error {
 		provenance = &e.Provenance
 	case *model.TaskAmend:
 		provenance = &e.Provenance
+	case *model.ClaimAssert:
+		// ClaimSpec has no writable status: replay starts it UNMEASURED.
+		// Observation and proof operations remain outside this allowlist.
+		provenance = &e.Provenance
 	case *model.TaskStart, *model.BlockerHold, *model.BlockerClear:
 	default:
 		// In particular, packets cannot inject review.admit to disposition
@@ -124,6 +128,8 @@ func gateOperation(event model.TypedEvent, author model.Actor) error {
 func gateProvides(project model.ProjectID, event model.TypedEvent) (gateKey, bool) {
 	switch e := event.(type) {
 	case *model.TaskCreate:
+		return gateKey{Record: model.RecordRef{Project: project, RecordID: e.ID, Revision: 1}}, true
+	case *model.ClaimAssert:
 		return gateKey{Record: model.RecordRef{Project: project, RecordID: e.ID, Revision: 1}}, true
 	case *model.TaskAmend:
 		target := e.Target
@@ -221,6 +227,13 @@ func admissionArtifacts(event model.TypedEvent) []model.ArtifactRef {
 	case *model.TaskAmend:
 		refs = append(refs, e.Provenance.SourceRefs...)
 		spec = &e.Replacement
+	case *model.ClaimAssert:
+		refs = append(refs, e.Provenance.SourceRefs...)
+		for _, external := range e.Spec.ExternalRefs {
+			if external.SourceRef != nil {
+				refs = append(refs, *external.SourceRef)
+			}
+		}
 	case *model.BlockerClear:
 		refs = append(refs, e.ResolvingWitness)
 	}

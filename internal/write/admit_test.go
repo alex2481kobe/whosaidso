@@ -3,6 +3,7 @@ package write
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -412,5 +413,97 @@ func TestAdmissionLocatorMaterializedWithoutPayloadRewrite(t *testing.T) {
 	}
 	if got := f.snapshot().Sources()[0].Intake.SourceRef.Content.Locators; !reflect.DeepEqual(got, source.SourceRef.Content.Locators) {
 		t.Fatal("admission rewrote the authored locator")
+	}
+}
+
+func TestAdmissionClaimArtifacts(t *testing.T) {
+	for _, location := range []string{"provenance", "external"} {
+		for _, scenario := range []string{"intake", "locator", "missing", "wrong-length", "missing-selector", "traversal", "absolute-path", "symlink-store"} {
+			t.Run(location+"/"+scenario, func(t *testing.T) {
+				f := newAdmissionFixture(t)
+				claim := f.claim()
+				body := []byte(`{"finding":"needs measurement"}`)
+				ref := admissionContent(body)
+				ref.Content.MediaType = "application/json"
+				ref.Selector = model.Selector{Kind: "json-pointer", Pointer: "/finding"}
+				blobs := [][]byte{body}
+				code := ""
+				switch scenario {
+				case "locator":
+					blobs = nil
+					ref.Content.Locators = []model.Locator{{Path: "finding.json"}}
+					if err := os.WriteFile(filepath.Join(f.project.Root, "finding.json"), body, 0600); err != nil {
+						t.Fatal(err)
+					}
+				case "missing":
+					blobs, code = nil, "unavailable"
+				case "wrong-length":
+					ref.Content.Length++
+					code = "conflict"
+				case "missing-selector":
+					ref.Selector.Pointer = "/absent"
+					code = "unavailable"
+				case "traversal":
+					ref.Content.Locators = []model.Locator{{Path: "../finding.json"}}
+					code = "invalid-field"
+				case "absolute-path":
+					ref.Content.Locators = []model.Locator{{Path: filepath.Join(f.project.Root, "finding.json")}}
+					code = "invalid-field"
+				case "symlink-store":
+					dir := filepath.Join(f.project.Root, evidence.DefaultArtifactDir)
+					if err := os.MkdirAll(filepath.Dir(dir), 0755); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.Symlink(t.TempDir(), dir); err != nil {
+						t.Fatal(err)
+					}
+					code = "invalid-field"
+				}
+				if location == "provenance" {
+					claim.Provenance.SourceRefs = []model.ArtifactRef{ref}
+				} else {
+					claim.Spec.ExternalRefs = []model.ExternalReference{{Tag: "VERIFIED", Citation: "reported finding", SourceRef: &ref}}
+				}
+				if scenario == "traversal" || scenario == "absolute-path" {
+					// Capture also rejects unsafe paths; feed untrusted bytes
+					// directly to verify admission repeats that check.
+					data, err := json.Marshal(claim)
+					if err != nil {
+						t.Fatal(err)
+					}
+					packets, err := gatePackets(f.project.ID, reduce.Snapshot{}, []model.Packet{{Project: f.project.ID, CommandID: f.id(), Author: f.author, Events: []model.Event{{Type: claim.EventType(), Data: data}}}})
+					if admissionErrorCode(err) != code || len(packets) != 0 {
+						t.Fatalf("unsafe claim artifact path escaped admission: %v, %v", packets, err)
+					}
+					return
+				}
+				packet := f.capture(blobs, claim)
+				if code != "" {
+					f.refuse(f.request(packet), code)
+					return
+				}
+				stored, err := store.ReadIntake(f.project, []model.ID{packet.CommandID})
+				if err != nil {
+					t.Fatal(err)
+				}
+				bundle := f.accept(packet)
+				if !reflect.DeepEqual(bundle.Events[0], stored[0].Events[0]) {
+					t.Fatal("artifact handling rewrote the authored claim")
+				}
+				if scenario == "locator" {
+					if err := os.Remove(filepath.Join(f.project.Root, "finding.json")); err != nil {
+						t.Fatal(err)
+					}
+				}
+				resolved, err := evidence.NewResolver(f.project.Root).Resolve(context.Background(), ref)
+				if err != nil || !bytes.Equal(resolved.Bytes, body) || resolved.Origin != evidence.OriginArtifactStore {
+					t.Fatalf("claim artifact was not preserved: %+v, %v", resolved, err)
+				}
+				got, ok := f.snapshot().ClaimAt(f.ref(claim.ID, 1))
+				if !ok || got.Status != reduce.StatusUnmeasured {
+					t.Fatalf("a source artifact became an observation: %+v", got)
+				}
+			})
+		}
 	}
 }

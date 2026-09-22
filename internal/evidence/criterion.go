@@ -141,66 +141,27 @@ func evaluateMember(c model.CriterionFix, o Observation) MemberResult {
 	// A bare number is not a measurement. Whether it is comparable with the
 	// threshold depends entirely on what it is counted in, and that has to come
 	// from the artifact, not from the record that points at it.
-	if o.Result.Unit.State != model.Known {
+	if o.Result.Unit.State != model.Known || o.Result.Unit.Value == nil {
 		m.Reason = o.Result.Unit.Reason
 		return m
 	}
 	m.Unit = *o.Result.Unit.Value
-	if m.Unit != c.Expression.Unit {
-		m.Reason = fmt.Sprintf("unit mismatch: the criterion declares %s, the artifact states %s",
-			quote(c.Expression.Unit), quote(m.Unit))
-		return m
-	}
-	if s := o.Result.Population; s.State == model.Known && *s.Value != c.Expression.Population.Identity {
-		m.Reason = fmt.Sprintf("population mismatch: the criterion declares %s, the artifact states %s",
-			quote(c.Expression.Population.Identity), quote(*s.Value))
-		return m
-	}
-	if s := o.Result.Denominator; s.State == model.Known && *s.Value != c.Expression.Population.Denominator {
-		m.Reason = fmt.Sprintf("denominator mismatch: the criterion declares %s, the artifact states %s",
-			quote(c.Expression.Population.Denominator), quote(*s.Value))
-		return m
-	}
-	// The population selector is an independent reading. Its cardinality says
-	// nothing about whether it counts the population the criterion declares.
-	if s := o.Population.Population; s.State == model.Known && *s.Value != c.Expression.Population.Identity {
-		m.Reason = fmt.Sprintf("population mismatch: the criterion declares %s, the selected population states %s",
-			quote(c.Expression.Population.Identity), quote(*s.Value))
-		return m
-	}
-	if s := o.Population.Denominator; s.State == model.Known && *s.Value != c.Expression.Population.Denominator {
-		m.Reason = fmt.Sprintf("denominator mismatch: the criterion declares %s, the selected population states %s",
-			quote(c.Expression.Population.Denominator), quote(*s.Value))
-		return m
+	for _, selected := range []struct {
+		name string
+		read Reading
+	}{
+		{"result", o.Result}, {"selected population", o.Population},
+	} {
+		if why := metadataAgreement(c, selected.name, selected.read, selected.name == "result"); why != "" {
+			m.Reason = why
+			return m
+		}
 	}
 
 	values, ok := o.Result.Scalars()
 	if !ok {
 		m.Reason = "result: " + o.Result.Reason
 		return m
-	}
-	// Set metadata has been checked above. A member may omit a declaration,
-	// but an explicit unknown or conflicting declaration cannot inherit it.
-	for i, declared := range o.Result.MemberMetadata {
-		for _, field := range []struct{ name, expected string }{
-			{"unit", c.Expression.Unit},
-			{"population", c.Expression.Population.Identity},
-			{"denominator", c.Expression.Population.Denominator},
-		} {
-			s, present := declared[field.name]
-			if !present {
-				continue
-			}
-			if s.State != model.Known || s.Value == nil {
-				m.Reason = fmt.Sprintf("member %d %s is unavailable: %s", i, field.name, s.Reason)
-				return m
-			}
-			if *s.Value != field.expected {
-				m.Reason = fmt.Sprintf("member %d %s mismatch: the criterion declares %s, the member states %s",
-					i, field.name, quote(field.expected), quote(*s.Value))
-				return m
-			}
-		}
 	}
 	size, ok := o.Population.Size()
 	if !ok {
@@ -285,6 +246,48 @@ func evaluateMember(c model.CriterionFix, o Observation) MemberResult {
 		m.Reason = "no value satisfies the criterion"
 		return m
 	}
+}
+
+// metadataAgreement applies the same declaration rule to a reading and its
+// members: omission is allowed, but unavailability and disagreement are not.
+// Population members identify the denominator; their units need not be the
+// result's measurement unit.
+func metadataAgreement(c model.CriterionFix, label string, r Reading, result bool) string {
+	for _, field := range []struct {
+		name, expected string
+		declared       model.Availability[string]
+	}{
+		{"unit", c.Expression.Unit, r.Unit},
+		{"population", c.Expression.Population.Identity, r.Population},
+		{"denominator", c.Expression.Population.Denominator, r.Denominator},
+	} {
+		if field.name == "unit" && !result {
+			continue
+		}
+		check := func(at string, s model.Availability[string], present bool) string {
+			if !present {
+				return ""
+			}
+			if s.State != model.Known || s.Value == nil {
+				return fmt.Sprintf("%s %s is unavailable: %s", at, field.name, s.Reason)
+			}
+			if *s.Value != field.expected {
+				return fmt.Sprintf("%s %s mismatch: the criterion declares %s, the artifact states %s",
+					at, field.name, quote(field.expected), quote(*s.Value))
+			}
+			return ""
+		}
+		if why := check(label, field.declared, field.declared.State != ""); why != "" {
+			return why
+		}
+		for i, declared := range r.MemberMetadata {
+			s, present := declared[field.name]
+			if why := check(fmt.Sprintf("%s member %d", label, i), s, present); why != "" {
+				return why
+			}
+		}
+	}
+	return ""
 }
 
 func verdictOf(b bool) Verdict {

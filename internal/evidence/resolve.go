@@ -415,7 +415,8 @@ type lfsPointer struct {
 // LFS must not be mistaken for a pointer.
 func parseLFSPointer(b []byte) (lfsPointer, bool) {
 	const version = "version https://git-lfs.github.com/spec/v1"
-	if len(b) > 1024 || !bytes.HasPrefix(b, []byte(version)) {
+	first, _, _ := bytes.Cut(b, []byte("\n"))
+	if len(b) > 1024 || !bytes.Equal(bytes.TrimSuffix(first, []byte("\r")), []byte(version)) {
 		return lfsPointer{}, false
 	}
 	var p lfsPointer
@@ -581,6 +582,7 @@ const (
 // the artifact stated about it. Unit, Population and Denominator come from the
 // artifact, never from the record: a unit retyped next to a number is a second
 // copy that can drift from the measurement it labels.
+// Metadata's zero State means omitted; Unknown means declared unavailable.
 type Reading struct {
 	Artifact    model.Digest
 	Selector    model.Selector
@@ -758,10 +760,19 @@ func unknown(reason string) model.Availability[string] {
 // be evaluated against a number whose unit nobody recorded.
 func metaFrom(objs ...map[string]any) (unit, population, denominator model.Availability[string]) {
 	pick := func(key, missing string) model.Availability[string] {
-		for _, o := range objs {
+		for i, o := range objs {
 			raw, ok := o[key]
 			if !ok {
 				continue
+			}
+			if obj, ok := raw.(map[string]any); ok && i > 0 {
+				// A parent's sibling reading is not an inherited label.
+				_, value := obj["value"]
+				_, values := obj["values"]
+				_, state := obj["state"]
+				if !state && (value || values) {
+					continue
+				}
 			}
 			s, isText := raw.(string)
 			if !isText || strings.TrimSpace(s) == "" {
@@ -769,7 +780,7 @@ func metaFrom(objs ...map[string]any) (unit, population, denominator model.Avail
 			}
 			return known(s)
 		}
-		return unknown(missing)
+		return model.Availability[string]{Reason: missing}
 	}
 	return pick("unit", "the artifact does not state the unit of this reading"),
 		pick("population", "the artifact does not state which population this reading covers"),

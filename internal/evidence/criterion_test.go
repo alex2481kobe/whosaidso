@@ -626,3 +626,74 @@ func TestDescribeStatesTheReason(t *testing.T) {
 		t.Fatalf("describe: %q", ev.Describe())
 	}
 }
+
+func TestMetadataAgreementAcrossSelections(t *testing.T) {
+	for _, reducer := range []model.CriterionReducer{model.All, model.Any, model.Count} {
+		for _, location := range []string{"result", "result member", "population", "population member"} {
+			for _, field := range []struct{ name, matching string }{
+				{"population", "pose sweep"}, {"denominator", "poses"},
+			} {
+				for _, tc := range []struct {
+					name  string
+					value any
+					want  Verdict
+				}{
+					{"omitted", nil, True}, {"matching", field.matching, True},
+					{"conflicting", "other", Unknown}, {"blank", "", Unknown},
+					{"null", nil, Unknown},
+					{"explicit unknown", map[string]any{"state": "unknown", "reason": "not measured"}, Unknown},
+				} {
+					t.Run(string(reducer)+"/"+location+"/"+field.name+"/"+tc.name, func(t *testing.T) {
+						c := testCriterion(t)
+						c.Expression.Reducer = reducer
+						if reducer == model.Count {
+							c.Expression.Operator = model.Equal
+							c.Expression.Target = numberScalar(json.Number("2"))
+						}
+						member := map[string]any{"value": json.Number("0.01")}
+						document := map[string]any{
+							"unit": "mm", "population": "pose sweep", "denominator": "poses",
+							"values": []any{json.Number("0.02"), member},
+						}
+						declaration := document
+						if strings.HasSuffix(location, " member") {
+							declaration = member
+						}
+						delete(declaration, field.name)
+						if tc.name != "omitted" {
+							declaration[field.name] = tc.value
+						}
+						body, err := json.Marshal(document)
+						if err != nil {
+							t.Fatal(err)
+						}
+						read, err := Select(resolved(t, string(body)), model.Selector{Kind: "json-pointer"})
+						if err != nil {
+							t.Fatal(err)
+						}
+						o := passing(invocationA)
+						if strings.HasPrefix(location, "result") {
+							o.Result = read
+						} else {
+							o.Population = read
+						}
+						reason := ""
+						if tc.want == Unknown {
+							reason = field.name
+						}
+						ev := evaluate(t, c, o)
+						wantVerdict(t, ev, tc.want, reason)
+						if tc.want == Unknown {
+							if ev.Members[0].Compared != 0 {
+								t.Fatalf("compared before agreement: %+v", ev.Members[0])
+							}
+							counterexample := observation(invocationB, numbersRead("mm", "pose sweep", "poses", "0.9"), sizedPopulation(1))
+							wantVerdict(t, evaluate(t, c, o, counterexample), False, "")
+							wantVerdict(t, evaluate(t, c, counterexample, o), False, "")
+						}
+					})
+				}
+			}
+		}
+	}
+}

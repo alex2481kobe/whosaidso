@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"math/big"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -65,9 +66,18 @@ func (s Scalar) validate(p string) error {
 var decimalNumber = regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$`)
 
 // DecimalRat accepts JSON decimal number text, never fractions, hex or float64.
+// Explicit exponents are limited to +/-4096 before rational construction: this
+// allows thousands of decimal orders of magnitude without million-digit powers
+// being rebuilt for every member of an evaluation family.
 func DecimalRat(n json.Number) (*big.Rat, error) {
 	if !decimalNumber.MatchString(string(n)) {
 		return nil, invalid("number", "expected JSON decimal number text")
+	}
+	if i := strings.IndexAny(string(n), "eE"); i >= 0 {
+		exponent, err := strconv.ParseInt(string(n)[i+1:], 10, 32)
+		if err != nil || exponent < -4096 || exponent > 4096 {
+			return nil, invalid("number", "decimal exponent must be in [-4096, 4096]")
+		}
 	}
 	r, ok := new(big.Rat).SetString(string(n))
 	if !ok {

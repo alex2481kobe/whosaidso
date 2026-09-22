@@ -45,22 +45,24 @@ datum
 |          3 files, 270 lines (407 test), largest write.go at 150 -- uses model, query, store, write
 |-- internal/
 |   |-- acceptance     (tests only, no production code)
-|   |      4492 lines of tests
+|   |      4917 lines of tests
 |   |-- evidence       turns a reference into the exact bytes it names, and a frozen criterion into a verdict over what those bytes actually say
-|   |      2 files, 1449 lines (1558 test), largest resolve.go at 1070 -- uses model
+|   |      2 files, 1463 lines (1736 test), largest resolve.go at 1081 -- uses model
 |   |-- model          wire vocabulary every other package shares: identities, references, packets and bundles, plus the strict encode/decode boundary
-|   |      8 files, 2608 lines (1095 test), largest events.go at 809 -- leaf
+|   |      9 files, 2636 lines (1236 test), largest events.go at 809 -- leaf
 |   |-- query          selects admitted facts before either output format renders them
 |   |      2 files, 350 lines (511 test), largest query.go at 277 -- uses model, reduce, store
 |   |-- reduce         folds admitted bundles into the state every Datum answer is read from
-|   |      9 files, 2645 lines (2692 test), largest proof.go at 692 -- uses model
+|   |      9 files, 2663 lines (3163 test), largest proof.go at 692 -- uses model
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
-|   |      8 files, 1477 lines (2103 test), largest intake.go at 475 -- uses model
+|   |      8 files, 1486 lines (2166 test), largest intake.go at 484 -- uses model
 |   `-- write          joins immutable capture to canonical state through one admission gate
-|          3 files, 1213 lines (1204 test), largest run.go at 574 -- uses evidence, model, reduce, store
+|          3 files, 1283 lines (1555 test), largest run.go at 631 -- uses evidence, model, reduce, store
 `-- tools/
-    `-- archtree       instrument that reports how this module's packages fit together
-           3 files, 386 lines (0 test), largest scan.go at 232 -- leaf
+    |-- archtree       instrument that reports how this module's packages fit together
+    |      3 files, 386 lines (0 test), largest scan.go at 232 -- leaf
+    `-- mintid         prints fresh record identifiers
+           1 files, 58 lines (0 test), largest main.go at 58 -- uses model
 ```
 <!-- archtree:end -->
 
