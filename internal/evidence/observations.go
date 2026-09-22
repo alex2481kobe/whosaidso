@@ -86,7 +86,7 @@ func (r *Resolver) Observe(ctx context.Context, c model.CriterionFix, env model.
 // unreadable artifact comes back as a reason, not an error, because the family
 // still has to be evaluated with that observation counted and refused.
 func (r *Resolver) readSelector(ctx context.Context, outs []model.ArtifactRef, runDir string, want model.ArtifactRef) (Reading, string, error) {
-	match, why := matchOutput(outs, runDir, want)
+	match, at, why := matchOutput(outs, runDir, want)
 	if why != "" {
 		return Reading{}, why, nil
 	}
@@ -95,7 +95,14 @@ func (r *Resolver) readSelector(ctx context.Context, outs []model.ArtifactRef, r
 	// silently re-aiming at different bytes.
 	ref := match
 	ref.Selector = want.Selector
-	resolved, err := r.Resolve(ctx, ref)
+	res := r
+	if strings.HasPrefix(at, runDir+"/") && ref.Content != nil {
+		// Only the run's own directory may answer. A same-digest copy elsewhere,
+		// such as the criterion's example in the store, is not this run's output.
+		pin, own := *ref.Content, *r
+		pin.Locators, ref.Content, own.noStore, res = []model.Locator{{Path: at}}, &pin, true, &own
+	}
+	resolved, err := res.Resolve(ctx, ref)
 	if err != nil {
 		if code := faultCode(err); code == "unavailable" || code == "io" {
 			return Reading{}, err.Error(), nil
@@ -120,10 +127,17 @@ func RunDir(invocation model.ID) string {
 // file; a contract path that would leave that directory names nothing there.
 // An output declared at the contract path itself still matches (U07's form).
 // Ambiguity is refused rather than resolved by position, since which of two
-// same-path outputs was meant is not something order can answer.
-func matchOutput(outs []model.ArtifactRef, runDir string, want model.ArtifactRef) (model.ArtifactRef, string) {
+// same-path outputs was meant is not something order can answer. A path not in
+// canonical form names nothing: refused, not normalized, so no spelling can
+// slip past the runs/ prefix check. It returns the matched path.
+func matchOutput(outs []model.ArtifactRef, runDir string, want model.ArtifactRef) (model.ArtifactRef, string, string) {
 	wanted := map[string]bool{}
+	var odd []string
 	for _, p := range declaredPaths(want) {
+		if path.Clean(p) != p {
+			odd = append(odd, p)
+			continue
+		}
 		if !strings.HasPrefix(p, DefaultArtifactDir+"/runs/") || strings.HasPrefix(p, runDir+"/") {
 			wanted[p] = true
 		}
@@ -132,29 +146,30 @@ func matchOutput(outs []model.ArtifactRef, runDir string, want model.ArtifactRef
 		}
 	}
 	if len(wanted) == 0 {
-		return model.ArtifactRef{}, "the criterion selector declares no path to match an output against"
+		return model.ArtifactRef{}, "", "the criterion selector declares no canonical path to match an output against " + strings.Join(odd, ", ")
 	}
 	var hits []model.ArtifactRef
+	var at string
 	for _, out := range outs {
 		for _, p := range declaredPaths(out) {
 			if wanted[p] {
-				hits = append(hits, out)
+				hits, at = append(hits, out), p
 				break
 			}
 		}
 	}
 	switch len(hits) {
 	case 1:
-		return hits[0], ""
+		return hits[0], at, ""
 	case 0:
 		paths := make([]string, 0, len(wanted))
 		for p := range wanted {
 			paths = append(paths, p)
 		}
 		sort.Strings(paths)
-		return model.ArtifactRef{}, "no output of this invocation declares " + strings.Join(paths, " or ")
+		return model.ArtifactRef{}, "", "no output of this invocation declares " + strings.Join(paths, " or ")
 	default:
-		return model.ArtifactRef{}, fmt.Sprintf("%d outputs declare the selected path", len(hits))
+		return model.ArtifactRef{}, "", fmt.Sprintf("%d outputs declare the selected path", len(hits))
 	}
 }
 
