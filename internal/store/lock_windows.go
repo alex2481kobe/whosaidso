@@ -40,7 +40,14 @@ const (
 // This file compiles and is believed correct, and no crash test has run against
 // it on Windows. publicationDurability refuses publication here for that reason,
 // so nothing in this build depends on an untested claim.
+//
+// Windows has no O_NOFOLLOW, so a symlink or reparse point is refused by Lstat
+// before the open. That leaves a race the Unix side does not have, which is
+// acceptable only because publication is refused on this platform.
 func lockAcquire(path string) (*os.File, error) {
+	if info, err := os.Lstat(path); err == nil && !info.Mode().IsRegular() {
+		return nil, unsafeLock(path)
+	}
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|syscall.O_CLOEXEC, 0o644)
 	if err != nil {
 		return nil, storeFault("io", path, err.Error())

@@ -88,8 +88,45 @@ func Transact(ctx context.Context, project Project, admissionID model.ID, reques
 	return transact(ctx, project, admissionID, requestDigest, propose, systemPublishIO())
 }
 
+// Admission is one admission whose request digest is known only under the lock.
+//
+// RetryDigest runs when a bundle is already published under ID. It answers
+// what digest this request would carry against that bundle, from the bundle
+// alone, so an identical retry is recognised without rereading anything the
+// original admission consumed, such as machine-local intake. Propose runs only
+// when nothing is published under ID, receives the prefix read under the lock
+// and returns the request digest together with the proposal.
+type Admission struct {
+	ID          model.ID
+	RetryDigest func(published model.Bundle) (model.Digest, error)
+	Propose     func(prefix []model.Bundle) (model.Digest, model.Bundle, error)
+}
+
+// TransactAdmission is Transact for a caller that must read its inputs under
+// the admission lock before it can name its request digest.
+func TransactAdmission(ctx context.Context, project Project, admission Admission) (model.Bundle, error) {
+	return transactAdmission(ctx, project, admission, systemPublishIO())
+}
+
 func transact(ctx context.Context, project Project, admissionID model.ID, requestDigest model.Digest, propose func([]model.Bundle) (model.Bundle, error), disk publishIO) (model.Bundle, error) {
+	if !model.ValidDigest(requestDigest) {
+		// The digest is what makes a retry recognisable as the same request, so
+		// an admission without one cannot be idempotent.
+		return model.Bundle{}, storeFault("invalid-field", "admission.request_digest", "not lowercase sha-256 hex")
+	}
+	admission := Admission{ID: admissionID, RetryDigest: func(model.Bundle) (model.Digest, error) { return requestDigest, nil }}
+	if propose != nil {
+		admission.Propose = func(prefix []model.Bundle) (model.Digest, model.Bundle, error) {
+			proposed, err := propose(prefix)
+			return requestDigest, proposed, err
+		}
+	}
+	return transactAdmission(ctx, project, admission, disk)
+}
+
+func transactAdmission(ctx context.Context, project Project, admission Admission, disk publishIO) (model.Bundle, error) {
 	var zero model.Bundle
+	admissionID := admission.ID
 	if err := publicationDurability(); err != nil {
 		return zero, err
 	}
@@ -105,12 +142,7 @@ func transact(ctx context.Context, project Project, admissionID model.ID, reques
 	if !model.ValidID(admissionID) {
 		return zero, storeFault("invalid-field", "admission.command_id", "not a ULID")
 	}
-	if !model.ValidDigest(requestDigest) {
-		// The digest is what makes a retry recognisable as the same request, so
-		// an admission without one cannot be idempotent.
-		return zero, storeFault("invalid-field", "admission.request_digest", "not lowercase sha-256 hex")
-	}
-	if propose == nil {
+	if admission.Propose == nil || admission.RetryDigest == nil {
 		return zero, storeFault("invalid-field", "admission.propose", "no transaction callback")
 	}
 	if err := ensureLedgerDir(project.Ledger, disk); err != nil {
@@ -134,6 +166,10 @@ func transact(ctx context.Context, project Project, admissionID model.ID, reques
 		if bundle.CommandID != admissionID {
 			continue
 		}
+		requestDigest, err := admission.RetryDigest(bundle)
+		if err != nil {
+			return zero, err
+		}
 		if bundle.RequestDigest != requestDigest {
 			return zero, storeFault("conflict", filepath.Join(project.Ledger, bundleFileName(bundle)),
 				"this admission id already published different content")
@@ -148,9 +184,12 @@ func transact(ctx context.Context, project Project, admissionID model.ID, reques
 	}
 	// The callback gets its own copy. What it does to that slice cannot change
 	// the prefix this transaction assigns its sequence from.
-	proposed, err := propose(append([]model.Bundle(nil), prefix...))
+	requestDigest, proposed, err := admission.Propose(append([]model.Bundle(nil), prefix...))
 	if err != nil {
 		return zero, err
+	}
+	if !model.ValidDigest(requestDigest) {
+		return zero, storeFault("invalid-field", "admission.request_digest", "not lowercase sha-256 hex")
 	}
 	bundle, err := sealBundle(project, prefix, admissionID, requestDigest, proposed)
 	if err != nil {

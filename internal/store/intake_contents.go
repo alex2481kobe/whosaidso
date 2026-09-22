@@ -114,17 +114,43 @@ func intakeRequestDigest(p model.Packet, blobs []CapturedBlob) (model.Digest, er
 	return model.HashBytes(data), nil
 }
 
+// VerifiedPacket is one intake packet as a single read verified it: the decoded
+// packet, the digest of the exact packet.json bytes that decoded to it, and the
+// blob inventory whose bytes were hashed against their names.
+//
+// It is a snapshot of that read, not a standing fact about the inbox. A caller
+// may use it for the rest of the operation that read it, never across commands.
+type VerifiedPacket struct {
+	Packet model.Packet
+	Ref    model.PacketRef
+	Blobs  []CapturedBlob
+}
+
 // ReadIntake returns verified complete packets. Nil ids selects the currently
 // visible packets in command-id order; a non-nil empty slice selects none.
 // Temporary siblings are never candidates, even if they contain valid JSON.
 func ReadIntake(project Project, ids []model.ID) ([]model.Packet, error) {
+	verified, err := ReadVerifiedIntake(project, ids)
+	if err != nil {
+		return nil, err
+	}
+	packets := make([]model.Packet, len(verified))
+	for i, v := range verified {
+		packets[i] = v.Packet
+	}
+	return packets, nil
+}
+
+// ReadVerifiedIntake is ReadIntake keeping what verification already computed,
+// so an admission never reopens or rehashes a packet it has just verified.
+func ReadVerifiedIntake(project Project, ids []model.ID) ([]VerifiedPacket, error) {
 	inbox, err := IntakeDir(project)
 	if err != nil {
 		return nil, err
 	}
 	for _, dir := range []string{filepath.Dir(filepath.Dir(inbox)), filepath.Dir(inbox), inbox} {
 		if _, err := os.Lstat(dir); os.IsNotExist(err) && ids == nil {
-			return []model.Packet{}, nil
+			return []VerifiedPacket{}, nil
 		}
 		if err := checkIntakePath(dir, true); err != nil {
 			return nil, err
@@ -133,7 +159,7 @@ func ReadIntake(project Project, ids []model.ID) ([]model.Packet, error) {
 	if ids == nil {
 		entries, err := os.ReadDir(inbox)
 		if os.IsNotExist(err) {
-			return []model.Packet{}, nil
+			return []VerifiedPacket{}, nil
 		}
 		if err != nil {
 			return nil, storeFault("io", inbox, err.Error())
@@ -148,16 +174,16 @@ func ReadIntake(project Project, ids []model.ID) ([]model.Packet, error) {
 			ids = append(ids, model.ID(entry.Name()))
 		}
 	}
-	packets := make([]model.Packet, 0, len(ids))
+	packets := make([]VerifiedPacket, 0, len(ids))
 	for _, id := range ids {
 		if !model.ValidID(id) {
 			return nil, storeFault("invalid-field", "intake.command_id", "not a ULID")
 		}
-		p, _, _, err := readIntakePacket(project, filepath.Join(inbox, string(id)))
+		p, ref, blobs, err := readIntakePacket(project, filepath.Join(inbox, string(id)))
 		if err != nil {
 			return nil, err
 		}
-		packets = append(packets, p)
+		packets = append(packets, VerifiedPacket{Packet: p, Ref: ref, Blobs: blobs})
 	}
 	return packets, nil
 }

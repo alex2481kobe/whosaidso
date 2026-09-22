@@ -14,6 +14,13 @@ import (
 // project's writers contend with each other and with nobody else.
 const lockName = ".lock"
 
+// unsafeLock refuses a lock path that is not a regular file of its own, such as
+// a symlink that would carry the lock, and its creation, out of the datum root.
+func unsafeLock(path string) error {
+	return storeFault("ledger-corrupt", path,
+		"the admission lock must be a regular file in the ledger directory, never a symlink; remove it and retry")
+}
+
 // publicationSuffix marks a ledger publication in progress. Only this
 // publisher creates such a file, and only recovery under the admission lock
 // removes one.
