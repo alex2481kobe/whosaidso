@@ -33,7 +33,9 @@ func (r *Resolver) readContent(c model.ContentPin) ([]byte, Origin, string, erro
 	for _, l := range c.Locators {
 		cands = append(cands, candidate{declared: l.Path, origin: OriginLocator})
 	}
-	cands = append(cands, candidate{declared: path.Join(r.artifactDir(), string(c.SHA256)), origin: OriginArtifactStore})
+	if !r.noStore {
+		cands = append(cands, candidate{declared: path.Join(r.artifactDir(), string(c.SHA256)), origin: OriginArtifactStore})
+	}
 
 	var notes []string
 	for _, cd := range cands {
@@ -169,7 +171,11 @@ func (r *Resolver) gitBlob(ctx context.Context, pin model.GitPin) ([]byte, error
 	if got := strings.TrimSpace(string(kind)); got != "commit" {
 		return nil, fault("invalid-field", "artifact.git.commit", "pinned object is a "+got+", not a commit")
 	}
-	spec := pin.Commit + ":" + pin.Path
+	// Every authored path is relative to the datum root, which may sit below the
+	// repository's top level. "<commit>:<path>" is read from the top level;
+	// "<commit>:./<path>" is read from the directory git runs in, the root. With
+	// ".." refused by relativePath, the lookup cannot leave the root's subtree.
+	spec := pin.Commit + ":./" + pin.Path
 	kind, err = run(ctx, r.Root, "cat-file", "-t", spec)
 	if err != nil {
 		return nil, fault("unavailable", "artifact.git.path",

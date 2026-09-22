@@ -217,43 +217,98 @@ func TestGateVerifyClosedEventSet(t *testing.T) {
 	// just these two types from the allowlist expectation. The other 23 stay as-is.
 	gateVerifyU11(t, f, a, allowed[5].(*model.TaskStart))
 	seen["task.takeover"], seen["attempt.terminal"] = true, true
-	refused := 0
+	closed := map[model.EventType]bool{}
+	for _, kind := range evClosedSet {
+		closed[kind] = true
+	}
+	for kind := range gateVerifyStillDisabled {
+		if !closed[kind] {
+			t.Fatalf("%s is named as disabled but is not in the closed event set; the boundary names an event that cannot be written", kind)
+		}
+	}
+	// Every remaining closed type is sent, schema-valid, bundled behind an
+	// admissible claim. The invariant is two-sided: a disabled operation is
+	// refused by the allowlist itself; an enabled one never is. Either way a
+	// refusal leaves the ledger byte-identical, so the bundled claim cannot be
+	// partially admitted.
+	exercised := map[model.EventType]bool{}
 	for _, event := range evAll() {
-		if seen[event.EventType()] {
+		kind := event.EventType()
+		exercised[kind] = true
+		if seen[kind] {
 			continue
 		}
-		refused++
-		t.Run(string(event.EventType()), func(t *testing.T) {
+		t.Run(string(kind), func(t *testing.T) {
 			g := gateVerifyNew(t)
-			control := g.control()
+			g.control()
 			// evAll supplies fully schema-valid payloads, not empty structs.
 			raw := recEncode(t, event)
 			if _, err := model.DecodeEvent(raw); err != nil {
 				t.Fatalf("control payload must decode: %v", err)
 			}
-			claim := g.claim(a)
-			_, err := g.admitRaw(a, a, recEncode(t, claim), raw)
-			if recCode(err) != "unavailable-until-integrated" {
-				t.Errorf("expected gate allowlist refusal for schema-valid %s, got %v; downstream reference failure would not prove this operation stayed disabled", event.EventType(), err)
+			// The packet author is the payload's own attributed author when it
+			// has one, so an attribution rule cannot stand in for the allowlist.
+			author := gateVerifyPayloadAuthor(event, a)
+			before := gateVerifyLedger(t, g.p)
+			_, err := g.admitRaw(author, author, recEncode(t, g.claim(author)), raw)
+			disabled := gateVerifyStillDisabled[kind]
+			switch {
+			case disabled && recCode(err) != "unavailable-until-integrated":
+				t.Errorf("expected gate allowlist refusal for schema-valid %s, got %v; downstream reference failure would not prove this operation stayed disabled", kind, err)
+			case !disabled && recCode(err) == "unavailable-until-integrated":
+				t.Errorf("%s is enabled by U12 but the allowlist still refused it: %v", kind, err)
 			}
-			prefix, err := store.ReadPrefix(g.p)
-			if err != nil || len(prefix) != 1 || prefix[0].CommandID != control.CommandID {
-				t.Errorf("expected unchanged ledger after rejected %s, got %d bundles and %v; a bundled claim must not be partially admitted", event.EventType(), len(prefix), err)
+			if err != nil && !bytes.Equal(before, gateVerifyLedger(t, g.p)) {
+				t.Errorf("refused %s changed the ledger; a bundled claim must not be partially admitted", kind)
 			}
 		})
-		seen[event.EventType()] = true
 	}
 	for _, kind := range evClosedSet {
-		if !seen[kind] {
-			t.Errorf("closed event type %s was not tested", kind)
+		if !exercised[kind] {
+			t.Errorf("closed event type %s was not exercised", kind)
 		}
 	}
-	if len(seen) != 25 {
-		t.Fatalf("expected all 25 closed event types, exercised %d", len(seen))
+}
+
+// gateVerifyStillDisabled is the admission boundary after U12. U12 enabled
+// task.close, invocation.start/seal, claim.revise, criterion.fix, proof.admit,
+// decision.open/revise, correction, instrument.declare/revise and
+// trust.withdraw, each behind its own rules. Packet authors still cannot mint
+// decision authority, supersession, reviews (admission alone writes those)
+// or disposal.
+var gateVerifyStillDisabled = map[model.EventType]bool{"decision.dispose": true, "supersede": true, "review.admit": true, "artifact.dispose": true}
+
+func gateVerifyPayloadAuthor(event model.TypedEvent, fallback model.Actor) model.Actor {
+	switch e := event.(type) {
+	case *model.ClaimRevise:
+		return e.Provenance.Author
+	case *model.DecisionOpen:
+		return e.Provenance.Author
+	case *model.DecisionRevise:
+		return e.Provenance.Author
+	case *model.InstrumentDeclare:
+		return e.Provenance.Author
+	case *model.InstrumentRevise:
+		return e.Provenance.Author
+	case *model.CriterionFix:
+		return e.Author
+	case *model.ProofAdmit:
+		return e.Judgment.Actor
 	}
-	if refused != 16 {
-		t.Fatalf("expected 16 allowlist refusals (25 total minus 7 pre-U11 and 2 U11 operations), exercised %d", refused)
+	return fallback
+}
+
+func gateVerifyLedger(t *testing.T, p store.Project) []byte {
+	t.Helper()
+	prefix, err := store.ReadPrefix(p)
+	if err != nil {
+		t.Fatal(err)
 	}
+	b, err := model.Encode(prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }
 
 func gateVerifyU11(t *testing.T, f *gateVerifyFixture, a model.Actor, start *model.TaskStart) {

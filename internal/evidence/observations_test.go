@@ -302,7 +302,7 @@ func TestContractPathResolvesInThisRunsDirectoryOnly(t *testing.T) {
 			for _, p := range tc.outputs {
 				outs = append(outs, output(p))
 			}
-			got, why := matchOutput(outs, a, contract(tc.contract))
+			got, _, why := matchOutput(outs, a, contract(tc.contract))
 			if tc.want == "" {
 				if why == "" {
 					t.Fatalf("matched %v; a run must read only its own output", declaredPaths(got))
