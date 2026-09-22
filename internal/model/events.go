@@ -14,49 +14,70 @@ type TypedEvent interface {
 	EventType() EventType
 }
 
-// EventRef addresses an immutable intake event without minting a per-event ID.
-// CommandID is the original packet ID, EventIndex its zero-based authored index.
-// U08 retains that provenance when flattening a packet set into a bundle.
-type EventRef struct {
-	Project    ProjectID `json:"project"`
-	CommandID  ID        `json:"command_id"`
-	EventIndex uint32    `json:"event_index"`
+// InvocationRef addresses the immutable start/seal pair by its subordinate ID.
+// U06/U12 require a seal when it is used as an observation. No event UUID or
+// future admission coordinate is needed while both packets are still in intake.
+type InvocationRef struct {
+	Project      ProjectID `json:"project"`
+	InvocationID ID        `json:"invocation_id"`
+}
+
+// BlockerRef identifies the hold under its exact task revision. U05 refuses
+// reusing that blocker ID to replace the hold's authored meaning.
+type BlockerRef struct {
+	Task      RecordRef `json:"task"`
+	BlockerID ID        `json:"blocker_id"`
+}
+
+// Provenance travels with each authored revision because Bundle retains packet
+// digests, not packet bodies. Pure replay cannot recover authors from intake.
+type Provenance struct {
+	Author     Actor         `json:"author"`
+	SourceRefs []ArtifactRef `json:"source_refs"`
 }
 
 // Creation/replacement payloads feed revision history in U05/U06 and authored
-// context in U13. The enclosing packet supplies each revision's author/provenance.
+// context in U13. U08 checks that provenance matches the authored intake.
 type TaskCreate struct {
-	ID   ID       `json:"id"`
-	Spec TaskSpec `json:"spec"`
+	Provenance Provenance `json:"provenance"`
+	ID         ID         `json:"id"`
+	Spec       TaskSpec   `json:"spec"`
 }
 type TaskAmend struct {
-	Target           RecordRef `json:"target"`
-	ExpectedRevision Revision  `json:"expected_revision"`
-	Replacement      TaskSpec  `json:"replacement"`
+	Provenance       Provenance `json:"provenance"`
+	Target           RecordRef  `json:"target"`
+	ExpectedRevision Revision   `json:"expected_revision"`
+	Replacement      TaskSpec   `json:"replacement"`
 }
 type ClaimAssert struct {
-	ID   ID        `json:"id"`
-	Spec ClaimSpec `json:"spec"`
+	Provenance Provenance `json:"provenance"`
+	ID         ID         `json:"id"`
+	Spec       ClaimSpec  `json:"spec"`
 }
 type ClaimRevise struct {
-	Target           RecordRef `json:"target"`
-	ExpectedRevision Revision  `json:"expected_revision"`
-	Replacement      ClaimSpec `json:"replacement"`
+	Provenance       Provenance `json:"provenance"`
+	Target           RecordRef  `json:"target"`
+	ExpectedRevision Revision   `json:"expected_revision"`
+	Replacement      ClaimSpec  `json:"replacement"`
 }
 type DecisionOpen struct {
-	ID   ID           `json:"id"`
-	Spec DecisionSpec `json:"spec"`
+	Provenance Provenance   `json:"provenance"`
+	ID         ID           `json:"id"`
+	Spec       DecisionSpec `json:"spec"`
 }
 type DecisionRevise struct {
+	Provenance       Provenance   `json:"provenance"`
 	Target           RecordRef    `json:"target"`
 	ExpectedRevision Revision     `json:"expected_revision"`
 	Replacement      DecisionSpec `json:"replacement"`
 }
 type InstrumentDeclare struct {
-	ID   ID             `json:"id"`
-	Spec InstrumentSpec `json:"spec"`
+	Provenance Provenance     `json:"provenance"`
+	ID         ID             `json:"id"`
+	Spec       InstrumentSpec `json:"spec"`
 }
 type InstrumentRevise struct {
+	Provenance       Provenance     `json:"provenance"`
 	Target           RecordRef      `json:"target"`
 	ExpectedRevision Revision       `json:"expected_revision"`
 	Replacement      InstrumentSpec `json:"replacement"`
@@ -183,7 +204,7 @@ type BlockerHold struct {
 type BlockerClear struct {
 	Task             RecordRef   `json:"task"`
 	BlockerID        ID          `json:"blocker_id"`
-	HoldRef          EventRef    `json:"hold_ref"`
+	HoldRef          BlockerRef  `json:"hold_ref"`
 	ResolvingWitness ArtifactRef `json:"resolving_witness"`
 }
 
@@ -193,13 +214,26 @@ type InvocationStart struct {
 	Envelope InvocationEnvelope `json:"envelope"`
 }
 type InvocationSeal struct {
-	StartRef EventRef           `json:"start_ref"`
+	StartRef InvocationRef      `json:"start_ref"`
 	Envelope InvocationEnvelope `json:"envelope"`
 }
 
 func (e InvocationStart) validate(p string) error {
 	if e.Envelope.Outcome.State != Unknown || e.Envelope.ObservedAt.State != Unknown || e.Envelope.OutputRefs.State != Unknown {
 		return invalid(p+".envelope", "pre-launch intent cannot claim a terminal observation or outputs")
+	}
+	return nil
+}
+
+func (e InvocationSeal) validate(p string) error {
+	if e.StartRef.InvocationID != e.Envelope.InvocationID || e.StartRef.Project != e.Envelope.ExecutionSourceIdentity.Project {
+		return invalid(p+".start_ref", "seal must link this invocation's immutable start")
+	}
+	return nil
+}
+func (e BlockerClear) validate(p string) error {
+	if e.HoldRef.Task != e.Task || e.HoldRef.BlockerID != e.BlockerID {
+		return invalid(p+".hold_ref", "clear must link this blocker at the same task revision")
 	}
 	return nil
 }
@@ -235,12 +269,12 @@ type CriterionFix struct {
 	Expression  CriterionExpression `json:"expression"`
 	Policy      EvaluationPolicy    `json:"policy"`
 	Author      Actor               `json:"author"`
+	SourceRefs  []ArtifactRef       `json:"source_refs"`
 }
 type ObservationDisposition struct {
-	InvocationID ID       `json:"invocation_id"`
-	SealRef      EventRef `json:"seal_ref"`
-	Disposition  string   `json:"disposition"`
-	Reason       string   `json:"reason" semantic:"text"`
+	InvocationRef InvocationRef `json:"invocation_ref"`
+	Disposition   string        `json:"disposition"`
+	Reason        string        `json:"reason" semantic:"text"`
 }
 
 func (d ObservationDisposition) validate(p string) error {
@@ -275,14 +309,12 @@ func (e ProofAdmit) validate(p string) error {
 	if len(e.Evidence) == 0 {
 		return invalid(p+".evidence", "proof needs an evidence family")
 	}
-	seen := map[ID]bool{}
-	seals := map[EventRef]bool{}
+	seen := map[InvocationRef]bool{}
 	for i, o := range e.Evidence {
-		if seen[o.InvocationID] || seals[o.SealRef] {
+		if seen[o.InvocationRef] {
 			return invalid(fmt.Sprintf("%s.evidence[%d]", p, i), "duplicate observation")
 		}
-		seen[o.InvocationID] = true
-		seals[o.SealRef] = true
+		seen[o.InvocationRef] = true
 	}
 	return nil
 }
@@ -553,6 +585,9 @@ func EncodeEvent(event TypedEvent) (Event, error) {
 	if event == nil || (reflect.ValueOf(event).Kind() == reflect.Pointer && reflect.ValueOf(event).IsNil()) {
 		return Event{}, invalid("event", "nil typed event")
 	}
+	if err := ValidateSchema(event); err != nil {
+		return Event{}, err
+	}
 	raw, err := json.Marshal(event)
 	if err != nil {
 		return Event{}, invalid("event.data", err.Error())
@@ -572,10 +607,11 @@ func EncodeEvent(event TypedEvent) (Event, error) {
 // Exactly one branch is set. Artifact pins are deliberately not record referents;
 // U07 resolves bytes, while U08/U13 use this walker for project ledger references.
 type Reference struct {
-	Path      string
-	Record    *RecordRef
-	Criterion *CriterionRef
-	Event     *EventRef
+	Path       string
+	Record     *RecordRef
+	Criterion  *CriterionRef
+	Invocation *InvocationRef
+	Blocker    *BlockerRef
 }
 
 func (r Reference) Project() ProjectID {
@@ -585,8 +621,11 @@ func (r Reference) Project() ProjectID {
 	if r.Criterion != nil {
 		return r.Criterion.Claim.Project
 	}
-	if r.Event != nil {
-		return r.Event.Project
+	if r.Invocation != nil {
+		return r.Invocation.Project
+	}
+	if r.Blocker != nil {
+		return r.Blocker.Task.Project
 	}
 	return ""
 }
@@ -595,7 +634,7 @@ func (r Reference) Project() ProjectID {
 // A new event must acquire an explicit branch here; JSON field-name heuristics
 // cannot distinguish an authored target from a coincidentally named config knob.
 func EventReferences(event TypedEvent) ([]Reference, error) {
-	if _, err := EncodeEvent(event); err != nil {
+	if err := ValidateSchema(event); err != nil {
 		return nil, err
 	}
 	w := referenceWalker{refs: []Reference{}}
@@ -618,11 +657,11 @@ func EventReferences(event TypedEvent) ([]Reference, error) {
 		w.record(e.Task, "task")
 	case *BlockerClear:
 		w.record(e.Task, "task")
-		w.event(e.HoldRef, "hold_ref")
+		w.blocker(e.HoldRef, "hold_ref")
 	case *InvocationStart:
 		w.envelope(e.Envelope, "envelope")
 	case *InvocationSeal:
-		w.event(e.StartRef, "start_ref")
+		w.invocation(e.StartRef, "start_ref")
 		w.envelope(e.Envelope, "envelope")
 	case *SourceIntake:
 		w.records(e.Referents, "referents")
@@ -637,7 +676,7 @@ func EventReferences(event TypedEvent) ([]Reference, error) {
 		w.record(e.Claim, "claim")
 		w.criterion(e.CriterionRef, "criterion_ref")
 		for i, o := range e.Evidence {
-			w.event(o.SealRef, fmt.Sprintf("evidence[%d].seal_ref", i))
+			w.invocation(o.InvocationRef, fmt.Sprintf("evidence[%d].invocation_ref", i))
 		}
 	case *DecisionOpen:
 		w.scope(e.Spec.Scope, "spec.scope")
@@ -709,9 +748,13 @@ func (w *referenceWalker) record(r RecordRef, p string) {
 func (w *referenceWalker) criterion(r CriterionRef, p string) {
 	w.refs = append(w.refs, Reference{Path: p, Criterion: &r})
 }
-func (w *referenceWalker) event(r EventRef, p string) {
-	w.refs = append(w.refs, Reference{Path: p, Event: &r})
+func (w *referenceWalker) invocation(r InvocationRef, p string) {
+	w.refs = append(w.refs, Reference{Path: p, Invocation: &r})
 }
+func (w *referenceWalker) blocker(r BlockerRef, p string) {
+	w.refs = append(w.refs, Reference{Path: p, Blocker: &r})
+}
+
 func (w *referenceWalker) records(rs []RecordRef, p string) {
 	for i, r := range rs {
 		w.record(r, fmt.Sprintf("%s[%d]", p, i))

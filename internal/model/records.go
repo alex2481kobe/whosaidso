@@ -70,8 +70,8 @@ func (a Authority) validate(p string) error {
 }
 
 // TaskSpec feeds U05 prerequisites/revisions, U11 acceptance and continuation,
-// and U13 context/constraint reads. Authorship comes from the enclosing packet;
-// reducers must retain that packet's author and provenance for every revision.
+// and U13 context/constraint reads. Revision events retain explicit provenance
+// so pure replay never needs to fetch an intake packet to recover an author.
 type TaskSpec struct {
 	Intent             string                `json:"intent" semantic:"text"`
 	Subject            string                `json:"subject" semantic:"text"`
@@ -94,9 +94,26 @@ type AcceptanceCriterion struct {
 
 // TaskProgress gives U11/U13 witnessed progress and a concrete continuation.
 type TaskProgress struct {
-	Summary     string        `json:"summary" semantic:"text"`
-	NextAction  string        `json:"next_action" semantic:"text"`
+	Summary     string        `json:"summary,omitempty" semantic:"text"`
+	NextAction  string        `json:"next_action,omitempty" semantic:"text"`
 	WitnessRefs []ArtifactRef `json:"witness_refs"`
+}
+
+func (p TaskProgress) validate(at string) error {
+	// Both fields are optional, so absent is fine. Present-but-whitespace is
+	// not: a summary of " " reads as recorded progress and says nothing. This
+	// is the same defect as a minLength rule a single space satisfies, which is
+	// the bug this whole system exists to catch.
+	if p.Summary != "" && strings.TrimSpace(p.Summary) == "" {
+		return invalid(at+".summary", "present but blank")
+	}
+	if p.NextAction != "" && strings.TrimSpace(p.NextAction) == "" {
+		return invalid(at+".next_action", "present but blank")
+	}
+	if strings.TrimSpace(p.Summary) == "" && strings.TrimSpace(p.NextAction) == "" {
+		return invalid(at, "progress needs a summary or next action")
+	}
+	return nil
 }
 
 // Prerequisite gives U05 a typed predicate at an exact revision. A consumer that
@@ -478,18 +495,121 @@ func (o ProcessOutcome) validate(p string) error {
 	return nil
 }
 
-// VisualObservation points at metadata bytes instead of copying transforms or
-// frames into a record. U10 pins each adapter selector; U07/U12 resolve actual
-// framing (bounds/camera/projection/viewport/DPR), state, appearance and limits.
+// VisualObservation keeps small observed metadata typed, and pins large transform,
+// lighting and material payloads. U10 captures these facts; U07/U12 compare them.
+// U13 can display missing facts without guessing a rest pose or default camera.
 type VisualObservation struct {
-	Framing    Availability[ArtifactRef] `json:"framing"`
-	Transforms Availability[ArtifactRef] `json:"transforms"`
-	Clip       Availability[string]      `json:"clip"`
-	Time       Availability[json.Number] `json:"time"`
-	Seed       Availability[string]      `json:"seed"`
-	Backend    Availability[string]      `json:"backend"`
-	Appearance Availability[ArtifactRef] `json:"appearance"`
-	Limits     Availability[ArtifactRef] `json:"limits"`
+	Framing    Availability[VisualFraming]    `json:"framing"`
+	Transforms Availability[ArtifactRef]      `json:"transforms"`
+	Clip       Availability[string]           `json:"clip"`
+	Time       Availability[json.Number]      `json:"time"`
+	Seed       Availability[string]           `json:"seed"`
+	Backend    Availability[string]           `json:"backend"`
+	Appearance Availability[VisualAppearance] `json:"appearance"`
+	Limits     Availability[VisualLimits]     `json:"limits"`
+}
+
+// VisualFraming lets the consumer determine whether the subject was actually
+// visible. ProjectedBounds pins the adapter's subject-bounds result, not an image guess.
+type VisualFraming struct {
+	Subject         Availability[string]      `json:"subject"`
+	ProjectedBounds Availability[ArtifactRef] `json:"projected_bounds"`
+	CameraPosition  Availability[Vector3]     `json:"camera_position"`
+	CameraTarget    Availability[Vector3]     `json:"camera_target"`
+	Projection      Availability[string]      `json:"projection"`
+	Viewport        Availability[Viewport]    `json:"viewport"`
+	DPR             Availability[json.Number] `json:"dpr"`
+}
+type Vector3 struct {
+	X json.Number `json:"x"`
+	Y json.Number `json:"y"`
+	Z json.Number `json:"z"`
+}
+type Viewport struct {
+	Width  uint64 `json:"width"`
+	Height uint64 `json:"height"`
+}
+
+func (v Viewport) validate(p string) error {
+	if v.Width == 0 || v.Height == 0 {
+		return invalid(p, "observed viewport dimensions must be positive")
+	}
+	return nil
+}
+func (f VisualFraming) validate(p string) error {
+	if err := observedText(f.Subject, p+".subject"); err != nil {
+		return err
+	}
+	if err := observedText(f.Projection, p+".projection"); err != nil {
+		return err
+	}
+	if f.DPR.State == Known && f.DPR.Value != nil {
+		r, err := DecimalRat(*f.DPR.Value)
+		if err != nil {
+			return err
+		}
+		if r.Sign() <= 0 {
+			return invalid(p+".dpr", "observed DPR must be positive")
+		}
+	}
+	return nil
+}
+
+// VisualAppearance exposes every appearance factor the visual trust contract
+// names, while the potentially large lights/materials/override bodies stay artifacts.
+type VisualAppearance struct {
+	Lights              Availability[ArtifactRef] `json:"lights"`
+	Exposure            Availability[json.Number] `json:"exposure"`
+	ColourSpace         Availability[string]      `json:"colour_space"`
+	Materials           Availability[ArtifactRef] `json:"materials"`
+	DiagnosticOverrides Availability[ArtifactRef] `json:"diagnostic_overrides"`
+}
+
+func (a VisualAppearance) validate(p string) error {
+	return observedText(a.ColourSpace, p+".colour_space")
+}
+
+type VisualLimits struct {
+	Occlusion        Availability[string]   `json:"occlusion"`
+	UnviewedSurfaces Availability[[]string] `json:"unviewed_surfaces"`
+	UntestedBackends Availability[[]string] `json:"untested_backends"`
+	StillLimitations string                 `json:"still_limitations" semantic:"text"`
+}
+
+func (l VisualLimits) validate(p string) error {
+	if err := observedText(l.Occlusion, p+".occlusion"); err != nil {
+		return err
+	}
+	for _, field := range []struct {
+		name  string
+		value Availability[[]string]
+	}{{"unviewed_surfaces", l.UnviewedSurfaces}, {"untested_backends", l.UntestedBackends}} {
+		if field.value.State == Known && field.value.Value != nil {
+			for i, s := range *field.value.Value {
+				if strings.TrimSpace(s) == "" {
+					return invalid(fmt.Sprintf("%s.%s[%d]", p, field.name, i), "whitespace-only is empty")
+				}
+			}
+		}
+	}
+	return nil
+}
+func (v VisualObservation) validate(p string) error {
+	for _, field := range []struct {
+		name  string
+		value Availability[string]
+	}{{"clip", v.Clip}, {"seed", v.Seed}, {"backend", v.Backend}} {
+		if err := observedText(field.value, p+"."+field.name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func observedText(v Availability[string], p string) error {
+	if v.State == Known && v.Value != nil && strings.TrimSpace(*v.Value) == "" {
+		return invalid(p, "known observation needs nonblank text")
+	}
+	return nil
 }
 
 func (e InvocationEnvelope) validate(p string) error {
@@ -599,6 +719,11 @@ func checkJSONShape(tree any, t reflect.Type, p string) error {
 				return invalid(p+"."+m.key, "unknown field")
 			}
 			seen[m.key] = true
+			if f.Tag.Get("semantic") == "text" {
+				if text, ok := m.value.(string); ok && strings.TrimSpace(text) == "" {
+					return invalid(p+"."+m.key, "whitespace-only is empty")
+				}
+			}
 			if err := checkJSONShape(m.value, f.Type, p+"."+m.key); err != nil {
 				return err
 			}
