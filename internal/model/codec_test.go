@@ -113,6 +113,28 @@ func TestStrictDecodeRefuses(t *testing.T) {
 
 // TestBundleChainRules: only the genesis bundle stands alone, so a gap in the
 // chain is detectable rather than invisible.
+// CLI inputs reach the same exact-key refusal as packets: an alias must not
+// let encoding/json pick one of two authored meanings.
+func TestStrictCallerInputDecoders(t *testing.T) {
+	if _, err := DecodeEvents([]byte(`[{"type":"claim.assert","data":{}}]`)); err != nil {
+		t.Fatalf("control event array: %v", err)
+	}
+	for _, in := range []string{`[{"type":"claim.revise","TYPE":"claim.assert","data":{}}]`, `[{"TYPE":"claim.revise","type":"claim.assert","data":{}}]`, `[{"type":"a","type":"b","data":{}}]`, `{"type":"a","data":{}}`, "[{\"type\":\"a-\xff\",\"data\":{}}]", `[] []`} {
+		if _, err := DecodeEvents([]byte(in)); err == nil {
+			t.Errorf("event array accepted: %s", in)
+		}
+	}
+	ref := `[{"kind":"content","content":{"sha256":"` + string(HashBytes([]byte("x"))) + `","length":1,"media_type":"text/plain","locators":[{"path":"a"}]},"selector":{"kind":"json-pointer","pointer":"/a"}}]`
+	if refs, err := DecodeArtifactRefs([]byte(ref), "refs"); err != nil || refs[0].Selector.Pointer != "/a" {
+		t.Fatalf("control refs: %+v, %v", refs, err)
+	}
+	for _, in := range []string{strings.Replace(ref, `"pointer":"/a"`, `"pointer":"/a","POINTER":"/b"`, 1), strings.Replace(ref, `"pointer":"/a"`, `"POINTER":"/b","pointer":"/a"`, 1), strings.Replace(ref, `"length"`, `"LENGTH"`, 1), `null`, ref + ` []`} {
+		if _, err := DecodeArtifactRefs([]byte(in), "refs"); err == nil {
+			t.Errorf("artifact refs accepted: %s", in)
+		}
+	}
+}
+
 func TestBundleChainRules(t *testing.T) {
 	d := string(HashBytes([]byte("admission")))
 	mk := func(seq string, pred string) string {

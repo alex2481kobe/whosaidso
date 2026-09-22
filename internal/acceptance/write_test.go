@@ -2,6 +2,7 @@ package acceptance_test
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -216,6 +217,20 @@ func TestWriteProducerChild(t *testing.T) {
 		return
 	}
 	report, gate := args[2], args[3]
+	// A report whose bytes are not valid UTF-8 cannot travel as argv: argv is
+	// authored intent, and the encoder refuses invalid UTF-8 there (R8.4 and
+	// the shared-encoder hardening, 2026-09-22). "hex:" carries such bytes
+	// intact. Reports are JSON and begin with "{", so the prefix cannot
+	// collide with a real one. Added by the coordinator to restore this
+	// fixture's transport; no assertion anywhere was changed.
+	if rest, ok := strings.CutPrefix(report, "hex:"); ok {
+		raw, err := hex.DecodeString(rest)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(93)
+		}
+		report = string(raw)
+	}
 	if gate != "" {
 		if err := os.WriteFile(gate+".ready", []byte("waiting"), 0600); err != nil {
 			fmt.Fprintln(os.Stderr, err)

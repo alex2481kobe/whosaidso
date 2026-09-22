@@ -40,6 +40,17 @@ func strictUnmarshal(b []byte, into any, what string) error {
 	if err != nil {
 		return err
 	}
+	// A bare event array (CLI capture) gets the same per-event exact-key check
+	// an envelope's events get; there is one rule, reached from both entries.
+	if what == "events" {
+		list, isArray := tree.([]any)
+		if !isArray {
+			return fault("invalid-json", what, "top-level value is not an array")
+		}
+		if err := checkEventKeys(list, what); err != nil {
+			return err
+		}
+	}
 	if allowed, ok := envelopeKeys[what]; ok {
 		top, isObject := tree.([]member)
 		if !isObject {
@@ -59,18 +70,8 @@ func strictUnmarshal(b []byte, into any, what string) error {
 			if !isArray {
 				return fault("invalid-field", what+".events", "events is not an array")
 			}
-			for i, item := range list {
-				obj, isObject := item.([]member)
-				if !isObject {
-					return fault("invalid-field", fmt.Sprintf("%s.events[%d]", what, i), "event is not an object")
-				}
-				for _, em := range obj {
-					if !eventKeys[em.key] {
-						return fault("invalid-field",
-							fmt.Sprintf("%s.events[%d].%s", what, i, em.key),
-							"unknown field, or a case variant of a known one")
-					}
-				}
+			if err := checkEventKeys(list, what+".events"); err != nil {
+				return err
 			}
 		}
 	}
@@ -80,6 +81,54 @@ func strictUnmarshal(b []byte, into any, what string) error {
 		return fault("invalid-field", what, err.Error())
 	}
 	return refuseNonUTC(reflect.ValueOf(into), what)
+}
+
+func checkEventKeys(list []any, at string) error {
+	for i, item := range list {
+		obj, isObject := item.([]member)
+		if !isObject {
+			return fault("invalid-field", fmt.Sprintf("%s[%d]", at, i), "event is not an object")
+		}
+		for _, em := range obj {
+			if !eventKeys[em.key] {
+				return fault("invalid-field", fmt.Sprintf("%s[%d].%s", at, i, em.key),
+					"unknown field, or a case variant of a known one")
+			}
+		}
+	}
+	return nil
+}
+
+// DecodeEvents parses a caller-authored event array (CLI capture input)
+// through the same strict decoder as packets: invalid UTF-8, duplicate keys
+// and case aliases such as "TYPE" beside "type" are refused, never resolved
+// by encoding/json's case-insensitive last-one-wins. Payloads are not typed
+// here; DecodeEvent does that per event.
+func DecodeEvents(b []byte) ([]Event, error) {
+	var events []Event
+	if err := strictUnmarshal(b, &events, "events"); err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+// DecodeArtifactRefs parses a caller-authored artifact reference array (CLI
+// handback delivery refs). Besides strictUnmarshal, the tree is checked
+// against the wire struct's exact JSON names, so "POINTER" beside "pointer"
+// is refused instead of one selector silently winning. null is refused.
+func DecodeArtifactRefs(b []byte, what string) ([]ArtifactRef, error) {
+	var refs []ArtifactRef
+	if err := strictUnmarshal(b, &refs, what); err != nil {
+		return nil, err
+	}
+	tree, err := parseOrdered(b)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkJSONShape(tree, reflect.TypeOf(refs), what); err != nil {
+		return nil, err
+	}
+	return refs, nil
 }
 
 // ---- UTC-only timestamps (ruling R8.4) -------------------------------------

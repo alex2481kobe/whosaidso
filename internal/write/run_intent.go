@@ -76,6 +76,24 @@ func runIntent(project store.Project, r RunRequest) (model.InvocationEnvelope, e
 	return e, nil
 }
 
+// runFreezeInstrument owns the instrument declaration the seal re-validates
+// against. Without it, caller storage reuse after launch (say ConfigSurface)
+// could invalidate a valid observation or validate an invalid one.
+func runFreezeInstrument(s model.InstrumentSpec) model.InstrumentSpec {
+	if s.ConfigSurface != nil {
+		s.ConfigSurface = append([]string{}, s.ConfigSurface...)
+	}
+	if s.DangerousDefaults != nil {
+		s.DangerousDefaults = append([]string{}, s.DangerousDefaults...)
+	}
+	s.ImplementationRef = runCopyArtifacts([]model.ArtifactRef{s.ImplementationRef})[0]
+	if v := runCopyValue(s.Validation.Value); v != nil {
+		v.Ref = runCopyArtifacts([]model.ArtifactRef{v.Ref})[0]
+		s.Validation.Value = v
+	}
+	return s
+}
+
 // runCopyValue is only for pointers to values with no mutable members.
 func runCopyValue[T any](p *T) *T {
 	if p == nil {

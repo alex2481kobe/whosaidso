@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -163,18 +162,13 @@ func handbackDeliveryRefs(path string, stdin io.Reader, refs *[]model.ArtifactRe
 	if err != nil {
 		return err
 	}
-	// The canonical codec rejects duplicate keys and trailing JSON values.
-	if _, err := model.Encode(json.RawMessage(data)); err != nil {
+	// The model's strict decoder refuses duplicate keys, case aliases, invalid
+	// UTF-8, trailing values and null, so no authored selector is dropped.
+	decoded, err := model.DecodeArtifactRefs(data, "delivery_refs")
+	if err != nil {
 		return err
 	}
-	d := json.NewDecoder(strings.NewReader(string(data)))
-	d.DisallowUnknownFields()
-	if err := d.Decode(refs); err != nil {
-		return err
-	}
-	if *refs == nil {
-		return fmt.Errorf("handback delivery refs must be an array")
-	}
+	*refs = decoded
 	return nil
 }
 
@@ -188,29 +182,19 @@ func captureCLI(ctx context.Context, project store.Project, id model.ID, author 
 		defer f.Close()
 		reader = f
 	}
-	decoder := json.NewDecoder(reader)
-	decoder.DisallowUnknownFields()
-	var rawEvents []json.RawMessage
-	if err := decoder.Decode(&rawEvents); err != nil {
+	data, err := io.ReadAll(reader)
+	if err != nil {
 		return model.PacketRef{}, err
 	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		return model.PacketRef{}, fmt.Errorf("capture expects exactly one event array")
+	// The model's strict decoder refuses duplicate keys, case aliases such as
+	// "TYPE" beside "type", invalid UTF-8 and trailing values, so the packet
+	// binds the author's words rather than encoding/json's choice among them.
+	events, err := model.DecodeEvents(data)
+	if err != nil {
+		return model.PacketRef{}, err
 	}
-	events := make([]model.Event, len(rawEvents))
-	for i, raw := range rawEvents {
-		// The model codec rejects duplicate fields and unknown envelope keys.
-		// Ordinary unmarshalling alone would silently keep the last duplicate.
-		if _, err := model.Encode(raw); err != nil {
-			return model.PacketRef{}, err
-		}
-		d := json.NewDecoder(strings.NewReader(string(raw)))
-		d.DisallowUnknownFields()
-		if err := d.Decode(&events[i]); err != nil {
-			return model.PacketRef{}, err
-		}
-		if _, err := model.DecodeEvent(events[i]); err != nil {
+	for _, event := range events {
+		if _, err := model.DecodeEvent(event); err != nil {
 			return model.PacketRef{}, err
 		}
 	}
