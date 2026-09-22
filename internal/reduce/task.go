@@ -91,7 +91,8 @@ type TaskProjection struct {
 // Task projects one task. The second result is false when no TASK with that
 // identity is admitted, which is different from a task with nothing to say.
 func (s Snapshot) Task(id Ident) (TaskProjection, bool) {
-	return s.inner().task(id)
+	p, ok := s.inner().task(id)
+	return deepCopy(p), ok
 }
 
 // Tasks projects every admitted task, sorted by project then id.
@@ -115,7 +116,7 @@ func (s Snapshot) Tasks() []TaskProjection {
 			out = append(out, p)
 		}
 	}
-	return out
+	return deepCopySlice(out)
 }
 
 // task evaluates the four predicates in the contract's order. The order is the

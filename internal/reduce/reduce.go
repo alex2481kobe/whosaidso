@@ -287,11 +287,8 @@ type Referrer struct {
 	Path   string
 }
 
-// Deferred names an admitted event whose SEMANTICS this unit does not fold.
-// The event is applied structurally, its references are validated and its
-// reverse edges are recorded, but no status is derived from it here. Listing
-// them is the difference between a scoped reducer and one that limps: none of
-// these can change a TASK answer, and a reader can see exactly what is pending.
+// Deferred preserves the diagnostic vocabulary for callers of the partial fold.
+// Every event in the closed model vocabulary now has a semantic route.
 type Deferred struct {
 	Origin Origin
 	Type   model.EventType
@@ -325,13 +322,12 @@ type state struct {
 	reviews      map[ReviewKey]Review
 	sources      map[SourceKey]Source
 	commands     map[model.ID]uint64
+	events       map[Origin]model.TypedEvent
 
 	reverseRecord     map[RecordKey][]Referrer
 	reverseCriterion  map[CriterionKey][]Referrer
 	reverseInvocation map[InvocationKey][]Referrer
 	reverseBlocker    map[BlockerKey][]Referrer
-
-	deferred []Deferred
 }
 
 func newState() *state {
@@ -347,6 +343,7 @@ func newState() *state {
 		reviews:           map[ReviewKey]Review{},
 		sources:           map[SourceKey]Source{},
 		commands:          map[model.ID]uint64{},
+		events:            map[Origin]model.TypedEvent{},
 		reverseRecord:     map[RecordKey][]Referrer{},
 		reverseCriterion:  map[CriterionKey][]Referrer{},
 		reverseInvocation: map[InvocationKey][]Referrer{},
@@ -379,11 +376,11 @@ func (s *state) clone() *state {
 		reviews:           copyMap(s.reviews),
 		sources:           copyMap(s.sources),
 		commands:          copyMap(s.commands),
+		events:            copyMap(s.events),
 		reverseRecord:     copyMap(s.reverseRecord),
 		reverseCriterion:  copyMap(s.reverseCriterion),
 		reverseInvocation: copyMap(s.reverseInvocation),
 		reverseBlocker:    copyMap(s.reverseBlocker),
-		deferred:          append([]Deferred(nil), s.deferred...),
 	}
 }
 
@@ -497,6 +494,7 @@ func (s *state) apply(b model.Bundle) error {
 	if err := s.checkEnvelope(b); err != nil {
 		return err
 	}
+	s.project = b.Project
 	for i, raw := range b.Events {
 		typed, err := model.DecodeEvent(raw)
 		if err != nil {
@@ -518,9 +516,9 @@ func (s *state) apply(b model.Bundle) error {
 		if err := s.route(b, i, typed); err != nil {
 			return err
 		}
+		s.events[Origin{Sequence: b.Sequence, EventIndex: i}] = typed
 		s.recordReferrers(b, i, typed)
 	}
-	s.project = b.Project
 	s.commands[b.CommandID] = b.Sequence
 	s.watermark = Watermark{
 		Sequence:   b.Sequence,
@@ -748,14 +746,17 @@ func (s *state) route(b model.Bundle, idx int, e model.TypedEvent) error {
 	case *model.ReviewAdmit:
 		return s.reviewAdmit(b, idx, o, t)
 
-	// Semantics folded in U06 and U12: proof, disposition, supersession,
-	// correction, trust withdrawal and manual disposal. Their references are
-	// validated and their reverse edges recorded above, and none of them can
-	// change a TASK status, so recording them as deferred is a scoped fold
-	// rather than a silent one.
-	case *model.ProofAdmit, *model.DecisionDispose, *model.Supersede,
-		*model.Correction, *model.TrustWithdraw, *model.ArtifactDispose:
-		s.deferred = append(append([]Deferred(nil), s.deferred...), Deferred{Origin: o, Type: e.EventType()})
+	case *model.ProofAdmit:
+		return s.proofAdmit(b, idx, t)
+	case *model.DecisionDispose:
+		return s.decisionDispose(b, idx, t)
+	case *model.Supersede:
+		return s.supersede(b, idx, t)
+	case *model.TrustWithdraw:
+		return s.requireKind(b, idx, t.Instrument, model.Instrument, "instrument")
+	case *model.Correction, *model.ArtifactDispose:
+		// Loss stays as an admitted fact. Query-time graph expansion also
+		// reaches dependents introduced after this bundle.
 		return nil
 	}
 	return faultAt("unknown-event", b.Sequence, idx, "event.type",
@@ -1078,7 +1079,15 @@ func (s Snapshot) Watermark() Watermark { return s.inner().watermark }
 
 // Record returns one exact admitted revision.
 func (s Snapshot) Record(ref model.RecordRef) (Record, bool) {
-	r, ok := s.inner().records[recordKey(ref)]
+	r, ok := s.inner().record(ref)
+	return deepCopy(r), ok
+}
+
+// record is the uncopied read. Callers inside this package scan without
+// paying for a copy they are about to discard; only the exported accessor,
+// where a value leaves the package, copies.
+func (s *state) record(ref model.RecordRef) (Record, bool) {
+	r, ok := s.records[recordKey(ref)]
 	return r, ok
 }
 
@@ -1090,12 +1099,16 @@ func (s Snapshot) CurrentRevision(id Ident) (model.Revision, bool) {
 
 // Current returns a record at its current revision.
 func (s Snapshot) Current(id Ident) (Record, bool) {
-	st := s.inner()
-	rev, ok := st.current[id]
+	r, ok := s.inner().currentRecord(id)
+	return deepCopy(r), ok
+}
+
+func (s *state) currentRecord(id Ident) (Record, bool) {
+	rev, ok := s.current[id]
 	if !ok {
 		return Record{}, false
 	}
-	r, ok := st.records[RecordKey{Project: id.Project, ID: id.ID, Revision: rev}]
+	r, ok := s.records[RecordKey{Project: id.Project, ID: id.ID, Revision: rev}]
 	return r, ok
 }
 
@@ -1103,9 +1116,12 @@ func (s Snapshot) Current(id Ident) (Record, bool) {
 // Sorting is not cosmetic: a map range would make the answer depend on Go's
 // randomized iteration, and two runs of the same ledger must agree exactly.
 func (s Snapshot) Records() []Record {
-	st := s.inner()
-	out := make([]Record, 0, len(st.records))
-	for _, r := range st.records {
+	return deepCopySlice(s.inner().recordsSorted())
+}
+
+func (s *state) recordsSorted() []Record {
+	out := make([]Record, 0, len(s.records))
+	for _, r := range s.records {
 		out = append(out, r)
 	}
 	sort.Slice(out, func(i, j int) bool { return lessRecordKey(out[i].Key, out[j].Key) })
@@ -1155,28 +1171,31 @@ func (s *state) blockersFor(id Ident) []Blocker {
 }
 
 // Attempts returns one task's attempts in ledger order.
-func (s Snapshot) Attempts(id Ident) []Attempt { return s.inner().attemptsFor(id) }
+func (s Snapshot) Attempts(id Ident) []Attempt { return deepCopySlice(s.inner().attemptsFor(id)) }
 
 // Blockers returns one task's holds in ledger order, cleared ones included.
-func (s Snapshot) Blockers(id Ident) []Blocker { return s.inner().blockersFor(id) }
+func (s Snapshot) Blockers(id Ident) []Blocker { return deepCopySlice(s.inner().blockersFor(id)) }
 
 // Closure returns the admitted closure, whether or not it takes effect.
 func (s Snapshot) Closure(id Ident) (Closure, bool) {
 	c, ok := s.inner().closed[id]
-	return c, ok
+	return deepCopy(c), ok
 }
 
 // Invocation returns one start/seal pair.
 func (s Snapshot) Invocation(key InvocationKey) (Invocation, bool) {
 	i, ok := s.inner().invocations[key]
-	return i, ok
+	return deepCopy(i), ok
 }
 
 // Invocations returns every invocation, sorted by project then id.
 func (s Snapshot) Invocations() []Invocation {
-	st := s.inner()
-	out := make([]Invocation, 0, len(st.invocations))
-	for _, i := range st.invocations {
+	return deepCopySlice(s.inner().invocationsSorted())
+}
+
+func (s *state) invocationsSorted() []Invocation {
+	out := make([]Invocation, 0, len(s.invocations))
+	for _, i := range s.invocations {
 		out = append(out, i)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -1192,20 +1211,23 @@ func (s Snapshot) Invocations() []Invocation {
 // revisions.
 func (s Snapshot) Criterion(ref model.CriterionRef) (Criterion, bool) {
 	c, ok := s.inner().criteria[criterionKey(ref)]
-	return c, ok
+	return deepCopy(c), ok
 }
 
 // Review returns the admitted disposition of one intake packet.
 func (s Snapshot) Review(key ReviewKey) (Review, bool) {
 	r, ok := s.inner().reviews[key]
-	return r, ok
+	return deepCopy(r), ok
 }
 
 // Sources returns every captured source, sorted by project then id.
 func (s Snapshot) Sources() []Source {
-	st := s.inner()
-	out := make([]Source, 0, len(st.sources))
-	for _, v := range st.sources {
+	return deepCopySlice(s.inner().sourcesSorted())
+}
+
+func (s *state) sourcesSorted() []Source {
+	out := make([]Source, 0, len(s.sources))
+	for _, v := range s.sources {
 		out = append(out, v)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -1218,7 +1240,7 @@ func (s Snapshot) Sources() []Source {
 }
 
 func sortedReferrers(in []Referrer) []Referrer {
-	out := append([]Referrer(nil), in...)
+	out := deepCopySlice(in)
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Origin != out[j].Origin {
 			return out[i].Origin.before(out[j].Origin)
@@ -1243,10 +1265,5 @@ func (s Snapshot) InvocationReferrers(ref model.InvocationRef) []Referrer {
 	return sortedReferrers(s.inner().reverseInvocation[invocationKey(ref)])
 }
 
-// Deferred lists admitted events whose semantics this unit does not fold, in
-// ledger order. It is empty for a ledger of task and source events.
-func (s Snapshot) Deferred() []Deferred {
-	out := append([]Deferred(nil), s.inner().deferred...)
-	sort.Slice(out, func(i, j int) bool { return out[i].Origin.before(out[j].Origin) })
-	return out
-}
+// Deferred is empty because all named events now have reducer semantics.
+func (s Snapshot) Deferred() []Deferred { return nil }
