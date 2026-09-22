@@ -161,6 +161,18 @@ func evaluateMember(c model.CriterionFix, o Observation) MemberResult {
 			quote(c.Expression.Population.Denominator), quote(*s.Value))
 		return m
 	}
+	// The population selector is an independent reading. Its cardinality says
+	// nothing about whether it counts the population the criterion declares.
+	if s := o.Population.Population; s.State == model.Known && *s.Value != c.Expression.Population.Identity {
+		m.Reason = fmt.Sprintf("population mismatch: the criterion declares %s, the selected population states %s",
+			quote(c.Expression.Population.Identity), quote(*s.Value))
+		return m
+	}
+	if s := o.Population.Denominator; s.State == model.Known && *s.Value != c.Expression.Population.Denominator {
+		m.Reason = fmt.Sprintf("denominator mismatch: the criterion declares %s, the selected population states %s",
+			quote(c.Expression.Population.Denominator), quote(*s.Value))
+		return m
+	}
 
 	values, ok := o.Result.Scalars()
 	if !ok {
@@ -299,6 +311,9 @@ func mapDifference(label string, a, b model.Availability[map[string]model.Availa
 			return label + " names " + quote(name) + " in only one run"
 		case lv.State != rv.State:
 			return label + " for " + quote(name) + " was observed in only one run"
+		case lv.State != model.Known:
+			// Like model.SameActor, two unknowns cannot establish equality.
+			return label + " for " + quote(name) + " was not observed in either run"
 		case lv.State == model.Known:
 			same, err := model.CompareScalars(*lv.Value, model.Equal, *rv.Value)
 			if err != nil {

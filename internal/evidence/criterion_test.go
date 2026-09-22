@@ -2,6 +2,7 @@ package evidence
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -243,6 +244,50 @@ func TestDenominatorAndPopulationMustMatch(t *testing.T) {
 	})
 }
 
+func TestSelectedPopulationMetadataMustMatch(t *testing.T) {
+	for _, reducer := range []model.CriterionReducer{model.All, model.Any, model.Count} {
+		for _, field := range []string{"population", "denominator"} {
+			for _, scenario := range []string{"passing", "failing", "empty true", "empty false"} {
+				t.Run(string(reducer)+"/"+field+"/"+scenario, func(t *testing.T) {
+					c := testCriterion(t)
+					c.Expression.Reducer = reducer
+					if reducer == model.Count {
+						c.Expression.Operator = model.Equal
+						c.Expression.Target = numberScalar(json.Number("2"))
+					}
+					o := passing(invocationA)
+					want := True
+					switch scenario {
+					case "failing":
+						o.Result.Values = []model.Scalar{numberScalar(json.Number("0.9"))}
+						o.Population = sizedPopulation(1)
+						want = False
+					case "empty true", "empty false":
+						o.Result.Values = nil
+						o.Population = sizedPopulation(0)
+						empty := scenario == "empty true"
+						c.Expression.EmptyResult = &empty
+						want = verdictOf(empty)
+					}
+					o.Population.Population = known("pose sweep")
+					o.Population.Denominator = known("poses")
+					wantVerdict(t, evaluate(t, c, o), want, "")
+					if field == "population" {
+						o.Population.Population = known("other sweep")
+					} else {
+						o.Population.Denominator = known("frames")
+					}
+					ev := evaluate(t, c, o)
+					wantVerdict(t, ev, Unknown, field+" mismatch")
+					if ev.Members[0].Verdict != Unknown || ev.Members[0].Compared != 0 {
+						t.Fatalf("incompatible population must be refused before comparison: %+v", ev.Members[0])
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestEmptyPopulation(t *testing.T) {
 	c := testCriterion(t)
 	wantVerdict(t, evaluate(t, c, passing(invocationA)), True, "")
@@ -361,6 +406,44 @@ func TestEffectiveConfigurationDecidesComparability(t *testing.T) {
 		lone.ConfigEffective = unknownConfig("the adapter reported no effective configuration")
 		wantVerdict(t, evaluate(t, c, lone), True, "")
 	})
+}
+
+func TestUnknownSettingValuesDoNotEstablishComparability(t *testing.T) {
+	for _, label := range []string{"effective configuration", "observed conditions"} {
+		for _, tc := range []struct {
+			name        string
+			left, right string // a nonempty reason makes this setting UNKNOWN
+		}{
+			{"both unknown same reason", "not observed", "not observed"},
+			{"both unknown different reasons", "first runner missed it", "second runner missed it"},
+			{"left unknown", "not observed", ""},
+			{"right unknown", "", "not observed"},
+		} {
+			t.Run(label+"/"+tc.name, func(t *testing.T) {
+				c := testCriterion(t)
+				a, b := passing(invocationA), passing(invocationB)
+				left, right := config("sample_count", "12"), config("sample_count", "1.200e1")
+				if label == "effective configuration" {
+					a.ConfigEffective, b.ConfigEffective = left, right
+				} else {
+					a.ConditionsObserved, b.ConditionsObserved = left, right
+				}
+				wantVerdict(t, evaluate(t, c, a, b), True, "")
+				if tc.left != "" {
+					(*left.Value)["sample_count"] = model.Availability[model.Scalar]{State: model.Unknown, Reason: tc.left}
+				}
+				if tc.right != "" {
+					(*right.Value)["sample_count"] = model.Availability[model.Scalar]{State: model.Unknown, Reason: tc.right}
+				}
+				forward := evaluate(t, c, a, b)
+				wantVerdict(t, forward, Unknown, label)
+				wantVerdict(t, forward, Unknown, "sample_count")
+				if backward := evaluate(t, c, b, a); !reflect.DeepEqual(forward, backward) {
+					t.Fatalf("order changed the refusal: %+v vs %+v", forward, backward)
+				}
+			})
+		}
+	}
 }
 
 // ---- arithmetic ----------------------------------------------------------
