@@ -42,34 +42,40 @@ stale. Nothing below is written by hand, so it cannot quietly stop being true.
 datum
 |-- cmd/
 |   `-- datum          whole command surface: the write side that captures and admits, and the read side that answers from what was admitted
-|          3 files, 354 lines (555 test), largest write.go at 227 -- uses model, query, store, write
+|          3 files, tested -- uses model, query, store, write
 |-- internal/
 |   |-- acceptance     (tests only, no production code)
-|   |      5693 lines of tests
+|   |      tests only
 |   |-- evidence       turns a reference into the exact bytes it names, and a frozen criterion into a verdict over what those bytes actually say
-|   |      7 files, 1581 lines (2038 test), largest criterion.go at 277 -- uses model
+|   |      7 files, tested -- uses model
 |   |-- model          wire vocabulary every other package shares: identities, references, packets and bundles, plus the strict encode/decode boundary
-|   |      13 files, 2689 lines (1488 test), largest wire.go at 322 -- leaf
+|   |      13 files, tested -- leaf
 |   |-- query          selects admitted facts before either output format renders them
-|   |      2 files, 365 lines (579 test), largest query.go at 292 -- uses model, reduce, store
+|   |      2 files, tested -- uses model, reduce, store
 |   |-- reduce         folds admitted bundles into the state every Datum answer is read from
-|   |      12 files, 2723 lines (3373 test), largest task.go at 438 -- uses model
+|   |      12 files, tested -- uses model
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
-|   |      9 files, 1503 lines (2166 test), largest publish.go at 395 -- uses model
+|   |      9 files, tested -- uses model
 |   `-- write          joins immutable capture to canonical state through one admission gate
-|          4 files, 1493 lines (1869 test), largest run.go at 631 -- uses evidence, model, reduce, store
+|          4 files, tested -- uses evidence, model, reduce, store
 `-- tools/
     |-- archtree       instrument that reports how this module's packages fit together
-    |      3 files, 386 lines (0 test), largest scan.go at 232 -- leaf
+    |      3 files, no tests -- leaf
     `-- mintid         prints fresh record identifiers
-           1 files, 58 lines (0 test), largest main.go at 58 -- uses model
+           1 files, no tests -- uses model
 ```
 <!-- archtree:end -->
 
-Each package shows what it is for, how big it is, and what inside this module
-it depends on. **leaf** means it imports nothing from this module, which is
-what makes a package testable on its own. `internal/acceptance` holds the tests
-written by reviewers who cannot edit the code they judge.
+Each package shows what it is for, whether it is tested, and what inside this
+module it depends on. **leaf** means it imports nothing from this module, which
+is what makes a package testable on its own. `internal/acceptance` holds the
+tests written by reviewers who cannot edit the code they judge.
+
+Deliberately no line counts: they change on every commit, which made the
+staleness check fire constantly, and a check that fires constantly gets
+ignored. The counts are in the JSON, where a criterion can select them, and
+size is what `tools/filesize.sh` is for. This tree changes only when the
+structure does.
 
 What the tree cannot see is written at the top of `tools/archtree/main.go`, and
 matters more than the numbers: it reads imports rather than use, and it is

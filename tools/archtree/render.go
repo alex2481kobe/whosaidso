@@ -50,12 +50,30 @@ func render(r report) string {
 				}
 				dep = "uses " + strings.Join(short, ", ")
 			}
+			// Deliberately no line counts. The first version printed
+			// production and test lines and the largest file, and the CI
+			// staleness check then failed on almost every commit, because a
+			// single added test line changes the rendered tree. A check that
+			// fails constantly is noise, and noise gets ignored, which is
+			// worse than no check at all. I tripped it twice within an hour
+			// of adding it.
+			//
+			// The counts still exist, in the JSON, where a criterion can
+			// select them and where churn costs nothing. Size is what
+			// tools/filesize.sh is for. This tree answers how the packages
+			// fit together, and that changes only when the structure does.
+			//
+			// Whether a package is tested at all IS structure, so that stays.
+			tested := "no tests"
+			if p.TestLines > 0 {
+				tested = "tested"
+			}
 			if p.Files == 0 {
-				fmt.Fprintf(&b, "%s%s   %d lines of tests\n", indent(gLast), indent(pLast), p.TestLines)
+				fmt.Fprintf(&b, "%s%s   tests only\n", indent(gLast), indent(pLast))
 				continue
 			}
-			fmt.Fprintf(&b, "%s%s   %d files, %d lines (%d test), largest %s at %d -- %s\n",
-				indent(gLast), indent(pLast), p.Files, p.Lines, p.TestLines, p.Largest, p.LargestN, dep)
+			fmt.Fprintf(&b, "%s%s   %d files, %s -- %s\n",
+				indent(gLast), indent(pLast), p.Files, tested, dep)
 		}
 	}
 	if len(r.Cycles) > 0 {
