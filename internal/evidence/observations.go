@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
 	"sort"
 	"strings"
 
@@ -57,8 +58,9 @@ func (r *Resolver) Observe(ctx context.Context, c model.CriterionFix, env model.
 		return o, nil
 	}
 	outs := *env.OutputRefs.Value
+	runDir := RunDir(env.InvocationID)
 
-	result, why, err := r.readSelector(ctx, outs, c.Expression.ResultSelector)
+	result, why, err := r.readSelector(ctx, outs, runDir, c.Expression.ResultSelector)
 	if err != nil {
 		return Observation{}, err
 	}
@@ -68,7 +70,7 @@ func (r *Resolver) Observe(ctx context.Context, c model.CriterionFix, env model.
 	}
 	o.Result = result
 
-	population, why, err := r.readSelector(ctx, outs, c.Expression.Population.Selector)
+	population, why, err := r.readSelector(ctx, outs, runDir, c.Expression.Population.Selector)
 	if err != nil {
 		return Observation{}, err
 	}
@@ -83,8 +85,8 @@ func (r *Resolver) Observe(ctx context.Context, c model.CriterionFix, env model.
 // readSelector finds the output this selector names and reads it. A missing or
 // unreadable artifact comes back as a reason, not an error, because the family
 // still has to be evaluated with that observation counted and refused.
-func (r *Resolver) readSelector(ctx context.Context, outs []model.ArtifactRef, want model.ArtifactRef) (Reading, string, error) {
-	match, why := matchOutput(outs, want)
+func (r *Resolver) readSelector(ctx context.Context, outs []model.ArtifactRef, runDir string, want model.ArtifactRef) (Reading, string, error) {
+	match, why := matchOutput(outs, runDir, want)
 	if why != "" {
 		return Reading{}, why, nil
 	}
@@ -107,13 +109,27 @@ func (r *Resolver) readSelector(ctx context.Context, outs []model.ArtifactRef, w
 	return reading, "", nil
 }
 
+// RunDir is the project-relative directory write.Run gives one invocation.
+func RunDir(invocation model.ID) string {
+	return path.Join(DefaultArtifactDir, "runs", string(invocation))
+}
+
 // matchOutput pairs a criterion selector with an output by the path each
-// declares. Ambiguity is refused rather than resolved by position, since which
-// of two same-path outputs was meant is not something order can answer.
-func matchOutput(outs []model.ArtifactRef, want model.ArtifactRef) (model.ArtifactRef, string) {
+// declares. R8.3: the contract path resolves in THIS run's own directory, so
+// out/result.json names runs/<this-id>/out/result.json and never another run's
+// file; a contract path that would leave that directory names nothing there.
+// An output declared at the contract path itself still matches (U07's form).
+// Ambiguity is refused rather than resolved by position, since which of two
+// same-path outputs was meant is not something order can answer.
+func matchOutput(outs []model.ArtifactRef, runDir string, want model.ArtifactRef) (model.ArtifactRef, string) {
 	wanted := map[string]bool{}
 	for _, p := range declaredPaths(want) {
-		wanted[p] = true
+		if !strings.HasPrefix(p, DefaultArtifactDir+"/runs/") || strings.HasPrefix(p, runDir+"/") {
+			wanted[p] = true
+		}
+		if joined := path.Join(runDir, p); strings.HasPrefix(joined, runDir+"/") {
+			wanted[joined] = true
+		}
 	}
 	if len(wanted) == 0 {
 		return model.ArtifactRef{}, "the criterion selector declares no path to match an output against"

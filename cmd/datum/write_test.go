@@ -321,7 +321,7 @@ func TestCLIHandbackRefusesInvalidFlags(t *testing.T) {
 
 const (
 	e2ePass   = `{"results":{"unit":"mm","population":"pose sweep","denominator":"poses","values":[0.0100,0.0200]},"population":{"population":"pose sweep","denominator":"poses","values":["pose-a","pose-b"]}}`
-	e2eScript = "printf '%s' '" + e2ePass + "' > \"$DATUM_RUN_DIR/result.json\"\nprintf '%s' '{\"version\":1,\"config_effective\":{},\"conditions_observed\":{},\"outputs\":[{\"path\":\"result.json\",\"media_type\":\"application/json\"}]}' > \"$DATUM_RUN_REPORT\"\n"
+	e2eScript = "mkdir \"$DATUM_RUN_DIR/out\"\nprintf '%s' '" + e2ePass + "' > \"$DATUM_RUN_DIR/out/result.json\"\nprintf '%s' '{\"version\":1,\"config_effective\":{},\"conditions_observed\":{},\"outputs\":[{\"path\":\"out/result.json\",\"media_type\":\"application/json\"}]}' > \"$DATUM_RUN_REPORT\"\n"
 )
 
 func e2ePin(body, path, media string) model.ArtifactRef {
@@ -441,11 +441,12 @@ func e2eStatus(t *testing.T, root string, claim model.RecordRef) reduce.ClaimSta
 	return p.Status
 }
 
-// The honest end-to-end result: a real `datum run` is admitted and makes the
-// claim MEASURED, and proof over it is refused because write.Run declares every
-// output under record/artifacts/runs/<invocation-id>/, a path a criterion frozen
-// before launch cannot name (R8.3 matches outputs by declared path).
-func TestCLIFreshProcessesRunToMeasuredAndStopAtOutputPath(t *testing.T) {
+// The whole path through the real CLI, one fresh process per step: capture and
+// admit the records, a frozen criterion and an attempt, `datum run` a producer,
+// admit its start and seal (MEASURED), then capture and admit proof (PROVEN).
+// The criterion's contract path out/result.json resolves in this run's own
+// directory, record/artifacts/runs/<invocation-id>/out/result.json (R8.3).
+func TestCLIFreshProcessesRunToProven(t *testing.T) {
 	root, criterion, instrument, attempt := e2eWorld(t)
 	out, err := e2eInvoke(t, root, nil, "run", "--attempt-id", string(attempt), "--instrument", string(instrument.RecordID),
 		"--claim", string(criterion.Claim.RecordID), "--claim-revision", "1", "--criterion-id", string(criterion.CriterionID), "--criterion-revision", "1", "--", "/bin/sh", "tools/measure.sh")
@@ -471,17 +472,16 @@ func TestCLIFreshProcessesRunToMeasuredAndStopAtOutputPath(t *testing.T) {
 	if _, err := e2eInvoke(t, root, []model.TypedEvent{proof}, "capture", "--command-id", string(cliID(901))); err != nil {
 		t.Fatal(err)
 	}
-	_, err = e2eInvoke(t, root, nil, "admit", "--command-id", string(cliID(902)), "--actor", "coordinator", "--outcome", "accepted", "--reason", "proof", string(cliID(901)))
-	if err == nil || !strings.Contains(err.Error(), "criterion-unsatisfied") || !strings.Contains(err.Error(), "no output of this invocation declares out/result.json") {
-		t.Fatalf("expected proof to stop at output-path matching, got %v", err)
+	if _, err := e2eInvoke(t, root, nil, "admit", "--command-id", string(cliID(902)), "--actor", "coordinator", "--outcome", "accepted", "--reason", "proof", string(cliID(901))); err != nil {
+		t.Fatal(err)
 	}
-	if status := e2eStatus(t, root, criterion.Claim); status != reduce.StatusMeasured {
-		t.Fatalf("refused proof changed the claim to %s", status)
+	if status := e2eStatus(t, root, criterion.Claim); status != reduce.StatusProven {
+		t.Fatalf("a real run's proof left the claim %s", status)
 	}
 }
 
-// With the run's output declared at the contract path (captured by a producer
-// outside write.Run), fresh processes carry the claim from UNMEASURED to PROVEN.
+// A producer outside write.Run may declare its output at the contract path
+// itself; fresh processes still carry the claim from UNMEASURED to PROVEN.
 func TestCLIFreshProcessesCaptureAdmitProofToProven(t *testing.T) {
 	root, criterion, instrument, attempt := e2eWorld(t)
 	if status := e2eStatus(t, root, criterion.Claim); status != reduce.StatusUnmeasured {
