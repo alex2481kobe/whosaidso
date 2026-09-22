@@ -7,6 +7,7 @@ package model
 import (
 	"fmt"
 	"path"
+	"reflect"
 	"strings"
 	"unicode"
 )
@@ -100,7 +101,7 @@ func lowerHex(s string) bool {
 }
 
 // ValidateArtifactRef checks the tagged-locator shape and every pin's path
-// safety, including corroboration, using the same rules as the schema walk.
+// syntax and selector, including corroboration, using the schema walk's rules.
 func ValidateArtifactRef(a ArtifactRef, path string) error {
 	switch a.Kind {
 	case "git":
@@ -144,15 +145,5 @@ func ValidateArtifactRef(a ArtifactRef, path string) error {
 			}
 		}
 	}
-	switch a.Selector.Kind {
-	case "whole":
-		if a.Selector.Pointer != "" {
-			return fault("invalid-field", path+".selector.pointer", `"whole" takes no pointer`)
-		}
-	case "json-pointer":
-		// The empty pointer is the JSON root and is legal.
-	default:
-		return fault("invalid-field", path+".selector.kind", `selector must be "whole" or "json-pointer"`)
-	}
-	return nil
+	return validateValue(reflect.ValueOf(a.Selector), path+".selector")
 }

@@ -51,3 +51,42 @@ func TestArtifactRefPathSafety(t *testing.T) {
 		}
 	}
 }
+
+func TestArtifactRefSelectorMatchesSchema(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		selector Selector
+		valid    bool
+	}{
+		{"whole", Selector{Kind: "whole"}, true},
+		{"root", Selector{Kind: "json-pointer"}, true},
+		{"member", Selector{Kind: "json-pointer", Pointer: "/value"}, true},
+		{"escapes", Selector{Kind: "json-pointer", Pointer: "/a~1b/~0/~01"}, true},
+		{"empty member", Selector{Kind: "json-pointer", Pointer: "/"}, true},
+		{"missing slash", Selector{Kind: "json-pointer", Pointer: "value"}, false},
+		{"dangling escape", Selector{Kind: "json-pointer", Pointer: "/value~"}, false},
+		{"invalid escape", Selector{Kind: "json-pointer", Pointer: "/value~2"}, false},
+		{"later invalid escape", Selector{Kind: "json-pointer", Pointer: "/good~0/bad~3"}, false},
+		{"whole with pointer", Selector{Kind: "whole", Pointer: "/value"}, false},
+		{"unknown kind", Selector{Kind: "other"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ref := ArtifactRef{Kind: "content", Selector: tc.selector,
+				Content: &ContentPin{SHA256: HashBytes([]byte("x")), Length: 1,
+					MediaType: "text/plain", Locators: []Locator{}}}
+			cheapErr := ValidateArtifactRef(ref, "ref")
+			// Validate the selector alone so this oracle does not call the
+			// cheap artifact validator through the schema's ArtifactRef case.
+			schemaErr := ValidateSchema(tc.selector)
+			if (cheapErr == nil) != tc.valid || (schemaErr == nil) != tc.valid {
+				t.Fatalf("valid=%v: cheap=%v, schema=%v", tc.valid, cheapErr, schemaErr)
+			}
+			if !tc.valid {
+				f, ok := cheapErr.(*Fault)
+				if !ok || f.Code != "invalid-field" || !strings.HasPrefix(f.Path, "ref.selector") {
+					t.Errorf("expected selector field fault: %v", cheapErr)
+				}
+			}
+		})
+	}
+}

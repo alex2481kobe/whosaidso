@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -125,7 +124,10 @@ func (r *Resolver) readFile(rel string) ([]byte, error) {
 	if err := relativePath(rel, "path"); err != nil {
 		return nil, err
 	}
-	full := filepath.Join(r.Root, filepath.FromSlash(rel))
+	full, err := r.containedPath(rel)
+	if err != nil {
+		return nil, err
+	}
 	info, err := os.Stat(full)
 	if err != nil {
 		return nil, errors.New("not readable")

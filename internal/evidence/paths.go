@@ -6,6 +6,7 @@ package evidence
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -116,8 +117,8 @@ func (r *Resolver) checkPaths(ref model.ArtifactRef) error {
 	return nil
 }
 
-// relativePath refuses anything that could read outside the project root or be
-// mistaken for a git option or revision expression.
+// relativePath checks declared syntax, not filesystem containment, and refuses
+// paths that could be mistaken for a git option or revision expression.
 func relativePath(s, at string) error {
 	switch {
 	case strings.TrimSpace(s) == "":
@@ -133,4 +134,25 @@ func relativePath(s, at string) error {
 		}
 	}
 	return nil
+}
+
+// containedPath resolves every symlink, including ancestors of both the file
+// and the root. A root reached through a symlink has the same containment rules.
+func (r *Resolver) containedPath(rel string) (string, error) {
+	root, err := filepath.EvalSymlinks(r.Root)
+	if err != nil {
+		return "", err
+	}
+	full, err := filepath.EvalSymlinks(filepath.Join(r.Root, filepath.FromSlash(rel)))
+	if err != nil {
+		return "", err
+	}
+	within, err := filepath.Rel(root, full)
+	if err != nil {
+		return "", err
+	}
+	if within == ".." || strings.HasPrefix(within, ".."+string(filepath.Separator)) {
+		return "", fault("invalid-field", "path", fmt.Sprintf("path %q resolved outside the root: %q is outside root %q", rel, full, root))
+	}
+	return full, nil
 }
