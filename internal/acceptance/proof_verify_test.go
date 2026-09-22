@@ -929,3 +929,55 @@ func TestProofVerifyFreshProcessRunReachesProvenOnItsOwnBytes(t *testing.T) {
 		t.Fatalf("a real datum run's proof left the claim %s", status)
 	}
 }
+
+// DATUM-CONTRACT, criterion.fix: "Changing it mints a new criterion revision
+// and cannot erase known counterevidence." The family is matched on the exact
+// criterion revision, so a failing run under revision 1 is outside revision
+// 2's family, and re-fixing the same criterion after a failure proves the
+// claim without that failure ever being dispositioned.
+func TestProofVerifyNewCriterionRevisionCannotEraseCounterevidence(t *testing.T) {
+	passing := func(w *pvWorld) model.ID {
+		id, err := w.run(true, func(id model.ID) []model.ArtifactRef {
+			pvPut(t, w.p.Root, pvRunPath(id, "out/result.json"), []byte(pvPass))
+			return []model.ArtifactRef{pvPin([]byte(pvPass), pvRunPath(id, "out/result.json"))}
+		})
+		if err != nil {
+			t.Fatalf("control: passing run must admit: %v", err)
+		}
+		return id
+	}
+	pvOwnRunDirControl(t, []byte(pvPass))
+	w := pvNew(t)
+	pvPut(t, w.p.Root, "out/result.json", []byte(pvPass))
+	w.fix("out/result.json", []byte(pvPass))
+	failed, err := w.run(true, func(id model.ID) []model.ArtifactRef {
+		pvPut(t, w.p.Root, pvRunPath(id, "out/result.json"), []byte(pvFail))
+		return []model.ArtifactRef{pvPin([]byte(pvFail), pvRunPath(id, "out/result.json"))}
+	})
+	if err != nil {
+		t.Fatalf("control: a failing run is admitted as family evidence: %v", err)
+	}
+	first := w.criterion
+	if err := w.prove(map[model.ID]string{failed: "supports"}); err == nil {
+		t.Fatal("control: the failing run must refuse proof under revision 1")
+	}
+	// Revision 2 of the same criterion, identical expression, fixed afterwards.
+	result, population := pvPin([]byte(pvPass), "out/result.json"), pvPin([]byte(pvPass), "out/result.json")
+	result.Selector, population.Selector = model.Selector{Kind: "json-pointer", Pointer: "/results"}, model.Selector{Kind: "json-pointer", Pointer: "/population"}
+	target := json.Number("0.05")
+	fix := &model.CriterionFix{Claim: w.claim, CriterionID: first.CriterionID, Revision: 2, Author: w.lane, SourceRefs: []model.ArtifactRef{},
+		Expression: model.CriterionExpression{ResultSelector: result, Unit: "mm", Population: model.Population{Identity: "pose sweep", Selector: population, Denominator: "poses"},
+			Operator: model.Less, Target: model.Scalar{Type: "number", Number: &target}, Reducer: model.All},
+		Policy: model.EvaluationPolicy{Inclusion: "entire-criterion-family", Retry: "retain-all"}}
+	if err := w.admit(w.lane, fix); err != nil {
+		t.Skipf("a second revision of the criterion is not admissible here (%v); nothing to probe", err)
+	}
+	w.criterion = model.CriterionRef{Claim: w.claim, CriterionID: first.CriterionID, Revision: 2}
+	time.Sleep(2 * time.Millisecond)
+	good := passing(w)
+	err = w.prove(map[model.ID]string{good: "supports"})
+	if err == nil || w.status() == reduce.StatusProven {
+		t.Errorf("expected proof under criterion %s revision 2 to be refused while run %s, a failing observation under revision 1 of the same criterion, stays undispositioned; got %v and claim %s. Re-fixing the criterion erased known counterevidence",
+			first.CriterionID, failed, err, w.status())
+	}
+}
