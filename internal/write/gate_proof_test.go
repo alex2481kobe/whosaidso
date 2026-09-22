@@ -225,18 +225,23 @@ func TestProofRefusesCriterionFixedAfterTheRun(t *testing.T) {
 	// Admitted in its own earlier bundle, it is still later than the run.
 	w.f.accept(fix)
 	w.f.refuse(w.f.request(start, seal), "criterion-not-frozen")
-	// A criterion admitted before the run starts is the control.
+	// A run started after the criterion is admitted is itself admissible.
 	pass, s, e := w.run(lateRef, proofPass)
 	w.f.accept(s, e)
 	proof := w.f.capture(nil, w.proof(lateRef, map[model.InvocationRef]string{pass: "supports"}))
 	// The refused run is still durable intake carrying this criterion.
 	w.f.refuse(w.f.request(proof), "pending-reconciliation")
+	// Rejecting it does not make it vanish: that criterion revision keeps it.
 	reject := w.f.request(start, seal)
 	reject.Outcome = "rejected"
 	if _, err := Admit(context.Background(), w.f.project, reject); err != nil {
 		t.Fatal(err)
 	}
-	w.f.accept(proof)
+	w.f.refuse(w.f.request(proof), "rejected-family-member")
+	// The control: a criterion fixed before every run carrying it.
+	clean, s2, e2 := w.run(w.criterion, proofPass)
+	w.f.accept(s2, e2)
+	w.f.accept(w.f.capture(nil, w.proof(w.criterion, map[model.InvocationRef]string{clean: "supports"})))
 }
 
 func TestProofRefusesUnknownValidationInstrument(t *testing.T) {

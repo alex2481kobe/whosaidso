@@ -19,7 +19,7 @@ import (
 
 // proofIntakeLimit is recorded with every admitted proof. Completeness is
 // checked against what this machine holds, never against intake it never saw.
-const proofIntakeLimit = "Proof family completeness covered the ledger and this machine's intake inbox only; invocations captured elsewhere and never delivered here could not be checked."
+const proofIntakeLimit = "Proof family completeness covered the ledger and this machine's intake inbox only, including rejected packets whose bytes remain there; invocations captured elsewhere and never delivered here could not be checked."
 
 func gateProofOperation(event model.TypedEvent, author model.Actor) (*model.Provenance, error) {
 	switch e := event.(type) {
