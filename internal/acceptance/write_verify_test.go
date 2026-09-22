@@ -3,6 +3,7 @@ package acceptance_test
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -91,7 +92,11 @@ func TestWriteVerifyProducerRejectsInvalidUTF8BeforeDecodingFacts(t *testing.T) 
 	// Unlike argv, this string becomes the bytes of producer.json. Keep the
 	// raw report artifact and process result; refuse only its purported facts.
 	report := strings.Replace(outsideRunReport, `"type":"number","number":8`, "\"type\":\"string\",\"string\":\"adapter-\xff\"", 1)
-	result, err := write.Run(context.Background(), p, outsideRunRequest(p, report, ""))
+	// Transport only: the malformed bytes travel hex-encoded because argv is
+	// authored intent and now refuses invalid UTF-8. The child writes the
+	// decoded ORIGINAL bytes to producer.json, and every assertion below is
+	// unchanged. Reconciled in the open by the coordinator, 2026-09-22.
+	result, err := write.Run(context.Background(), p, outsideRunRequest(p, "hex:"+hex.EncodeToString([]byte(report)), ""))
 	_, seal := outsideRunPackets(t, p, result)
 	raw, readErr := os.ReadFile(filepath.Join(result.ArtifactDir, "producer.json"))
 	if readErr != nil || !bytes.Equal(raw, []byte(report)) {
