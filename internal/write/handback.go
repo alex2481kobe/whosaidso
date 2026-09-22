@@ -165,14 +165,14 @@ func gateHandbacks(base reduce.Snapshot, packets []model.Packet) ([]model.Packet
 				if e.Task.Revision != a.TaskRevision {
 					return nil, admissionFault("revision-conflict", "task", "receipt must carry the revision the attempt started against")
 				}
-				// ASSUMPTION: a handback carries the task revision the attempt
-				// STARTED against, and is admitted against the CURRENT revision.
-				// Both are recorded: intake + attempt retain the starting contract;
-				// this bundle records the admission revision. Work actually done
-				// was against the old contract. Rejecting it for another person's
-				// amendment punishes the lane and pressures it to backdate receipts.
-				// Reverse this translation here if the owner rules otherwise;
-				// U05 still requires CURRENT and rejects stale events unchanged.
+				// RULED (owner, R8.2, 2026-09-22): a handback carries the task
+				// revision the attempt STARTED against, and is admitted against the
+				// CURRENT revision. Both are recorded: intake + attempt retain the
+				// starting contract; this bundle records the admission revision.
+				// Work actually done was against the old contract. Rejecting it for
+				// another person's amendment punishes the lane and pressures it to
+				// backdate receipts. U05 still requires CURRENT and rejects stale
+				// events unchanged; this translation is the ruled exception.
 				current := revisions[reduce.Ident{Project: e.Task.Project, ID: e.Task.RecordID}]
 				rewrite, e.Task.Revision = current != e.Task.Revision, current
 				terminals = append(terminals, e)
