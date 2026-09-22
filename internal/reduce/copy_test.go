@@ -52,17 +52,36 @@ func escapingTypes(t *testing.T) map[reflect.Type]string {
 }
 
 // immutableByContract is the stated exemption list, and it is deliberately
-// tiny. These types DO hide references that deepCopy leaves shared, and that is
-// correct rather than tolerated: nothing can mutate them through their public
-// API, so a shared address can never become a shared change.
+// tiny. These types DO hide references that deepCopy leaves shared.
 //
-// time.Time holds loc *time.Location, and every method on Time returns a new
-// Time rather than writing to the receiver. A Location is a process-wide
-// immutable value, and copying one would be actively wrong: it would break
-// equality between a copied location and time.UTC.
+// The first version of this comment claimed "nothing can mutate them through
+// their public API, so a shared address can never become a shared change".
+// That is false, and an outside reviewer proved it with
+// TestCopySnapshotTimeLocationCannotRewriteAdmittedTimestamp. time.Time.Location
+// is exported and returns a *time.Location, and `*loc = *other` is ordinary Go
+// needing no unsafe and no reflection. Assigning through it changes how an
+// admitted timestamp renders in every snapshot at once, with no event behind
+// the change.
 //
-// Adding to this list is a claim that a type cannot be mutated by any caller.
-// Make that claim on purpose, in writing, or do not make it.
+// So the accurate claim is narrower: these types have no exported method that
+// mutates the receiver, and the only way to change one is to assign through a
+// pointer the caller had to go out of its way to obtain.
+//
+// They stay exempt anyway, as a priced decision rather than an oversight.
+// Copying a Location would break equality between a copied location and
+// time.UTC, and allocate one per timestamp, and a caller assigning through a
+// *time.Location has already corrupted zone data process-wide, well beyond
+// anything this package could contain.
+//
+// Whether a non-UTC location can reach a snapshot through real admission at
+// all is open: the wire codec forces UTC when marshalling, so a timestamp that
+// round-trips through JSON cannot carry one. The reviewer's fixture builds the
+// envelope in memory and skips that round trip. Until someone checks, the
+// honest statement is that the hole is real in the type and may be unreachable
+// in practice. Do not upgrade "unmeasured" to "safe".
+//
+// Adding to this list is a claim about what a caller can do to a type. Make it
+// on purpose, in writing, with its price stated, or do not make it.
 var immutableByContract = map[string]bool{
 	"time.Time":     true,
 	"time.Location": true,
