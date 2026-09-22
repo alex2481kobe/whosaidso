@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Read-only by default. A workflow that never needs to write should never be
+# able to. Narrower write scopes belong in specific trusted workflows only.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Do not leave a credential in the checkout for later steps, or for
+          # anything a dependency might run.
+          persist-credentials: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: No dependencies
+        # Datum is standard library only. A go.sum appearing means something
+        # pulled a dependency in, which is a decision, not an accident.
+        run: |
+          test ! -f go.sum || { echo "go.sum exists: a dependency was added"; exit 1; }
+
+      - name: Format
+        run: |
+          unformatted=$(gofmt -l .)
+          test -z "$unformatted" || { echo "gofmt needed on:"; echo "$unformatted"; exit 1; }
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./... -count=1

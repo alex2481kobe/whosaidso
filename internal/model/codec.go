@@ -23,7 +23,7 @@ func HashBytes(b []byte) Digest {
 
 // Encode writes UTF-8 JSON with recursively sorted object keys, two-space
 // indentation, and one trailing newline. Same value in, same bytes out, on any
-// machine — which is what lets a digest mean something.
+// machine. That is what lets a digest mean something.
 //
 // Array order is preserved (it carries meaning) and numeric tokens are kept
 // exactly as written. This is a local deterministic convention, not a claim of
