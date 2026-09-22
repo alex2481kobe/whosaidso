@@ -251,3 +251,68 @@ func TestReadCLISelfAdmissionAudit(t *testing.T) {
 		t.Fatalf("missing audit help: %s", help)
 	}
 }
+
+func TestFreshProcessInstrumentsOnThisRepositoryShowUnknownValidation(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(cwd, "..", "..")
+	answer := readJSON(t, readProcess(t, root, nil, "instruments", "--json"))
+	if answer.Project != "datum/datum" || answer.Watermark.Bundles == 0 || answer.Preset == nil || answer.Preset.Instruments == nil {
+		t.Fatalf("instruments must answer from this repository's own ledger, got %+v", answer)
+	}
+	// Attention listing is asserted in internal/query; this checks dispatch and rendering.
+	for _, v := range *answer.Preset.Instruments {
+		if v.Validation.State != "KNOWN" && (v.Validation.State != "UNKNOWN" || v.Validation.Reason == "") {
+			t.Fatalf("instrument %s validation must be KNOWN, or UNKNOWN with its reason; got %+v", v.Ref.RecordID, v.Validation)
+		}
+	}
+	text := readProcess(t, root, nil, "instruments")
+	if !bytes.Contains(text, []byte(`"attention":`)) || bytes.Index(text, []byte(`"attention":`)) > bytes.Index(text, []byte(`"instruments":`)) {
+		t.Fatalf("text must list attention before the instrument details, got %s", text)
+	}
+}
+
+func TestReadCLIPresetsLimitAndContinueObservation(t *testing.T) {
+	root, data := cliFixture(t)
+	cliControl(t, root, data)
+	call := func(args ...string) ([]byte, error) {
+		var output bytes.Buffer
+		err := readCLI(context.Background(), args, root, &output, io.Discard)
+		return output.Bytes(), err
+	}
+	for _, args := range [][]string{{"instruments"}, {"state"}, {"now"}, {"todo", "--limit", "1"}, {"context", "--limit", "2", string(cliID(1))}} {
+		if _, err := call(args...); err != nil {
+			t.Fatalf("preset %v must succeed: %v", args, err)
+		}
+	}
+	for _, args := range [][]string{{"continue"}, {"instruments", "--limit", "1"}, {"now", string(cliID(1))}, {"todo", "--limit", "-1"}} {
+		if output, err := call(args...); err == nil || len(output) != 0 {
+			t.Fatalf("invalid preset %v must fail without an answer, got %s", args, output)
+		}
+	}
+	files := func() map[string]string {
+		out := map[string]string{}
+		filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+			if err == nil && !d.IsDir() {
+				data, _ := os.ReadFile(path)
+				out[path] = string(data)
+			}
+			return nil
+		})
+		return out
+	}
+	before := files()
+	answer := readJSON(t, readProcess(t, root, nil, "continue", "--json", string(cliID(1))))
+	c := answer.Preset.Continue
+	// The fixture is not a git checkout, so HEAD and dirty are UNKNOWN, but the
+	// observation time was actually taken.
+	if c.Observed.Head.State != model.Unknown || c.Observed.Head.Reason == "" || c.Observed.Dirty.State != model.Unknown ||
+		c.Observed.ObservedAt.State != model.Known || c.Observed.ObservedAt.Value.IsZero() {
+		t.Fatalf("continue outside git must report UNKNOWN HEAD/dirty with reasons and a real observation time, got %+v", c.Observed)
+	}
+	if !reflect.DeepEqual(before, files()) {
+		t.Fatal("continue wrote a file; it must write no handoff record")
+	}
+}

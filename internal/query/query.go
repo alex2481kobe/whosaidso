@@ -2,6 +2,7 @@
 package query
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,9 +15,13 @@ import (
 )
 
 type Request struct {
-	Command      string // show, history, task todo, or intake pending
+	Command      string // show, history, task todo, intake pending, or a preset in presets.go
 	ID           model.ID
 	SelfAdmitted model.SelfAdmissionState // empty means no filter; history only, without ID
+	Limit        int                      // optional-result cap for context, continue and todo; 0 means none
+	Observed     *Observation             // continue only: the caller's fresh workspace observation
+	Provider     Provider                 // optional; nil works fully offline
+	Context      context.Context          // for the provider only; nil means Background
 }
 
 // Answer is the complete read result shared by text and JSON. UNKNOWN is a
@@ -31,6 +36,7 @@ type Answer struct {
 	History   []Event         `json:"history"`
 	Intake    []Packet        `json:"intake"`
 	Reviews   []Review        `json:"reviews"`
+	Preset    *Preset         `json:"preset,omitempty"` // only the read presets fill this
 }
 
 // Review exposes the projected per-packet fact, including legacy UNKNOWN.
@@ -119,11 +125,14 @@ func Read(project store.Project, request Request) (Answer, error) {
 			return Answer{}, fmt.Errorf("self-admitted must be true, false, or unknown")
 		}
 	}
-	if request.Command != "show" && request.Command != "history" && request.Command != "task todo" && request.Command != "intake pending" {
+	if request.Command != "show" && request.Command != "history" && request.Command != "task todo" && request.Command != "intake pending" && !presetCommands[request.Command] {
 		return Answer{}, fmt.Errorf("unknown read command %q", request.Command)
 	}
-	if request.ID != "" && (!model.ValidID(request.ID) || request.Command != "show" && request.Command != "history") {
-		return Answer{}, fmt.Errorf("only show and history accept a record ULID")
+	if request.ID != "" && (!model.ValidID(request.ID) || request.Command != "show" && request.Command != "history" && !idPresets[request.Command]) {
+		return Answer{}, fmt.Errorf("only show, history, context and continue accept a record ULID")
+	}
+	if err := checkPresetRequest(request); err != nil {
+		return Answer{}, err
 	}
 	prefix, err := store.ReadPrefix(project)
 	if err != nil {
@@ -186,6 +195,8 @@ func Read(project store.Project, request Request) (Answer, error) {
 		}
 	case "intake pending":
 		a.Intake, err = pending(project, snapshot, prefix)
+	default:
+		err = preset(project, snapshot, prefix, request, &a)
 	}
 	return a, err
 }
