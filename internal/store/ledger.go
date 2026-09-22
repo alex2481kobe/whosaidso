@@ -114,6 +114,7 @@ func readLedger(project Project) ([]model.Bundle, error) {
 		}
 	}
 	bundles := make([]model.Bundle, 0, len(files))
+	commands := make(map[model.ID]int, len(files))
 	for i, file := range files {
 		path := filepath.Join(dir, file.name)
 		if file.sequence != uint64(i)+1 {
@@ -148,6 +149,17 @@ func readLedger(project Project) ([]model.Bundle, error) {
 			return nil, storeFault("ledger-discontinuity", path,
 				"predecessor does not name the preceding bundle")
 		}
+		if prior, exists := commands[bundle.CommandID]; exists {
+			requests := "matching request digests"
+			if bundles[prior].RequestDigest != bundle.RequestDigest {
+				requests = "different request digests"
+			}
+			return nil, storeFault("ledger-corrupt", path,
+				"command id "+string(bundle.CommandID)+" is published at sequences "+
+					strconv.FormatUint(bundles[prior].Sequence, 10)+" and "+strconv.FormatUint(bundle.Sequence, 10)+
+					" with "+requests+"; admission identity is ambiguous")
+		}
+		commands[bundle.CommandID] = i
 		bundles = append(bundles, bundle)
 	}
 	return bundles, nil

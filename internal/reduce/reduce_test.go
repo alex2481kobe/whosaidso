@@ -501,6 +501,59 @@ func TestStaleTaskRevisionOnAttemptEvents(t *testing.T) {
 
 func mustErr(_ Snapshot, err error) error { return err }
 
+func TestAttemptIdentityCollisionIsAProjectWideFault(t *testing.T) {
+	for _, takeover := range []bool{false, true} {
+		for _, terminal := range []bool{false, true} {
+			t.Run(fmt.Sprintf("takeover=%t/terminal=%t", takeover, terminal), func(t *testing.T) {
+				l := goodLedger(t)
+				l.add(t, &model.TaskCreate{Provenance: provenance("lane-b"), ID: newID("TSKB"), Spec: taskSpec()})
+				if terminal {
+					l.add(t, &model.AttemptTerminal{
+						Task: ref(newID("TSKA"), 1), AttemptID: newID("ATTA"),
+						Outcome: model.AttemptStopped, Reason: "stopped", NextAction: "retry",
+						DeliveryRefs: []model.ArtifactRef{},
+					})
+				}
+				if takeover {
+					l.add(t, &model.TaskStart{Task: ref(newID("TSKB"), 1), Actor: model.Actor{ID: "lane-b"}, AttemptID: newID("ATTB")})
+				}
+				before := mustReplay(t, l.bundles())
+				unchanged := mustReplay(t, l.bundles())
+				event := func(id model.ID) model.TypedEvent {
+					if takeover {
+						return &model.TaskTakeover{
+							Task: ref(newID("TSKB"), 1), Actor: model.Actor{ID: "lane-c"},
+							AttemptID: id, PriorAttemptID: newID("ATTB"), StoppedConfirmationRef: blobRef("stopped"),
+						}
+					}
+					return &model.TaskStart{Task: ref(newID("TSKB"), 1), Actor: model.Actor{ID: "lane-c"}, AttemptID: id}
+				}
+				controlLedger := *l
+				control, err := Apply(before, controlLedger.add(t, event(newID("ATTC"))))
+				if err != nil {
+					t.Fatalf("distinct attempt identity refused: %v", err)
+				}
+				if got := control.inner().attemptOwner[Ident{Project: testProject, ID: newID("ATTC")}]; got.Task != newID("TSKB") {
+					t.Fatalf("distinct attempt owner = %+v", got)
+				}
+				// An earlier valid event must also be rolled back on collision.
+				bundle := l.add(t,
+					&model.TaskCreate{Provenance: provenance("lane-c"), ID: newID("TSKC"), Spec: taskSpec()},
+					event(newID("ATTA")),
+				)
+				after, err := Apply(before, bundle)
+				f := wantFault(t, err, CodeDuplicateRecord)
+				if f.Path != "attempt_id" || f.Sequence != bundle.Sequence || f.EventIndex != 1 {
+					t.Fatalf("collision fault location = %+v", f)
+				}
+				if !reflect.DeepEqual(after, Snapshot{}) || !reflect.DeepEqual(before, unchanged) {
+					t.Fatal("refused collision published partial state or changed its input")
+				}
+			})
+		}
+	}
+}
+
 // ---- references -----------------------------------------------------------
 
 func TestUnknownReferencesAreRefused(t *testing.T) {

@@ -200,6 +200,61 @@ func TestRetryWithDifferentContentIsRefused(t *testing.T) {
 	readControl(t, p, 1)
 }
 
+func TestConcurrentAdmissionsWithOneCommandIdentity(t *testing.T) {
+	for _, changed := range []bool{false, true} {
+		t.Run("changed_request_"+strconv.FormatBool(changed), func(t *testing.T) {
+			p := ledgerProject(t)
+			admitControl(t, p, 1)
+			digests := [2]model.Digest{digestFor(2), digestFor(2)}
+			if changed {
+				digests[1] = digestFor(99)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			start := make(chan struct{})
+			var group sync.WaitGroup
+			var bundles [2]model.Bundle
+			var errs [2]error
+			var called [2]bool
+			for i := range bundles {
+				group.Add(1)
+				go func(i int) {
+					defer group.Done()
+					<-start
+					bundles[i], errs[i] = Transact(ctx, p, admissionID(2), digests[i], func(prefix []model.Bundle) (model.Bundle, error) {
+						called[i] = true
+						return proposeFor(i + 2)(prefix)
+					})
+				}(i)
+			}
+			close(start)
+			group.Wait()
+			published := readControl(t, p, 2)[1]
+			want, err := model.Encode(published)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if called[0] == called[1] {
+				t.Fatalf("exactly one proposal must run: %v", called)
+			}
+			for i, err := range errs {
+				if digests[i] != published.RequestDigest {
+					requireFault(t, err, "conflict")
+					if bundles[i].CommandID != "" {
+						t.Fatalf("conflicting admission returned %+v", bundles[i])
+					}
+					continue
+				}
+				got, encodeErr := model.Encode(bundles[i])
+				if err != nil || encodeErr != nil || string(got) != string(want) {
+					t.Fatalf("writer %d did not recover the one admitted bundle: %+v, %v", i, bundles[i], err)
+				}
+			}
+			requireNoTemporaries(t, p)
+		})
+	}
+}
+
 // ---- what the callback may and may not do --------------------------------
 
 func TestCallbackFailureWritesNoBundle(t *testing.T) {

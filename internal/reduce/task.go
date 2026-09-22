@@ -239,6 +239,12 @@ func (s *state) closedSuccess(target model.RecordRef) (Truth, string) {
 	if c.Outcome != model.ClosureSuccess {
 		return TruthFalse, fmt.Sprintf("closed %s, which is not success", c.Outcome)
 	}
+	// The producer must be CLOSED at its current revision; a historical
+	// witness alone does not establish that its current obligation is met.
+	current := s.records[RecordKey{Project: who.Project, ID: who.ID, Revision: s.current[who]}]
+	if _, ok := s.witnessed(current, c); !ok {
+		return TruthFalse, "the dependency's current revision is not witnessed closed"
+	}
 	// The witness must apply to the revision the consumer required, not merely
 	// to whatever revision happened to be closed. rec is that exact revision.
 	if missing, ok := s.witnessed(rec, c); !ok {

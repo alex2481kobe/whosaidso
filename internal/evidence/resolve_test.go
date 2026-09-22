@@ -1,10 +1,13 @@
 package evidence
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -208,7 +211,7 @@ func TestGitObjectIDIsNotTheRawSHA256(t *testing.T) {
 	// Control: the git pin corroborated by the RAW digest resolves and is marked
 	// as checked against the second pin.
 	ok := gitRef("sha256", head, "engine/pelvis.json", "whole", "")
-	ok.Content = &model.ContentPin{SHA256: model.Digest(raw), Length: uint64(len(body)), MediaType: "application/json"}
+	ok.Content = contentRef(body, "application/json", []string{"engine/pelvis.json"}, "whole", "").Content
 	got, err := r.Resolve(ctx, ok)
 	if err != nil {
 		t.Fatalf("control: %v", err)
@@ -237,6 +240,7 @@ func TestBothPinsAreCheckedAgainstEachOther(t *testing.T) {
 		SHA256:    model.HashBytes([]byte(body)),
 		Length:    uint64(len(body)),
 		MediaType: "application/json",
+		Locators:  []model.Locator{{Path: "engine/pelvis.json"}},
 	}
 	// Control: agreeing pins resolve.
 	if _, err := r.Resolve(ctx, both); err != nil {
@@ -267,6 +271,16 @@ func TestBothPinsAreCheckedAgainstEachOther(t *testing.T) {
 		bad.Git = &model.GitPin{ObjectFormat: "sha1", Commit: strings.Repeat("a", 40), Path: "engine/pelvis.json"}
 		_, err := r.Resolve(ctx, bad)
 		wantFault(t, err, "unavailable")
+	})
+	t.Run("git primary requires readable content corroboration", func(t *testing.T) {
+		for _, locators := range [][]model.Locator{nil, {{Path: "missing.json"}}} {
+			bad := both
+			pin := *both.Content
+			pin.Locators = locators
+			bad.Content = &pin
+			_, err := r.Resolve(ctx, bad)
+			wantFault(t, err, "unavailable")
+		}
 	})
 }
 
@@ -325,6 +339,96 @@ func TestLFSPointerIsNotThePayload(t *testing.T) {
 }
 
 // ---- content pins --------------------------------------------------------
+
+func TestResolverChecksDeclaredMediaType(t *testing.T) {
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, image.NewNRGBA(image.Rect(0, 0, 1, 1))); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, body, media, code string
+	}{
+		{"JSON", `{"value":1}`, "application/json", ""},
+		{"PNG", encoded.String(), "image/png", ""},
+		{"plain text", "a readable café\n", "text/plain", ""},
+		{"opaque bytes", "\x00\xff\x01", "application/octet-stream", ""},
+		{"empty opaque bytes", "", "application/octet-stream", ""},
+		{"case insensitive media", `{"value":1}`, "APPLICATION/JSON", ""},
+		{"JSON claiming PNG", `{"value":1}`, "image/png", "conflict"},
+		{"PNG claiming JSON", encoded.String(), "application/json", "conflict"},
+		{"incomplete PNG signature", "\x89PNG\r\n\x1a", "image/png", "conflict"},
+		{"malformed JSON", `{"value":`, "application/json", "conflict"},
+		{"invalid UTF8 JSON", "{\"value\":\"\xff\"}", "application/json", "conflict"},
+		{"binary claiming text", "text\x00", "text/plain", "conflict"},
+		{"invalid UTF8 text", "\xff", "text/plain", "conflict"},
+		{"unsupported type", "arbitrary bytes", "application/x-datum", "unavailable"},
+		{"JSON suffix is not a schema check", `{"value":1}`, "application/example+json", "unavailable"},
+		{"unverified parameters", `{"value":1}`, "application/json; profile=example", "unavailable"},
+		{"malformed media declaration", `{"value":1}`, "application/json; broken", "invalid-field"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := newRepo(t)
+			head := commitFile(t, root, "artifact.bin", tc.body)
+			digest := model.HashBytes([]byte(tc.body))
+			pointer := fmt.Sprintf("version https://git-lfs.github.com/spec/v1\noid sha256:%s\nsize %d\n", digest, len(tc.body))
+			head = commitFile(t, root, "pointer.bin", pointer)
+			for _, route := range []string{"content", "git", "lfs-git", "lfs-content"} {
+				t.Run(route, func(t *testing.T) {
+					ref := contentRef(tc.body, tc.media, []string{"artifact.bin"}, "whole", "")
+					if route != "content" {
+						ref.Git = &model.GitPin{ObjectFormat: "sha1", Commit: head, Path: "artifact.bin"}
+					}
+					if strings.HasPrefix(route, "lfs-") {
+						ref.Git.Path = "pointer.bin"
+					}
+					if route == "git" || route == "lfs-git" {
+						ref.Kind = "git"
+					}
+					got, err := NewResolver(root).Resolve(context.Background(), ref)
+					if tc.code != "" {
+						wantFault(t, err, tc.code)
+						var f *model.Fault
+						if !errors.As(err, &f) || f.Path != "artifact.content.media_type" || f.Detail == "" {
+							t.Fatalf("expected an explained media type refusal: %v", err)
+						}
+						return
+					}
+					if err != nil || string(got.Bytes) != tc.body || got.MediaType != tc.media || got.Corroborated != (route != "content") || got.LFSPointer != strings.HasPrefix(route, "lfs-") {
+						t.Fatalf("valid media must resolve with its provenance: %+v, %v", got, err)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestContentPinRefusesLFSPointerFromLocatorOrStore(t *testing.T) {
+	digest := model.HashBytes([]byte("payload"))
+	pointer := fmt.Sprintf("version https://git-lfs.github.com/spec/v1\noid sha256:%s\nsize 7\n", digest)
+	for _, store := range []bool{false, true} {
+		t.Run(fmt.Sprintf("store=%t", store), func(t *testing.T) {
+			root := t.TempDir()
+			ref := contentRef(pointer, "application/octet-stream", []string{"pointer.bin"}, "whole", "")
+			at := "pointer.bin"
+			if store {
+				at = DefaultArtifactDir + "/" + string(ref.Content.SHA256)
+			}
+			writeFile(t, root, at, pointer)
+			_, err := NewResolver(root).Resolve(context.Background(), ref)
+			wantFault(t, err, "unavailable")
+			if !strings.Contains(err.Error(), "LFS pointer") || !strings.Contains(err.Error(), string(digest)) {
+				t.Fatalf("refusal must explain which payload is needed: %v", err)
+			}
+		})
+	}
+	// Mentioning a pointer inside a document does not make the document a stub.
+	root := t.TempDir()
+	body := "LFS example:\n" + pointer
+	writeFile(t, root, "example.txt", body)
+	if _, err := NewResolver(root).Resolve(context.Background(), contentRef(body, "text/plain", []string{"example.txt"}, "whole", "")); err != nil {
+		t.Fatalf("a document mentioning LFS must remain readable: %v", err)
+	}
+}
 
 func TestContentPinLocatorsAndArtifactStore(t *testing.T) {
 	root := t.TempDir()

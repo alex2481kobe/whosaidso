@@ -498,6 +498,52 @@ func TestAClosureWithALiveAttemptDoesNotClose(t *testing.T) {
 
 // ---- dependencies ---------------------------------------------------------
 
+func TestDependencyRequiresCurrentAndRequiredRevisionWitnesses(t *testing.T) {
+	cases := []struct {
+		name      string
+		witnesses []model.Revision
+		required  model.Revision
+		producer  TaskStatus
+		consumer  TaskStatus
+		truth     Truth
+	}{
+		{"current", []model.Revision{2}, 2, StatusClosed, StatusReady, TruthTrue},
+		{"historical only", []model.Revision{1}, 1, StatusBlocked, StatusBlocked, TruthFalse},
+		{"required missing", []model.Revision{2}, 1, StatusClosed, StatusBlocked, TruthFalse},
+		{"both revisions", []model.Revision{1, 2}, 1, StatusClosed, StatusReady, TruthTrue},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			l := newLedger()
+			l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+			l.add(t, &model.TaskAmend{
+				Provenance: provenance("coordinator"), Target: ref(newID("TSKA"), 1), ExpectedRevision: 1,
+				Replacement: taskSpec(withCriteria(model.AcceptanceCriterion{
+					ID: newID("ACCA"), Revision: 2, Criterion: "the acceptance bar was raised",
+				})),
+			})
+			closure := closeSuccess(newID("TSKA"), 2)
+			closure.AcceptanceWitnessRefs = nil
+			for _, rev := range tc.witnesses {
+				closure.AcceptanceWitnessRefs = append(closure.AcceptanceWitnessRefs, model.AcceptanceWitness{
+					CriterionID: newID("ACCA"), CriterionRevision: rev, WitnessRef: blobRef("acceptance"),
+				})
+			}
+			l.add(t, closure, &model.TaskCreate{
+				Provenance: provenance("lane-b"), ID: newID("TSKB"),
+				Spec: taskSpec(withPrerequisite("task-success", ref(newID("TSKA"), tc.required), "forbid", nil)),
+			})
+			s := mustReplay(t, l.bundles())
+			producer, _ := s.Task(Ident{Project: testProject, ID: newID("TSKA")})
+			consumer, _ := s.Task(Ident{Project: testProject, ID: newID("TSKB")})
+			if producer.Status != tc.producer || consumer.Status != tc.consumer || consumer.Prerequisites[0].Truth != tc.truth {
+				t.Fatalf("producer %s, consumer %s (%s); want %s, %s (%s)",
+					producer.Status, consumer.Status, consumer.Prerequisites[0].Truth, tc.producer, tc.consumer, tc.truth)
+			}
+		})
+	}
+}
+
 // TestDependencyRuleRejectsEveryNonSuccessClosure is the closed-is-not-success
 // fixture. Cancelled, withdrawn and waived are all CLOSED, and none of them may
 // satisfy an ordinary success dependency.

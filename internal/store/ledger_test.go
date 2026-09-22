@@ -161,6 +161,73 @@ func TestReadPrefixEmptyLedgerIsEmptyNotBroken(t *testing.T) {
 	}
 }
 
+func TestDuplicateCommandIdentityRefusesReadsRetriesAndAdmissions(t *testing.T) {
+	for _, changed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("changed_request_%t", changed), func(t *testing.T) {
+			p := ledgerProject(t)
+			original := admitControl(t, p, 1)
+			second := admitControl(t, p, 2)
+			readControl(t, p, 2)
+			repeated := original
+			repeated.Sequence, repeated.Predecessor = 3, second.CommandID
+			requests := "matching request digests"
+			if changed {
+				repeated.RequestDigest = digestFor(99)
+				requests = "different request digests"
+			}
+			data, err := model.Encode(repeated)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := model.DecodeBundle(data); err != nil {
+				t.Fatalf("duplicate must be an individually valid bundle: %v", err)
+			}
+			path := ledgerPath(t, p, 3, repeated.CommandID)
+			writeLedgerFile(t, p, filepath.Base(path), data)
+			checkFault := func(err error) {
+				t.Helper()
+				requireFault(t, err, "ledger-corrupt")
+				var fault *model.Fault
+				if !errors.As(err, &fault) || fault.Path != path ||
+					!strings.Contains(fault.Detail, string(original.CommandID)) ||
+					!strings.Contains(fault.Detail, "sequences 1 and 3") ||
+					!strings.Contains(fault.Detail, requests) {
+					t.Fatalf("fault must locate and distinguish duplicate identities: %v", err)
+				}
+			}
+			prefix, err := ReadPrefix(p)
+			checkFault(err)
+			if len(prefix) != 0 {
+				t.Fatalf("ambiguous ledger returned %d bundles", len(prefix))
+			}
+			for _, request := range []struct {
+				id     model.ID
+				digest model.Digest
+			}{
+				{original.CommandID, original.RequestDigest},
+				{repeated.CommandID, repeated.RequestDigest},
+				{admissionID(4), digestFor(4)},
+			} {
+				bundle, err := Transact(context.Background(), p, request.id, request.digest, func([]model.Bundle) (model.Bundle, error) {
+					t.Fatal("ambiguous ledger reached the proposal callback")
+					return model.Bundle{}, nil
+				})
+				checkFault(err)
+				if bundle.CommandID != "" {
+					t.Fatalf("ambiguous ledger selected bundle %+v", bundle)
+				}
+			}
+			requireNoTemporaries(t, p)
+			if err := os.Remove(path); err != nil {
+				t.Fatal(err)
+			}
+			readControl(t, p, 2)
+			// Refusal released the lock and did not consume the next sequence.
+			admitControl(t, p, 3)
+		})
+	}
+}
+
 func TestReadPrefixSelectsSequenceOrderNotEnumerationOrder(t *testing.T) {
 	p := ledgerProject(t)
 	admitSeries(t, p, 12)

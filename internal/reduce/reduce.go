@@ -861,7 +861,7 @@ func (s *state) start(b model.Bundle, idx int, o Origin, e *model.TaskStart) err
 		return err
 	}
 	key := AttemptKey{Project: b.Project, Task: e.Task.RecordID, Attempt: e.AttemptID}
-	if _, ok := s.attempts[key]; ok {
+	if _, ok := s.attemptOwner[Ident{Project: b.Project, ID: e.AttemptID}]; ok {
 		return faultAt(CodeDuplicateRecord, b.Sequence, idx, "attempt_id", "attempt already admitted")
 	}
 	// A second start while an attempt is live would give one task two owners
@@ -893,7 +893,7 @@ func (s *state) takeover(b model.Bundle, idx int, o Origin, e *model.TaskTakeove
 			"no admitted prior attempt under this task")
 	}
 	key := AttemptKey{Project: b.Project, Task: e.Task.RecordID, Attempt: e.AttemptID}
-	if _, ok := s.attempts[key]; ok {
+	if _, ok := s.attemptOwner[Ident{Project: b.Project, ID: e.AttemptID}]; ok {
 		return faultAt(CodeDuplicateRecord, b.Sequence, idx, "attempt_id", "attempt already admitted")
 	}
 	// The prior attempt is left exactly as it was. A takeover does not write a

@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"os"
 	"os/exec"
 	"path"
@@ -26,6 +27,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"datum/internal/model"
 )
@@ -153,6 +155,11 @@ func (r *Resolver) resolveGitFirst(ctx context.Context, ref model.ArtifactRef) (
 		if err := agree(out.SHA256, out.Length, *ref.Content); err != nil {
 			return ResolvedArtifact{}, err
 		}
+		// Agreement with the declaration does not establish that the second
+		// pin is readable. Check its own locators/store before corroborating.
+		if _, _, _, err := r.readContent(*ref.Content); err != nil {
+			return ResolvedArtifact{}, err
+		}
 		out.MediaType = ref.Content.MediaType
 		out.Corroborated = true
 	}
@@ -242,10 +249,60 @@ func (r *Resolver) readContent(c model.ContentPin) ([]byte, Origin, string, erro
 			notes = append(notes, fmt.Sprintf("%s: hashes to %s", cd.declared, sum))
 			continue
 		}
+		// Once identity matches, another copy cannot repair a false claim
+		// about these bytes, so these refusals do not fall through to fallback.
+		if ptr, ok := parseLFSPointer(b); ok {
+			return nil, "", "", fault("unavailable", "artifact.content",
+				"the content pin names an LFS pointer, not its payload. The payload needs a content pin naming oid "+ptr.oid)
+		}
+		if err := checkMediaType(b, c.MediaType); err != nil {
+			return nil, "", "", err
+		}
 		return b, cd.origin, cd.declared, nil
 	}
 	return nil, "", "", fault("unavailable", "artifact.content",
 		"no locator holds the pinned bytes ("+strings.Join(notes, " | ")+")")
+}
+
+// checkMediaType checks only a bounded set of byte-level format properties:
+// PNG's signature, UTF-8 JSON syntax, and UTF-8 plain text without binary control
+// characters. Octet-stream makes no narrower claim than arbitrary bytes.
+// BLIND TO: PNG chunk/pixel integrity, JSON schema or meaning (including duplicate
+// keys), and text's meaning or intended format. A signature is not a full PNG
+// validation, and readable text does not identify a specific text-based format.
+// Unsupported media types and parameters are unknown, so they are refused with
+// a reason rather than inferred from a filename or a best-effort MIME guess.
+func checkMediaType(b []byte, declared string) error {
+	media, params, err := mime.ParseMediaType(declared)
+	if err != nil {
+		return fault("invalid-field", "artifact.content.media_type", "invalid media type: "+err.Error())
+	}
+	if len(params) != 0 {
+		return fault("unavailable", "artifact.content.media_type", "media type parameters cannot be verified: "+declared)
+	}
+	var matches bool
+	switch media {
+	case "application/octet-stream":
+		matches = true
+	case "image/png":
+		matches = bytes.HasPrefix(b, []byte("\x89PNG\r\n\x1a\n"))
+	case "application/json":
+		matches = utf8.Valid(b) && json.Valid(b)
+	case "text/plain":
+		matches = utf8.Valid(b)
+		for _, c := range b {
+			if (c < 0x20 && c != '\t' && c != '\n' && c != '\r' && c != '\f') || c == 0x7f {
+				matches = false
+				break
+			}
+		}
+	default:
+		return fault("unavailable", "artifact.content.media_type", "no byte-level check is available for media type "+declared)
+	}
+	if !matches {
+		return fault("conflict", "artifact.content.media_type", "the pinned bytes do not satisfy the byte-level format check for "+declared)
+	}
+	return nil
 }
 
 func (r *Resolver) artifactDir() string {
