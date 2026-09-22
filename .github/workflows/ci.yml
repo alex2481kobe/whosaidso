@@ -42,8 +42,15 @@ jobs:
         run: go test ./... -count=1
 
       - name: Test under the race detector
-        # Admission takes a lock and publishes files, and two writers racing on
-        # one command id is a case this project has to get right rather than
-        # hope about. Measured clean across the whole suite on 2026-09-22;
-        # keeping it measured is the point of putting it here.
+        # always(), because a step that only runs when everything else passed
+        # is not a check, it is a wish. Without it this step was SKIPPED on
+        # every run while main carried known failing tests, so the race
+        # detector never executed in CI once. The config said it ran. It did
+        # not run. That is this repository's own subject, committed by me.
+        #
+        # Races are a different property from correctness, so this has to be
+        # able to fail on its own and to report when the suite is otherwise
+        # red. Admission takes a lock and publishes files, and two writers
+        # racing on one command id is a case to measure rather than hope about.
+        if: always()
         run: go test ./... -race -count=1
