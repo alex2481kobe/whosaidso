@@ -54,3 +54,11 @@ jobs:
         # racing on one command id is a case to measure rather than hope about.
         if: always()
         run: go test ./... -race -count=1
+
+      - name: The architecture tree in the README is current
+        # The tree is generated, so it can be wrong in exactly one way: nobody
+        # regenerated it. Watched failing on a deliberately stale tree and
+        # passing on a current one before being put here, because a check
+        # nobody has seen fail is not evidence of anything.
+        if: always()
+        run: sh tools/readme-tree.sh -check
