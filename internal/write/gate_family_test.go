@@ -7,6 +7,7 @@ package write
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,8 +41,13 @@ func TestProofPendingPassingRunAdmitsInTheSameSet(t *testing.T) {
 	w := newProofWorld(t, true)
 	first, s1, e1 := w.run(w.criterion, proofPass)
 	w.f.accept(s1, e1)
-	second, s2, e2 := w.run(w.criterion, proofPass)
+	// The proof is captured before the run's packets, so only its dependency
+	// on the seal, not command-id order, can place it after that seal.
+	env := w.envelope(w.criterion)
+	second := model.InvocationRef{Project: w.f.project.ID, InvocationID: env.InvocationID}
 	proof := w.f.capture(nil, w.proof(w.criterion, map[model.InvocationRef]string{first: "supports", second: "supports"}))
+	s2 := w.f.capture(nil, &model.InvocationStart{Envelope: env})
+	e2 := w.f.capture([][]byte{[]byte(proofPass)}, proofSealed(env, proofPass))
 	w.f.accept(proof, s2, e2)
 	if w.status(t) != reduce.StatusProven {
 		t.Fatal("a complete family admitted in one set did not reach PROVEN")
@@ -223,6 +229,33 @@ func TestGateOperationsStillUnavailable(t *testing.T) {
 		t.Run(string(event.EventType()), func(t *testing.T) {
 			if err := gateOperation(event, model.Actor{ID: "author"}); admissionErrorCode(err) != "unavailable-until-integrated" {
 				t.Fatalf("operation became available: %v", err)
+			}
+		})
+	}
+}
+
+func TestProofRefusesIncomparableOrUnreadableSupport(t *testing.T) {
+	for _, route := range []string{"incomparable", "unreadable"} {
+		t.Run(route, func(t *testing.T) {
+			w := newProofWorld(t, true)
+			first, s1, e1 := w.run(w.criterion, proofPass)
+			env := w.envelope(w.criterion)
+			seal := proofSealed(env, proofPass)
+			if route == "incomparable" {
+				// Both runs pass on their own; they did not run under the same conditions.
+				seed := json.Number("8")
+				seal.Envelope.ConditionsObserved = proofKnown(map[string]model.Availability[model.Scalar]{"seed": proofKnown(model.Scalar{Type: "number", Number: &seed})})
+			} else {
+				// The output exists but not at the criterion's declared path: UNKNOWN, not TRUE.
+				seal.Envelope.OutputRefs = proofKnown([]model.ArtifactRef{proofPin(proofPass, "elsewhere/result.json")})
+			}
+			second := model.InvocationRef{Project: w.f.project.ID, InvocationID: env.InvocationID}
+			w.f.accept(s1, e1, w.f.capture(nil, &model.InvocationStart{Envelope: env}), w.f.capture([][]byte{[]byte(proofPass)}, seal))
+			w.f.refuse(w.f.request(w.f.capture(nil, w.proof(w.criterion, map[model.InvocationRef]string{first: "supports", second: "supports"}))), "criterion-unsatisfied")
+			// The same member dispositioned inconclusive leaves a satisfiable family.
+			w.f.accept(w.f.capture(nil, w.proof(w.criterion, map[model.InvocationRef]string{first: "supports", second: "inconclusive"})))
+			if w.status(t) != reduce.StatusProven {
+				t.Fatal("control with the unusable member marked inconclusive did not prove")
 			}
 		})
 	}

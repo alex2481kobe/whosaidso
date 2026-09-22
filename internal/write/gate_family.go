@@ -92,14 +92,13 @@ func gateProofFamily(ctx context.Context, project store.Project, after reduce.Sn
 		if member.Disposition != "supports" {
 			continue
 		}
-		if own.Verdict != evidence.True {
-			return admissionFault("criterion-unsatisfied", path, fmt.Sprintf("supporting member is %s: %s", own.Verdict, own.Reason))
-		}
 		if err := gateInstrumentValidation(ctx, resolver, after, inv.Start.InstrumentRef, path); err != nil {
 			return err
 		}
 		supports = append(supports, observation)
 	}
+	// Every supporting member must be TRUE and comparable with the others;
+	// one UNKNOWN or incomparable member leaves the family unsatisfied.
 	family, err := evidence.Evaluate(criterion.Fix, supports)
 	if err != nil {
 		return err
