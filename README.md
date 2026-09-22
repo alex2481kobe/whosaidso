@@ -51,7 +51,7 @@ datum
 |   |-- model          wire vocabulary every other package shares: identities, references, packets and bundles, plus the strict encode/decode boundary
 |   |      14 files, tested -- leaf
 |   |-- query          selects admitted facts before either output format renders them
-|   |      9 files, tested -- uses model, reduce, store
+|   |      10 files, tested -- uses model, reduce, store
 |   |-- reduce         folds admitted bundles into the state every Datum answer is read from
 |   |      15 files, tested -- uses model
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
@@ -120,6 +120,13 @@ datum history [--json] [RECORD_ID]
 datum task todo [--json]
 datum intake pending [--json]
 ```
+
+Before disposing of an artifact, `datum disposal-loss --digest SHA256` prints
+the `support_loss` targets an `artifact.dispose` of those bytes must record,
+direct and transitive, and the admitted events that cite them (add
+`--git FORMAT:COMMIT:PATH` when the disposal names a git pin). It writes
+nothing and fills in nothing: you write each reason, and admission recomputes
+the list and refuses a short one as `loss-unaccounted`.
 
 A record needs an identifier, and `datum id` prints one (`datum id 5` prints
 five). Use it rather than inventing one: hand-writing Crockford base32
