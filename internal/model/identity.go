@@ -97,14 +97,14 @@ func ValidDigest(s Digest) bool {
 	return true
 }
 
-// SameActor is true only for two KNOWN, identical ids. Two unknowns are not the
-// same actor, so an unknown author and an unknown admitter never establish
-// self-admission by accident.
 // blank reports whether a required semantic string is effectively empty. A
 // single space is not a value. This is the defect the contract names directly:
 // a "non-empty" rule that a space satisfies is not a rule.
 func blank(s string) bool { return Blank(s) }
 
+// SameActor is true only for two KNOWN, identical ids. Two unknowns are not the
+// same actor, so an unknown author and an unknown admitter never establish
+// self-admission by accident.
 func SameActor(a, b Actor) bool {
 	// An actor carrying BOTH branches is malformed, and two malformed actors
 	// must never compare equal - that would manufacture self-admission out of
