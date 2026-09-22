@@ -13,14 +13,34 @@ import (
 
 const readUsage = `datum show [--json] [RECORD_ID]
 datum history [--json] [RECORD_ID]
+datum history [--json] --self-admitted[=true|false|unknown]
 datum task todo [--json]
 datum intake pending [--json]
 
 Show selects current admitted records. History selects admitted events in order.
 TODO includes all tasks not CLOSED. Pending includes rejected and correction-requested packets.
+History without an ID also lists per-packet reviews. --self-admitted selects only
+matching reviews, including rejected packets, without needing local intake bytes.
+The bare flag selects true; false excludes unknown. Legacy facts remain UNKNOWN.
+This audit filter cannot be combined with a record ID.
 Every answer carries its ledger watermark. Flags precede the optional record ID.
 Output is generated on stdout; --json exports the same answer as text.
 `
+
+// A bare audit flag means true, while explicit values retain all three states.
+type selfAdmissionFlag string
+
+func (f *selfAdmissionFlag) String() string { return string(*f) }
+func (*selfAdmissionFlag) IsBoolFlag() bool { return true }
+func (f *selfAdmissionFlag) Set(value string) error {
+	switch model.SelfAdmissionState(value) {
+	case model.SelfAdmissionTrue, model.SelfAdmissionFalse, model.SelfAdmissionUnknown:
+		*f = selfAdmissionFlag(value)
+		return nil
+	default:
+		return fmt.Errorf("self-admitted must be true, false, or unknown")
+	}
+}
 
 func isReadCommand(args []string) bool {
 	if len(args) == 0 {
@@ -58,13 +78,17 @@ func readCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.W
 	flags.SetOutput(stderr)
 	flags.Usage = func() { fmt.Fprint(stderr, readUsage) }
 	jsonOutput := flags.Bool("json", false, "export the answer as JSON")
+	var selfAdmitted selfAdmissionFlag
+	if command == "history" {
+		flags.Var(&selfAdmitted, "self-admitted", "select per-packet reviews by true, false, or unknown (bare flag: true)")
+	}
 	if err := flags.Parse(rest); err != nil {
 		if err == flag.ErrHelp {
 			return nil
 		}
 		return err
 	}
-	request := query.Request{Command: command}
+	request := query.Request{Command: command, SelfAdmitted: model.SelfAdmissionState(selfAdmitted)}
 	if flags.NArg() > 1 || flags.NArg() > 0 && command != "show" && command != "history" {
 		return fmt.Errorf("%s: unexpected positional arguments", command)
 	}

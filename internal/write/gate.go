@@ -111,6 +111,13 @@ func gateOperation(event model.TypedEvent, author model.Actor) error {
 	case *model.ClaimAssert:
 		// Claims start UNMEASURED; observation/proof operations stay disabled.
 		provenance = &e.Provenance
+	case *model.InstrumentDeclare:
+		// Known validation currently grants active trust during reduction.
+		// A declaration cannot grant itself that authority.
+		if e.Spec.Validation.State != model.Unknown {
+			return admissionFault("unavailable-until-integrated", "spec.validation", "declaration cannot establish trusted validation")
+		}
+		provenance = &e.Provenance
 	case *model.TaskStart, *model.TaskTakeover, *model.AttemptTerminal, *model.BlockerHold, *model.BlockerClear:
 	default:
 		// Packet authors cannot mint reviews, closures or DECISION authority.
@@ -127,6 +134,8 @@ func gateProvides(project model.ProjectID, event model.TypedEvent) (gateKey, boo
 	case *model.TaskCreate:
 		return gateKey{Record: model.RecordRef{Project: project, RecordID: e.ID, Revision: 1}}, true
 	case *model.ClaimAssert:
+		return gateKey{Record: model.RecordRef{Project: project, RecordID: e.ID, Revision: 1}}, true
+	case *model.InstrumentDeclare:
 		return gateKey{Record: model.RecordRef{Project: project, RecordID: e.ID, Revision: 1}}, true
 	case *model.TaskAmend:
 		target := e.Target
@@ -232,6 +241,12 @@ func admissionArtifacts(event model.TypedEvent) []model.ArtifactRef {
 		}
 	case *model.BlockerClear:
 		refs = append(refs, e.ResolvingWitness)
+	case *model.InstrumentDeclare:
+		refs = append(refs, e.Provenance.SourceRefs...)
+		refs = append(refs, e.Spec.ImplementationRef)
+		if e.Spec.Validation.Value != nil {
+			refs = append(refs, e.Spec.Validation.Value.Ref)
+		}
 	case *model.TaskTakeover:
 		refs = append(refs, e.StoppedConfirmationRef)
 	case *model.AttemptTerminal:

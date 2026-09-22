@@ -1,14 +1,282 @@
 package write
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
+	"datum/internal/evidence"
 	"datum/internal/model"
 	"datum/internal/reduce"
 )
+
+func (f *admissionFixture) instrument() *model.InstrumentDeclare {
+	return &model.InstrumentDeclare{
+		ID: f.id(), Provenance: model.Provenance{Author: f.author, SourceRefs: []model.ArtifactRef{}},
+		Spec: model.InstrumentSpec{
+			QuestionAnswered: "how many bytes does the input contain", BlindTo: "the meaning of those bytes",
+			NotAnswered: "whether the input is correct", ConfigSurface: []string{}, DangerousDefaults: []string{},
+			ValidRange: "fixture text", ImplementationRef: admissionContent([]byte("instrument implementation")),
+			Validation: model.Availability[model.InstrumentValidation]{State: model.Unknown, Reason: "not independently validated"},
+		},
+	}
+}
+
+func TestAdmissionInstrumentDeclaration(t *testing.T) {
+	for _, unknownAuthor := range []bool{false, true} {
+		t.Run(map[bool]string{false: "identified-author", true: "unknown-author"}[unknownAuthor], func(t *testing.T) {
+			f := newAdmissionFixture(t)
+			if unknownAuthor {
+				f.author = model.Actor{UnknownReason: "original author was not recorded"}
+			}
+			instrument, consumer := f.instrument(), f.task()
+			ref := f.ref(instrument.ID, 1)
+			consumer.Spec.ContextRefs = []model.RecordRef{ref}
+			first := f.capture(nil, consumer)
+			second := f.capture([][]byte{[]byte("instrument implementation")}, instrument)
+			bundle := f.accept(first, second)
+			if bundle.Events[0].Type != "instrument.declare" || bundle.Events[1].Type != "task.create" {
+				t.Fatal("instrument did not provide revision 1 to its forward consumer")
+			}
+			got, ok := f.snapshot().InstrumentAt(ref)
+			if !ok || !reflect.DeepEqual(got.Spec, &instrument.Spec) || got.Support.ActiveTrust != reduce.TruthUnknown {
+				t.Fatalf("declaration changed its specification or acquired trust: %+v", got)
+			}
+			record, ok := f.snapshot().Record(ref)
+			if !ok || record.Provenance.Author != f.author {
+				t.Fatalf("provenance was lost: %+v", record)
+			}
+			consumer = f.task()
+			consumer.Spec.ContextRefs = []model.RecordRef{ref}
+			f.accept(f.capture(nil, consumer)) // also resolves from the admitted prefix
+		})
+	}
+}
+
+func TestGateInstrumentMalformedDeclaration(t *testing.T) {
+	for _, field := range []string{"blind_to", "not_answered"} {
+		for _, value := range []string{"omitted", "", " \t", "\u200b"} {
+			t.Run(field+"/"+value, func(t *testing.T) {
+				f := newAdmissionFixture(t)
+				raw := admissionTestEvent(t, f.instrument())
+				var data map[string]any
+				if err := json.Unmarshal(raw.Data, &data); err != nil {
+					t.Fatal(err)
+				}
+				spec := data["spec"].(map[string]any)
+				if value == "omitted" {
+					delete(spec, field)
+				} else {
+					spec[field] = value
+				}
+				assertInstrumentDecodeRefusal(t, f, raw, data, "spec."+field)
+			})
+		}
+	}
+	for _, mutation := range []string{"missing-author", "status", "spec.status", "trusted-validation"} {
+		t.Run(mutation, func(t *testing.T) {
+			f := newAdmissionFixture(t)
+			raw := admissionTestEvent(t, f.instrument())
+			var data map[string]any
+			if err := json.Unmarshal(raw.Data, &data); err != nil {
+				t.Fatal(err)
+			}
+			path := mutation
+			switch mutation {
+			case "missing-author":
+				data["provenance"].(map[string]any)["author"] = map[string]any{}
+				path = "provenance.author"
+			case "status":
+				data["status"] = "TRUSTED"
+			case "spec.status":
+				data["spec"].(map[string]any)["status"] = "TRUSTED"
+			case "trusted-validation":
+				data["spec"].(map[string]any)["validation"] = map[string]any{"state": "trusted"}
+				path = "spec.validation"
+			}
+			assertInstrumentDecodeRefusal(t, f, raw, data, path)
+		})
+	}
+}
+
+func assertInstrumentDecodeRefusal(t *testing.T, f *admissionFixture, raw model.Event, data map[string]any, path string) {
+	t.Helper()
+	var err error
+	raw.Data, err = json.Marshal(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Bypass capture's encoder to exercise the gate on untrusted event bytes.
+	packets, err := gatePackets(f.project.ID, reduce.Snapshot{}, []model.Packet{{Project: f.project.ID, CommandID: f.id(), Author: f.author, Events: []model.Event{raw}}})
+	if admissionErrorCode(err) != "invalid-field" || !strings.Contains(err.Error(), "event.data."+path) || len(packets) != 0 {
+		t.Fatalf("wanted malformed declaration refused at %s: packets %v, error %v", path, packets, err)
+	}
+}
+
+func TestAdmissionInstrumentAuthorityAndIdentityRefusals(t *testing.T) {
+	for _, mutation := range []string{"forged-author", "known-validation", "duplicate-instrument", "duplicate-task", "instrument.revise"} {
+		t.Run(mutation, func(t *testing.T) {
+			f := newAdmissionFixture(t)
+			instrument := f.instrument()
+			events := []model.TypedEvent{instrument}
+			code := "conflict"
+			switch mutation {
+			case "forged-author":
+				instrument.Provenance.Author.ID = "someone else"
+				code = "attribution-mismatch"
+			case "known-validation":
+				instrument.Spec.Validation = model.Availability[model.InstrumentValidation]{State: model.Known, Value: &model.InstrumentValidation{Ref: instrument.Spec.ImplementationRef, Version: "self-certified"}}
+				code = "unavailable-until-integrated"
+			case "duplicate-instrument":
+				other := f.instrument()
+				other.ID = instrument.ID
+				events = append(events, other)
+			case "duplicate-task":
+				other := f.task()
+				other.ID = instrument.ID
+				events = append(events, other)
+			case "instrument.revise":
+				events = append(events, &model.InstrumentRevise{Target: f.ref(instrument.ID, 1), ExpectedRevision: 1, Provenance: instrument.Provenance, Replacement: instrument.Spec})
+				code = "unavailable-until-integrated"
+			}
+			f.refuse(f.request(f.capture([][]byte{[]byte("instrument implementation")}, events...)), code)
+		})
+	}
+}
+
+func TestGateAllOtherOperationsRemainUnavailable(t *testing.T) {
+	// Exercise the operation boundary directly so unrelated schema/reference
+	// failures cannot conceal an accidentally widened allowlist.
+	for _, event := range []model.TypedEvent{
+		&model.TaskClose{}, &model.InvocationStart{}, &model.InvocationSeal{},
+		&model.ClaimRevise{}, &model.CriterionFix{}, &model.ProofAdmit{},
+		&model.DecisionOpen{}, &model.DecisionRevise{}, &model.DecisionDispose{},
+		&model.Supersede{}, &model.Correction{}, &model.InstrumentRevise{},
+		&model.TrustWithdraw{}, &model.ReviewAdmit{}, &model.ArtifactDispose{},
+	} {
+		t.Run(string(event.EventType()), func(t *testing.T) {
+			if err := gateOperation(event, model.Actor{ID: "author"}); admissionErrorCode(err) != "unavailable-until-integrated" {
+				t.Fatalf("operation became available: %v", err)
+			}
+		})
+	}
+}
+
+func TestAdmissionInstrumentArtifacts(t *testing.T) {
+	for _, location := range []string{"provenance", "implementation"} {
+		for _, scenario := range []string{"intake", "locator", "missing", "wrong-length", "missing-selector", "traversal", "absolute-path", "symlink-file", "symlink-parent", "symlink-store"} {
+			t.Run(location+"/"+scenario, func(t *testing.T) {
+				f := newAdmissionFixture(t)
+				instrument := f.instrument()
+				body := []byte(`{"tool":"counts bytes"}`)
+				ref := admissionContent(body)
+				ref.Content.MediaType = "application/json"
+				ref.Selector = model.Selector{Kind: "json-pointer", Pointer: "/tool"}
+				blobs := [][]byte{[]byte("instrument implementation"), body}
+				code := ""
+				switch scenario {
+				case "missing":
+					blobs, code = blobs[:1], "unavailable"
+				case "wrong-length":
+					ref.Content.Length++
+					code = "conflict"
+				case "missing-selector":
+					ref.Selector.Pointer, code = "/absent", "unavailable"
+				case "traversal":
+					ref.Content.Locators = []model.Locator{{Path: "../tool.json"}}
+				case "absolute-path":
+					ref.Content.Locators = []model.Locator{{Path: filepath.Join(f.project.Root, "tool.json")}}
+				case "locator", "symlink-file", "symlink-parent", "symlink-store":
+					blobs = blobs[:1] // no safe copy of the target pin may hide an escape
+					path := filepath.Join(f.project.Root, "tool.json")
+					ref.Content.Locators = []model.Locator{{Path: "tool.json"}}
+					if scenario != "locator" {
+						outside := t.TempDir()
+						path = filepath.Join(outside, "tool.json")
+						link, target := filepath.Join(f.project.Root, "tool.json"), path
+						if scenario == "symlink-parent" {
+							link, target = filepath.Join(f.project.Root, "linked"), outside
+							ref.Content.Locators[0].Path = "linked/tool.json"
+						} else if scenario == "symlink-store" {
+							link, target = filepath.Join(f.project.Root, evidence.DefaultArtifactDir, string(ref.Content.SHA256)), path
+							ref.Content.Locators = []model.Locator{}
+						}
+						if err := os.MkdirAll(filepath.Dir(link), 0755); err != nil {
+							t.Fatal(err)
+						}
+						if err := os.Symlink(target, link); err != nil {
+							t.Fatal(err)
+						}
+						code = "unavailable"
+					}
+					if err := os.WriteFile(path, body, 0600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if location == "provenance" {
+					instrument.Provenance.SourceRefs = []model.ArtifactRef{ref}
+				} else {
+					instrument.Spec.ImplementationRef = ref
+				}
+				if scenario == "traversal" || scenario == "absolute-path" {
+					data, err := json.Marshal(instrument)
+					if err != nil {
+						t.Fatal(err)
+					}
+					packets, err := gatePackets(f.project.ID, reduce.Snapshot{}, []model.Packet{{Project: f.project.ID, CommandID: f.id(), Author: f.author, Events: []model.Event{{Type: instrument.EventType(), Data: data}}}})
+					if admissionErrorCode(err) != "invalid-field" || len(packets) != 0 {
+						t.Fatalf("unsafe artifact path admitted: %v, %v", packets, err)
+					}
+					return
+				}
+				packet := f.capture(blobs, instrument)
+				if code != "" {
+					before := f.snapshot().Watermark()
+					_, err := Admit(context.Background(), f.project, f.request(packet))
+					if admissionErrorCode(err) != code || f.snapshot().Watermark() != before {
+						t.Fatalf("wanted %s without publication, got %v", code, err)
+					}
+					if strings.HasPrefix(scenario, "symlink-") && !strings.Contains(err.Error(), "resolved outside the root") {
+						t.Fatalf("refusal did not reach resolver symlink containment: %v", err)
+					}
+					return
+				}
+				bundle := f.accept(packet)
+				admitted, err := model.DecodeEvent(bundle.Events[0])
+				if err != nil || !reflect.DeepEqual(admitted, instrument) {
+					t.Fatalf("admission rewrote the declaration: %+v, %v", admitted, err)
+				}
+				if scenario == "locator" {
+					if err := os.Remove(filepath.Join(f.project.Root, "tool.json")); err != nil {
+						t.Fatal(err)
+					}
+				}
+				resolved, err := evidence.NewResolver(f.project.Root).Resolve(context.Background(), ref)
+				if err != nil || !bytes.Equal(resolved.Bytes, body) || resolved.Origin != evidence.OriginArtifactStore {
+					t.Fatalf("artifact was not preserved: %+v, %v", resolved, err)
+				}
+			})
+		}
+	}
+}
+
+func TestGateInstrumentArtifactEnumeration(t *testing.T) {
+	f := newAdmissionFixture(t)
+	instrument := f.instrument()
+	source, validation := admissionContent([]byte("source")), admissionContent([]byte("validation"))
+	instrument.Provenance.SourceRefs = []model.ArtifactRef{source}
+	// Known validation is refused by this gate, but artifact enumeration must
+	// still cover the complete model so that it cannot become a bypass later.
+	instrument.Spec.Validation = model.Availability[model.InstrumentValidation]{State: model.Known, Value: &model.InstrumentValidation{Ref: validation, Version: "v1"}}
+	if got, want := admissionArtifacts(instrument), []model.ArtifactRef{source, instrument.Spec.ImplementationRef, validation}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("declaration artifacts: got %+v, want %+v", got, want)
+	}
+}
 
 func TestAdmissionReferenceAndAttributionRefusals(t *testing.T) {
 	for _, mutation := range []string{"missing-reference", "cycle", "in-packet-forward", "foreign-subject", "forged-author", "duplicate-provider"} {

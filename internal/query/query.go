@@ -14,8 +14,9 @@ import (
 )
 
 type Request struct {
-	Command string // show, history, task todo, or intake pending
-	ID      model.ID
+	Command      string // show, history, task todo, or intake pending
+	ID           model.ID
+	SelfAdmitted model.SelfAdmissionState // empty means no filter; history only, without ID
 }
 
 // Answer is the complete read result shared by text and JSON. UNKNOWN is a
@@ -29,6 +30,22 @@ type Answer struct {
 	Records   []Record        `json:"records"`
 	History   []Event         `json:"history"`
 	Intake    []Packet        `json:"intake"`
+	Reviews   []Review        `json:"reviews"`
+}
+
+// Review exposes the projected per-packet fact, including legacy UNKNOWN.
+// The embedded review preserves its identity, disposition, reason and origin.
+type Review struct {
+	reduce.Review
+	SelfAdmission string `json:"SelfAdmission"`
+}
+
+func describeReview(review reduce.Review) Review {
+	state := string(review.SelfAdmission)
+	if review.SelfAdmission == model.SelfAdmissionUnknown {
+		state = "UNKNOWN"
+	}
+	return Review{Review: review, SelfAdmission: state}
 }
 
 // A zero-bundle prefix has known counts but no head, not a year-one timestamp.
@@ -83,17 +100,25 @@ type Event struct {
 	Event     model.Event       `json:"event"`
 }
 type Packet struct {
-	CommandID   model.ID       `json:"command_id"`
-	Packet      *model.Packet  `json:"packet"`
-	Unavailable *Unknown       `json:"unavailable,omitempty"`
-	Disposition string         `json:"disposition"`
-	Review      *reduce.Review `json:"review"`
+	CommandID   model.ID      `json:"command_id"`
+	Packet      *model.Packet `json:"packet"`
+	Unavailable *Unknown      `json:"unavailable,omitempty"`
+	Disposition string        `json:"disposition"`
+	Review      *Review       `json:"review"`
 }
 
 // Read selects the immutable ledger prefix once. Intake is a separate visible
 // inventory, read afterwards; its dispositions are always relative to this
 // answer's watermark, never a later ledger read. No generated files are read.
 func Read(project store.Project, request Request) (Answer, error) {
+	if request.SelfAdmitted != "" {
+		if request.Command != "history" || request.ID != "" {
+			return Answer{}, fmt.Errorf("self-admitted filter requires history without a record ULID")
+		}
+		if request.SelfAdmitted != model.SelfAdmissionTrue && request.SelfAdmitted != model.SelfAdmissionFalse && request.SelfAdmitted != model.SelfAdmissionUnknown {
+			return Answer{}, fmt.Errorf("self-admitted must be true, false, or unknown")
+		}
+	}
 	if request.Command != "show" && request.Command != "history" && request.Command != "task todo" && request.Command != "intake pending" {
 		return Answer{}, fmt.Errorf("unknown read command %q", request.Command)
 	}
@@ -112,7 +137,7 @@ func Read(project store.Project, request Request) (Answer, error) {
 	a := Answer{Command: request.Command, Project: project.ID, Result: "KNOWN",
 		Watermark: Watermark{Sequence: w.Sequence, Bundles: w.Bundles, Events: w.Events,
 			Head: Unknown{State: "UNKNOWN", Reason: "no admitted bundle in this prefix"}},
-		Records: []Record{}, History: []Event{}, Intake: []Packet{}}
+		Records: []Record{}, History: []Event{}, Intake: []Packet{}, Reviews: []Review{}}
 	if w.Bundles > 0 {
 		a.Watermark.Head = Head{CommandID: w.CommandID, RecordedAt: w.RecordedAt}
 	}
@@ -138,6 +163,18 @@ func Read(project store.Project, request Request) (Answer, error) {
 			a.Records = append(a.Records, r)
 		}
 	case "history":
+		// Review packet refs do not identify records. Audit the complete prefix
+		// independently of intake, without assigning bundle siblings to a packet.
+		if request.ID == "" {
+			for _, review := range snapshot.Reviews() {
+				if request.SelfAdmitted == "" || review.SelfAdmission == request.SelfAdmitted {
+					a.Reviews = append(a.Reviews, describeReview(review))
+				}
+			}
+		}
+		if request.SelfAdmitted != "" {
+			break
+		}
 		selected := historyOrigins(snapshot, id)
 		for _, bundle := range prefix {
 			for i, event := range bundle.Events {
@@ -200,7 +237,8 @@ func pending(project store.Project, s reduce.Snapshot, prefix []model.Bundle) ([
 			if !present {
 				p = Packet{CommandID: ref.CommandID, Unavailable: &Unknown{"UNKNOWN", "reviewed packet is absent from local intake"}}
 			}
-			p.Disposition, p.Review = review.Outcome, &review
+			projected := describeReview(review)
+			p.Disposition, p.Review = review.Outcome, &projected
 			byID[ref.CommandID] = p
 		}
 	}

@@ -193,3 +193,61 @@ func TestReadCLIConventionsErrorsAndNoCanonicalWrites(t *testing.T) {
 		t.Fatalf("read commands must be discoverable without changing write help, got %s", output)
 	}
 }
+
+func TestReadCLISelfAdmissionAudit(t *testing.T) {
+	root, _ := cliFixture(t)
+	p, err := store.Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refs := []model.PacketRef{}
+	states := map[model.ID]model.SelfAdmissionState{}
+	for i, state := range []model.SelfAdmissionState{"true", "false", "unknown"} {
+		id := cliID(50 + i)
+		refs = append(refs, model.PacketRef{CommandID: id, Digest: model.HashBytes([]byte(id))})
+		states[id] = state
+	}
+	event, err := model.EncodeEvent(&model.ReviewAdmit{Packets: refs, Outcome: "rejected", Actor: model.Actor{ID: "reviewer"},
+		Reason: "per-packet audit control", SelfAdmission: states})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.Transact(context.Background(), p, cliID(60), model.HashBytes([]byte("audit")), func([]model.Bundle) (model.Bundle, error) {
+		return model.Bundle{Admitter: model.Actor{ID: "reviewer"}, Packets: []model.PacketRef{}, Events: []model.Event{event}}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		flag, state string
+		id          model.ID
+	}{
+		{"--self-admitted", "true", cliID(50)}, {"--self-admitted=true", "true", cliID(50)},
+		{"--self-admitted=false", "false", cliID(51)}, {"--self-admitted=unknown", "UNKNOWN", cliID(52)},
+	} {
+		a := readJSON(t, readProcess(t, root, nil, "history", "--json", tc.flag))
+		if len(a.Reviews) != 1 || a.Reviews[0].Key.CommandID != tc.id || a.Reviews[0].SelfAdmission != tc.state || a.Watermark.Sequence != 1 {
+			t.Fatalf("%s selected wrong audit: %+v", tc.flag, a)
+		}
+		var rendered bytes.Buffer
+		if err := query.RenderText(&rendered, a); err != nil {
+			t.Fatal(err)
+		}
+		if output := readProcess(t, root, nil, "history", tc.flag); !bytes.Equal(output, rendered.Bytes()) {
+			t.Fatalf("CLI formats disagree: %s versus %s", output, rendered.Bytes())
+		}
+	}
+	for _, args := range [][]string{
+		{"history", "--self-admitted="}, {"history", "--self-admitted=no"}, {"history", "--self-admitted=UNKNOWN"},
+		{"history", "--self-admitted", string(cliID(1))}, {"show", "--self-admitted"},
+		{"task", "todo", "--self-admitted"}, {"intake", "pending", "--self-admitted"},
+	} {
+		var out bytes.Buffer
+		if err := readCLI(context.Background(), args, root, &out, io.Discard); err == nil || out.Len() != 0 {
+			t.Fatalf("invalid filter %v returned %q, %v", args, out.String(), err)
+		}
+	}
+	if help := readProcess(t, root, nil, "read", "--help"); !bytes.Contains(help, []byte("--self-admitted[=true|false|unknown]")) {
+		t.Fatalf("missing audit help: %s", help)
+	}
+}
