@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"time"
 	"unicode/utf8"
 )
 
@@ -77,7 +79,48 @@ func strictUnmarshal(b []byte, into any, what string) error {
 	if err := dec.Decode(into); err != nil {
 		return fault("invalid-field", what, err.Error())
 	}
-	return nil
+	return refuseNonUTC(reflect.ValueOf(into), what)
+}
+
+// ---- UTC-only timestamps (ruling R8.4) -------------------------------------
+
+var timeType = reflect.TypeOf(time.Time{})
+
+// refuseNonUTC is the decode half of R8.4: the wire carries only UTC. One
+// instant spelled in two zones was two byte strings and two digests, and a
+// decoded private location could be reassigned through Time.Location() in
+// every snapshot at once. Like ValidID refusing lowercase rather than upcasing,
+// decoding REFUSES any other offset (+00:00 included), so the stored bytes are
+// exactly what decode returns. It reaches every nested timestamp, not only the
+// envelope's own.
+func refuseNonUTC(v reflect.Value, path string) error {
+	return walkWire(v, path, 0, func(v reflect.Value, at string) error {
+		if v.Type() == timeType && v.CanInterface() && v.Interface().(time.Time).Location() != time.UTC {
+			return fault("invalid-field", at, "timestamp must be UTC, spelled Z (ruling R8.4)")
+		}
+		return nil
+	})
+}
+
+// utcBytes is the encode half: it re-encodes raw, marshalled from a value of
+// type t, with every timestamp normalised to UTC. It works on a private copy
+// decoded from the bytes, so the caller's value is never rewritten. A timestamp
+// it cannot set (inside a map value) stays as it was and refuseNonUTC then
+// refuses it: loud, never silent.
+func utcBytes(raw []byte, t reflect.Type) ([]byte, error) {
+	private := reflect.New(t)
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	if err := dec.Decode(private.Interface()); err != nil {
+		return nil, fault("invalid-field", "event.data", err.Error())
+	}
+	_ = walkWire(private, "", 0, func(v reflect.Value, _ string) error {
+		if v.Type() == timeType && v.CanSet() {
+			v.Set(reflect.ValueOf(v.Interface().(time.Time).UTC()))
+		}
+		return nil
+	})
+	return json.Marshal(private.Elem().Interface())
 }
 
 // DecodePacket parses intake bytes, refusing anything it cannot fully account for.

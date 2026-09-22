@@ -1,13 +1,15 @@
 package reduce
 
-// Timestamp survival through durable ledger publication and copy costs live here.
+// UTC-only timestamps through durable ledger publication, and copy costs, live here.
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,12 +17,20 @@ import (
 	"datum/internal/store"
 )
 
-func TestInvocationLocationSurvivesLedgerPublication(t *testing.T) {
+// Ruling R8.4 flipped this test. It was written to PROVE the hole: a +00:37
+// invocation timestamp survived packet JSON, durable store.Transact
+// publication, ledger reads and Replay, and assigning through its private
+// decoded Location() rewrote it in every snapshot at once. The wire now
+// carries only UTC. EncodeEvent writes an in-process timestamp as UTC, and
+// decoding refuses any other offset, so no snapshot can hold a private
+// location. This is a spec change, not a test bent to fit code.
+func TestInvocationTimestampIsUTCThroughLedgerPublication(t *testing.T) {
 	t.Setenv("HOME", t.TempDir()) // isolate the real intake publisher
 	root := t.TempDir()
 	project := store.Project{ID: testProject, Root: root, Ledger: filepath.Join(root, "record", "events")}
 	l, env, _ := sealStart(t)
 	env.StartedAt = time.Date(2026, 9, 22, 12, 0, 0, 0, time.FixedZone("fixture", 37*60))
+	instant := env.StartedAt
 	// Reuse only the prerequisite events, never the in-memory snapshot.
 	events := []model.Event{}
 	for _, b := range l.out[:3] {
@@ -32,6 +42,9 @@ func TestInvocationLocationSurvivesLedgerPublication(t *testing.T) {
 			t.Fatal(err)
 		}
 		events = append(events, raw)
+	}
+	if env.StartedAt.Location().String() != "fixture" {
+		t.Fatal("EncodeEvent must normalise a private copy, not the caller's value")
 	}
 	// Exercise packet encoding/decoding as well as bundle encoding/decoding.
 	packetBytes, err := model.Encode(model.Packet{
@@ -93,8 +106,8 @@ func TestInvocationLocationSurvivesLedgerPublication(t *testing.T) {
 	if err := json.Compact(&compact, ledgerBytes); err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(compact.Bytes(), []byte(`"started_at":"2026-09-22T12:00:00+00:37"`)) {
-		t.Fatal("ledger did not retain the invocation offset")
+	if !bytes.Contains(compact.Bytes(), []byte(`"started_at":"2026-09-22T11:23:00Z"`)) || bytes.Contains(ledgerBytes, []byte("+00:37")) {
+		t.Fatalf("ledger must carry the invocation instant in UTC only: %s", compact.Bytes())
 	}
 	prefix, err := store.ReadPrefix(project)
 	if err != nil {
@@ -104,17 +117,11 @@ func TestInvocationLocationSurvivesLedgerPublication(t *testing.T) {
 	got := before.Invocations()[0]
 	for field, stamp := range map[string]time.Time{
 		"start.started_at": got.Start.StartedAt, "seal.started_at": got.Seal.StartedAt,
-		"seal.observed_at": *got.Seal.ObservedAt.Value,
+		"seal.observed_at": got.Seal.ObservedAt.Value.Add(-time.Second),
 	} {
-		name, offset := stamp.Zone()
-		t.Logf("%s: location=%q zone=%q offset=%d UTC=%t timestamp=%s",
-			field, stamp.Location(), name, offset, stamp.Location() == time.UTC, stamp.Format(time.RFC3339Nano))
-		if stamp.Location() == time.UTC || stamp.Location() == time.Local || offset != 37*60 {
-			t.Fatalf("%s lost its private non-UTC offset", field)
+		if stamp.Location() != time.UTC || !stamp.Equal(instant) {
+			t.Fatalf("%s must come back as the same instant in UTC, got %s", field, stamp.Format(time.RFC3339Nano))
 		}
-	}
-	if before.Watermark().RecordedAt.Location() != time.UTC {
-		t.Fatal("store's bundle timestamp should be UTC")
 	}
 	fork := newLedger()
 	fork.seq, fork.prev = bundle.Sequence, bundle.CommandID
@@ -124,19 +131,22 @@ func TestInvocationLocationSurvivesLedgerPublication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Characterize the existing exemption, using a private non-hour location.
-	// Never overwrite UTC, Local, or Go's cached whole-hour locations.
-	loc := after.Invocations()[0].Start.StartedAt.Location()
-	saved := *loc
-	defer func() { *loc = saved }()
-	want := got.Start.StartedAt.Format(time.RFC3339Nano)
-	*loc = *time.FixedZone("replacement", 38*60)
+	// Both forks hold time.UTC, never a private location a caller could
+	// reassign. Never assign through time.UTC itself: that is process-wide.
 	for name, snapshot := range map[string]Snapshot{"earlier": before, "later": after} {
-		changed := snapshot.Invocations()[0].Start.StartedAt.Format(time.RFC3339Nano)
-		t.Logf("%s snapshot after location assignment: %s -> %s", name, want, changed)
-		if changed != "2026-09-22T12:01:00+00:38" {
-			t.Fatalf("exemption behavior changed: %s; update this characterization and the copy policy", changed)
+		if snapshot.Invocations()[0].Start.StartedAt.Location() != time.UTC {
+			t.Fatalf("the %s snapshot holds a non-UTC location", name)
 		}
+	}
+	// Ledger bytes carrying an offset are refused on replay, not normalised.
+	tampered := bytes.Replace(ledgerBytes, []byte("2026-09-22T11:23:00Z"), []byte("2026-09-22T12:00:00+00:37"), 1)
+	decoded, err := model.DecodeBundle(tampered)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fault *model.Fault
+	if _, err := Replay([]model.Bundle{decoded}); !errors.As(err, &fault) || !strings.HasSuffix(fault.Path, "started_at") {
+		t.Fatalf("a ledger offset must be refused at started_at, got %v", err)
 	}
 }
 

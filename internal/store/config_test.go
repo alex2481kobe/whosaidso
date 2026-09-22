@@ -20,16 +20,59 @@ func TestDiscoverNearestAndRelativeLedger(t *testing.T) {
 	if err != nil || string(parent.ID) != "parent" || parent.Root != root || parent.Ledger != filepath.Join(root, "record/events") {
 		t.Fatalf("parent discovery: %+v, %v", parent, err)
 	}
-	putFile(t, filepath.Join(nested, "datum.toml"), []byte("# nearest wins\n'id' = \"team/project # one\" # comment\nledger = '../events'\n"))
+	putFile(t, filepath.Join(nested, "datum.toml"), []byte("# nearest wins\n'id' = \"team/project # one\" # comment\nledger = 'record/../events'\n"))
 	p, err := Discover(cwd)
-	if err != nil || string(p.ID) != "team/project # one" || p.Root != nested || p.Ledger != filepath.Join(root, "events") {
+	if err != nil || string(p.ID) != "team/project # one" || p.Root != nested || p.Ledger != filepath.Join(nested, "events") {
 		t.Fatalf("nearest discovery: %+v, %v", p, err)
 	}
-	absolute := filepath.Join(t.TempDir(), "ledger")
-	putFile(t, filepath.Join(nested, "datum.toml"), []byte("id = 'child'\nledger = '"+absolute+"'\n"))
-	p, err = Discover(cwd)
-	if err != nil || p.Ledger != absolute {
-		t.Fatalf("absolute ledger: %+v, %v", p, err)
+}
+
+// Ruling R8.1: the ledger is committed with the project, so a ledger path that
+// leaves the datum root is refused, whether absolute, climbing, or linked out.
+func TestDiscoverRefusesALedgerLeavingItsRoot(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "proj")
+	outside := filepath.Join(parent, "elsewhere")
+	mustMkdir(t, filepath.Join(root, "record"))
+	mustMkdir(t, outside)
+	mustSymlink(t, outside, filepath.Join(root, "out"))
+	mustSymlink(t, filepath.Join(parent, "missing"), filepath.Join(root, "dangling"))
+	for _, ledger := range []string{
+		filepath.Join(parent, "ledger"), // absolute
+		filepath.Join(root, "events"),   // absolute, even when it names the root
+		"..", "../events", "record/../../events",
+		"../proj-events",    // a string prefix of the root, not a segment
+		"out/events", "out", // an in-root link that points out
+		"record/../out/new/events", // a missing tail beneath the link
+	} {
+		putFile(t, filepath.Join(root, "datum.toml"), []byte("id='p'\nledger='"+ledger+"'"))
+		_, err := Discover(root)
+		requireFault(t, err, "config-invalid-value")
+		var f *model.Fault
+		errors.As(err, &f)
+		if !strings.Contains(f.Detail, "proj") || !strings.Contains(f.Detail, ledger) {
+			t.Errorf("fault for %q must name the ledger and the root: %v", ledger, f)
+		}
+	}
+	putFile(t, filepath.Join(root, "datum.toml"), []byte("id='p'\nledger='dangling/events'"))
+	_, err := Discover(root)
+	requireFault(t, err, "io")
+}
+
+func TestDiscoverKeepsALedgerInsideItsRoot(t *testing.T) {
+	// The root itself is reached through a link, as macOS /tmp is.
+	real := t.TempDir()
+	linked := filepath.Join(t.TempDir(), "linked-root")
+	mustSymlink(t, real, linked)
+	mustMkdir(t, filepath.Join(real, "store", "events"))
+	mustSymlink(t, filepath.Join(real, "store"), filepath.Join(real, "record"))
+	// "..events" is a name inside the root: segments, not a string prefix.
+	for _, ledger := range []string{"record/events", "record/new/events", "fresh/events", "./events", "..events"} {
+		putFile(t, filepath.Join(real, "datum.toml"), []byte("id='p'\nledger='"+ledger+"'"))
+		p, err := Discover(linked)
+		if err != nil || p.Root != linked || p.Ledger != filepath.Join(linked, ledger) {
+			t.Fatalf("in-root ledger %q: %+v, %v", ledger, p, err)
+		}
 	}
 }
 
@@ -130,6 +173,13 @@ func mustMkdir(t *testing.T, path string) {
 	t.Helper()
 	if err := os.MkdirAll(path, 0700); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func mustSymlink(t *testing.T, target, link string) {
+	t.Helper()
+	if err := os.Symlink(target, link); err != nil {
+		t.Skip("symlinks unavailable:", err)
 	}
 }
 

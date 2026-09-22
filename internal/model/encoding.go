@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,14 +33,20 @@ func HashBytes(b []byte) Digest {
 // exactly as written. This is a local deterministic convention, not a claim of
 // full RFC 8785 canonicalisation.
 func Encode(v any) ([]byte, error) {
+	// encoding/json silently replaces invalid UTF-8 with U+FFFD. That makes an
+	// invalid byte and a real U+FFFD produce IDENTICAL bytes and one digest -
+	// two different inputs with one identity, which is the collision a digest
+	// exists to prevent. Found by lane E. Checking the marshalled bytes came too
+	// late: by then "holder-\xff" was already a different, valid actor. So the
+	// value is checked BEFORE marshalling, naming the field.
+	if err := refuseInvalidUTF8(reflect.ValueOf(v), "$"); err != nil {
+		return nil, err
+	}
 	first, err := json.Marshal(v)
 	if err != nil {
 		return nil, fault("invalid-field", "", "value cannot be encoded as JSON: "+err.Error())
 	}
-	// encoding/json silently replaces invalid UTF-8 with U+FFFD. That makes an
-	// invalid byte and a real U+FFFD produce IDENTICAL bytes and one digest -
-	// two different inputs with one identity, which is the collision a digest
-	// exists to prevent. Refuse instead. Found by lane E.
+	// Backstop for bytes a custom MarshalJSON emits, which the walk cannot see.
 	if !utf8.Valid(first) {
 		return nil, fault("invalid-field", "", "value contains invalid UTF-8; it would be silently rewritten")
 	}
@@ -51,6 +58,74 @@ func Encode(v any) ([]byte, error) {
 	writeOrdered(&out, tree, 0)
 	out.WriteByte('\n')
 	return out.Bytes(), nil
+}
+
+var rawMessageType = reflect.TypeOf(json.RawMessage(nil))
+
+// walkWire visits every value json.Marshal would write: exported fields under
+// their JSON names, map keys (at "<map key>") and values, and slice elements.
+// It is the one walk behind the UTF-8 and the UTC checks. Past json.Marshal's
+// own cycle depth it stops and leaves the cycle for json.Marshal to refuse.
+func walkWire(v reflect.Value, path string, depth int, visit func(reflect.Value, string) error) error {
+	if !v.IsValid() || depth > 1000 {
+		return nil
+	}
+	if err := visit(v, path); err != nil {
+		return err
+	}
+	switch v.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		if !v.IsNil() {
+			return walkWire(v.Elem(), path, depth+1, visit)
+		}
+	case reflect.Struct:
+		for i := 0; i < v.NumField(); i++ {
+			f := v.Type().Field(i)
+			name := strings.Split(f.Tag.Get("json"), ",")[0]
+			// json promotes an embedded struct's fields even when it is unexported.
+			if !f.IsExported() && !f.Anonymous || name == "-" {
+				continue
+			}
+			at := path
+			if name != "" {
+				at += "." + name
+			} else if !f.Anonymous {
+				at += "." + f.Name
+			}
+			if err := walkWire(v.Field(i), at, depth+1, visit); err != nil {
+				return err
+			}
+		}
+	case reflect.Map:
+		iter := v.MapRange()
+		for iter.Next() {
+			if err := visit(iter.Key(), path+".<map key>"); err != nil {
+				return err
+			}
+			if err := walkWire(iter.Value(), path+"."+fmt.Sprint(iter.Key()), depth+1, visit); err != nil {
+				return err
+			}
+		}
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < v.Len(); i++ {
+			if err := walkWire(v.Index(i), fmt.Sprintf("%s[%d]", path, i), depth+1, visit); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// refuseInvalidUTF8 checks strings and raw JSON bytes; other byte slices
+// become base64 and hold no text.
+func refuseInvalidUTF8(v reflect.Value, path string) error {
+	return walkWire(v, path, 0, func(v reflect.Value, at string) error {
+		if v.Kind() == reflect.String && !utf8.ValidString(v.String()) ||
+			v.Type() == rawMessageType && !utf8.Valid(v.Bytes()) {
+			return fault("invalid-field", at, "value contains invalid UTF-8; it would be silently rewritten")
+		}
+		return nil
+	})
 }
 
 // member is one key/value pair, kept so we can sort deliberately rather than

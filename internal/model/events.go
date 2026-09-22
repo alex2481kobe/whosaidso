@@ -151,6 +151,9 @@ func EncodeEvent(event TypedEvent) (Event, error) {
 		return Event{}, err
 	}
 	raw, err := json.Marshal(event)
+	if err == nil {
+		raw, err = utcBytes(raw, reflect.TypeOf(event)) // ruling R8.4
+	}
 	if err != nil {
 		return Event{}, invalid("event.data", err.Error())
 	}

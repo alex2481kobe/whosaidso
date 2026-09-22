@@ -67,23 +67,19 @@ func escapingTypes(t *testing.T) map[reflect.Type]string {
 // mutates the receiver, and the only way to change one is to assign through a
 // pointer the caller had to go out of its way to obtain.
 //
-// This exemption remains an explicit limitation, not an immutability guarantee.
-// TestInvocationLocationSurvivesLedgerPublication proves that packet JSON,
-// durable store.Transact publication, ledger reads and Replay preserve +00:37
-// inside invocation events. Only the packet/bundle's OWN timestamp becomes UTC.
-// Assignment through that private decoded location changes both snapshot forks;
-// no process-wide UTC/Local corruption is necessary.
+// Ruling R8.4 closed the reachable case. The wire carries only UTC: EncodeEvent
+// writes every timestamp as UTC and decoding refuses any other offset, so an
+// admitted snapshot can no longer hold a private location - none can be
+// admitted. TestInvocationTimestampIsUTCThroughLedgerPublication and
+// TestInvocationTimestampIsUTCThroughApplicationAdmission prove it through the
+// real ledger and intake paths. The one location left is time.UTC itself,
+// shared by the whole process; assigning through it corrupts every time value
+// in the program, not one snapshot, and no copy policy could contain that.
 //
-// TestInvocationLocationThroughApplicationAdmission also proves the narrower
-// current application gate refuses invocation.start as unavailable-until-integrated.
-// That gate blocks the application route, not the codec or the reducer API.
-// Keep the outside regression: it describes a real reducer limitation.
-//
-// TestDetachedLocationCandidateCost measures a test-only copy alternative:
-// Go 1.26.5 darwin/arm64, one sealed invocation read costs 36 allocations today
-// versus 39 with three detached Location structs. Cloning UTC also loses
-// Location()==time.UTC and time.Time == equality, while Time.Equal is preserved.
-// Production copy behavior is intentionally unchanged pending that policy choice.
+// A snapshot built by hand, bypassing decode, can still hold a private
+// location; the copy does not detach it. TestDetachedLocationCandidateCost
+// keeps the measured price of detaching (one allocation per timestamp) should
+// that ever become reachable again. Production copy behavior is unchanged.
 //
 // Adding to this list is a claim about what a caller can do to a type. Make it
 // on purpose, in writing, with its price stated, or do not make it.

@@ -32,9 +32,14 @@ func TestCopySnapshotNestedMapsAndPointersRemainDetached(t *testing.T) {
 }
 
 func TestCopySnapshotTimeLocationCannotRewriteAdmittedTimestamp(t *testing.T) {
+	// SPEC CHANGE under ruling R8.4, not a test bent to fit code. This fixture
+	// assumed a private non-UTC location survived admission, so assigning
+	// through a returned Time.Location() rewrote the admitted timestamp in both
+	// snapshots. R8.4 makes that premise false by design: the wire carries only
+	// UTC, EncodeEvent writes the instant as UTC, and decoding refuses any other
+	// offset. The test now asserts the invariant that closes the hole instead.
 	events, env, proof := outsideProofFixture()
-	// A non-hour offset avoids Go's shared fixed-zone cache. Never mutate UTC,
-	// Local, or a cached whole-hour location as part of this regression fixture.
+	// A non-hour offset avoids Go's shared fixed-zone cache.
 	env.StartedAt = time.Date(2026, 9, 22, 12, 0, 0, 0, time.FixedZone("fixture", 37*60))
 	first := laneEReduceBundle(t, model.Bundle{}, append(events, &model.InvocationStart{Envelope: env}, outsideProofSeal(env), proof)...)
 	before := laneEReduceReplay(t, first)
@@ -46,19 +51,10 @@ func TestCopySnapshotTimeLocationCannotRewriteAdmittedTimestamp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("control independent fork must apply: %v", err)
 	}
-	want := before.Invocations()[0].Start.StartedAt.Format(time.RFC3339Nano)
-	returned := after.Invocations()[0]
-	loc := returned.Start.StartedAt.Location()
-	if loc == time.UTC || loc == time.Local {
-		t.Fatal("fixture must use a private decoded fixed-offset location")
-	}
-	saved := *loc
-	defer func() { *loc = saved }()
-	*loc = *time.FixedZone("caller-replacement", 38*60)
 	for name, s := range map[string]reduce.Snapshot{"earlier": before, "later": after} {
-		got := s.Invocations()[0].Start.StartedAt.Format(time.RFC3339Nano)
-		if got != want {
-			t.Errorf("the %s snapshot's admitted timestamp changed from %s to %s after assigning through a returned Time.Location(). The copier skips time.Time's private location pointer, but its exported Location method makes that shared object mutable; no event authorized this change", name, want, got)
+		got := s.Invocations()[0].Start.StartedAt
+		if !got.Equal(env.StartedAt) || got.Location() != time.UTC {
+			t.Errorf("the %s snapshot's admitted timestamp is %s (location %q). A non-UTC timestamp admitted through the real path must come back as the same instant in UTC, so no private location is ever shared between snapshots", name, got.Format(time.RFC3339Nano), got.Location())
 		}
 	}
 }

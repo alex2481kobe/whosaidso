@@ -1,12 +1,13 @@
 package reduce_test
 
-// The application admission gate's current timestamp reachability lives here.
+// UTC-only timestamps through real intake and the application admission gate live here.
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,7 +21,13 @@ func admissionUnknown[T any]() model.Availability[T] {
 	return model.Availability[T]{State: model.Unknown, Reason: "not observed"}
 }
 
-func TestInvocationLocationThroughApplicationAdmission(t *testing.T) {
+// Ruling R8.4 flipped this test. It was written to PROVE the hole: real intake
+// retained a +00:37 invocation timestamp, and only the invocation admission
+// gate stood between it and the ledger. The wire now carries only UTC: an
+// in-process timestamp is captured as the same instant in UTC, and event bytes
+// carrying an offset are refused when decoded. This is a spec change, not a
+// test bent to fit code.
+func TestInvocationTimestampIsUTCThroughApplicationAdmission(t *testing.T) {
 	// Intake intentionally uses an isolated home so this real capture never
 	// writes to the user's inbox.
 	t.Setenv("HOME", t.TempDir())
@@ -85,16 +92,21 @@ func TestInvocationLocationThroughApplicationAdmission(t *testing.T) {
 		t.Fatal(err)
 	}
 	stamp := decoded.(*model.InvocationStart).Envelope.StartedAt
-	_, offset := stamp.Zone()
-	if stamp.Location() == time.UTC || offset != 37*60 {
-		t.Fatalf("real intake lost the non-UTC timestamp: %s", stamp)
+	if stamp.Location() != time.UTC || !stamp.Equal(env.StartedAt) {
+		t.Fatalf("real intake must hold the same instant in UTC: %s", stamp.Format(time.RFC3339Nano))
+	}
+	// The same event with its offset spelled in the bytes is refused, not normalised.
+	offset := packets[0].Events[0]
+	offset.Data = []byte(strings.Replace(string(offset.Data), "2026-09-22T11:23:00Z", "2026-09-22T12:00:00+00:37", 1))
+	if _, err := model.DecodeEvent(offset); !errors.As(err, new(*model.Fault)) || !strings.Contains(err.Error(), "envelope.started_at") {
+		t.Fatalf("an offset in event bytes must be refused at started_at: %v", err)
 	}
 	_, err = admit(15, packet)
 	var fault *model.Fault
 	if !errors.As(err, &fault) || fault.Code != "unavailable-until-integrated" || fault.Path != "event.type" {
 		t.Fatalf("invocation admission policy changed; re-evaluate reachability: %v", err)
 	}
-	t.Logf("real intake retains %s, location=%q; write.Admit refuses: %v", stamp.Format(time.RFC3339Nano), stamp.Location(), err)
+	t.Logf("real intake holds %s; write.Admit refuses: %v", stamp.Format(time.RFC3339Nano), err)
 	prefix, err := store.ReadPrefix(project)
 	if err != nil {
 		t.Fatal(err)

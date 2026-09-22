@@ -1,9 +1,13 @@
 package model
 
 import (
+	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDecodeBundleWritableSequence(t *testing.T) {
@@ -173,6 +177,109 @@ func TestArtifactRefShape(t *testing.T) {
 	for name, ref := range bad {
 		if err := ValidateArtifactRef(ref, "ref"); err == nil {
 			t.Errorf("accepted what it must refuse: %s", name)
+		}
+	}
+}
+
+// utcSeal is a sealed invocation whose two timestamps, one of them nested in a
+// pointer, are the same instants spelled in zone.
+func utcSeal(zone *time.Location) *InvocationSeal {
+	seal := schemaEvents()[9].(*InvocationSeal)
+	seal.Envelope.StartedAt = seal.Envelope.StartedAt.In(zone)
+	seal.Envelope.ObservedAt = schemaKnown(seal.Envelope.StartedAt.Add(time.Second))
+	return seal
+}
+
+// Ruling R8.4, encode half: an in-process timestamp in any zone is written as
+// UTC, so one instant has one spelling, one byte string and one digest.
+func TestEncodeWritesOneInstantAsOneSpelling(t *testing.T) {
+	var first []byte
+	for i, zone := range []*time.Location{time.UTC, time.FixedZone("plus", 37*60), time.FixedZone("minus", -5*3600)} {
+		seal := utcSeal(zone)
+		event, err := EncodeEvent(seal)
+		if err != nil {
+			t.Fatalf("%s: %v", zone, err)
+		}
+		if seal.Envelope.StartedAt.Location() != zone || seal.Envelope.ObservedAt.Value.Location() != zone {
+			t.Errorf("%s: EncodeEvent rewrote the caller's value instead of a private copy", zone)
+		}
+		packet, err := Encode(Packet{Version: WireVersion, Project: schemaProject, CommandID: schemaID(20),
+			RequestDigest: HashBytes([]byte("r")), Author: Actor{ID: "lane-a"},
+			CapturedAt: seal.Envelope.StartedAt, Events: []Event{event}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			first = packet
+		} else if !bytes.Equal(packet, first) || HashBytes(packet) != HashBytes(first) {
+			t.Errorf("one instant in zone %s encoded differently:\n%s\nvs\n%s", zone, packet, first)
+		}
+	}
+	for _, want := range []string{`"started_at": "2026-09-21T12:00:00Z"`, `"observed_at"`, `"2026-09-21T12:00:01Z"`} {
+		if !bytes.Contains(first, []byte(want)) {
+			t.Errorf("encoded packet lacks %s", want)
+		}
+	}
+}
+
+// Ruling R8.4, decode half: any other offset is refused, not normalised, at
+// every depth, naming the field. Stored bytes are exactly what decode returns.
+func TestDecodeRefusesANonUTCTimestampAtAnyDepth(t *testing.T) {
+	event, err := EncodeEvent(utcSeal(time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded, err := DecodeEvent(event); err != nil ||
+		decoded.(*InvocationSeal).Envelope.StartedAt.Location() != time.UTC {
+		t.Fatalf("control: a UTC event must decode as UTC: %v", err)
+	}
+	packet := validPacketJSON("")
+	if _, err := DecodePacket([]byte(packet)); err != nil {
+		t.Fatalf("control: %v", err)
+	}
+	cases := []struct{ name, from, to, path string }{
+		{"top-level +01:00", `"2026-09-22T01:02:03Z"`, `"2026-09-22T02:02:03+01:00"`, "packet.captured_at"},
+		{"top-level +00:00", `"2026-09-22T01:02:03Z"`, `"2026-09-22T01:02:03+00:00"`, "packet.captured_at"},
+		{"nested", `"started_at":"2026-09-21T12:00:00Z"`, `"started_at":"2026-09-21T12:37:00+00:37"`, "event.data.envelope.started_at"},
+		{"nested in a pointer", `"value":"2026-09-21T12:00:01Z"`, `"value":"2026-09-21T07:00:01-05:00"`, "event.data.envelope.observed_at.value"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var err error
+			if strings.HasPrefix(c.path, "packet") {
+				_, err = DecodePacket([]byte(strings.Replace(packet, c.from, c.to, 1)))
+			} else {
+				if !bytes.Contains(event.Data, []byte(c.from)) {
+					t.Fatalf("fixture lacks %s: %s", c.from, event.Data)
+				}
+				_, err = DecodeEvent(Event{Type: event.Type, Data: bytes.Replace(event.Data, []byte(c.from), []byte(c.to), 1)})
+			}
+			if f, ok := err.(*Fault); !ok || f.Code != "invalid-field" || f.Path != c.path {
+				t.Fatalf("want invalid-field at %s, got %v", c.path, err)
+			}
+		})
+	}
+}
+
+// The refusal breaks no history: Datum's own committed ledger decodes whole.
+func TestCommittedLedgerIsAlreadyUTC(t *testing.T) {
+	paths, err := filepath.Glob(filepath.Join("..", "..", "record", "events", "*.json"))
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("committed ledger not found: %v", err)
+	}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		bundle, err := DecodeBundle(data)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		for i, event := range bundle.Events {
+			if _, err := DecodeEvent(event); err != nil {
+				t.Errorf("%s event %d: %v", path, i, err)
+			}
 		}
 	}
 }

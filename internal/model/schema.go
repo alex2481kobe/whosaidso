@@ -15,6 +15,11 @@ import (
 // ValidateSchema checks a programmatically constructed payload at the same
 // boundary as DecodeEvent. It does not resolve references or admit facts.
 func ValidateSchema(v any) error {
+	// Before json.Marshal can rewrite invalid UTF-8 as U+FFFD; EncodeEvent
+	// reaches its own marshal only through here.
+	if err := refuseInvalidUTF8(reflect.ValueOf(v), "payload"); err != nil {
+		return err
+	}
 	b, err := json.Marshal(v)
 	if err != nil {
 		return invalid("payload", err.Error())
