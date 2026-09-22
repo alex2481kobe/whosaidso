@@ -219,7 +219,7 @@ func runIntent(project store.Project, r RunRequest) (model.InvocationEnvelope, e
 	e = model.InvocationEnvelope{
 		InvocationID: id, AttemptID: r.AttemptID, InstrumentRef: r.InstrumentRef,
 		CriterionRef: r.CriterionRef, ExecutionSourceIdentity: r.ExecutionSourceIdentity,
-		Argv: append([]string(nil), r.Argv...), InputRefs: r.InputRefs,
+		Argv: r.Argv, InputRefs: r.InputRefs,
 		ConfigRequested: r.ConfigRequested, ConditionsDeclared: r.ConditionsDeclared, StartedAt: now,
 		ConfigEffective:    runUnknown[map[string]model.Availability[model.Scalar]](),
 		ConditionsObserved: runUnknown[map[string]model.Availability[model.Scalar]](),
@@ -242,14 +242,60 @@ func runIntent(project store.Project, r RunRequest) (model.InvocationEnvelope, e
 	if err := model.ValidateInvocationConfig(e, r.Instrument); err != nil {
 		return e, err
 	}
-	// Freeze caller-owned maps and slices so the seal repeats exactly the intent
-	// that was published, even if the caller later reuses its request storage.
-	data, err := json.Marshal(e)
-	if err != nil {
-		return e, err
+	// Freeze intent here, before publishing or launching: the start and seal
+	// must own every mutable value even if the caller reuses its request.
+	e.Argv = append([]string(nil), e.Argv...)
+	e.InputRefs = runCopyArtifacts(e.InputRefs)
+	e.ConfigRequested = runCopyScalars(e.ConfigRequested)
+	e.ConditionsDeclared = runCopyScalars(e.ConditionsDeclared)
+	e.CriterionRef.Value = runCopyValue(e.CriterionRef.Value)
+	e.ExecutionSourceIdentity.MachineID.Value = runCopyValue(e.ExecutionSourceIdentity.MachineID.Value)
+	e.ExecutionSourceIdentity.Head.Value = runCopyValue(e.ExecutionSourceIdentity.Head.Value)
+	e.ExecutionSourceIdentity.Dirty.Value = runCopyValue(e.ExecutionSourceIdentity.Dirty.Value)
+	e.ExecutionSourceIdentity.SourceRefs = runCopyArtifacts(e.ExecutionSourceIdentity.SourceRefs)
+	return e, nil
+}
+
+// runCopyValue is only for pointers to values with no mutable members.
+func runCopyValue[T any](p *T) *T {
+	if p == nil {
+		return nil
 	}
-	err = json.Unmarshal(data, &e)
-	return e, err
+	v := *p
+	return &v
+}
+
+func runCopyScalars(values map[string]model.Scalar) map[string]model.Scalar {
+	if values == nil {
+		return nil
+	}
+	out := make(map[string]model.Scalar, len(values))
+	for key, value := range values {
+		value.Number = runCopyValue(value.Number)
+		value.String = runCopyValue(value.String)
+		value.Bool = runCopyValue(value.Bool)
+		out[key] = value
+	}
+	return out
+}
+
+func runCopyArtifacts(refs []model.ArtifactRef) []model.ArtifactRef {
+	if refs == nil {
+		return nil
+	}
+	out := make([]model.ArtifactRef, len(refs))
+	for i, ref := range refs {
+		ref.Git = runCopyValue(ref.Git)
+		if ref.Content != nil {
+			content := *ref.Content
+			if content.Locators != nil {
+				content.Locators = append([]model.Locator{}, content.Locators...)
+			}
+			ref.Content = &content
+		}
+		out[i] = ref
+	}
+	return out
 }
 
 func runKnown[T any](value T) model.Availability[T] {
@@ -482,7 +528,7 @@ func runReadReport(dir string) (*ProducerReport, []byte, error) {
 	}
 	shape := json.NewDecoder(bytes.NewReader(raw))
 	shape.UseNumber()
-	if err := runUniqueJSON(shape, 0); err != nil {
+	if err := runUniqueJSON(shape, 0, "$"); err != nil {
 		return nil, raw, err
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
@@ -501,8 +547,9 @@ func runReadReport(dir string) (*ProducerReport, []byte, error) {
 }
 
 // Last-key-wins decoding can turn contradictory producer facts into a seemingly
-// unambiguous observation, so duplicates are refused before typed decoding.
-func runUniqueJSON(decoder *json.Decoder, depth int) error {
+// unambiguous observation, so duplicates and case aliases are refused at every
+// depth before typed decoding, with the model decoder's fault codes and paths.
+func runUniqueJSON(decoder *json.Decoder, depth int, path string) error {
 	if depth > 64 {
 		return fmt.Errorf("run: producer report nesting exceeds 64 levels")
 	}
@@ -515,19 +562,29 @@ func runUniqueJSON(decoder *json.Decoder, depth int) error {
 		return nil
 	}
 	seen := map[string]bool{}
-	for decoder.More() {
+	for i := 0; decoder.More(); i++ {
+		childPath := fmt.Sprintf("%s[%d]", path, i)
 		if delim == '{' {
 			key, err := decoder.Token()
 			if err != nil {
 				return err
 			}
 			name, ok := key.(string)
-			if !ok || seen[name] {
-				return fmt.Errorf("run: duplicate JSON field in producer report")
+			if !ok {
+				return &model.Fault{Code: "invalid-json", Path: path, EventIndex: -1, Detail: "object key is not a string"}
+			}
+			childPath = path + "." + name
+			if seen[name] {
+				return &model.Fault{Code: "invalid-json", Path: childPath, EventIndex: -1, Detail: "duplicate object key"}
+			}
+			for previous := range seen {
+				if strings.EqualFold(previous, name) {
+					return &model.Fault{Code: "invalid-field", Path: childPath, EventIndex: -1, Detail: "unknown field, or a case variant of a known one"}
+				}
 			}
 			seen[name] = true
 		}
-		if err := runUniqueJSON(decoder, depth+1); err != nil {
+		if err := runUniqueJSON(decoder, depth+1, childPath); err != nil {
 			return err
 		}
 	}

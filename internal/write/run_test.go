@@ -54,6 +54,93 @@ func runTestRequest(root, mode string, args ...string) RunRequest {
 
 func runTestPtr[T any](v T) *T { return &v }
 
+func TestRunIntentOwnsMutableValues(t *testing.T) {
+	project := runTestProject(t)
+	for _, test := range []struct {
+		name   string
+		mutate func(RunRequest)
+	}{
+		{"argv", func(r RunRequest) { r.Argv[0] = "changed" }},
+		{"config map", func(r RunRequest) { r.ConfigRequested["samples"] = runTestNumber("999") }},
+		{"condition map", func(r RunRequest) { delete(r.ConditionsDeclared, "idle") }},
+		{"number pointer", func(r RunRequest) { *r.ConfigRequested["samples"].Number = "999" }},
+		{"string pointer", func(r RunRequest) { *r.ConfigRequested["seed"].String = "changed" }},
+		{"bool pointer", func(r RunRequest) { *r.ConditionsDeclared["idle"].Bool = false }},
+		{"criterion", func(r RunRequest) { r.CriterionRef.Value.Revision++ }},
+		{"machine", func(r RunRequest) { *r.ExecutionSourceIdentity.MachineID.Value = runTestID(99) }},
+		{"head", func(r RunRequest) { r.ExecutionSourceIdentity.Head.Value.Commit = strings.Repeat("b", 40) }},
+		{"dirty", func(r RunRequest) { *r.ExecutionSourceIdentity.Dirty.Value = true }},
+		{"input slice", func(r RunRequest) { r.InputRefs[0] = model.ArtifactRef{} }},
+		{"input content", func(r RunRequest) { r.InputRefs[0].Content.Length++ }},
+		{"input locators", func(r RunRequest) { r.InputRefs[0].Content.Locators[0].Path = "changed" }},
+		{"input git", func(r RunRequest) { r.InputRefs[1].Git.Path = "changed" }},
+		{"source slice", func(r RunRequest) { r.ExecutionSourceIdentity.SourceRefs[0] = model.ArtifactRef{} }},
+		{"source content", func(r RunRequest) { r.ExecutionSourceIdentity.SourceRefs[0].Content.Length++ }},
+		{"source locators", func(r RunRequest) { r.ExecutionSourceIdentity.SourceRefs[0].Content.Locators[0].Path = "changed" }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			r := runTestRequest(project.Root, "ok")
+			r.ConfigRequested["seed"] = model.Scalar{Type: "string", String: runTestPtr("original")}
+			r.CriterionRef = runKnown(model.CriterionRef{Claim: r.InstrumentRef, CriterionID: runTestID(4), Revision: 1})
+			r.ExecutionSourceIdentity.MachineID = runKnown(runTestID(5))
+			r.ExecutionSourceIdentity.Head = runKnown(model.GitHead{ObjectFormat: "sha1", Commit: strings.Repeat("a", 40)})
+			r.ExecutionSourceIdentity.Dirty = runKnown(false)
+			r.InputRefs = []model.ArtifactRef{r.ExecutionSourceIdentity.SourceRefs[0], {
+				Kind: "git", Git: &model.GitPin{ObjectFormat: "sha1", Commit: strings.Repeat("a", 40), Path: "fixture"},
+				Selector: model.Selector{Kind: "whole"},
+			}}
+			e, err := runIntent(project, r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			before, err := json.Marshal(e)
+			if err != nil {
+				t.Fatal(err)
+			}
+			test.mutate(r)
+			after, err := json.Marshal(e)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(before, after) {
+				t.Fatalf("caller mutation changed frozen intent: %s", test.name)
+			}
+		})
+	}
+}
+
+func TestRunReportKeyFaults(t *testing.T) {
+	for _, test := range []struct {
+		name, report, code, path string
+	}{
+		{"duplicate", `{"version":1,"version":1}`, "invalid-json", "$.version"},
+		{"top alias", `{"version":1,"VERSION":1}`, "invalid-field", "$.VERSION"},
+		{"scalar alias", `{"version":1,"config_effective":{"samples":{"type":"number","number":8,"NUMBER":99}}}`, "invalid-field", "$.config_effective.samples.NUMBER"},
+		{"reverse alias", `{"version":1,"config_effective":{"samples":{"type":"number","NUMBER":99,"number":8}}}`, "invalid-field", "$.config_effective.samples.number"},
+		{"nested duplicate", `{"version":1,"config_effective":{"samples":{"type":"number","number":8,"number":99}}}`, "invalid-json", "$.config_effective.samples.number"},
+		{"map alias", `{"version":1,"config_effective":{"samples":{"type":"number","number":8},"SAMPLES":{"type":"number","number":99}}}`, "invalid-field", "$.config_effective.SAMPLES"},
+		{"array alias", `{"version":1,"outputs":[{"path":"a","PATH":"b","media_type":"text/plain"}]}`, "invalid-field", "$.outputs[0].PATH"},
+		{"array duplicate", `{"version":1,"outputs":[{"path":"a","path":"b","media_type":"text/plain"}]}`, "invalid-json", "$.outputs[0].path"},
+		{"visual alias", `{"version":1,"visual":{"backend":{"state":"known","value":"webgl","VALUE":"webgpu"}}}`, "invalid-field", "$.visual.backend.VALUE"},
+		{"unicode alias", `{"version":1,"conditions_observed":{"k":{"type":"bool","bool":true},"\u212a":{"type":"bool","bool":false}}}`, "invalid-field", "$.conditions_observed.K"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "producer.json"), []byte(test.report), 0600); err != nil {
+				t.Fatal(err)
+			}
+			report, raw, err := runReadReport(dir)
+			var fault *model.Fault
+			if !errors.As(err, &fault) || fault.Code != test.code || fault.Path != test.path || fault.EventIndex != -1 {
+				t.Fatalf("want %s at %s outside an event, got %v", test.code, test.path, err)
+			}
+			if report != nil || string(raw) != test.report {
+				t.Fatal("refused report must retain its bytes and supply no facts")
+			}
+		})
+	}
+}
+
 func runTestControl(t *testing.T, project store.Project) RunResult {
 	t.Helper()
 	result, err := Run(context.Background(), project, runTestRequest(project.Root, "ok"))
@@ -323,6 +410,9 @@ func TestRunInvalidReportStillSealsObservedExit(t *testing.T) {
 		`{"version":1,"config_effective":{"unknown":{"type":"number","number":1}}}`,
 		`{"version":1,"config_effective":{"samples":{"type":"number","number":1}},"outcome":"pass"}`,
 		`{"version":1,"version":2,"version":1}`,
+		`{"version":1,"config_effective":{"samples":{"type":"number","number":8,"NUMBER":99}}}`,
+		`{"version":1,"config_effective":{"samples":{"type":"number","NUMBER":99,"number":8}}}`,
+		`{"version":1,"outputs":[{"path":"result.json","PATH":"link","media_type":"application/json"}]}`,
 		`{"version":1,"outputs":[{"path":"../escape","media_type":"text/plain"}]}`,
 		`{"version":1,"outputs":[{"path":"link","media_type":"text/plain"}]}`,
 		`{"version":1} {"version":1}`,
@@ -334,7 +424,7 @@ func TestRunInvalidReportStillSealsObservedExit(t *testing.T) {
 		}
 		runTestOutcome(t, result.Envelope, "exit", 0)
 		runTestPackets(t, project, result)
-		if result.Envelope.ConfigEffective.State != model.Unknown || result.Envelope.Visual.State != model.Unknown {
+		if result.Envelope.ConfigEffective.State != model.Unknown || result.Envelope.ConditionsObserved.State != model.Unknown || result.Envelope.Visual.State != model.Unknown {
 			t.Fatal("invalid report supplied observations")
 		}
 		if string(runTestArtifact(t, project, result, "producer.json")) != report {
