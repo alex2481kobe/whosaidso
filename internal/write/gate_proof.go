@@ -35,7 +35,9 @@ func gateProofOperation(event model.TypedEvent, author model.Actor) (*model.Prov
 		return nil, nil
 	case *model.InstrumentRevise:
 		return &e.Provenance, gateValidation(e.Replacement.Validation)
-	case *model.TrustWithdraw, *model.Correction, *model.InvocationStart, *model.InvocationSeal:
+	case *model.InvocationSeal:
+		return nil, gateReconciliation(e.Envelope, author)
+	case *model.TrustWithdraw, *model.Correction, *model.InvocationStart:
 		// Withdrawal and correction only remove support, attributed to the
 		// packet author in the review. Invocation facts are checked by the
 		// reducer, by criterion freezing and by artifact resolution.
@@ -246,6 +248,30 @@ func gateClosureEffective(after reduce.Snapshot, e *model.TaskClose) error {
 	task, ok := after.Task(reduce.Ident{Project: e.Task.Project, ID: e.Task.RecordID})
 	if !ok || task.Status != reduce.StatusClosed {
 		return admissionFault("closure-ineffective", "task", fmt.Sprintf("closure would leave the task %s: live attempts %d, owed %v", task.Status, len(task.LiveAttempts), task.Reasons))
+	}
+	return nil
+}
+
+// gateReconciliation: a seal with an UNKNOWN outcome records that the terminal
+// observation was never made (a dead runner). It must carry no reading at all,
+// and whoever reconciled it must be identified.
+func gateReconciliation(env model.InvocationEnvelope, author model.Actor) error {
+	if env.Outcome.State != model.Unknown {
+		return nil
+	}
+	if model.Blank(author.ID) {
+		return admissionFault("attribution-unknown", "packet.author", "a reconciliation seal needs an identified author")
+	}
+	for _, f := range []struct {
+		name  string
+		state model.AvailabilityState
+	}{
+		{"observed_at", env.ObservedAt.State}, {"output_refs", env.OutputRefs.State}, {"config_effective", env.ConfigEffective.State},
+		{"conditions_observed", env.ConditionsObserved.State}, {"isolation", env.Isolation.State}, {"visual", env.Visual.State},
+	} {
+		if f.state != model.Unknown {
+			return admissionFault("reconciliation-reading", "envelope."+f.name, "a seal with an unknown outcome cannot carry an observation")
+		}
 	}
 	return nil
 }

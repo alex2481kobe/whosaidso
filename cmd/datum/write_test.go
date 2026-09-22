@@ -538,3 +538,45 @@ func TestCLIRunRefusesBeforeLaunch(t *testing.T) {
 		}
 	}
 }
+
+// A dead runner is reconciled through the CLI: its admitted start receives an
+// attributed UNKNOWN-outcome seal with no reading, in fresh processes.
+func TestCLIFreshProcessesReconcileADeadRunner(t *testing.T) {
+	root, criterion, instrument, attempt := e2eWorld(t)
+	unknown := func() model.Availability[map[string]model.Availability[model.Scalar]] {
+		return model.Availability[map[string]model.Availability[model.Scalar]]{State: model.Unknown, Reason: "not launched"}
+	}
+	env := model.InvocationEnvelope{InvocationID: cliID(800), AttemptID: attempt, InstrumentRef: instrument, CriterionRef: e2eKnown(criterion),
+		ExecutionSourceIdentity: model.ExecutionIdentity{Project: "test/cli", SourceRefs: []model.ArtifactRef{}, MachineID: model.Availability[model.ID]{State: model.Unknown, Reason: "fixture"}, Head: model.Availability[model.GitHead]{State: model.Unknown, Reason: "fixture"}, Dirty: model.Availability[bool]{State: model.Unknown, Reason: "fixture"}},
+		Argv:                    []string{"/bin/sh", "tools/measure.sh"}, InputRefs: []model.ArtifactRef{}, ConfigRequested: map[string]model.Scalar{}, ConditionsDeclared: map[string]model.Scalar{},
+		ConfigEffective: unknown(), ConditionsObserved: unknown(), Isolation: model.Availability[model.Isolation]{State: model.Unknown, Reason: "not enforced"},
+		StartedAt: time.Now().UTC(), ObservedAt: model.Availability[time.Time]{State: model.Unknown, Reason: "not launched"}, Outcome: model.Availability[model.ProcessOutcome]{State: model.Unknown, Reason: "not launched"},
+		OutputRefs: model.Availability[[]model.ArtifactRef]{State: model.Unknown, Reason: "not launched"}, Visual: model.Availability[model.VisualObservation]{State: model.Unknown, Reason: "numeric"}}
+	if _, err := e2eInvoke(t, root, []model.TypedEvent{&model.InvocationStart{Envelope: env}}, "capture", "--command-id", string(cliID(801))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e2eInvoke(t, root, nil, "admit", "--command-id", string(cliID(802)), "--actor", "coordinator", "--outcome", "accepted", "--reason", "start", string(cliID(801))); err != nil {
+		t.Fatal(err)
+	}
+	out, err := e2eInvoke(t, root, nil, "reconcile", "--invocation-id", string(env.InvocationID), "--reason", "runner host lost power")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var packet model.PacketRef
+	if err := json.Unmarshal(out, &packet); err != nil || packet.CommandID == "" {
+		t.Fatalf("reconcile printed no packet: %s, %v", out, err)
+	}
+	if _, err := e2eInvoke(t, root, nil, "admit", "--command-id", string(cliID(803)), "--actor", "coordinator", "--outcome", "accepted", "--reason", "reconciled", string(packet.CommandID)); err != nil {
+		t.Fatal(err)
+	}
+	project, _ := store.Discover(root)
+	prefix, _ := store.ReadPrefix(project)
+	snapshot, err := reduce.Replay(prefix)
+	inv, ok := snapshot.Invocation(reduce.InvocationKey{Project: "test/cli", InvocationID: env.InvocationID})
+	if err != nil || !ok || inv.Seal == nil || inv.Seal.Outcome.State != model.Unknown || inv.Seal.OutputRefs.State != model.Unknown || !strings.Contains(inv.Seal.Outcome.Reason, "lane") {
+		t.Fatalf("reconciliation seal missing or carrying a reading: %+v, %v", inv.Seal, err)
+	}
+	if status := e2eStatus(t, root, criterion.Claim); status != reduce.StatusUnmeasured {
+		t.Fatalf("a reconciled run with no reading made the claim %s", status)
+	}
+}

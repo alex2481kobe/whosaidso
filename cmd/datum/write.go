@@ -21,6 +21,7 @@ datum handback [--command-id ULID] [--actor ID] --attempt-id ULID --outcome OUTC
               [--hold-id ULID --hold-reason REASON --hold-actor ID --hold-criterion TEXT]
 datum run [--actor ID] --attempt-id ULID --instrument ID [--claim ID --claim-revision N
           --criterion-id ULID --criterion-revision N] [--timeout DURATION] -- ARGV ...
+datum reconcile [--actor ID] --invocation-id ULID --reason TEXT
 
 Capture reads a JSON array of typed events and writes only immutable intake.
 Admission reviews a packet set and is the only command that publishes a bundle.
@@ -35,6 +36,8 @@ Missing hold attribution is unknown; --hold-actor never inherits the receipt act
 Run executes ARGV without a shell, captures its start and seal as two packets
 and prints both packet IDs; admit them. The instrument and any criterion must
 already be admitted: a criterion admitted after launch cannot freeze this run.
+Reconcile captures an UNKNOWN-outcome seal, with no reading, for an admitted run
+whose observer died; admit its packet. It needs an identified actor.
 Actor falls back to DATUM_ACTOR. Missing attribution is recorded as unknown.
 `
 
@@ -52,8 +55,8 @@ func writeCLI(ctx context.Context, args []string, cwd string, stdin io.Reader, s
 		return err
 	}
 	verb := args[0]
-	if verb == "run" {
-		return runCLI(ctx, args[1:], cwd, stdout, stderr, getenv)
+	if verb == "run" || verb == "reconcile" {
+		return runCLI(ctx, args, cwd, stdout, stderr, getenv)
 	}
 	if verb != "capture" && verb != "admit" && verb != "handback" {
 		return fmt.Errorf("unavailable-until-integrated: command %q is not enabled by the first gate", verb)
@@ -219,13 +222,15 @@ func captureCLI(ctx context.Context, project store.Project, id model.ID, author 
 	return store.WriteIntake(ctx, project, store.IntakeRequest{CommandID: id, Author: author, Events: events, Blobs: readers})
 }
 
-// runCLI resolves the admitted instrument and criterion from a fresh replay,
+// runCLI (run and reconcile) resolves the admitted instrument and criterion from a fresh replay,
 // then hands intent to write.Run. A failing measurement still prints its
 // packets, because a failed run is family evidence that must be admitted.
 func runCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.Writer, getenv func(string) string) error {
-	flags := flag.NewFlagSet("run", flag.ContinueOnError)
+	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	actor := flags.String("actor", "", "attributed actor")
+	invocation := flags.String("invocation-id", "", "reconcile: admitted unsealed invocation ULID")
+	reason := flags.String("reason", "", "reconcile: why the observer did not seal")
 	attempt := flags.String("attempt-id", "", "admitted attempt ULID")
 	instrument := flags.String("instrument", "", "admitted instrument id; its current revision is used")
 	claim := flags.String("claim", "", "claim id the criterion tests")
@@ -233,7 +238,7 @@ func runCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.Wr
 	criterion := flags.String("criterion-id", "", "admitted criterion ULID")
 	criterionRevision := flags.Uint64("criterion-revision", 0, "exact criterion revision")
 	timeout := flags.Duration("timeout", 0, "execution deadline; zero leaves it to the caller")
-	if err := flags.Parse(args); err != nil {
+	if err := flags.Parse(args[1:]); err != nil {
 		if err == flag.ErrHelp {
 			return nil
 		}
@@ -250,6 +255,17 @@ func runCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.Wr
 	}
 	project, err := store.Discover(cwd)
 	if err != nil {
+		return err
+	}
+	if args[0] == "reconcile" {
+		ref, err := write.Reconcile(ctx, project, write.ReconcileRequest{Author: author, InvocationID: model.ID(*invocation), Reason: *reason})
+		if err != nil {
+			return err
+		}
+		encoded, err := model.Encode(ref)
+		if err == nil {
+			_, err = stdout.Write(encoded)
+		}
 		return err
 	}
 	prefix, err := store.ReadPrefix(project)
