@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -135,49 +136,72 @@ func TestWriteProducerCaseVariantsCannotMergeContradictoryFacts(t *testing.T) {
 	}
 }
 
+// Run first checks Err after runIntent has copied caller-owned data, before
+// publishing the start packet or launching any producer goroutines or child.
+type outsideCopiedIntentContext struct {
+	context.Context
+	once   sync.Once
+	copied chan struct{}
+	resume chan struct{}
+}
+
+func (ctx *outsideCopiedIntentContext) Err() error {
+	ctx.once.Do(func() {
+		close(ctx.copied)
+		<-ctx.resume
+	})
+	return ctx.Context.Err()
+}
+
 func TestWriteProducerFreezesCallerIntentBeforeLaunch(t *testing.T) {
 	project := outsideWriteProject(t)
 	outsideRunControl(t, project)
-	gate := filepath.Join(project.Root, "child-gate")
-	request := outsideRunRequest(project, outsideRunReport, gate)
+	request := outsideRunRequest(project, outsideRunReport, "")
+	ctx := &outsideCopiedIntentContext{
+		Context: context.Background(),
+		copied:  make(chan struct{}),
+		resume:  make(chan struct{}),
+	}
+	resume := sync.OnceFunc(func() { close(ctx.resume) })
+	defer resume() // Also unblock Run if the barrier assertion fails.
 	type runAnswer struct {
 		result write.RunResult
 		err    error
 	}
 	done := make(chan runAnswer, 1)
 	go func() {
-		result, err := write.Run(context.Background(), project, request)
+		result, err := write.Run(ctx, project, request)
 		done <- runAnswer{result, err}
 	}()
-	// The child is alive and waiting, so the intent packet is already durable
-	// and the producer cannot be sealing while caller-owned maps are reused.
-	deadline := time.Now().Add(8 * time.Second)
-	for {
-		if _, err := os.Stat(gate + ".ready"); err == nil {
-			break
-		}
-		select {
-		case answer := <-done:
-			t.Fatalf("fixture producer exited before announcing its pre-seal barrier: %v", answer.err)
-		default:
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("fixture producer never reached its pre-seal barrier")
-		}
-		time.Sleep(5 * time.Millisecond)
+	select {
+	case <-ctx.copied:
+	case answer := <-done:
+		t.Fatalf("fixture producer exited before its post-copy barrier: %v", answer.err)
+	case <-time.After(8 * time.Second):
+		t.Fatal("fixture producer never reached its post-copy barrier")
 	}
+	// Receiving copied orders all copy reads before these writes. Closing resume
+	// orders these writes before publication and sealing, even if copying regresses.
 	request.ConfigRequested["sample_count"] = laneEEvidenceNumber("999")
 	request.ConditionsDeclared["seed"] = laneEEvidenceNumber("777")
-	if err := os.WriteFile(gate+".release", []byte("continue"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	resume()
 	answer := <-done
 	if answer.err != nil {
 		t.Fatalf("fixture run must complete after caller storage is reused: %v", answer.err)
 	}
 	start, seal := outsideRunPackets(t, project, answer.result)
-	if !reflect.DeepEqual(start.ConfigRequested, seal.ConfigRequested) || !reflect.DeepEqual(start.ConditionsDeclared, seal.ConditionsDeclared) {
-		t.Fatalf("durable start requested sample_count=%s, seed=%s; durable seal repeats sample_count=%s, seed=%s after caller map reuse. Expected the original intent in both packets: unmarshaling into the existing envelope reused caller-owned maps instead of freezing them before launch", *start.ConfigRequested["sample_count"].Number, *start.ConditionsDeclared["seed"].Number, *seal.ConfigRequested["sample_count"].Number, *seal.ConditionsDeclared["seed"].Number)
+	wantConfig := map[string]model.Scalar{"sample_count": laneEEvidenceNumber("12")}
+	wantConditions := map[string]model.Scalar{"seed": laneEEvidenceNumber("7")}
+	for _, packet := range []struct {
+		name     string
+		envelope model.InvocationEnvelope
+	}{{"start", start}, {"seal", seal}} {
+		if !reflect.DeepEqual(packet.envelope.ConfigRequested, wantConfig) {
+			t.Errorf("durable %s must preserve original requested sample_count=12 after caller map reuse: got %+v", packet.name, packet.envelope.ConfigRequested)
+		}
+		if !reflect.DeepEqual(packet.envelope.ConditionsDeclared, wantConditions) {
+			t.Errorf("durable %s must preserve original declared seed=7 after caller map reuse: got %+v", packet.name, packet.envelope.ConditionsDeclared)
+		}
 	}
 }
 
