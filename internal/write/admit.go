@@ -6,11 +6,9 @@ package write
 // This file stays near 200 lines to keep the admission transaction whole.
 
 import (
-	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,17 +29,64 @@ type AdmitRequest struct {
 }
 
 // Admit is the only canonical writer in this package. Capture never calls it implicitly.
+//
+// Everything is read under the admission lock, once. A retry of an admission
+// already published is answered from the ledger alone: the published bundle
+// binds the packet refs this request named, so its digest is recomputed from
+// them and intake is never needed, which is what lets a moved or cloned project
+// recover a lost acknowledgement. Otherwise intake is read and verified once,
+// and that one verified read supplies the packets, their exact-byte refs and
+// the request digest for the rest of this admission.
 func Admit(ctx context.Context, project store.Project, request AdmitRequest) (model.Bundle, error) {
 	ids, err := admissionIDs(request)
 	if err != nil {
 		return model.Bundle{}, err
 	}
-	// Only request identity is read early. Every authoritative check is repeated
-	// after Transact selects the prefix, including the exact packet bytes.
-	_, refs, err := admissionPackets(project, ids)
-	if err != nil {
-		return model.Bundle{}, err
+	return store.TransactAdmission(ctx, project, store.Admission{
+		ID: request.CommandID,
+		RetryDigest: func(published model.Bundle) (model.Digest, error) {
+			if len(published.Packets) != len(ids) {
+				return "", admissionFault("conflict", "packets", "this admission id already published a different packet set")
+			}
+			for i, ref := range published.Packets {
+				if ref.CommandID != ids[i] {
+					return "", admissionFault("conflict", "packets", "this admission id already published a different packet set")
+				}
+			}
+			return retryDigest(project, request, published.Packets)
+		},
+		Propose: func(prefix []model.Bundle) (model.Digest, model.Bundle, error) {
+			proposal, digest, err := proposeAdmission(ctx, project, request, ids, prefix)
+			return digest, proposal, err
+		},
+	})
+}
+
+// retryDigest recomputes the request digest against an admission already
+// published under this id. A packet whose intake is gone is known only by the
+// ref the ledger bound, so that ref stands for it. A packet still in intake is
+// read and verified again, so different bytes under the same packet id are a
+// different request and are refused, not answered with the old bundle.
+func retryDigest(project store.Project, request AdmitRequest, published []model.PacketRef) (model.Digest, error) {
+	refs := make([]model.PacketRef, len(published))
+	for i, ref := range published {
+		verified, err := store.ReadVerifiedIntake(project, []model.ID{ref.CommandID})
+		var fault *model.Fault
+		switch {
+		case errors.As(err, &fault) && fault.Code == "intake-not-found":
+			refs[i] = ref
+		case err != nil:
+			return "", err
+		default:
+			refs[i] = verified[0].Ref
+		}
 	}
+	return admissionDigest(project, request, refs)
+}
+
+// admissionDigest is the request identity: the packets by exact bytes, and the
+// review the admitter asked for.
+func admissionDigest(project store.Project, request AdmitRequest, refs []model.PacketRef) (model.Digest, error) {
 	data, err := model.Encode(struct {
 		Project model.ProjectID   `json:"project"`
 		Packets []model.PacketRef `json:"packets"`
@@ -50,77 +95,89 @@ func Admit(ctx context.Context, project store.Project, request AdmitRequest) (mo
 		Reason  string            `json:"reason"`
 	}{project.ID, refs, request.Admitter, request.Outcome, request.Reason})
 	if err != nil {
+		return "", err
+	}
+	return model.HashBytes(data), nil
+}
+
+// proposeAdmission runs under the lock against the prefix read there.
+func proposeAdmission(ctx context.Context, project store.Project, request AdmitRequest, ids []model.ID, prefix []model.Bundle) (model.Bundle, model.Digest, error) {
+	snapshot, err := reduce.Replay(prefix)
+	if err != nil {
+		return model.Bundle{}, "", err
+	}
+	verified, err := store.ReadVerifiedIntake(project, ids)
+	if err != nil {
+		return model.Bundle{}, "", err
+	}
+	packets := make([]model.Packet, len(verified))
+	lockedRefs := make([]model.PacketRef, len(verified))
+	for i, v := range verified {
+		packets[i], lockedRefs[i] = v.Packet, v.Ref
+		if prior, ok := snapshot.Review(reduce.ReviewKey{Project: project.ID, CommandID: v.Ref.CommandID}); ok {
+			return model.Bundle{}, "", admissionFault("conflict", "packets", fmt.Sprintf("packet %s already has disposition %s", v.Ref.CommandID, prior.Outcome))
+		}
+	}
+	digest, err := admissionDigest(project, request, lockedRefs)
+	if err != nil {
+		return model.Bundle{}, "", err
+	}
+	proposal, err := admissionProposal(ctx, project, request, digest, prefix, snapshot, packets, lockedRefs)
+	return proposal, digest, err
+}
+
+func admissionProposal(ctx context.Context, project store.Project, request AdmitRequest, digest model.Digest, prefix []model.Bundle, snapshot reduce.Snapshot, packets []model.Packet, lockedRefs []model.PacketRef) (model.Bundle, error) {
+	proposal := model.Bundle{Admitter: request.Admitter, Packets: lockedRefs, Events: []model.Event{}}
+	var eventPackets []model.ID
+	if request.Outcome == "accepted" {
+		var err error
+		packets, err = gatePackets(project.ID, snapshot, packets)
+		if err != nil {
+			return model.Bundle{}, err
+		}
+		for _, packet := range packets {
+			proposal.Events = append(proposal.Events, packet.Events...)
+			for range packet.Events {
+				eventPackets = append(eventPackets, packet.CommandID)
+			}
+		}
+	}
+	selfAdmission, authors, reason := admissionDetails(request, packets)
+	captured := make(map[model.ID]time.Time, len(packets))
+	for _, packet := range packets {
+		captured[packet.CommandID] = packet.CapturedAt.UTC()
+	}
+	invocations, err := reviewedInvocations(request.Outcome, packets)
+	if err != nil {
 		return model.Bundle{}, err
 	}
-	digest := model.HashBytes(data)
-	return store.Transact(ctx, project, request.CommandID, digest, func(prefix []model.Bundle) (model.Bundle, error) {
-		snapshot, err := reduce.Replay(prefix)
-		if err != nil {
+	review, err := model.EncodeEvent(&model.ReviewAdmit{Packets: lockedRefs, Outcome: request.Outcome, Actor: request.Admitter, Reason: reason,
+		SelfAdmission: selfAdmission, Invocations: invocations, Authors: authors, CapturedAt: captured, EventPackets: eventPackets})
+	if err != nil {
+		return model.Bundle{}, err
+	}
+	proposal.Events = append(proposal.Events, review)
+	after, err := gateProposal(snapshot, project.ID, request.CommandID, digest, proposal)
+	if err != nil {
+		return model.Bundle{}, err
+	}
+	if request.Outcome == "accepted" {
+		if err := gateDisposals(after, packets); err != nil {
 			return model.Bundle{}, err
 		}
-		packets, lockedRefs, err := admissionPackets(project, ids)
-		if err != nil {
+		if err := materializeAdmission(ctx, project, packets); err != nil {
 			return model.Bundle{}, err
 		}
-		for i, ref := range lockedRefs {
-			if ref != refs[i] {
-				return model.Bundle{}, admissionFault("conflict", "packets", "packet bytes changed while waiting for admission")
-			}
-			if prior, ok := snapshot.Review(reduce.ReviewKey{Project: project.ID, CommandID: ref.CommandID}); ok {
-				return model.Bundle{}, admissionFault("conflict", "packets", fmt.Sprintf("packet %s already has disposition %s", ref.CommandID, prior.Outcome))
-			}
-		}
-		proposal := model.Bundle{Admitter: request.Admitter, Packets: lockedRefs, Events: []model.Event{}}
-		var eventPackets []model.ID
-		if request.Outcome == "accepted" {
-			packets, err = gatePackets(project.ID, snapshot, packets)
-			if err != nil {
-				return model.Bundle{}, err
-			}
-			for _, packet := range packets {
-				proposal.Events = append(proposal.Events, packet.Events...)
-				for range packet.Events {
-					eventPackets = append(eventPackets, packet.CommandID)
-				}
-			}
-		}
-		selfAdmission, authors, reason := admissionDetails(request, packets)
-		captured := make(map[model.ID]time.Time, len(packets))
-		for _, packet := range packets {
-			captured[packet.CommandID] = packet.CapturedAt.UTC()
-		}
-		invocations, err := reviewedInvocations(request.Outcome, packets)
-		if err != nil {
+		if err := gateProofs(ctx, project, prefix, snapshot, after, packets); err != nil {
 			return model.Bundle{}, err
 		}
-		review, err := model.EncodeEvent(&model.ReviewAdmit{Packets: lockedRefs, Outcome: request.Outcome, Actor: request.Admitter, Reason: reason,
-			SelfAdmission: selfAdmission, Invocations: invocations, Authors: authors, CapturedAt: captured, EventPackets: eventPackets})
-		if err != nil {
+		if err := gateQuotes(ctx, project, packets); err != nil {
 			return model.Bundle{}, err
 		}
-		proposal.Events = append(proposal.Events, review)
-		after, err := gateProposal(snapshot, project.ID, request.CommandID, digest, proposal)
-		if err != nil {
-			return model.Bundle{}, err
-		}
-		if request.Outcome == "accepted" {
-			if err := gateDisposals(after, packets); err != nil {
-				return model.Bundle{}, err
-			}
-			if err := materializeAdmission(ctx, project, packets); err != nil {
-				return model.Bundle{}, err
-			}
-			if err := gateProofs(ctx, project, prefix, snapshot, after, packets); err != nil {
-				return model.Bundle{}, err
-			}
-			if err := gateQuotes(ctx, project, packets); err != nil {
-				return model.Bundle{}, err
-			}
-		}
-		// The store alone seals the envelope. The validation copy never becomes
-		// the proposal, so a tail selected outside the store cannot be published.
-		return proposal, nil
-	})
+	}
+	// The store alone seals the envelope. The validation copy never becomes
+	// the proposal, so a tail selected outside the store cannot be published.
+	return proposal, nil
 }
 
 func admissionIDs(r AdmitRequest) ([]model.ID, error) {
@@ -149,43 +206,6 @@ func admissionIDs(r AdmitRequest) ([]model.ID, error) {
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	return ids, nil
-}
-
-func admissionPackets(project store.Project, ids []model.ID) ([]model.Packet, []model.PacketRef, error) {
-	packets, err := store.ReadIntake(project, ids)
-	if err != nil {
-		return nil, nil, err
-	}
-	inbox, err := store.IntakeDir(project)
-	if err != nil {
-		return nil, nil, err
-	}
-	refs := make([]model.PacketRef, len(packets))
-	for i, packet := range packets {
-		path := filepath.Join(inbox, string(packet.CommandID), "packet.json")
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, nil, err
-		}
-		decoded, err := model.DecodePacket(data)
-		if err != nil {
-			return nil, nil, err
-		}
-		before, err := model.Encode(packet)
-		if err != nil {
-			return nil, nil, err
-		}
-		after, err := model.Encode(decoded)
-		if err != nil {
-			return nil, nil, err
-		}
-		if !bytes.Equal(before, after) {
-			return nil, nil, admissionFault("conflict", path, "packet changed during verification")
-		}
-		// Hash stored bytes, not a reconstructed packet with different whitespace.
-		refs[i] = model.PacketRef{CommandID: packet.CommandID, Digest: model.HashBytes(data)}
-	}
-	return packets, refs, nil
 }
 
 // admissionDetails renders the readable suffix from the same facts we persist.

@@ -42,7 +42,7 @@ is stale. Nothing below is written by hand, so it cannot quietly stop being true
 datum
 |-- cmd/
 |   `-- datum          This file holds `datum id [N]`, which prints N fresh record identifiers (default one)
-|          5 files, tested -- uses model, query, reduce, store, write
+|          5 files, tested -- uses evidence, model, query, reduce, store, write
 |-- internal/
 |   |-- acceptance     (tests only, no production code)
 |   |      tests only

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"datum/internal/evidence"
 	"datum/internal/model"
 	"datum/internal/store"
 	"datum/internal/write"
@@ -23,6 +25,8 @@ datum reconcile [--actor ID] --invocation-id ULID --reason TEXT
 datum id [N]
 
 Capture reads a JSON array of typed events and writes only immutable intake.
+A source.intake is captured with its original bytes, read from its reference
+or from --blob; capture refuses a source whose bytes it cannot save.
 Admission reviews a packet set and is the only command that publishes a bundle.
 Handback captures a receipt for an admitted attempt; admit its returned packet ID.
 OUTCOME: success, stopped, refused, no-reading, measurement-impossible,
@@ -218,5 +222,60 @@ func captureCLI(ctx context.Context, project store.Project, id model.ID, author 
 		defer f.Close()
 		readers = append(readers, f)
 	}
-	return store.WriteIntake(ctx, project, store.IntakeRequest{CommandID: id, Author: author, Events: events, Blobs: readers})
+	sources, err := sourceBlobs(ctx, project, events)
+	if err != nil {
+		return model.PacketRef{}, err
+	}
+	readers = append(readers, sources...)
+	return store.WriteIntake(ctx, project, store.IntakeRequest{CommandID: id, Author: author, Blobs: readers,
+		BuildEvents: func(captured []store.CapturedBlob) ([]model.Event, error) {
+			return events, requireSourceBytes(events, captured)
+		}})
+}
+
+// sourceBlobs implements capture durability (contract: intake durably saves
+// incoming source before acknowledging capture). Each source.intake's reference
+// is resolved inside the datum root, and bytes that verify against the
+// original's digest and length are captured into the packet with it, so the
+// source survives its original being deleted before admission. A reference that
+// does not resolve is left to --blob; requireSourceBytes refuses what neither
+// supplied.
+func sourceBlobs(ctx context.Context, project store.Project, events []model.Event) ([]io.Reader, error) {
+	resolver := evidence.NewResolver(project.Root)
+	var readers []io.Reader
+	for _, raw := range events {
+		event, err := model.DecodeEvent(raw)
+		if err != nil {
+			return nil, err
+		}
+		source, ok := event.(*model.SourceIntake)
+		if !ok {
+			continue
+		}
+		resolved, err := resolver.Resolve(ctx, source.SourceRef)
+		if err == nil && resolved.SHA256 == source.OriginalDigest && resolved.Length == source.Length {
+			readers = append(readers, bytes.NewReader(resolved.Bytes))
+		}
+	}
+	return readers, nil
+}
+
+// requireSourceBytes is the rule itself: capture is acknowledged only when the
+// packet's own blob inventory holds every source.intake's exact original bytes.
+func requireSourceBytes(events []model.Event, captured []store.CapturedBlob) error {
+	have := make(map[store.CapturedBlob]bool, len(captured))
+	for _, blob := range captured {
+		have[blob] = true
+	}
+	for i, raw := range events {
+		event, err := model.DecodeEvent(raw)
+		if err != nil {
+			return err
+		}
+		if source, ok := event.(*model.SourceIntake); ok && !have[store.CapturedBlob{SHA256: source.OriginalDigest, Length: source.Length}] {
+			return &model.Fault{Code: "source-not-captured", EventIndex: i, Path: "source_ref",
+				Detail: "the original source bytes do not resolve inside the datum root and were not passed with --blob, so capture cannot save them durably"}
+		}
+	}
+	return nil
 }
