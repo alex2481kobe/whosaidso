@@ -8,6 +8,11 @@
 *.out
 coverage.*
 
+# Ledger working files. The lock lives inside the ledger directory by design,
+# and a crash can leave a publication temporary. Neither is a record.
+record/events/.lock
+record/events/*.json.tmp
+
 # OS / editor
 .DS_Store
 *.swp
