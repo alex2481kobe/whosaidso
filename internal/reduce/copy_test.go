@@ -67,18 +67,23 @@ func escapingTypes(t *testing.T) map[reflect.Type]string {
 // mutates the receiver, and the only way to change one is to assign through a
 // pointer the caller had to go out of its way to obtain.
 //
-// They stay exempt anyway, as a priced decision rather than an oversight.
-// Copying a Location would break equality between a copied location and
-// time.UTC, and allocate one per timestamp, and a caller assigning through a
-// *time.Location has already corrupted zone data process-wide, well beyond
-// anything this package could contain.
+// This exemption remains an explicit limitation, not an immutability guarantee.
+// TestInvocationLocationSurvivesLedgerPublication proves that packet JSON,
+// durable store.Transact publication, ledger reads and Replay preserve +00:37
+// inside invocation events. Only the packet/bundle's OWN timestamp becomes UTC.
+// Assignment through that private decoded location changes both snapshot forks;
+// no process-wide UTC/Local corruption is necessary.
 //
-// Whether a non-UTC location can reach a snapshot through real admission at
-// all is open: the wire codec forces UTC when marshalling, so a timestamp that
-// round-trips through JSON cannot carry one. The reviewer's fixture builds the
-// envelope in memory and skips that round trip. Until someone checks, the
-// honest statement is that the hole is real in the type and may be unreachable
-// in practice. Do not upgrade "unmeasured" to "safe".
+// TestInvocationLocationThroughApplicationAdmission also proves the narrower
+// current application gate refuses invocation.start as unavailable-until-integrated.
+// That gate blocks the application route, not the codec or the reducer API.
+// Keep the outside regression: it describes a real reducer limitation.
+//
+// TestDetachedLocationCandidateCost measures a test-only copy alternative:
+// Go 1.26.5 darwin/arm64, one sealed invocation read costs 36 allocations today
+// versus 39 with three detached Location structs. Cloning UTC also loses
+// Location()==time.UTC and time.Time == equality, while Time.Equal is preserved.
+// Production copy behavior is intentionally unchanged pending that policy choice.
 //
 // Adding to this list is a claim about what a caller can do to a type. Make it
 // on purpose, in writing, with its price stated, or do not make it.

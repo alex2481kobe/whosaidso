@@ -366,10 +366,14 @@ func TestU06ChangedSealCannotEstablishObservation(t *testing.T) {
 				t.Fatal(err)
 			}
 			l.out[4].Events[0] = raw
-			wantClaim(t, mustReplay(t, l.out), ref(newID("CMA1"), 1), StatusUnmeasured)
+			got, err := Replay(l.out)
+			wantFault(t, err, CodeInvalidField)
+			if !reflect.DeepEqual(got, Snapshot{}) {
+				t.Fatal("contradictory seal published a snapshot")
+			}
 			l.add(t, admitProof(ref(newID("CMA1"), 1), newID("RNA")))
 			_, err = Replay(l.out)
-			wantFault(t, err, CodeInvalidTransition)
+			wantFault(t, err, CodeInvalidField)
 		})
 	}
 }

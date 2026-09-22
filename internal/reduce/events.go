@@ -5,6 +5,7 @@ package reduce
 
 import (
 	"fmt"
+	"reflect"
 
 	"datum/internal/model"
 )
@@ -149,11 +150,28 @@ func (s *state) invocationSeal(b model.Bundle, idx int, o Origin, e *model.Invoc
 	if inv.Seal != nil {
 		return faultAt(CodeInvalidTransition, b.Sequence, idx, "start_ref", "the invocation is already sealed")
 	}
-	// Intent is immutable: a seal that renames the instrument, the argv or the
-	// criterion is a different run wearing this one's identity.
-	if e.Envelope.AttemptID != inv.Start.AttemptID || e.Envelope.InstrumentRef != inv.Start.InstrumentRef {
-		return faultAt(CodeInvalidField, b.Sequence, idx, "envelope",
-			"the seal disagrees with the admitted pre-launch intent")
+	// Only observations may change: effective config, observed conditions,
+	// isolation, observation time, outcome, outputs, and visual observations.
+	start, end := inv.Start, e.Envelope
+	for _, field := range []struct {
+		name string
+		same bool
+	}{
+		{"invocation_id", start.InvocationID == end.InvocationID},
+		{"attempt_id", start.AttemptID == end.AttemptID},
+		{"instrument_ref", start.InstrumentRef == end.InstrumentRef},
+		{"criterion_ref", reflect.DeepEqual(start.CriterionRef, end.CriterionRef)},
+		{"execution_source_identity", reflect.DeepEqual(start.ExecutionSourceIdentity, end.ExecutionSourceIdentity)},
+		{"argv", reflect.DeepEqual(start.Argv, end.Argv)},
+		{"input_refs", reflect.DeepEqual(start.InputRefs, end.InputRefs)},
+		{"config_requested", reflect.DeepEqual(start.ConfigRequested, end.ConfigRequested)},
+		{"conditions_declared", reflect.DeepEqual(start.ConditionsDeclared, end.ConditionsDeclared)},
+		{"started_at", start.StartedAt.Equal(end.StartedAt)},
+	} {
+		if !field.same {
+			return faultAt(CodeInvalidField, b.Sequence, idx, "envelope."+field.name,
+				"the seal disagrees with the admitted pre-launch intent")
+		}
 	}
 	seal := e.Envelope
 	inv.Seal = &seal
