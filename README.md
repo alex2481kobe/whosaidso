@@ -47,7 +47,7 @@ datum
 |   |-- acceptance     (tests only, no production code)
 |   |      4492 lines of tests
 |   |-- evidence       turns a reference into the exact bytes it names, and a frozen criterion into a verdict over what those bytes actually say
-|   |      2 files, 1415 lines (1460 test), largest resolve.go at 1059 -- uses model
+|   |      2 files, 1449 lines (1558 test), largest resolve.go at 1070 -- uses model
 |   |-- model          wire vocabulary every other package shares: identities, references, packets and bundles, plus the strict encode/decode boundary
 |   |      8 files, 2608 lines (1095 test), largest events.go at 809 -- leaf
 |   |-- reduce         folds admitted bundles into the state every Datum answer is read from

@@ -591,6 +591,8 @@ type Reading struct {
 	Population  model.Availability[string]
 	Denominator model.Availability[string]
 	Reason      string
+	// MemberMetadata parallels Values; absent keys were not declared by the member.
+	MemberMetadata []map[string]model.Availability[string]
 }
 
 // Scalars returns the values to compare. An absent reading has none, and says so.
@@ -682,8 +684,17 @@ func finish(out Reading, v any) (Reading, error) {
 	case []any:
 		out.Kind = ReadingSet
 		out.Values = make([]model.Scalar, 0, len(t))
+		out.MemberMetadata = make([]map[string]model.Availability[string], len(t))
 		for i, e := range t {
 			if obj, ok := e.(map[string]any); ok {
+				unit, population, denominator := metaFrom(obj)
+				declared := map[string]model.Availability[string]{"unit": unit, "population": population, "denominator": denominator}
+				for key := range declared {
+					if _, present := obj[key]; !present {
+						delete(declared, key)
+					}
+				}
+				out.MemberMetadata[i] = declared
 				inner, found := obj["value"]
 				if !found {
 					out.Kind, out.Values = ReadingAbsent, nil

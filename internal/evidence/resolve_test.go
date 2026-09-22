@@ -672,6 +672,41 @@ func TestSelectorsReadExactJSONNumbers(t *testing.T) {
 	})
 }
 
+func TestSelectPreservesMemberMetadataDeclarations(t *testing.T) {
+	for _, field := range []string{"unit", "population", "denominator"} {
+		for _, raw := range []string{`"different"`, `""`, `null`, `{"state":"unknown","reason":"not observed"}`} {
+			t.Run(field+"/"+raw, func(t *testing.T) {
+				body := `{"unit":"mm","population":"pose sweep","denominator":"poses","values":[0.0200,{"value":0.0100,"` + field + `":` + raw + `},{"value":9007199254740993}]}`
+				got, err := Select(resolved(t, body), model.Selector{Kind: "json-pointer"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				values, ok := got.Scalars()
+				if !ok || len(values) != 3 || string(*values[1].Number) != "0.0100" || string(*values[2].Number) != "9007199254740993" {
+					t.Fatalf("resolution must retain exact values despite metadata disagreement: %+v", got)
+				}
+				if *got.Unit.Value != "mm" || *got.Population.Value != "pose sweep" || *got.Denominator.Value != "poses" {
+					t.Fatalf("member declarations overwrote set metadata: %+v", got)
+				}
+				if len(got.MemberMetadata) != 3 || len(got.MemberMetadata[0]) != 0 || len(got.MemberMetadata[2]) != 0 || len(got.MemberMetadata[1]) != 1 {
+					t.Fatalf("member declarations must retain their positions and omitted fields: %+v", got.MemberMetadata)
+				}
+				declared, present := got.MemberMetadata[1][field]
+				if !present {
+					t.Fatal("explicit declaration was lost")
+				}
+				if raw == `"different"` {
+					if declared.State != model.Known || declared.Value == nil || *declared.Value != "different" {
+						t.Fatalf("declared value lost: %+v", declared)
+					}
+				} else if declared.State != model.Unknown || declared.Value != nil || !strings.Contains(declared.Reason, field) {
+					t.Fatalf("explicit unavailability must remain present with a reason: %+v", declared)
+				}
+			})
+		}
+	}
+}
+
 // ---- observations --------------------------------------------------------
 
 const resultArtifact = `{

@@ -179,6 +179,29 @@ func evaluateMember(c model.CriterionFix, o Observation) MemberResult {
 		m.Reason = "result: " + o.Result.Reason
 		return m
 	}
+	// Set metadata has been checked above. A member may omit a declaration,
+	// but an explicit unknown or conflicting declaration cannot inherit it.
+	for i, declared := range o.Result.MemberMetadata {
+		for _, field := range []struct{ name, expected string }{
+			{"unit", c.Expression.Unit},
+			{"population", c.Expression.Population.Identity},
+			{"denominator", c.Expression.Population.Denominator},
+		} {
+			s, present := declared[field.name]
+			if !present {
+				continue
+			}
+			if s.State != model.Known || s.Value == nil {
+				m.Reason = fmt.Sprintf("member %d %s is unavailable: %s", i, field.name, s.Reason)
+				return m
+			}
+			if *s.Value != field.expected {
+				m.Reason = fmt.Sprintf("member %d %s mismatch: the criterion declares %s, the member states %s",
+					i, field.name, quote(field.expected), quote(*s.Value))
+				return m
+			}
+		}
+	}
 	size, ok := o.Population.Size()
 	if !ok {
 		m.Reason = "population: " + o.Population.Reason

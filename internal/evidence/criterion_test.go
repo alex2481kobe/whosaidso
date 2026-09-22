@@ -244,6 +244,69 @@ func TestDenominatorAndPopulationMustMatch(t *testing.T) {
 	})
 }
 
+func TestMemberMetadataMustBeComparableBeforeReduction(t *testing.T) {
+	for _, reducer := range []model.CriterionReducer{model.All, model.Any, model.Count} {
+		for _, field := range []struct{ name, matching string }{
+			{"unit", `"mm"`}, {"population", `"pose sweep"`}, {"denominator", `"poses"`},
+		} {
+			for _, tc := range []struct {
+				name, raw string
+				want      Verdict
+			}{
+				{"omitted", "", True}, {"matching", field.matching, True},
+				{"conflicting", `"different"`, Unknown}, {"blank", `""`, Unknown},
+				{"null", `null`, Unknown}, {"explicit unknown", `{"state":"unknown","reason":"not observed"}`, Unknown},
+			} {
+				t.Run(string(reducer)+"/"+field.name+"/"+tc.name, func(t *testing.T) {
+					c := testCriterion(t)
+					c.Expression.Reducer = reducer
+					if reducer == model.Count {
+						c.Expression.Operator = model.Equal
+						c.Expression.Target = numberScalar(json.Number("2"))
+					}
+					declaration := ""
+					if tc.raw != "" {
+						declaration = `,"` + field.name + `":` + tc.raw
+					}
+					body := `{"unit":"mm","population":"pose sweep","denominator":"poses","values":[0.0100,{"value":0.0200` + declaration + `}]}`
+					read, err := Select(resolved(t, body), model.Selector{Kind: "json-pointer"})
+					if err != nil {
+						t.Fatal(err)
+					}
+					o := observation(invocationA, read, sizedPopulation(2))
+					ev := evaluate(t, c, o)
+					reason := ""
+					if tc.want == Unknown {
+						reason = "member 1 " + field.name
+					}
+					wantVerdict(t, ev, tc.want, reason)
+					if tc.want == Unknown && ev.Members[0].Compared != 0 {
+						t.Fatalf("metadata must be checked before scalar comparison: %+v", ev.Members[0])
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestMemberMetadataUnknownCannotEraseIndependentCounterexample(t *testing.T) {
+	c := testCriterion(t)
+	body := `{"unit":"mm","population":"pose sweep","denominator":"poses","values":[{"value":0.0100,"unit":"cm"}]}`
+	read, err := Select(resolved(t, body), model.Selector{Kind: "json-pointer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	uncertain := observation(invocationA, read, sizedPopulation(1))
+	wantVerdict(t, evaluate(t, c, uncertain), Unknown, "unit")
+	counterexample := observation(invocationB, numbersRead("mm", "pose sweep", "poses", "0.9"), sizedPopulation(1))
+	counterexample.ConfigEffective = config("camera_pos", "34")
+	forward := evaluate(t, c, uncertain, counterexample)
+	wantVerdict(t, forward, False, "does not satisfy")
+	if backward := evaluate(t, c, counterexample, uncertain); !reflect.DeepEqual(forward, backward) {
+		t.Fatal("family order changed the independent counterexample")
+	}
+}
+
 func TestSelectedPopulationMetadataMustMatch(t *testing.T) {
 	for _, reducer := range []model.CriterionReducer{model.All, model.Any, model.Count} {
 		for _, field := range []string{"population", "denominator"} {
