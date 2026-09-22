@@ -3,6 +3,7 @@ package write
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -122,6 +123,7 @@ func TestRunReportKeyFaults(t *testing.T) {
 		{"array alias", `{"version":1,"outputs":[{"path":"a","PATH":"b","media_type":"text/plain"}]}`, "invalid-field", "$.outputs[0].PATH"},
 		{"array duplicate", `{"version":1,"outputs":[{"path":"a","path":"b","media_type":"text/plain"}]}`, "invalid-json", "$.outputs[0].path"},
 		{"visual alias", `{"version":1,"visual":{"backend":{"state":"known","value":"webgl","VALUE":"webgpu"}}}`, "invalid-field", "$.visual.backend.VALUE"},
+		{"invalid utf8", "{\"version\":1,\"config_effective\":{\"samples\":{\"type\":\"string\",\"string\":\"adapter-\xff\"}}}", "invalid-json", "$"},
 		{"unicode alias", `{"version":1,"conditions_observed":{"k":{"type":"bool","bool":true},"\u212a":{"type":"bool","bool":false}}}`, "invalid-field", "$.conditions_observed.K"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -433,6 +435,47 @@ func TestRunInvalidReportStillSealsObservedExit(t *testing.T) {
 	}
 }
 
+// A malformed report is itself an observation. Its bytes travel hex-encoded
+// in argv because argv is intent and invalid UTF-8 intent is refused at start.
+func TestRunInvalidUTF8ReportSealsUnknown(t *testing.T) {
+	project := runTestProject(t)
+	for _, test := range []struct {
+		report string
+		state  model.AvailabilityState
+	}{
+		{`{"version":1,"config_effective":{"samples":{"type":"string","string":"adapter-\ufffd"}}}`, model.Known},
+		{"{\"version\":1,\"config_effective\":{\"samples\":{\"type\":\"string\",\"string\":\"adapter-\xff\"}}}", model.Unknown},
+	} {
+		result, err := Run(context.Background(), project, runTestRequest(project.Root, "report-hex", hex.EncodeToString([]byte(test.report))))
+		if (err == nil) != (test.state == model.Known) || result.Envelope.ConfigEffective.State != test.state {
+			t.Fatalf("report %q: err=%v, config=%+v, want %s", test.report, err, result.Envelope.ConfigEffective, test.state)
+		}
+		runTestPackets(t, project, result)
+		if string(runTestArtifact(t, project, result, "producer.json")) != test.report {
+			t.Fatal("report bytes were not kept exactly")
+		}
+	}
+}
+
+func TestRunInstrumentIsFrozenBeforeSeal(t *testing.T) {
+	r := runTestRequest(t.TempDir(), "ok")
+	r.Instrument.DangerousDefaults = []string{"fast"}
+	r.Instrument.Validation = runKnown(model.InstrumentValidation{Ref: r.Instrument.ImplementationRef, Version: "1"})
+	frozen := runFreezeInstrument(r.Instrument)
+	before, err := json.Marshal(frozen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Instrument.ConfigSurface[0] = "reused"
+	r.Instrument.DangerousDefaults[0] = "reused"
+	r.Instrument.ImplementationRef.Content.Locators[0].Path = "reused"
+	r.Instrument.Validation.Value.Ref.Content.Length++
+	r.Instrument.Validation.Value.Version = "2"
+	if after, _ := json.Marshal(frozen); !bytes.Equal(before, after) {
+		t.Fatalf("caller reuse rewrote the frozen instrument: %s", after)
+	}
+}
+
 func TestRunSurvivingObserverSealsSignalAndCancellation(t *testing.T) {
 	project := runTestProject(t)
 	runTestControl(t, project)
@@ -654,6 +697,11 @@ func TestRunChildProcess(t *testing.T) {
 			os.Exit(96)
 		}
 		if err := os.Symlink(os.Getenv("DATUM_RUN_REPORT"), filepath.Join(os.Getenv("DATUM_RUN_DIR"), "link")); err != nil {
+			os.Exit(96)
+		}
+	case "report-hex":
+		report, err := hex.DecodeString(args[1])
+		if err != nil || os.WriteFile(os.Getenv("DATUM_RUN_REPORT"), report, 0600) != nil {
 			os.Exit(96)
 		}
 	case "burst":

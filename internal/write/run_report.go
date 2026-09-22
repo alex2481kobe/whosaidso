@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"datum/internal/model"
 	"datum/internal/store"
@@ -180,6 +181,12 @@ func runReadReport(dir string) (*ProducerReport, []byte, error) {
 	}
 	if len(raw) > runReportBytes {
 		return nil, nil, fmt.Errorf("run: producer report exceeds 1 MiB")
+	}
+	// encoding/json would repair an invalid byte into U+FFFD and hand back a
+	// KNOWN fact the producer never wrote. The malformed report is itself the
+	// observation: keep its bytes, supply no facts, still seal.
+	if !utf8.Valid(raw) {
+		return nil, raw, &model.Fault{Code: "invalid-json", Path: "$", EventIndex: -1, Detail: "producer report contains invalid UTF-8"}
 	}
 	shape := json.NewDecoder(bytes.NewReader(raw))
 	shape.UseNumber()

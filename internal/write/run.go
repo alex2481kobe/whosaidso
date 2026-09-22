@@ -63,6 +63,7 @@ type RunResult struct {
 // gets a separate bounded context. A killed observer cannot execute this seal.
 func Run(ctx context.Context, project store.Project, request RunRequest) (RunResult, error) {
 	var result RunResult
+	request.Instrument = runFreezeInstrument(request.Instrument)
 	envelope, err := runIntent(project, request)
 	if err != nil {
 		return result, err

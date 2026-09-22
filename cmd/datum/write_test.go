@@ -101,6 +101,10 @@ func TestCLICaptureRejectsMalformedEvents(t *testing.T) {
 		`[{"type":"task.create","data":{},"extra":true}]`,
 		`[{"type":"task.create","data":{}}] {}`,
 		`null`,
+		`[{"type":"task.create","TYPE":"task.start","data":{}}]`,
+		`[{"TYPE":"task.start","type":"task.create","data":{}}]`,
+		`[{"type":"task.create","Data":{}}]`,
+		"[{\"type\":\"task.create\",\"data\":{},\"x-\xff\":1}]",
 	} {
 		if _, err := callWriteCLI(t, root, []byte(input), "capture", "--actor", "lane"); err == nil {
 			t.Fatalf("malformed intake was acknowledged: %s", input)
@@ -296,5 +300,13 @@ func TestCLIHandbackRefusesInvalidFlags(t *testing.T) {
 	}
 	if out, err := callWriteCLI(t, root, nil, control...); err != nil || !json.Valid(out) {
 		t.Fatalf("minimal authored handback failed: %s, %v", out, err)
+	}
+	// Case aliases must be refused, not resolved by encoding/json's choice.
+	pin := `[{"kind":"content","content":{"sha256":"` + string(model.HashBytes([]byte("x"))) + `","length":1,"media_type":"application/json","locators":[{"path":"d.json"}]},"selector":{"kind":"json-pointer","pointer":"/a"}}]`
+	for i, input := range []string{pin, strings.Replace(pin, `"pointer":"/a"`, `"pointer":"/a","POINTER":"/b"`, 1), strings.Replace(pin, `"pointer":"/a"`, `"POINTER":"/b","pointer":"/a"`, 1), strings.Replace(pin, `"kind":"content"`, `"Kind":"content"`, 1)} {
+		args := append(append([]string(nil), control...), "--delivery-refs", "-", "--command-id", string(cliID(20+i)))
+		if out, err := callWriteCLI(t, root, []byte(input), args...); (err == nil) != (i == 0) {
+			t.Fatalf("delivery refs %s: out=%s err=%v", input, out, err)
+		}
 	}
 }
