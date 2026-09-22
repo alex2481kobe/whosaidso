@@ -221,7 +221,8 @@ func (s *state) reviewAdmit(b model.Bundle, idx int, o Origin, e *model.ReviewAd
 				invocations = append(invocations, inv)
 			}
 		}
-		s.reviews[key] = Review{Key: key, Packet: p, Outcome: e.Outcome, Actor: e.Actor, Reason: e.Reason, Origin: o, SelfAdmission: selfAdmission, Invocations: invocations}
+		s.reviews[key] = Review{Key: key, Packet: p, Outcome: e.Outcome, Actor: e.Actor, Reason: e.Reason, Origin: o, SelfAdmission: selfAdmission, Invocations: invocations,
+			Author: reviewAuthor(e, p.CommandID)}
 	}
-	return nil
+	return s.attributeEvents(b, idx, e)
 }

@@ -201,6 +201,9 @@ type Review struct {
 	Reason        string
 	Origin        Origin
 	SelfAdmission model.SelfAdmissionState
+	// Author is the Actor this packet was captured with, or an unknown Actor
+	// when a legacy review did not record it (R10.1 revised).
+	Author model.Actor
 	// Invocations are the invocation facts this packet carried when it was not
 	// accepted (R10.3). Empty for accepted packets.
 	Invocations []model.ReviewedInvocation

@@ -40,6 +40,7 @@ type state struct {
 	invocations  map[InvocationKey]Invocation
 	criteria     map[CriterionKey]Criterion
 	reviews      map[ReviewKey]Review
+	eventPackets map[Origin]ReviewKey // accepted event -> the packet that carried it
 	sources      map[SourceKey]Source
 	commands     map[model.ID]uint64
 	events       map[Origin]model.TypedEvent
@@ -61,6 +62,7 @@ func newState() *state {
 		invocations:       map[InvocationKey]Invocation{},
 		criteria:          map[CriterionKey]Criterion{},
 		reviews:           map[ReviewKey]Review{},
+		eventPackets:      map[Origin]ReviewKey{},
 		sources:           map[SourceKey]Source{},
 		commands:          map[model.ID]uint64{},
 		events:            map[Origin]model.TypedEvent{},
@@ -94,6 +96,7 @@ func (s *state) clone() *state {
 		invocations:       copyMap(s.invocations),
 		criteria:          copyMap(s.criteria),
 		reviews:           copyMap(s.reviews),
+		eventPackets:      copyMap(s.eventPackets),
 		sources:           copyMap(s.sources),
 		commands:          copyMap(s.commands),
 		events:            copyMap(s.events),
