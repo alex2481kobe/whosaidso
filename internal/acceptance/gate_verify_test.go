@@ -273,10 +273,11 @@ func TestGateVerifyClosedEventSet(t *testing.T) {
 // gateVerifyStillDisabled is the admission boundary after U12. U12 enabled
 // task.close, invocation.start/seal, claim.revise, criterion.fix, proof.admit,
 // decision.open/revise, correction, instrument.declare/revise and
-// trust.withdraw, each behind its own rules. Packet authors still cannot mint
-// decision authority, supersession, reviews (admission alone writes those)
-// or disposal.
-var gateVerifyStillDisabled = map[model.EventType]bool{"decision.dispose": true, "supersede": true, "review.admit": true, "artifact.dispose": true}
+// trust.withdraw, each behind its own rules. Owner ruling R10 then enabled
+// decision.dispose: the ruling quote and a named authority are recorded, and
+// accountability is visibility, not an author check. Packet authors still
+// cannot mint supersession, reviews (admission alone writes those) or disposal.
+var gateVerifyStillDisabled = map[model.EventType]bool{"supersede": true, "review.admit": true, "artifact.dispose": true}
 
 func gateVerifyPayloadAuthor(event model.TypedEvent, fallback model.Actor) model.Actor {
 	switch e := event.(type) {
