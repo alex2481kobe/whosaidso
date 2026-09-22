@@ -43,11 +43,11 @@ func Discover(cwd string) (Project, error) {
 			if err != nil {
 				return Project{}, err
 			}
-			ledger := values["ledger"]
-			if !filepath.IsAbs(ledger) {
-				ledger = filepath.Join(root, ledger)
+			ledger, err := ledgerInRoot(root, values["ledger"], path)
+			if err != nil {
+				return Project{}, err
 			}
-			return Project{ID: model.ProjectID(values["id"]), Root: root, Ledger: filepath.Clean(ledger)}, nil
+			return Project{ID: model.ProjectID(values["id"]), Root: root, Ledger: ledger}, nil
 		}
 		if !os.IsNotExist(err) {
 			return Project{}, storeFault("io", path, err.Error())
@@ -62,6 +62,50 @@ func Discover(cwd string) (Project, error) {
 			return Project{}, storeFault("config-not-found", cwd, "no datum.toml in this directory or its parents")
 		}
 		root = parent
+	}
+}
+
+// ledgerInRoot enforces ruling R8.1: the ledger is committed with the project,
+// so it may not leave the datum root. Containment is asked of the filesystem by
+// path segments, with symlinks resolved on both sides (macOS /tmp is a link).
+func ledgerInRoot(root, declared, config string) (string, error) {
+	ledger := filepath.Join(root, declared)
+	outside := storeFault("config-invalid-value", config,
+		fmt.Sprintf("ledger %q resolves to %q, outside the datum root %q", declared, ledger, root))
+	if filepath.IsAbs(declared) || filepath.VolumeName(declared) != "" {
+		return "", outside
+	}
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", storeFault("io", root, err.Error())
+	}
+	realLedger, err := resolveExisting(ledger)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(realRoot, realLedger)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		outside.Detail = fmt.Sprintf("ledger %q resolves to %q, outside the datum root %q", declared, realLedger, realRoot)
+		return "", outside
+	}
+	return ledger, nil
+}
+
+// resolveExisting resolves symlinks through the longest existing prefix, since
+// a new project's ledger does not exist yet. Only a missing name is deferred: a
+// dangling link still points somewhere, so it is refused, not guessed at.
+func resolveExisting(path string) (string, error) {
+	tail := ""
+	for {
+		real, err := filepath.EvalSymlinks(path)
+		if err == nil {
+			return filepath.Join(real, tail), nil
+		}
+		if _, lstatErr := os.Lstat(path); !os.IsNotExist(lstatErr) {
+			return "", storeFault("io", path, err.Error())
+		}
+		tail = filepath.Join(filepath.Base(path), tail)
+		path = filepath.Dir(path)
 	}
 }
 
