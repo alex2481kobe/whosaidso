@@ -12,9 +12,12 @@ import (
 // gateKey follows typed references and attempt identities; bundled authority
 // artifacts resolve separately.
 type gateKey struct {
-	Record  model.RecordRef
-	Blocker model.ID
-	Attempt model.ID
+	Record     model.RecordRef
+	Blocker    model.ID
+	Attempt    model.ID
+	Criterion  model.CriterionRef
+	Invocation model.InvocationRef
+	Sealed     model.InvocationRef
 }
 
 func gatePackets(project model.ProjectID, snapshot reduce.Snapshot, packets []model.Packet) ([]model.Packet, error) {
@@ -90,6 +93,14 @@ func gatePackets(project model.ProjectID, snapshot reduce.Snapshot, packets []mo
 				dependencies[i][provider] = true
 			}
 		}
+		// A proof is ordered after the seals it disposes of, when they are proposed.
+		for _, event := range typed {
+			for _, sealed := range gateSealNeeds(event) {
+				if provider, ok := providers[gateKey{Sealed: sealed}]; ok && provider != i {
+					dependencies[i][provider] = true
+				}
+			}
+		}
 	}
 	ordered := make([]model.Packet, 0, len(packets))
 	used := make([]bool, len(packets))
@@ -132,16 +143,19 @@ func gateOperation(event model.TypedEvent, author model.Actor) error {
 		// Claims start UNMEASURED; observation/proof operations stay disabled.
 		provenance = &e.Provenance
 	case *model.InstrumentDeclare:
-		// Known validation currently grants active trust during reduction.
-		// A declaration cannot grant itself that authority.
-		if e.Spec.Validation.State != model.Unknown {
-			return admissionFault("unavailable-until-integrated", "spec.validation", "declaration cannot establish trusted validation")
+		// R9: known validation is admitted when its pinned artifact resolves;
+		// the admitter is the judgment and trust.withdraw revokes it.
+		if err := gateValidation(e.Spec.Validation); err != nil {
+			return err
 		}
 		provenance = &e.Provenance
 	case *model.TaskStart, *model.TaskTakeover, *model.AttemptTerminal, *model.BlockerHold, *model.BlockerClear:
 	default:
 		// Packet authors cannot mint reviews, closures or DECISION authority.
-		return admissionFault("unavailable-until-integrated", "event.type", string(event.EventType())+" is not enabled by the first admission gate")
+		var err error
+		if provenance, err = gateProofOperation(event, author); err != nil {
+			return err
+		}
 	}
 	if provenance != nil && provenance.Author != author {
 		return admissionFault("attribution-mismatch", "provenance.author", "record author must match the immutable packet author")
@@ -168,7 +182,7 @@ func gateProvides(project model.ProjectID, event model.TypedEvent) (gateKey, boo
 	case *model.TaskTakeover:
 		return gateKey{Attempt: e.AttemptID}, true
 	}
-	return gateKey{}, false
+	return gateProofProvides(project, event)
 }
 
 func gateAttemptNeed(event model.TypedEvent) (string, model.ID) {
@@ -177,6 +191,8 @@ func gateAttemptNeed(event model.TypedEvent) (string, model.ID) {
 		return "attempt_id", e.AttemptID
 	case *model.TaskTakeover:
 		return "prior_attempt_id", e.PriorAttemptID
+	case *model.InvocationStart:
+		return "envelope.attempt_id", e.Envelope.AttemptID
 	}
 	return "", ""
 }
@@ -194,6 +210,14 @@ func gateReference(snapshot reduce.Snapshot, ref model.Reference) (gateKey, bool
 			}
 		}
 		return key, false
+	}
+	if ref.Criterion != nil {
+		_, exists := snapshot.Criterion(*ref.Criterion)
+		return gateKey{Criterion: *ref.Criterion}, exists
+	}
+	if ref.Invocation != nil {
+		_, exists := snapshot.Invocation(reduce.InvocationKey{Project: ref.Invocation.Project, InvocationID: ref.Invocation.InvocationID})
+		return gateKey{Invocation: *ref.Invocation}, exists
 	}
 	return gateKey{}, false
 }
@@ -285,6 +309,8 @@ func admissionArtifacts(event model.TypedEvent) []model.ArtifactRef {
 		refs = append(refs, e.StoppedConfirmationRef)
 	case *model.AttemptTerminal:
 		refs = append(refs, e.DeliveryRefs...)
+	default:
+		refs = append(refs, gateProofArtifacts(event)...)
 	}
 	if spec != nil {
 		if spec.Progress != nil {
@@ -301,7 +327,7 @@ func admissionArtifacts(event model.TypedEvent) []model.ArtifactRef {
 	return refs
 }
 
-func gateProposal(base reduce.Snapshot, project model.ProjectID, command model.ID, digest model.Digest, proposal model.Bundle) error {
+func gateProposal(base reduce.Snapshot, project model.ProjectID, command model.ID, digest model.Digest, proposal model.Bundle) (reduce.Snapshot, error) {
 	// Validation only: Transact assigns the real envelope to the proposal.
 	validation := proposal
 	validation.Version = model.WireVersion
@@ -314,7 +340,7 @@ func gateProposal(base reduce.Snapshot, project model.ProjectID, command model.I
 	for i, raw := range proposal.Events {
 		event, err := model.DecodeEvent(raw)
 		if err != nil {
-			return err
+			return reduce.Snapshot{}, err
 		}
 		start, ok := event.(*model.TaskStart)
 		if !ok {
@@ -325,25 +351,24 @@ func gateProposal(base reduce.Snapshot, project model.ProjectID, command model.I
 			validation.Events = proposal.Events[:i]
 			current, err = reduce.Apply(base, validation)
 			if err != nil {
-				return err
+				return reduce.Snapshot{}, err
 			}
 		}
 		who := reduce.Ident{Project: start.Task.Project, ID: start.Task.RecordID}
 		if revision, exists := current.CurrentRevision(who); exists && revision != start.Task.Revision {
-			return &reduce.Conflict{Target: start.Task, Expected: start.Task.Revision, Actual: revision, Sequence: validation.Sequence, EventIndex: i, Path: "task"}
+			return reduce.Snapshot{}, &reduce.Conflict{Target: start.Task, Expected: start.Task.Revision, Actual: revision, Sequence: validation.Sequence, EventIndex: i, Path: "task"}
 		}
 		if task, exists := current.Task(who); exists && task.Status != reduce.StatusReady {
-			return admissionFault("invalid-transition", "task.start", fmt.Sprintf("task is %s and cannot start until it is READY", task.Status))
+			return reduce.Snapshot{}, admissionFault("invalid-transition", "task.start", fmt.Sprintf("task is %s and cannot start until it is READY", task.Status))
 		}
 		for _, task := range current.Tasks() {
 			for _, attempt := range task.Attempts {
 				if attempt.Key.Attempt == start.AttemptID {
-					return admissionFault("conflict", "attempt_id", "attempt identity already belongs to a task")
+					return reduce.Snapshot{}, admissionFault("conflict", "attempt_id", "attempt identity already belongs to a task")
 				}
 			}
 		}
 	}
 	validation.Events = proposal.Events
-	_, err := reduce.Apply(base, validation)
-	return err
+	return reduce.Apply(base, validation)
 }

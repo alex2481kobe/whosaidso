@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"datum/internal/model"
+	"datum/internal/reduce"
 	"datum/internal/store"
 	"datum/internal/write"
 )
@@ -18,6 +19,8 @@ datum admit --command-id ULID [--actor ID] --outcome accepted|rejected|correctio
 datum handback [--command-id ULID] [--actor ID] --attempt-id ULID --outcome OUTCOME --reason TEXT --next-action TEXT
               [--commits-denied] [--reconciliation-owed] [--delivery-refs FILE|-]
               [--hold-id ULID --hold-reason REASON --hold-actor ID --hold-criterion TEXT]
+datum run [--actor ID] --attempt-id ULID --instrument ID [--claim ID --claim-revision N
+          --criterion-id ULID --criterion-revision N] [--timeout DURATION] -- ARGV ...
 
 Capture reads a JSON array of typed events and writes only immutable intake.
 Admission reviews a packet set and is the only command that publishes a bundle.
@@ -29,6 +32,9 @@ Blocked-mid-task admission needs an open hold in the same bundle; out-of-scope
 needs a resume hold with an authored reassignment criterion and actor.
 Hold reasons: prerequisite, awaiting-acceptance, resume, reconciliation.
 Missing hold attribution is unknown; --hold-actor never inherits the receipt actor.
+Run executes ARGV without a shell, captures its start and seal as two packets
+and prints both packet IDs; admit them. The instrument and any criterion must
+already be admitted: a criterion admitted after launch cannot freeze this run.
 Actor falls back to DATUM_ACTOR. Missing attribution is recorded as unknown.
 `
 
@@ -46,6 +52,9 @@ func writeCLI(ctx context.Context, args []string, cwd string, stdin io.Reader, s
 		return err
 	}
 	verb := args[0]
+	if verb == "run" {
+		return runCLI(ctx, args[1:], cwd, stdout, stderr, getenv)
+	}
 	if verb != "capture" && verb != "admit" && verb != "handback" {
 		return fmt.Errorf("unavailable-until-integrated: command %q is not enabled by the first gate", verb)
 	}
@@ -208,4 +217,73 @@ func captureCLI(ctx context.Context, project store.Project, id model.ID, author 
 		readers = append(readers, f)
 	}
 	return store.WriteIntake(ctx, project, store.IntakeRequest{CommandID: id, Author: author, Events: events, Blobs: readers})
+}
+
+// runCLI resolves the admitted instrument and criterion from a fresh replay,
+// then hands intent to write.Run. A failing measurement still prints its
+// packets, because a failed run is family evidence that must be admitted.
+func runCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.Writer, getenv func(string) string) error {
+	flags := flag.NewFlagSet("run", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	actor := flags.String("actor", "", "attributed actor")
+	attempt := flags.String("attempt-id", "", "admitted attempt ULID")
+	instrument := flags.String("instrument", "", "admitted instrument id; its current revision is used")
+	claim := flags.String("claim", "", "claim id the criterion tests")
+	claimRevision := flags.Uint64("claim-revision", 0, "exact claim revision")
+	criterion := flags.String("criterion-id", "", "admitted criterion ULID")
+	criterionRevision := flags.Uint64("criterion-revision", 0, "exact criterion revision")
+	timeout := flags.Duration("timeout", 0, "execution deadline; zero leaves it to the caller")
+	if err := flags.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return nil
+		}
+		return err
+	}
+	actorSet := false
+	flags.Visit(func(f *flag.Flag) { actorSet = actorSet || f.Name == "actor" })
+	if !actorSet {
+		*actor = getenv("DATUM_ACTOR")
+	}
+	author := model.Actor{ID: *actor}
+	if model.Blank(*actor) {
+		author = model.Actor{UnknownReason: "no actor supplied by --actor or DATUM_ACTOR"}
+	}
+	project, err := store.Discover(cwd)
+	if err != nil {
+		return err
+	}
+	prefix, err := store.ReadPrefix(project)
+	if err != nil {
+		return err
+	}
+	snapshot, err := reduce.Replay(prefix)
+	if err != nil {
+		return err
+	}
+	current, ok := snapshot.Instrument(reduce.Ident{Project: project.ID, ID: model.ID(*instrument)})
+	if !ok {
+		return fmt.Errorf("run: instrument %q is not admitted", *instrument)
+	}
+	request := write.RunRequest{Author: author, AttemptID: model.ID(*attempt), InstrumentRef: model.RecordRef{Project: project.ID, RecordID: current.Instrument.ID, Revision: current.Instrument.Revision},
+		Instrument: *current.Spec, Argv: flags.Args(), Timeout: *timeout,
+		CriterionRef:            model.Availability[model.CriterionRef]{State: model.Unknown, Reason: "no criterion named for this run"},
+		ExecutionSourceIdentity: model.ExecutionIdentity{Project: project.ID, SourceRefs: []model.ArtifactRef{}, MachineID: model.Availability[model.ID]{State: model.Unknown, Reason: "not captured by the CLI"}, Head: model.Availability[model.GitHead]{State: model.Unknown, Reason: "not captured by the CLI"}, Dirty: model.Availability[bool]{State: model.Unknown, Reason: "not captured by the CLI"}}}
+	if *criterion != "" || *claim != "" {
+		ref := model.CriterionRef{Claim: model.RecordRef{Project: project.ID, RecordID: model.ID(*claim), Revision: model.Revision(*claimRevision)}, CriterionID: model.ID(*criterion), Revision: model.Revision(*criterionRevision)}
+		if _, ok := snapshot.Criterion(ref); !ok {
+			return fmt.Errorf("run: criterion %s revision %d of claim %s revision %d is not admitted; fix and admit it before launch", *criterion, *criterionRevision, *claim, *claimRevision)
+		}
+		request.CriterionRef = model.Availability[model.CriterionRef]{State: model.Known, Value: &ref}
+	}
+	result, runErr := write.Run(ctx, project, request)
+	if result.StartPacket.CommandID != "" {
+		encoded, err := model.Encode(result)
+		if err != nil {
+			return err
+		}
+		if _, err := stdout.Write(encoded); err != nil {
+			return err
+		}
+	}
+	return runErr
 }

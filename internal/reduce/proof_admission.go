@@ -38,8 +38,9 @@ func (s *state) requireKind(b model.Bundle, idx int, ref model.RecordRef, kind m
 	return nil
 }
 
-// proofAdmit checks applicability recoverable from admitted facts. Evaluation of
-// artifact bytes, family closure and semantic judgment remain admission gate work.
+// proofAdmit checks applicability recoverable from admitted facts, including
+// closure over the admitted family. Evaluation of artifact bytes, pending intake
+// and the judgment's attribution remain admission gate work.
 func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 	if err := s.requireKind(b, idx, e.Claim, model.Claim, "claim"); err != nil {
 		return err
@@ -71,6 +72,24 @@ func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 	}
 	if !supported {
 		return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "proof has no supporting local observation")
+	}
+	// The family is every admitted invocation carrying this criterion, not the
+	// members a proposer chose to list. An unsealed member has no result yet, so
+	// proof waits for its reconciliation rather than treating it as absent.
+	listed := map[InvocationKey]bool{}
+	for _, member := range e.Evidence {
+		listed[invocationKey(member.InvocationRef)] = true
+	}
+	for _, inv := range s.invocationsSorted() {
+		if inv.Start.CriterionRef.State != model.Known || inv.Start.CriterionRef.Value == nil || *inv.Start.CriterionRef.Value != e.CriterionRef {
+			continue
+		}
+		if inv.Seal == nil {
+			return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "a family member has no admitted seal; proof waits for reconciliation")
+		}
+		if !listed[inv.Key] {
+			return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "proof omits a sealed member of the criterion family")
+		}
 	}
 	if len(s.supportLosses(recordNode(e.Claim))) != 0 {
 		return faultAt(CodeInvalidTransition, b.Sequence, idx, "claim", "claim has unresolved support loss")
