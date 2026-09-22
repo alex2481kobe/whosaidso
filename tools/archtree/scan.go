@@ -33,6 +33,15 @@ type pkg struct {
 	Largest   string   `json:"largest_file"`
 	LargestN  int      `json:"largest_file_lines"`
 	Imports   []string `json:"imports"`
+	// FileLines is every production file in the package with its own count,
+	// the per-file answer tools/filesize.sh used to give. Test files are
+	// excluded here as they were there; their total is TestLines.
+	FileLines []fileLines `json:"file_lines"`
+}
+
+type fileLines struct {
+	Path  string `json:"path"`
+	Lines int    `json:"lines"`
 }
 
 type report struct {
@@ -80,7 +89,8 @@ func scan(root, mod string) ([]pkg, error) {
 	var out []pkg
 	fset := token.NewFileSet()
 	for dir := range dirs {
-		p := pkg{}
+		// Initialised, not nil, for the reason given in cycles below.
+		p := pkg{FileLines: []fileLines{}}
 		rel, _ := filepath.Rel(root, dir)
 		p.Path = filepath.ToSlash(rel)
 		imports := map[string]bool{}
@@ -106,6 +116,7 @@ func scan(root, mod string) ([]pkg, error) {
 			p.Name = f.Name.Name
 			p.Files++
 			p.Lines += n
+			p.FileLines = append(p.FileLines, fileLines{Path: filepath.ToSlash(filepath.Join(p.Path, e.Name())), Lines: n})
 			if n > p.LargestN {
 				p.LargestN, p.Largest = n, e.Name()
 			}

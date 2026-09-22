@@ -61,4 +61,4 @@ jobs:
         # passing on a current one before being put here, because a check
         # nobody has seen fail is not evidence of anything.
         if: always()
-        run: sh tools/readme-tree.sh -check
+        run: go run ./tools/archtree -check

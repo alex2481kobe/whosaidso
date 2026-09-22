@@ -59,8 +59,8 @@ func render(r report) string {
 			// of adding it.
 			//
 			// The counts still exist, in the JSON, where a criterion can
-			// select them and where churn costs nothing. Size is what
-			// tools/filesize.sh is for. This tree answers how the packages
+			// select them and where churn costs nothing. Per-file size
+			// is in the JSON's file_lines. This tree answers how the packages
 			// fit together, and that changes only when the structure does.
 			//
 			// Whether a package is tested at all IS structure, so that stays.
