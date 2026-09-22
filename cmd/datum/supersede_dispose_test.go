@@ -39,7 +39,7 @@ func TestCLISupersededRecordStaysInShowAndHistory(t *testing.T) {
 		return &model.DecisionOpen{ID: cliID(id), Provenance: lane, Spec: model.DecisionSpec{Question: question, Options: []string{"yes", "no"}, WaitingActor: model.Actor{ID: "owner"}, Scope: authority.Scope}}
 	}
 	old, replacement := model.RecordRef{Project: "test/cli", RecordID: cliID(10), Revision: 1}, model.RecordRef{Project: "test/cli", RecordID: cliID(11), Revision: 1}
-	ruling := &model.DecisionDispose{Decision: old, Disposition: "approved", Quote: "ship it", Scope: authority.Scope, Authority: authority}
+	ruling := &model.DecisionDispose{Decision: old, Disposition: "approved", Quote: "the second question replaces the first", Scope: authority.Scope, Authority: authority}
 	for i, event := range []model.TypedEvent{open(10, "ship revision one"), open(11, "ship revision two"), ruling} {
 		if err := e2eAdmitOne(t, root, event, 20+2*i, 21+2*i, "lane"); err != nil {
 			t.Fatal(err)

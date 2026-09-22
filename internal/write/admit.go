@@ -113,6 +113,9 @@ func Admit(ctx context.Context, project store.Project, request AdmitRequest) (mo
 			if err := gateProofs(ctx, project, prefix, snapshot, after, packets); err != nil {
 				return model.Bundle{}, err
 			}
+			if err := gateQuotes(ctx, project, packets); err != nil {
+				return model.Bundle{}, err
+			}
 		}
 		// The store alone seals the envelope. The validation copy never becomes
 		// the proposal, so a tail selected outside the store cannot be published.
