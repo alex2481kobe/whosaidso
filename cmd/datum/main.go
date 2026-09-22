@@ -17,6 +17,10 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
+	if len(os.Args) > 1 && os.Args[1] == "id" {
+		stop()
+		os.Exit(idCLI(os.Args[2:], os.Stdout, os.Stderr))
+	}
 	cwd, err := os.Getwd()
 	if err == nil {
 		if isReadCommand(os.Args[1:]) {

@@ -22,6 +22,7 @@ datum handback [--command-id ULID] [--actor ID] --attempt-id ULID --outcome OUTC
 datum run [--actor ID] --attempt-id ULID --instrument ID [--claim ID --claim-revision N
           --criterion-id ULID --criterion-revision N] [--timeout DURATION] -- ARGV ...
 datum reconcile [--actor ID] --invocation-id ULID --reason TEXT
+datum id [N]
 
 Capture reads a JSON array of typed events and writes only immutable intake.
 Admission reviews a packet set and is the only command that publishes a bundle.

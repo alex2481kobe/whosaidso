@@ -123,8 +123,8 @@ datum task todo [--json]
 datum intake pending [--json]
 ```
 
-A record needs an identifier, and `go run ./tools/mintid` prints one. Nothing
-else here will give you a valid ULID, and hand-writing Crockford base32
+A record needs an identifier, and `datum id` prints one (`datum id 5` prints
+five). Use it rather than inventing one: hand-writing Crockford base32
 reliably produces ids that parse and mean nothing.
 
 ## Status
