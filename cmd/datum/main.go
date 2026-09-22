@@ -1,3 +1,10 @@
+// Command datum is the whole command surface: the write side that captures
+// and admits, and the read side that answers from what was admitted.
+//
+// The two are deliberately separate. Capture writes immutable intake and
+// publishes nothing. Admission is the only command that writes a bundle.
+// Reads never write at all, so deleting anything a read produced changes no
+// canonical state.
 package main
 
 import (

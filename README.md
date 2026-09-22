@@ -41,11 +41,11 @@ stale. Nothing below is written by hand, so it cannot quietly stop being true.
 ```text
 datum
 |-- cmd/
-|   `-- datum          (no package comment)
-|          3 files, 270 lines (407 test), largest write.go at 150 -- uses model, query, store, write
+|   `-- datum          whole command surface: the write side that captures and admits, and the read side that answers from what was admitted
+|          3 files, 277 lines (407 test), largest write.go at 150 -- uses model, query, store, write
 |-- internal/
 |   |-- acceptance     (tests only, no production code)
-|   |      4917 lines of tests
+|   |      5443 lines of tests
 |   |-- evidence       turns a reference into the exact bytes it names, and a frozen criterion into a verdict over what those bytes actually say
 |   |      7 files, 1532 lines (1736 test), largest criterion.go at 382 -- uses model
 |   |-- model          wire vocabulary every other package shares: identities, references, packets and bundles, plus the strict encode/decode boundary
