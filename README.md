@@ -47,11 +47,11 @@ datum
 |   |-- acceptance     (tests only, no production code)
 |   |      4917 lines of tests
 |   |-- evidence       turns a reference into the exact bytes it names, and a frozen criterion into a verdict over what those bytes actually say
-|   |      2 files, 1463 lines (1736 test), largest resolve.go at 1081 -- uses model
+|   |      7 files, 1532 lines (1736 test), largest criterion.go at 382 -- uses model
 |   |-- model          wire vocabulary every other package shares: identities, references, packets and bundles, plus the strict encode/decode boundary
-|   |      9 files, 2636 lines (1236 test), largest events.go at 809 -- leaf
+|   |      13 files, 2668 lines (1236 test), largest wire.go at 322 -- leaf
 |   |-- query          selects admitted facts before either output format renders them
-|   |      2 files, 350 lines (511 test), largest query.go at 277 -- uses model, reduce, store
+|   |      2 files, 365 lines (579 test), largest query.go at 292 -- uses model, reduce, store
 |   |-- reduce         folds admitted bundles into the state every Datum answer is read from
 |   |      9 files, 2663 lines (3163 test), largest proof.go at 692 -- uses model
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
