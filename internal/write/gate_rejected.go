@@ -50,10 +50,51 @@ func envelopeDigest(env model.InvocationEnvelope) (model.Digest, error) {
 	return model.HashBytes(data), nil
 }
 
+// gateRejectedMembers runs before replay, so a proof that omits a run the
+// ledger recorded as rejected, or dispositions it as anything but inapplicable
+// or inconclusive, is refused with its own code. A run proposed in this same
+// set is admitted with the proof and belongs to the admitted family instead.
+func gateRejectedMembers(snapshot reduce.Snapshot, event model.TypedEvent, providers map[gateKey]int) error {
+	proof, ok := event.(*model.ProofAdmit)
+	if !ok {
+		return nil
+	}
+	dispositions := map[model.InvocationRef]string{}
+	for _, member := range proof.Evidence {
+		dispositions[member.InvocationRef] = member.Disposition
+	}
+	for _, review := range snapshot.Reviews() {
+		if review.Outcome == "accepted" {
+			continue
+		}
+		for _, fact := range review.Invocations {
+			if fact.CriterionRef.State != model.Known || fact.CriterionRef.Value == nil || *fact.CriterionRef.Value != proof.CriterionRef {
+				continue
+			}
+			ref := model.InvocationRef{Project: review.Key.Project, InvocationID: fact.InvocationID}
+			_, admitted := snapshot.Invocation(reduce.InvocationKey{Project: ref.Project, InvocationID: ref.InvocationID})
+			if _, proposed := providers[gateKey{Invocation: ref}]; admitted || proposed {
+				continue
+			}
+			path := "intake/" + string(review.Key.CommandID)
+			switch dispositions[ref] {
+			case "inapplicable", "inconclusive":
+			case "":
+				return admissionFault("rejected-family-member", path,
+					fmt.Sprintf("%s invocation %s carries this criterion and the proof omits it; a rejected run stays in the family", review.Outcome, fact.InvocationID))
+			default:
+				return admissionFault("rejected-family-member", path,
+					fmt.Sprintf("%s invocation %s can only be dispositioned inapplicable or inconclusive, never %s", review.Outcome, fact.InvocationID, dispositions[ref]))
+			}
+		}
+	}
+	return nil
+}
+
 // gateRejectedFamily: a rejected run carrying the criterion never leaves the
-// family, and the ledger alone decides it. The reducer already refuses a proof
-// that omits a rejected-only run or dispositions it other than inapplicable or
-// inconclusive. What needs bytes is U12's identity rule: if the ledger also
+// family, and the ledger alone decides it. Omission and disposition are checked
+// before replay by gateRejectedMembers and again by the reducer. What needs the
+// replayed set is U12's identity rule: if the ledger also
 // admitted that invocation, the rejected start or seal must be byte-identical
 // to the admitted one, or the proof is refused. The returned set names the
 // rejected-only members, which are accounted for but never evaluated.

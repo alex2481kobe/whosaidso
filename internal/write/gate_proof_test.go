@@ -238,10 +238,10 @@ func TestProofRefusesCriterionFixedAfterTheRun(t *testing.T) {
 	if _, err := Admit(context.Background(), w.f.project, reject); err != nil {
 		t.Fatal(err)
 	}
-	w.f.refuse(w.f.request(proof), "invalid-transition")
+	w.f.refuse(w.f.request(proof), "rejected-family-member")
 	// R10.3: no longer permanently blocked. The judgment accounts for it.
 	early := model.InvocationRef{Project: w.f.project.ID, InvocationID: env.InvocationID}
-	w.f.refuse(w.f.request(w.f.capture(nil, w.proof(lateRef, map[model.InvocationRef]string{pass: "supports", early: "supports"}))), "invalid-transition")
+	w.f.refuse(w.f.request(w.f.capture(nil, w.proof(lateRef, map[model.InvocationRef]string{pass: "supports", early: "supports"}))), "rejected-family-member")
 	w.f.accept(w.f.capture(nil, w.proof(lateRef, map[model.InvocationRef]string{pass: "supports", early: "inapplicable"})))
 	if w.status(t) != reduce.StatusProven {
 		t.Fatal("the dispositioned rejected run left the criterion revision blocked")
