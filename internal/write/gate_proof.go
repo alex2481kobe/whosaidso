@@ -1,10 +1,10 @@
 package write
 
 // U12 operations the gate enables — claim/instrument revision, trust withdrawal,
-// criterion fixing, invocation start/seal, proof, task closure and decision
-// open/revise — and the post-replay checks that need artifact bytes, ledger
-// times or the intake inbox live here. Operations that stay disabled (decision
-// disposition, supersession, correction, review, disposal) and the admission
+// criterion fixing, invocation start/seal, proof, task closure, decision
+// open/revise and correction — and the post-replay checks that need artifact
+// bytes, ledger times or the intake inbox live here. Operations that stay
+// disabled (decision disposition, supersession, review, disposal) and the admission
 // transaction itself do not. Proof family evaluation lives in gate_family.go.
 
 import (
@@ -35,8 +35,9 @@ func gateProofOperation(event model.TypedEvent, author model.Actor) (*model.Prov
 		return nil, nil
 	case *model.InstrumentRevise:
 		return &e.Provenance, gateValidation(e.Replacement.Validation)
-	case *model.TrustWithdraw, *model.InvocationStart, *model.InvocationSeal:
-		// Withdrawal only removes support. Invocation facts are checked by the
+	case *model.TrustWithdraw, *model.Correction, *model.InvocationStart, *model.InvocationSeal:
+		// Withdrawal and correction only remove support, attributed to the
+		// packet author in the review. Invocation facts are checked by the
 		// reducer, by criterion freezing and by artifact resolution.
 		return nil, nil
 	case *model.CriterionFix:
@@ -106,7 +107,7 @@ func gateSealNeeds(event model.TypedEvent) []model.InvocationRef {
 // operation, so no artifact field can skip resolution and root containment.
 func gateProofArtifacts(event model.TypedEvent) []model.ArtifactRef {
 	switch e := event.(type) {
-	case *model.ClaimRevise, *model.InstrumentRevise, *model.CriterionFix, *model.InvocationStart, *model.InvocationSeal, *model.DecisionOpen, *model.DecisionRevise:
+	case *model.ClaimRevise, *model.InstrumentRevise, *model.CriterionFix, *model.InvocationStart, *model.InvocationSeal, *model.DecisionOpen, *model.DecisionRevise, *model.Correction:
 		out := []model.ArtifactRef{}
 		gateWalkArtifacts(reflect.ValueOf(event), &out)
 		return out

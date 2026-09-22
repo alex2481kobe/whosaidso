@@ -224,7 +224,7 @@ func TestGateOperationsStillUnavailable(t *testing.T) {
 	// conceal a widened allowlist. These stay closed until a unit opens them.
 	for _, event := range []model.TypedEvent{
 		&model.DecisionDispose{},
-		&model.Supersede{}, &model.Correction{}, &model.ReviewAdmit{}, &model.ArtifactDispose{},
+		&model.Supersede{}, &model.ReviewAdmit{}, &model.ArtifactDispose{},
 	} {
 		t.Run(string(event.EventType()), func(t *testing.T) {
 			if err := gateOperation(event, model.Actor{ID: "author"}); admissionErrorCode(err) != "unavailable-until-integrated" {
