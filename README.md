@@ -45,13 +45,13 @@ datum
 |          2 files, 171 lines (212 test), largest write.go at 150 -- uses model, store, write
 |-- internal/
 |   |-- acceptance     (tests only, no production code)
-|   |      4057 lines of tests
+|   |      4492 lines of tests
 |   |-- evidence       turns a reference into the exact bytes it names, and a frozen criterion into a verdict over what those bytes actually say
 |   |      2 files, 1415 lines (1460 test), largest resolve.go at 1059 -- uses model
 |   |-- model          wire vocabulary every other package shares: identities, references, packets and bundles, plus the strict encode/decode boundary
-|   |      4 files, 2565 lines (1095 test), largest records.go at 990 -- leaf
+|   |      8 files, 2608 lines (1095 test), largest events.go at 809 -- leaf
 |   |-- reduce         folds admitted bundles into the state every Datum answer is read from
-|   |      4 files, 2593 lines (2673 test), largest reduce.go at 1269 -- uses model
+|   |      9 files, 2645 lines (2692 test), largest proof.go at 692 -- uses model
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
 |   |      8 files, 1477 lines (2103 test), largest intake.go at 475 -- uses model
 |   `-- write          joins immutable capture to canonical state through one admission gate

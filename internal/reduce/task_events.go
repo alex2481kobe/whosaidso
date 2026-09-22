@@ -1,0 +1,197 @@
+package reduce
+
+// Task prerequisites, attempts, closures, and blocker transitions live here.
+// Derived task status and acceptance answers remain in task.go.
+// This complete lifecycle group is slightly below 200 lines without unrelated handlers.
+
+import (
+	"fmt"
+
+	"datum/internal/model"
+)
+
+// checkPrerequisites refuses a typed prerequisite pointed at the wrong kind of
+// record. A task-success prerequisite naming a CLAIM would evaluate to UNKNOWN
+// forever, which reads as "waiting" when it is really "malformed".
+func (s *state) checkPrerequisites(b model.Bundle, idx int, spec model.TaskSpec) error {
+	for i, r := range spec.Prerequisites {
+		if r.Target.Project != b.Project {
+			continue // resolves on read
+		}
+		rec, ok := s.records[recordKey(r.Target)]
+		if !ok {
+			continue // the reference check already refused, or it is cross-project
+		}
+		var want model.Kind
+		switch r.Kind {
+		case "task-success":
+			want = model.Task
+		case "claim-proof":
+			want = model.Claim
+		case "decision-approved":
+			want = model.Decision
+		}
+		if rec.Kind != want {
+			return faultAt(CodeInvalidField, b.Sequence, idx,
+				fmt.Sprintf("prerequisites[%d].target", i),
+				fmt.Sprintf("%s prerequisite must name a %s, not a %s", r.Kind, want, rec.Kind))
+		}
+	}
+	return nil
+}
+
+func (s *state) taskAt(b model.Bundle, idx int, ref model.RecordRef, path string) (Record, error) {
+	rec, ok := s.records[recordKey(ref)]
+	if !ok {
+		return Record{}, faultAt(CodeUnknownReference, b.Sequence, idx, path,
+			fmt.Sprintf("no admitted revision %d of %s", ref.Revision, ref.RecordID))
+	}
+	if rec.Kind != model.Task {
+		return Record{}, faultAt(CodeInvalidTransition, b.Sequence, idx, path,
+			fmt.Sprintf("%s is a %s", ref.RecordID, rec.Kind))
+	}
+	if _, closed := s.closed[ident(ref)]; closed {
+		return Record{}, faultAt(CodeInvalidTransition, b.Sequence, idx, path, "the task is closed")
+	}
+	return rec, nil
+}
+
+func (s *state) start(b model.Bundle, idx int, o Origin, e *model.TaskStart) error {
+	if _, err := s.taskAt(b, idx, e.Task, "task"); err != nil {
+		return err
+	}
+	key := AttemptKey{Project: b.Project, Task: e.Task.RecordID, Attempt: e.AttemptID}
+	if _, ok := s.attemptOwner[Ident{Project: b.Project, ID: e.AttemptID}]; ok {
+		return faultAt(CodeDuplicateRecord, b.Sequence, idx, "attempt_id", "attempt already admitted")
+	}
+	// A second start while an attempt is live would give one task two owners
+	// with no record that the first was displaced. That is what takeover is,
+	// and takeover carries the confirmation that the prior writer stopped.
+	for _, a := range s.attemptsFor(ident(e.Task)) {
+		if a.Live() {
+			return faultAt(CodeInvalidTransition, b.Sequence, idx, "attempt_id",
+				fmt.Sprintf("attempt %s is still live; use takeover", a.Key.Attempt))
+		}
+	}
+	s.attempts[key] = Attempt{
+		Key:          key,
+		TaskRevision: e.Task.Revision,
+		Actor:        e.Actor,
+		Started:      o,
+	}
+	s.attemptOwner[Ident{Project: b.Project, ID: e.AttemptID}] = key
+	return nil
+}
+
+func (s *state) takeover(b model.Bundle, idx int, o Origin, e *model.TaskTakeover) error {
+	if _, err := s.taskAt(b, idx, e.Task, "task"); err != nil {
+		return err
+	}
+	prior := AttemptKey{Project: b.Project, Task: e.Task.RecordID, Attempt: e.PriorAttemptID}
+	if _, ok := s.attempts[prior]; !ok {
+		return faultAt(CodeUnknownReference, b.Sequence, idx, "prior_attempt_id",
+			"no admitted prior attempt under this task")
+	}
+	key := AttemptKey{Project: b.Project, Task: e.Task.RecordID, Attempt: e.AttemptID}
+	if _, ok := s.attemptOwner[Ident{Project: b.Project, ID: e.AttemptID}]; ok {
+		return faultAt(CodeDuplicateRecord, b.Sequence, idx, "attempt_id", "attempt already admitted")
+	}
+	// The prior attempt is left exactly as it was. A takeover does not write a
+	// terminal receipt on someone else's behalf, so an abandoned attempt stays
+	// visibly live and the task stays IN FLIGHT until its own holder answers.
+	s.attempts[key] = Attempt{
+		Key:          key,
+		TaskRevision: e.Task.Revision,
+		Actor:        e.Actor,
+		Takeover:     true,
+		PriorAttempt: e.PriorAttemptID,
+		Started:      o,
+	}
+	s.attemptOwner[Ident{Project: b.Project, ID: e.AttemptID}] = key
+	return nil
+}
+
+func (s *state) terminal(b model.Bundle, idx int, o Origin, e *model.AttemptTerminal) error {
+	key := AttemptKey{Project: b.Project, Task: e.Task.RecordID, Attempt: e.AttemptID}
+	a, ok := s.attempts[key]
+	if !ok {
+		return faultAt(CodeUnknownReference, b.Sequence, idx, "attempt_id",
+			"no admitted attempt under this task")
+	}
+	if a.Terminal != nil {
+		return faultAt(CodeInvalidTransition, b.Sequence, idx, "attempt_id",
+			"the attempt already has a terminal receipt")
+	}
+	a.Terminal = &Terminal{
+		Outcome:            e.Outcome,
+		Reason:             e.Reason,
+		NextAction:         e.NextAction,
+		DeliveryRefs:       e.DeliveryRefs,
+		CommitsDenied:      e.CommitsDenied,
+		ReconciliationOwed: e.ReconciliationOwed,
+		Origin:             o,
+	}
+	s.attempts[key] = a
+	return nil
+}
+
+func (s *state) close(b model.Bundle, idx int, o Origin, e *model.TaskClose) error {
+	if _, err := s.taskAt(b, idx, e.Task, "task"); err != nil {
+		return err
+	}
+	// Whether every attempt is terminal, and whether a success closure has
+	// applicable witnesses, are PROJECTION questions, evaluated in order in
+	// task.go. They are not refused here: an authorised closure is a fact, and
+	// dropping it would hide that someone closed a task with a writer still in
+	// it. The admission gate refuses, the reducer records and then projects.
+	who := ident(e.Task)
+	if _, ok := s.closed[who]; ok {
+		return faultAt(CodeInvalidTransition, b.Sequence, idx, "task", "the task is already closed")
+	}
+	s.closed[who] = Closure{
+		Task:                e.Task,
+		Outcome:             e.Outcome,
+		Authority:           e.Authority,
+		AcceptanceWitnesses: e.AcceptanceWitnessRefs,
+		DeliveryWitnesses:   e.DeliveryWitnessRefs,
+		Origin:              o,
+	}
+	return nil
+}
+
+func (s *state) hold(b model.Bundle, idx int, o Origin, e *model.BlockerHold) error {
+	if _, err := s.taskAt(b, idx, e.Task, "task"); err != nil {
+		return err
+	}
+	key := BlockerKey{Project: b.Project, Task: e.Task.RecordID, Blocker: e.BlockerID}
+	// Reuse is refused even after the hold was cleared. Rebinding a blocker id
+	// would rewrite what an already-admitted clear resolved.
+	if _, ok := s.blockers[key]; ok {
+		return faultAt(CodeDuplicateRecord, b.Sequence, idx, "blocker_id", "blocker id already used on this task")
+	}
+	s.blockers[key] = Blocker{
+		Key:          key,
+		TaskRevision: e.Task.Revision,
+		Reason:       e.Reason,
+		Actor:        e.Actor,
+		Criterion:    e.Criterion,
+		Held:         o,
+	}
+	return nil
+}
+
+func (s *state) clear(b model.Bundle, idx int, o Origin, e *model.BlockerClear) error {
+	key := BlockerKey{Project: b.Project, Task: e.Task.RecordID, Blocker: e.BlockerID}
+	held, ok := s.blockers[key]
+	if !ok {
+		return faultAt(CodeUnknownReference, b.Sequence, idx, "blocker_id", "no admitted hold with this id")
+	}
+	if held.Cleared != nil {
+		return faultAt(CodeInvalidTransition, b.Sequence, idx, "blocker_id", "the hold is already cleared")
+	}
+	witness := e.ResolvingWitness
+	held.Cleared = &o
+	held.Witness = &witness
+	s.blockers[key] = held
+	return nil
+}
