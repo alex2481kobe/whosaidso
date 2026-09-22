@@ -104,6 +104,74 @@ func TestPendingRetainsRejectionsCorrectionsAndMissingLocalPackets(t *testing.T)
 	}
 }
 
+func TestPendingHonorsReviewEventsWithoutEnvelopePackets(t *testing.T) {
+	for _, outcome := range []string{"rejected", "correction-requested", "accepted"} {
+		t.Run(outcome, func(t *testing.T) {
+			p := testProject(t)
+			readyControl(t, p)
+			first, second := capturePacket(t, p, 2), capturePacket(t, p, 3)
+			// Reverse event order to check that packet output still sorts by ID.
+			bundle := appendEvents(t, p, 101, &model.ReviewAdmit{
+				Packets: []model.PacketRef{second, first}, Outcome: outcome,
+				Actor: model.Actor{ID: "reviewer"}, Reason: "admitted event is authoritative"})
+			if len(bundle.Packets) != 0 {
+				t.Fatal("fixture must omit envelope packet references")
+			}
+			for _, missing := range []bool{false, true} {
+				if missing {
+					dir, err := store.IntakeDir(p)
+					if err != nil {
+						t.Fatal(err)
+					}
+					for _, ref := range []model.PacketRef{first, second} {
+						if err := os.RemoveAll(filepath.Join(dir, string(ref.CommandID))); err != nil {
+							t.Fatal(err)
+						}
+					}
+				}
+				a := readAnswer(t, p, "intake pending", "")
+				if a.Result != "KNOWN" || a.Watermark.Sequence != 2 {
+					t.Fatalf("expected successful review at watermark 2, got %+v", a)
+				}
+				if outcome == "accepted" {
+					if len(a.Intake) != 0 {
+						t.Fatalf("accepted packets must leave pending, got %+v", a.Intake)
+					}
+				} else {
+					if len(a.Intake) != 2 {
+						t.Fatalf("both reviews must survive missing=%t, got %+v", missing, a.Intake)
+					}
+					for i, ref := range []model.PacketRef{first, second} {
+						packet := a.Intake[i]
+						if packet.CommandID != ref.CommandID || packet.Disposition != outcome || packet.Review == nil ||
+							packet.Review.Packet != ref || packet.Review.Outcome != outcome || packet.Review.Actor.ID != "reviewer" ||
+							packet.Review.Reason != "admitted event is authoritative" || packet.Review.Origin != (reduce.Origin{Sequence: 2, EventIndex: 0}) {
+							t.Fatalf("must retain ordered review attribution for %s, got %+v", ref.CommandID, packet)
+						}
+						if missing {
+							if packet.Packet != nil || packet.Unavailable == nil || packet.Unavailable.State != "UNKNOWN" {
+								t.Fatalf("missing local bytes must be UNKNOWN, got %+v", packet)
+							}
+						} else if packet.Packet == nil || packet.Unavailable != nil {
+							t.Fatalf("local packet bytes must remain visible, got %+v", packet)
+						}
+					}
+				}
+				var exported, rendered bytes.Buffer
+				if err := RenderJSON(&exported, a); err != nil {
+					t.Fatal(err)
+				}
+				if err := RenderText(&rendered, a); err != nil {
+					t.Fatal(err)
+				}
+				if !reflect.DeepEqual(jsonLeaves(t, exported.Bytes()), textLeaves(t, rendered.String())) {
+					t.Fatal("text and JSON must preserve the same review facts")
+				}
+			}
+		})
+	}
+}
+
 func TestClaimAndMissingRecordDoNotGainGuessedAnswers(t *testing.T) {
 	p := testProject(t)
 	readyControl(t, p)

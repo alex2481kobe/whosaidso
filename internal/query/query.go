@@ -163,9 +163,21 @@ func pending(project store.Project, s reduce.Snapshot, prefix []model.Bundle) ([
 		p := &packets[i]
 		byID[p.CommandID] = Packet{CommandID: p.CommandID, Packet: p, Disposition: "pending"}
 	}
-	// Review facts survive even if this machine has no copy of the local intake.
+	// Review events are the admitted facts, even without envelope packet refs
+	// or a local copy of the intake bytes.
 	for _, bundle := range prefix {
-		for _, ref := range bundle.Packets {
+		var refs []model.PacketRef
+		for _, event := range bundle.Events {
+			if event.Type != "review.admit" {
+				continue
+			}
+			typed, err := model.DecodeEvent(event)
+			if err != nil {
+				return nil, err
+			}
+			refs = append(refs, typed.(*model.ReviewAdmit).Packets...)
+		}
+		for _, ref := range refs {
 			review, ok := s.Review(reduce.ReviewKey{Project: project.ID, CommandID: ref.CommandID})
 			if !ok {
 				continue
@@ -251,7 +263,8 @@ func describe(s reduce.Snapshot, fact reduce.Record) Record {
 }
 
 // History is all revisions plus events that explicitly reference those
-// revisions, including invocation receipts owned by this task's attempts.
+// revisions, including receipts naming a claim through their criterion reference
+// or owned by this task's attempts.
 // It is not a recursive traversal of neighboring records or inferred sources.
 func historyOrigins(s reduce.Snapshot, id reduce.Ident) map[reduce.Origin]bool {
 	origins := map[reduce.Origin]bool{}
@@ -266,7 +279,9 @@ func historyOrigins(s reduce.Snapshot, id reduce.Ident) map[reduce.Origin]bool {
 		}
 	}
 	for _, invocation := range s.Invocations() {
-		if invocation.Attempt.Project == id.Project && invocation.Attempt.Task == id.ID {
+		criterion := invocation.Start.CriterionRef.Value
+		namesClaim := criterion != nil && criterion.Claim.Project == id.Project && criterion.Claim.RecordID == id.ID
+		if namesClaim || invocation.Attempt.Project == id.Project && invocation.Attempt.Task == id.ID {
 			origins[invocation.Started] = true
 			if invocation.Sealed != nil {
 				origins[*invocation.Sealed] = true
