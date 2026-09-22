@@ -1,8 +1,6 @@
 package evidence
 
-// Invocation observations and matching frozen selectors to actual outputs live here.
-// Byte retrieval, selector interpretation, and criterion verdicts do not.
-// This file stays below 200 lines because invocation-output binding is one responsibility.
+// Invocation observations, output binding, and cross-invocation comparability live here.
 
 import (
 	"context"
@@ -148,6 +146,123 @@ func faultCode(err error) string {
 	var f *model.Fault
 	if errors.As(err, &f) {
 		return f.Code
+	}
+	return ""
+}
+
+// comparable checks that the family measured the same thing under the same
+// conditions. Two runs whose effective configuration differs are two different
+// measurements, and reporting one result for them would hide which one it came
+// from. Values are compared, not the requested configuration, because what was
+// asked for is not what ran.
+func comparable(members []Observation) string {
+	for i := 1; i < len(members); i++ {
+		a, b := members[0], members[i]
+		pair := string(a.InvocationRef.InvocationID) + " and " + string(b.InvocationRef.InvocationID)
+		if why := mapDifference("effective configuration", a.ConfigEffective, b.ConfigEffective); why != "" {
+			return pair + " are not comparable: " + why
+		}
+		if why := mapDifference("observed conditions", a.ConditionsObserved, b.ConditionsObserved); why != "" {
+			return pair + " are not comparable: " + why
+		}
+	}
+	return ""
+}
+
+func mapDifference(label string, a, b model.Availability[map[string]model.Availability[model.Scalar]]) string {
+	switch {
+	case a.State != model.Known && b.State != model.Known:
+		// Neither run recorded it, so sameness is an assumption. It is a cheap
+		// assumption to make and an expensive one to be wrong about.
+		return "neither run observed its " + label
+	case a.State != model.Known || b.State != model.Known:
+		return "one run observed its " + label + " and the other did not"
+	}
+	left, right := *a.Value, *b.Value
+	for _, name := range union(left, right) {
+		lv, lok := left[name]
+		rv, rok := right[name]
+		switch {
+		case !lok || !rok:
+			// cameraPosition in one run and camera_pos in the other is the drift
+			// the instrument declares its knob names to prevent: it makes two
+			// comparable runs look different, or hides a real difference.
+			return label + " names " + quote(name) + " in only one run"
+		case lv.State != rv.State:
+			return label + " for " + quote(name) + " was observed in only one run"
+		case lv.State != model.Known:
+			// Like model.SameActor, two unknowns cannot establish equality.
+			return label + " for " + quote(name) + " was not observed in either run"
+		case lv.State == model.Known:
+			same, err := model.CompareScalars(*lv.Value, model.Equal, *rv.Value)
+			if err != nil {
+				return label + " for " + quote(name) + " is not comparable across the runs: " + err.Error()
+			}
+			if !same {
+				return label + " for " + quote(name) + " differs between the runs"
+			}
+		}
+	}
+	return ""
+}
+
+func union(a, b map[string]model.Availability[model.Scalar]) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, m := range []map[string]model.Availability[model.Scalar]{a, b} {
+		for k := range m {
+			if !seen[k] {
+				seen[k] = true
+				out = append(out, k)
+			}
+		}
+	}
+	// Sorted so a refusal names the same knob every time it runs.
+	sort.Strings(out)
+	return out
+}
+
+// metadataAgreement keeps reading-wide and member declarations separate while
+// applying one rule: omission is allowed, unavailability and disagreement are not.
+func metadataAgreement(c model.CriterionFix, label string, r Reading, result bool) string {
+	fields := map[string]model.Availability[string]{}
+	for key, s := range map[string]model.Availability[string]{"unit": r.Unit, "population": r.Population, "denominator": r.Denominator} {
+		if s.State != "" {
+			fields[key] = s
+		}
+	}
+	if why := metadataFields(c, label, fields, result); why != "" {
+		return why
+	}
+	for i, declared := range r.MemberMetadata {
+		if why := metadataFields(c, fmt.Sprintf("%s member %d", label, i), declared, result); why != "" {
+			return why
+		}
+	}
+	return ""
+}
+
+func metadataFields(c model.CriterionFix, label string, fields map[string]model.Availability[string], result bool) string {
+	for _, field := range []struct{ name, expected string }{
+		{"unit", c.Expression.Unit},
+		{"population", c.Expression.Population.Identity},
+		{"denominator", c.Expression.Population.Denominator},
+	} {
+		// Population members identify the denominator, not the measurement unit.
+		if field.name == "unit" && !result {
+			continue
+		}
+		s, present := fields[field.name]
+		if !present {
+			continue
+		}
+		if s.State != model.Known || s.Value == nil {
+			return fmt.Sprintf("%s %s is unavailable: %s", label, field.name, s.Reason)
+		}
+		if *s.Value != field.expected {
+			return fmt.Sprintf("%s %s mismatch: the criterion declares %s, the artifact states %s",
+				label, field.name, quote(field.expected), quote(*s.Value))
+		}
 	}
 	return ""
 }

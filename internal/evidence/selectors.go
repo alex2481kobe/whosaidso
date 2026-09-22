@@ -51,10 +51,23 @@ type Reading struct {
 	Reason      string
 	// MemberMetadata parallels Values; absent keys were not declared by the member.
 	MemberMetadata []map[string]model.Availability[string]
+	// MemberReasons parallels Values. A nonblank entry marks an unreadable slot;
+	// its zero Scalar is never a measurement. Positions and coverage are retained.
+	MemberReasons []string
 }
 
-// Scalars returns the values to compare. An absent reading has none, and says so.
+// Scalars returns a complete readable selection, never unreadable placeholders.
 func (r Reading) Scalars() ([]model.Scalar, bool) {
+	for _, reason := range r.MemberReasons {
+		if reason != "" {
+			return nil, false
+		}
+	}
+	return r.selectedValues()
+}
+
+// selectedValues includes partial sets; callers must consult MemberReasons.
+func (r Reading) selectedValues() ([]model.Scalar, bool) {
 	switch r.Kind {
 	case ReadingScalar:
 		return []model.Scalar{r.Scalar}, true
@@ -108,14 +121,8 @@ func Select(a ResolvedArtifact, sel model.Selector) (Reading, error) {
 		return out, nil
 	}
 
-	chain := []map[string]any{}
-	if obj, isObj := value.(map[string]any); isObj {
-		chain = append(chain, obj)
-	}
-	if parent != nil {
-		chain = append(chain, parent)
-	}
-	out.Unit, out.Population, out.Denominator = metaFrom(chain...)
+	obj, _ := value.(map[string]any)
+	out.Unit, out.Population, out.Denominator = metaFrom(obj, parent)
 
 	switch v := value.(type) {
 	case map[string]any:
@@ -141,11 +148,13 @@ func finish(out Reading, v any) (Reading, error) {
 	switch t := v.(type) {
 	case []any:
 		out.Kind = ReadingSet
-		out.Values = make([]model.Scalar, 0, len(t))
+		out.Values = make([]model.Scalar, len(t))
+		out.MemberReasons = make([]string, len(t))
+		readable := 0
 		out.MemberMetadata = make([]map[string]model.Availability[string], len(t))
 		for i, e := range t {
 			if obj, ok := e.(map[string]any); ok {
-				unit, population, denominator := metaFrom(obj)
+				unit, population, denominator := metaFrom(obj, nil)
 				declared := map[string]model.Availability[string]{"unit": unit, "population": population, "denominator": denominator}
 				for key := range declared {
 					if _, present := obj[key]; !present {
@@ -155,19 +164,25 @@ func finish(out Reading, v any) (Reading, error) {
 				out.MemberMetadata[i] = declared
 				inner, found := obj["value"]
 				if !found {
-					out.Kind, out.Values = ReadingAbsent, nil
-					out.Reason = fmt.Sprintf("member %d of the selected set states no value", i)
-					return out, nil
+					out.MemberReasons[i] = fmt.Sprintf("member %d of the selected set states no value", i)
 				}
 				e = inner
 			}
 			s, ok := scalarOf(e)
 			if !ok {
-				out.Kind, out.Values = ReadingAbsent, nil
-				out.Reason = fmt.Sprintf("member %d of the selected set is not a comparable value", i)
-				return out, nil
+				if out.MemberReasons[i] == "" {
+					out.MemberReasons[i] = fmt.Sprintf("member %d of the selected set is not a comparable value", i)
+				}
+				if out.Reason == "" {
+					out.Reason = out.MemberReasons[i]
+				}
+				continue
 			}
-			out.Values = append(out.Values, s)
+			out.Values[i] = s
+			readable++
+		}
+		if len(t) > 0 && readable == 0 {
+			out.Kind = ReadingAbsent
 		}
 		return out, nil
 	default:
@@ -214,9 +229,9 @@ func unknown(reason string) model.Availability[string] {
 // object holding them and then at its parent. Nothing is defaulted: an artifact
 // that does not state its unit leaves the unit unknown, and a criterion cannot
 // be evaluated against a number whose unit nobody recorded.
-func metaFrom(objs ...map[string]any) (unit, population, denominator model.Availability[string]) {
+func metaFrom(selected, parent map[string]any) (unit, population, denominator model.Availability[string]) {
 	pick := func(key, missing string) model.Availability[string] {
-		for i, o := range objs {
+		for i, o := range []map[string]any{selected, parent} {
 			raw, ok := o[key]
 			if !ok {
 				continue
