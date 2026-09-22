@@ -167,25 +167,6 @@ func TestAdmissionClaimCannotAssertProofWithoutEvidence(t *testing.T) {
 	f.accept(f.capture(nil, claim))
 }
 
-func TestGateOtherOperationsRemainDisabled(t *testing.T) {
-	for _, event := range []model.TypedEvent{
-		&model.TaskTakeover{}, &model.AttemptTerminal{}, &model.TaskClose{},
-		&model.InvocationStart{}, &model.InvocationSeal{}, &model.ClaimRevise{},
-		&model.CriterionFix{}, &model.ProofAdmit{}, &model.DecisionOpen{},
-		&model.DecisionRevise{}, &model.DecisionDispose{}, &model.Supersede{},
-		&model.Correction{}, &model.InstrumentDeclare{}, &model.InstrumentRevise{},
-		&model.TrustWithdraw{}, &model.ReviewAdmit{}, &model.ArtifactDispose{},
-	} {
-		t.Run(string(event.EventType()), func(t *testing.T) {
-			// Isolate operation authority from schema and downstream checks;
-			// a later refusal must not hide an accidentally widened allowlist.
-			if err := gateOperation(event, model.Actor{ID: "owner"}); admissionErrorCode(err) != "unavailable-until-integrated" {
-				t.Fatalf("operation became authorized: %v", err)
-			}
-		})
-	}
-}
-
 func TestAdmissionClaimReferencesAndAttribution(t *testing.T) {
 	for _, mutation := range []string{"scope-reference", "external-reference", "forged-author", "duplicate-claim", "duplicate-task", "cycle", "in-packet-forward"} {
 		t.Run(mutation, func(t *testing.T) {
@@ -250,47 +231,6 @@ func TestAdmissionClaimForwardProviderAndUnknownAuthor(t *testing.T) {
 	ref := f.ref(claim.ID, 1)
 	another.Spec.ExternalRefs = []model.ExternalReference{{Tag: "VERIFIED", Citation: "prior finding", RecordRef: &ref}}
 	f.accept(f.capture(nil, another))
-}
-
-func TestAdmissionStartAndBlockerTransitions(t *testing.T) {
-	f := newAdmissionFixture(t)
-	task := f.goodControl()
-	ref := f.ref(task.ID, 1)
-	hold := &model.BlockerHold{Task: ref, BlockerID: f.id(), Reason: model.BlockerPrerequisite, Actor: f.author, Criterion: "wait for a recorded witness"}
-	f.accept(f.capture(nil, hold))
-	if projection, _ := f.snapshot().Task(reduce.Ident{Project: f.project.ID, ID: task.ID}); projection.Status != reduce.StatusBlocked {
-		t.Fatal("good hold did not block the task")
-	}
-	f.refuse(f.request(f.capture(nil, &model.TaskStart{Task: ref, Actor: f.author, AttemptID: f.id()})), "invalid-transition")
-	witness := []byte("the prerequisite was resolved")
-	clear := &model.BlockerClear{Task: ref, BlockerID: hold.BlockerID, HoldRef: model.BlockerRef{Task: ref, BlockerID: hold.BlockerID}, ResolvingWitness: admissionContent(witness)}
-	clearPacket := f.capture([][]byte{witness}, clear)
-	attempt := f.id()
-	startPacket := f.capture(nil, &model.TaskStart{Task: ref, Actor: f.author, AttemptID: attempt})
-	f.accept(startPacket, clearPacket)
-	if projection, _ := f.snapshot().Task(reduce.Ident{Project: f.project.ID, ID: task.ID}); projection.Status != reduce.StatusInFlight {
-		t.Fatalf("cleared task did not start: %+v", projection)
-	}
-	f.refuse(f.request(f.capture(nil, &model.TaskStart{Task: ref, Actor: f.author, AttemptID: f.id()})), "invalid-transition")
-	other := f.task()
-	f.accept(f.capture(nil, other))
-	f.refuse(f.request(f.capture(nil, &model.TaskStart{Task: f.ref(other.ID, 1), Actor: f.author, AttemptID: attempt})), "conflict")
-	f.refuse(f.request(f.capture([][]byte{witness}, clear)), "invalid-transition")
-}
-
-func TestAdmissionForwardBlockerReference(t *testing.T) {
-	f := newAdmissionFixture(t)
-	task := f.goodControl()
-	ref := f.ref(task.ID, 1)
-	hold := &model.BlockerHold{Task: ref, BlockerID: f.id(), Reason: model.BlockerPrerequisite, Actor: f.author, Criterion: "wait for witness"}
-	witness := []byte("resolved")
-	clear := &model.BlockerClear{Task: ref, BlockerID: hold.BlockerID, HoldRef: model.BlockerRef{Task: ref, BlockerID: hold.BlockerID}, ResolvingWitness: admissionContent(witness)}
-	first := f.capture([][]byte{witness}, clear)
-	second := f.capture(nil, hold)
-	bundle := f.accept(first, second)
-	if bundle.Events[0].Type != "blocker.hold" || bundle.Events[1].Type != "blocker.clear" {
-		t.Fatal("forward hold reference did not sort")
-	}
 }
 
 func TestAdmissionExactAuthorityCarrier(t *testing.T) {

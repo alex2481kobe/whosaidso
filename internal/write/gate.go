@@ -9,8 +9,7 @@ import (
 	"datum/internal/reduce"
 )
 
-// gateKey follows the model's typed references. Artifact identities are resolved
-// separately because sources can be authority carriers within the same bundle.
+// gateKey follows typed references; bundled authority artifacts resolve separately.
 type gateKey struct {
 	Record  model.RecordRef
 	Blocker model.ID
@@ -97,7 +96,7 @@ func gatePackets(project model.ProjectID, snapshot reduce.Snapshot, packets []mo
 		used[chosen] = true
 		ordered = append(ordered, packets[chosen])
 	}
-	return ordered, nil
+	return gateHandbacks(snapshot, ordered)
 }
 
 func gateOperation(event model.TypedEvent, author model.Actor) error {
@@ -110,13 +109,11 @@ func gateOperation(event model.TypedEvent, author model.Actor) error {
 	case *model.TaskAmend:
 		provenance = &e.Provenance
 	case *model.ClaimAssert:
-		// ClaimSpec has no writable status: replay starts it UNMEASURED.
-		// Observation and proof operations remain outside this allowlist.
+		// Claims start UNMEASURED; observation/proof operations stay disabled.
 		provenance = &e.Provenance
-	case *model.TaskStart, *model.BlockerHold, *model.BlockerClear:
+	case *model.TaskStart, *model.TaskTakeover, *model.AttemptTerminal, *model.BlockerHold, *model.BlockerClear:
 	default:
-		// In particular, packets cannot inject review.admit to disposition
-		// another packet or claim owner DECISION authority by naming an actor.
+		// Packet authors cannot mint reviews, closures or DECISION authority.
 		return admissionFault("unavailable-until-integrated", "event.type", string(event.EventType())+" is not enabled by the first admission gate")
 	}
 	if provenance != nil && provenance.Author != author {
@@ -194,8 +191,7 @@ func containsAdmissionRef(refs []model.RecordRef, target model.RecordRef) bool {
 }
 
 func sameAdmissionArtifact(a, b model.ArtifactRef) bool {
-	// Locators are retrieval hints. Identity comes from every supplied pin, so
-	// changing a locator cannot grant authority over different source bytes.
+	// Identity comes from every supplied pin; locators are retrieval hints.
 	if a.Kind != b.Kind || (a.Git == nil) != (b.Git == nil) || (a.Content == nil) != (b.Content == nil) {
 		return false
 	}
@@ -236,6 +232,10 @@ func admissionArtifacts(event model.TypedEvent) []model.ArtifactRef {
 		}
 	case *model.BlockerClear:
 		refs = append(refs, e.ResolvingWitness)
+	case *model.TaskTakeover:
+		refs = append(refs, e.StoppedConfirmationRef)
+	case *model.AttemptTerminal:
+		refs = append(refs, e.DeliveryRefs...)
 	}
 	if spec != nil {
 		if spec.Progress != nil {
@@ -253,8 +253,7 @@ func admissionArtifacts(event model.TypedEvent) []model.ArtifactRef {
 }
 
 func gateProposal(base reduce.Snapshot, project model.ProjectID, command model.ID, digest model.Digest, proposal model.Bundle) error {
-	// This envelope exists only to exercise the reducer. Transact receives the
-	// untouched proposal and assigns the real timestamp and predecessor itself.
+	// Validation only: Transact assigns the real envelope to the proposal.
 	validation := proposal
 	validation.Version = model.WireVersion
 	validation.Project = project
