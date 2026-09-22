@@ -159,8 +159,8 @@ func gateHandbacks(base reduce.Snapshot, packets []model.Packet) ([]model.Packet
 				if !ok || a.Key.Project != e.Task.Project || a.Key.Task != e.Task.RecordID {
 					return nil, admissionFault("unknown-reference", "attempt_id", "receipt must name its own task and attempt")
 				}
-				if !model.SameActor(a.Actor, packet.Author) {
-					return nil, admissionFault("attribution-mismatch", "author", "receipt must be authored by the attempt holder")
+				if !receiptAuthorAdmissible(a.Actor, packet.Author) {
+					return nil, admissionFault("attribution-mismatch", "author", "receipt must be authored by the attempt holder, or by a named author when the holder is unknown")
 				}
 				if e.Task.Revision != a.TaskRevision {
 					return nil, admissionFault("revision-conflict", "task", "receipt must carry the revision the attempt started against")
@@ -213,4 +213,17 @@ func gateHandbacks(base reduce.Snapshot, packets []model.Packet) ([]model.Packet
 		}
 	}
 	return packets, nil
+}
+
+// receiptAuthorAdmissible: a known holder's attempt takes a receipt only from
+// that holder. When the holder is UNKNOWN, a receipt from a NAMED author is
+// admissible and stays attributed to that author through its packet: closing
+// an attempt requires no authority or judgment, so unknown attribution must
+// not make it unclosable (C782). Two unknowns never match, so an unknown
+// author cannot close an unknown holder's attempt.
+func receiptAuthorAdmissible(holder, author model.Actor) bool {
+	if model.Blank(holder.ID) {
+		return !model.Blank(author.ID) && model.Blank(author.UnknownReason)
+	}
+	return model.SameActor(holder, author)
 }

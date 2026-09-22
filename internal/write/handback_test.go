@@ -265,7 +265,7 @@ func TestAdmissionStartAndBlockerTransitions(t *testing.T) {
 	f.refuse(f.request(f.capture(nil, &model.TaskStart{Task: ref, Actor: f.author, AttemptID: f.id()})), "invalid-transition")
 	other := f.task()
 	f.accept(f.capture(nil, other))
-	f.refuse(f.request(f.capture(nil, &model.TaskStart{Task: f.ref(other.ID, 1), Actor: f.author, AttemptID: attempt})), "conflict")
+	f.refuse(f.request(f.capture(nil, &model.TaskStart{Task: f.ref(other.ID, 1), Actor: f.author, AttemptID: attempt})), "duplicate-record")
 	f.refuse(f.request(f.capture([][]byte{witness}, clear)), "invalid-transition")
 }
 
@@ -285,3 +285,28 @@ func TestAdmissionForwardBlockerReference(t *testing.T) {
 }
 
 // The disabled-operation list moved to TestGateOperationsStillUnavailable (gate_family_test.go).
+
+// TestHandbackUnknownHolderTakesANamedReceipt: an attempt started with unknown
+// attribution can be closed by a named author, recorded as that author. An
+// unknown author is still refused, because two unknowns never match.
+func TestHandbackUnknownHolderTakesANamedReceipt(t *testing.T) {
+	f := newAdmissionFixture(t)
+	task := f.goodControl()
+	attempt := f.id()
+	f.accept(f.capture(nil, &model.TaskStart{Task: f.ref(task.ID, 1), Actor: model.Actor{UnknownReason: "the holder was not recorded"}, AttemptID: attempt}))
+	r := HandbackRequest{AttemptID: attempt, Outcome: model.AttemptStopped, Reason: "stopped", NextAction: "reassign"}
+
+	r.CommandID, r.Author = f.id(), model.Actor{UnknownReason: "the closer was not recorded"}
+	f.refuse(f.request(captureHandback(t, f, r)), "attribution-mismatch")
+
+	r.CommandID, r.Author = f.id(), model.Actor{ID: "closer"}
+	b := f.accept(captureHandback(t, f, r))
+	s := f.snapshot()
+	p, _ := s.Task(reduce.Ident{Project: f.project.ID, ID: task.ID})
+	if len(p.LiveAttempts) != 0 || p.Attempts[0].Terminal == nil {
+		t.Fatalf("a named receipt did not close the unknown holder's attempt: %+v", p)
+	}
+	if got := s.EventAuthor(p.Attempts[0].Terminal.Origin).Author; got != r.Author || b.Sequence != p.Attempts[0].Terminal.Origin.Sequence {
+		t.Fatalf("receipt recorded as %+v, want %+v", got, r.Author)
+	}
+}
