@@ -57,7 +57,7 @@ datum
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
 |   |      9 files, tested -- uses model
 |   `-- write          joins immutable capture to canonical state through one admission gate
-|          13 files, tested -- uses evidence, model, reduce, store
+|          14 files, tested -- uses evidence, model, reduce, store
 `-- tools/
     `-- archtree       instrument that reports how this module's packages fit together
            4 files, tested -- leaf

@@ -204,12 +204,12 @@ func gateHandbacks(base reduce.Snapshot, packets []model.Packet) ([]model.Packet
 		found := false
 		for _, hold := range holds {
 			key := gateKey{Record: model.RecordRef{Project: hold.Task.Project, RecordID: hold.Task.RecordID}, Blocker: hold.BlockerID}
-			if hold.Task == terminal.Task && !cleared[key] && (terminal.Outcome != model.AttemptOutOfScope || hold.Reason == model.BlockerResume) {
+			if hold.Task == terminal.Task && !cleared[key] && (terminal.Outcome != model.AttemptOutOfScope || hold.Reason == model.BlockerResume && !model.Blank(hold.Actor.ID)) {
 				found = true
 			}
 		}
 		if !found {
-			return nil, admissionFault("missing-hold", "attempt.terminal", "blocked-mid-task needs a bundled open hold; out-of-scope needs an authored resume/reassignment hold")
+			return nil, admissionFault("missing-hold", "attempt.terminal", "blocked-mid-task needs a bundled open hold; out-of-scope needs an authored resume/reassignment hold naming its actor")
 		}
 	}
 	return packets, nil

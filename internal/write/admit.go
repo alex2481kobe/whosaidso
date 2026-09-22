@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"datum/internal/model"
 	"datum/internal/reduce"
@@ -84,12 +85,16 @@ func Admit(ctx context.Context, project store.Project, request AdmitRequest) (mo
 			}
 		}
 		selfAdmission, authors, reason := admissionDetails(request, packets)
+		captured := make(map[model.ID]time.Time, len(packets))
+		for _, packet := range packets {
+			captured[packet.CommandID] = packet.CapturedAt.UTC()
+		}
 		invocations, err := reviewedInvocations(request.Outcome, packets)
 		if err != nil {
 			return model.Bundle{}, err
 		}
 		review, err := model.EncodeEvent(&model.ReviewAdmit{Packets: lockedRefs, Outcome: request.Outcome, Actor: request.Admitter, Reason: reason,
-			SelfAdmission: selfAdmission, Invocations: invocations, Authors: authors, EventPackets: eventPackets})
+			SelfAdmission: selfAdmission, Invocations: invocations, Authors: authors, CapturedAt: captured, EventPackets: eventPackets})
 		if err != nil {
 			return model.Bundle{}, err
 		}
@@ -106,6 +111,9 @@ func Admit(ctx context.Context, project store.Project, request AdmitRequest) (mo
 				return model.Bundle{}, err
 			}
 			if err := gateProofs(ctx, project, prefix, snapshot, after, packets); err != nil {
+				return model.Bundle{}, err
+			}
+			if err := gateQuotes(ctx, project, packets); err != nil {
 				return model.Bundle{}, err
 			}
 		}

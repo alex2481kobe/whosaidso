@@ -5,6 +5,7 @@ package model
 
 import (
 	"fmt"
+	"time"
 )
 
 // InvocationRef addresses the immutable start/seal pair by its subordinate ID.
@@ -166,6 +167,11 @@ type ReviewAdmit struct {
 	// packet was captured with, so who wrote an admitted act is in the ledger,
 	// not only in local intake. Omission is legacy and projects as unknown.
 	Authors map[ID]Actor `json:"authors,omitempty"`
+	// CapturedAt binds each packet command ID to the time Datum's intake
+	// stamped when it captured the packet; no author-facing input sets it.
+	// "Criterion frozen before the run" is decided against it, so the check
+	// replays from the ledger. Omission is legacy and projects as unknown.
+	CapturedAt map[ID]time.Time `json:"captured_at,omitempty"`
 	// EventPackets names, on an accepted review, the packet of each bundle
 	// event before this one, in bundle order. Admission orders packets by
 	// dependency, so the ledger cannot otherwise attribute an event to a packet.
@@ -228,6 +234,14 @@ func (e ReviewAdmit) validate(p string) error {
 	for id := range e.Authors {
 		if !seen[id] {
 			return invalid(p+".authors", "names an unreviewed packet")
+		}
+	}
+	if e.CapturedAt != nil && len(e.CapturedAt) != len(e.Packets) {
+		return invalid(p+".captured_at", "must cover exactly the reviewed packets")
+	}
+	for id := range e.CapturedAt {
+		if !seen[id] {
+			return invalid(p+".captured_at", "names an unreviewed packet")
 		}
 	}
 	for i, id := range e.EventPackets {

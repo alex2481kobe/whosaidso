@@ -18,7 +18,9 @@ import (
 	"datum/internal/reduce"
 )
 
-const disposeRuling = `{"ruling":"ship revision one"}`
+// The ruling's words carry the quote's exact whitespace: quotes are compared
+// with the selected text byte for byte, never trimmed.
+const disposeRuling = `{"ruling":"  ship revision one\n"}`
 
 type disposeWorld struct {
 	f     *admissionFixture
