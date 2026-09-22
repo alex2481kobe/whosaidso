@@ -280,21 +280,4 @@ func TestAdmissionForwardBlockerReference(t *testing.T) {
 	}
 }
 
-func TestGateOtherOperationsRemainDisabled(t *testing.T) {
-	for _, event := range []model.TypedEvent{
-		&model.TaskClose{},
-		&model.InvocationStart{}, &model.InvocationSeal{}, &model.ClaimRevise{},
-		&model.CriterionFix{}, &model.ProofAdmit{}, &model.DecisionOpen{},
-		&model.DecisionRevise{}, &model.DecisionDispose{}, &model.Supersede{},
-		&model.Correction{}, &model.InstrumentDeclare{}, &model.InstrumentRevise{},
-		&model.TrustWithdraw{}, &model.ReviewAdmit{}, &model.ArtifactDispose{},
-	} {
-		t.Run(string(event.EventType()), func(t *testing.T) {
-			// Isolate operation authority from schema and downstream checks;
-			// a later refusal must not hide an accidentally widened allowlist.
-			if err := gateOperation(event, model.Actor{ID: "owner"}); admissionErrorCode(err) != "unavailable-until-integrated" {
-				t.Fatalf("operation became authorized: %v", err)
-			}
-		})
-	}
-}
+// The disabled-operation list moved to TestGateOperationsStillUnavailable (gate_family_test.go).

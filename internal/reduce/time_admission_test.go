@@ -25,8 +25,8 @@ func admissionUnknown[T any]() model.Availability[T] {
 // retained a +00:37 invocation timestamp, and only the invocation admission
 // gate stood between it and the ledger. The wire now carries only UTC: an
 // in-process timestamp is captured as the same instant in UTC, and event bytes
-// carrying an offset are refused when decoded. This is a spec change, not a
-// test bent to fit code.
+// carrying an offset are refused when decoded. U12 opened invocation.start, so
+// the invariant is now end to end: the start admits and the ledger holds UTC.
 func TestInvocationTimestampIsUTCThroughApplicationAdmission(t *testing.T) {
 	// Intake intentionally uses an isolated home so this real capture never
 	// writes to the user's inbox.
@@ -101,19 +101,20 @@ func TestInvocationTimestampIsUTCThroughApplicationAdmission(t *testing.T) {
 	if _, err := model.DecodeEvent(offset); !errors.As(err, new(*model.Fault)) || !strings.Contains(err.Error(), "envelope.started_at") {
 		t.Fatalf("an offset in event bytes must be refused at started_at: %v", err)
 	}
-	_, err = admit(15, packet)
-	var fault *model.Fault
-	if !errors.As(err, &fault) || fault.Code != "unavailable-until-integrated" || fault.Path != "event.type" {
-		t.Fatalf("invocation admission policy changed; re-evaluate reachability: %v", err)
+	if _, err := admit(15, packet); err != nil {
+		t.Fatalf("invocation.start must admit since U12: %v", err)
 	}
-	t.Logf("real intake holds %s; write.Admit refuses: %v", stamp.Format(time.RFC3339Nano), err)
 	prefix, err := store.ReadPrefix(project)
 	if err != nil {
 		t.Fatal(err)
 	}
 	snapshot, err := reduce.Replay(prefix)
-	if err != nil || len(prefix) != 2 || len(snapshot.Invocations()) != 0 {
-		t.Fatalf("refused invocation changed the ledger: bundles=%d error=%v", len(prefix), err)
+	if err != nil || len(prefix) != 3 || len(snapshot.Invocations()) != 1 {
+		t.Fatalf("admitted invocation did not replay: bundles=%d error=%v", len(prefix), err)
+	}
+	admitted := snapshot.Invocations()[0].Start.StartedAt
+	if admitted.Location() != time.UTC || !admitted.Equal(env.StartedAt) {
+		t.Fatalf("the ledger must hold the same instant in UTC: %s", admitted.Format(time.RFC3339Nano))
 	}
 	if snapshot.Watermark().RecordedAt.Location() != time.UTC {
 		t.Fatal("the actually admitted watermark is not UTC")

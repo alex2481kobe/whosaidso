@@ -120,7 +120,9 @@ func assertInstrumentDecodeRefusal(t *testing.T, f *admissionFixture, raw model.
 }
 
 func TestAdmissionInstrumentAuthorityAndIdentityRefusals(t *testing.T) {
-	for _, mutation := range []string{"forged-author", "known-validation", "duplicate-instrument", "duplicate-task", "instrument.revise"} {
+	// Known validation and instrument.revise are admitted under R9 when their
+	// artifacts resolve; TestInstrumentKnownValidationMustResolve covers them.
+	for _, mutation := range []string{"forged-author", "duplicate-instrument", "duplicate-task"} {
 		t.Run(mutation, func(t *testing.T) {
 			f := newAdmissionFixture(t)
 			instrument := f.instrument()
@@ -130,9 +132,6 @@ func TestAdmissionInstrumentAuthorityAndIdentityRefusals(t *testing.T) {
 			case "forged-author":
 				instrument.Provenance.Author.ID = "someone else"
 				code = "attribution-mismatch"
-			case "known-validation":
-				instrument.Spec.Validation = model.Availability[model.InstrumentValidation]{State: model.Known, Value: &model.InstrumentValidation{Ref: instrument.Spec.ImplementationRef, Version: "self-certified"}}
-				code = "unavailable-until-integrated"
 			case "duplicate-instrument":
 				other := f.instrument()
 				other.ID = instrument.ID
@@ -141,29 +140,8 @@ func TestAdmissionInstrumentAuthorityAndIdentityRefusals(t *testing.T) {
 				other := f.task()
 				other.ID = instrument.ID
 				events = append(events, other)
-			case "instrument.revise":
-				events = append(events, &model.InstrumentRevise{Target: f.ref(instrument.ID, 1), ExpectedRevision: 1, Provenance: instrument.Provenance, Replacement: instrument.Spec})
-				code = "unavailable-until-integrated"
 			}
 			f.refuse(f.request(f.capture([][]byte{[]byte("instrument implementation")}, events...)), code)
-		})
-	}
-}
-
-func TestGateAllOtherOperationsRemainUnavailable(t *testing.T) {
-	// Exercise the operation boundary directly so unrelated schema/reference
-	// failures cannot conceal an accidentally widened allowlist.
-	for _, event := range []model.TypedEvent{
-		&model.TaskClose{}, &model.InvocationStart{}, &model.InvocationSeal{},
-		&model.ClaimRevise{}, &model.CriterionFix{}, &model.ProofAdmit{},
-		&model.DecisionOpen{}, &model.DecisionRevise{}, &model.DecisionDispose{},
-		&model.Supersede{}, &model.Correction{}, &model.InstrumentRevise{},
-		&model.TrustWithdraw{}, &model.ReviewAdmit{}, &model.ArtifactDispose{},
-	} {
-		t.Run(string(event.EventType()), func(t *testing.T) {
-			if err := gateOperation(event, model.Actor{ID: "author"}); admissionErrorCode(err) != "unavailable-until-integrated" {
-				t.Fatalf("operation became available: %v", err)
-			}
 		})
 	}
 }
@@ -271,8 +249,8 @@ func TestGateInstrumentArtifactEnumeration(t *testing.T) {
 	instrument := f.instrument()
 	source, validation := admissionContent([]byte("source")), admissionContent([]byte("validation"))
 	instrument.Provenance.SourceRefs = []model.ArtifactRef{source}
-	// Known validation is refused by this gate, but artifact enumeration must
-	// still cover the complete model so that it cannot become a bypass later.
+	// Known validation is admitted only when this enumeration hands its artifact
+	// to resolution, so the enumeration must cover the complete model.
 	instrument.Spec.Validation = model.Availability[model.InstrumentValidation]{State: model.Known, Value: &model.InstrumentValidation{Ref: validation, Version: "v1"}}
 	if got, want := admissionArtifacts(instrument), []model.ArtifactRef{source, instrument.Spec.ImplementationRef, validation}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("declaration artifacts: got %+v, want %+v", got, want)
@@ -336,7 +314,8 @@ func TestAdmissionStableTieBreakAndExternalReferences(t *testing.T) {
 }
 
 func TestAdmissionOnlyFirstGateOperations(t *testing.T) {
-	for _, operation := range []string{"decision", "review"} {
+	// decision.open is enabled by U12 (TestDecisionOpenAndReviseAdmitWithoutDisposition).
+	for _, operation := range []string{"review"} {
 		t.Run(operation, func(t *testing.T) {
 			f := newAdmissionFixture(t)
 			control := f.goodControl()
@@ -424,11 +403,11 @@ func TestAdmissionClaimCannotAssertProofWithoutEvidence(t *testing.T) {
 	claim := f.claim()
 	ref := f.ref(claim.ID, 1)
 	// Syntactically valid names do not establish a frozen criterion or an
-	// observation. A claim packet must not open the proof admission operation.
+	// observation, so a proof bundled with its claim has nothing to stand on.
 	proof := &model.ProofAdmit{Claim: ref, CriterionRef: model.CriterionRef{Claim: ref, CriterionID: f.id(), Revision: 1},
 		Evidence: []model.ObservationDisposition{{InvocationRef: model.InvocationRef{Project: f.project.ID, InvocationID: f.id()}, Disposition: "supports", Reason: "asserted without an observation"}},
 		Judgment: model.ResponsibleJudgment{Actor: f.author, Reason: "asserted proof without evidence"}}
-	f.refuse(f.request(f.capture(nil, claim, proof)), "unavailable-until-integrated")
+	f.refuse(f.request(f.capture(nil, claim, proof)), "unknown-reference")
 	if _, exists := f.snapshot().ClaimAt(ref); exists {
 		t.Fatal("refused proof packet partially admitted its claim")
 	}

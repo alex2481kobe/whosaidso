@@ -80,6 +80,7 @@ func Admit(ctx context.Context, project store.Project, request AdmitRequest) (mo
 			}
 		}
 		selfAdmission, reason := admissionDetails(request, packets)
+		reason += gateProofLimit(request.Outcome, packets)
 		review, err := model.EncodeEvent(&model.ReviewAdmit{
 			Packets: lockedRefs, Outcome: request.Outcome, Actor: request.Admitter,
 			Reason: reason, SelfAdmission: selfAdmission,
@@ -88,11 +89,15 @@ func Admit(ctx context.Context, project store.Project, request AdmitRequest) (mo
 			return model.Bundle{}, err
 		}
 		proposal.Events = append(proposal.Events, review)
-		if err := gateProposal(snapshot, project.ID, request.CommandID, digest, proposal); err != nil {
+		after, err := gateProposal(snapshot, project.ID, request.CommandID, digest, proposal)
+		if err != nil {
 			return model.Bundle{}, err
 		}
 		if request.Outcome == "accepted" {
 			if err := materializeAdmission(ctx, project, packets); err != nil {
+				return model.Bundle{}, err
+			}
+			if err := gateProofs(ctx, project, prefix, snapshot, after, packets); err != nil {
 				return model.Bundle{}, err
 			}
 		}
