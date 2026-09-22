@@ -155,7 +155,7 @@ func TestHandbackStartedAndCurrentRevisions(t *testing.T) {
 }
 
 func TestHandbackAtomicHoldRefusals(t *testing.T) {
-	for _, variant := range []string{"old", "wrong-task", "cleared", "reassignment", "scope-amendment", "wrong-author", "wrong-revision"} {
+	for _, variant := range []string{"old", "wrong-task", "cleared", "reassignment", "reassignment-to-nobody", "scope-amendment", "wrong-author", "wrong-revision"} {
 		t.Run(variant, func(t *testing.T) {
 			f, task, r := handbackControl(t)
 			r.Outcome = model.AttemptBlockedMidTask
@@ -175,6 +175,10 @@ func TestHandbackAtomicHoldRefusals(t *testing.T) {
 			case "reassignment":
 				r.Outcome = model.AttemptOutOfScope
 				hold.Reason = model.BlockerPrerequisite
+				extra = append(extra, f.capture(nil, hold))
+			case "reassignment-to-nobody":
+				r.Outcome = model.AttemptOutOfScope
+				hold.Actor = model.Actor{UnknownReason: "no actor supplied"}
 				extra = append(extra, f.capture(nil, hold))
 			case "scope-amendment":
 				r.Outcome = model.AttemptOutOfScope
