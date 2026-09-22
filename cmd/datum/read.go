@@ -23,6 +23,7 @@ datum instruments|state|now [--json]
 datum todo [--json] [--limit N]
 datum context [--json] [--limit N] [RECORD_ID]
 datum continue [--json] [--limit N] TASK_ID
+datum disposal-loss [--json] --digest SHA256 [--git FORMAT:COMMIT:PATH]
 
 Show selects current admitted records. History selects admitted events in order.
 TODO includes all tasks not CLOSED. Pending includes rejected and correction-requested packets.
@@ -36,6 +37,10 @@ INSTRUMENTS shows validation first; UNKNOWN validation is listed under attention
 --limit cuts only optional results (READY tasks, context refs), never blockers,
 mandatory constraints, prerequisites, corrections or supersessions.
 continue observes git HEAD, dirty state and the time now, and writes nothing.
+disposal-loss prints the support_loss targets an artifact.dispose of exactly that
+identity must record at this watermark (give --git when the disposal names a git
+pin), and the admitted events citing it. Reasons are yours to write; admission
+recomputes the list and stays the authority.
 `
 
 // A bare audit flag means true, while explicit values retain all three states.
@@ -58,7 +63,7 @@ func isReadCommand(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "show", "history", "task", "intake", "read", "instruments", "state", "now", "todo", "context", "continue":
+	case "show", "history", "task", "intake", "read", "instruments", "state", "now", "todo", "context", "continue", "disposal-loss":
 		return true
 	}
 	return false
@@ -82,7 +87,7 @@ func readCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.W
 		}
 		command, rest = command+" "+rest[0], rest[1:]
 	}
-	presets := map[string]bool{"instruments": true, "state": true, "now": true, "todo": true, "context": true, "continue": true}
+	presets := map[string]bool{"instruments": true, "state": true, "now": true, "todo": true, "context": true, "continue": true, "disposal-loss": true}
 	if command != "show" && command != "history" && command != "task todo" && command != "intake pending" && !presets[command] {
 		return fmt.Errorf("unknown read command %q; see datum read --help", command)
 	}
@@ -99,6 +104,11 @@ func readCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.W
 	if command == "history" {
 		flags.Var(&selfAdmitted, "self-admitted", "select per-packet reviews by true, false, or unknown (bare flag: true)")
 	}
+	var digest, git string
+	if command == "disposal-loss" {
+		flags.StringVar(&digest, "digest", "", "sha-256 of the artifact a disposal would name (required)")
+		flags.StringVar(&git, "git", "", "the disposal's git pin as FORMAT:COMMIT:PATH, when it names one")
+	}
 	if err := flags.Parse(rest); err != nil {
 		if err == flag.ErrHelp {
 			return nil
@@ -106,6 +116,16 @@ func readCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.W
 		return err
 	}
 	request := query.Request{Command: command, SelfAdmitted: model.SelfAdmissionState(selfAdmitted), Limit: limit, Context: ctx}
+	if command == "disposal-loss" {
+		request.Disposal = &query.DisposalTarget{Digest: model.Digest(digest)}
+		if git != "" {
+			parts := strings.SplitN(git, ":", 3)
+			if len(parts) != 3 {
+				return fmt.Errorf("disposal-loss: --git must be FORMAT:COMMIT:PATH")
+			}
+			request.Disposal.Git = &model.GitPin{ObjectFormat: parts[0], Commit: parts[1], Path: parts[2]}
+		}
+	}
 	if flags.NArg() > 1 || flags.NArg() > 0 && !withID {
 		return fmt.Errorf("%s: unexpected positional arguments", command)
 	}

@@ -15,7 +15,7 @@ import (
 	"datum/internal/store"
 )
 
-var presetCommands = map[string]bool{"instruments": true, "state": true, "now": true, "todo": true, "context": true, "continue": true}
+var presetCommands = map[string]bool{"instruments": true, "state": true, "now": true, "todo": true, "context": true, "continue": true, "disposal-loss": true}
 var idPresets = map[string]bool{"context": true, "continue": true}
 
 // Preset holds only the sections its command selects; an absent section was
@@ -36,6 +36,7 @@ type Preset struct {
 	Closure            *Closure          `json:"closure,omitempty"`
 	Proposals          *Proposal         `json:"proposals,omitempty"`
 	Continue           *Continuation     `json:"continue,omitempty"`
+	Disposal           *DisposalLoss     `json:"disposal,omitempty"`
 }
 
 func list[T any](xs []T) *[]T {
@@ -54,7 +55,7 @@ func checkPresetRequest(r Request) error {
 	case r.Observed != nil && r.Command != "continue":
 		return fmt.Errorf("a workspace observation belongs only to continue")
 	}
-	return nil
+	return checkDisposalRequest(r)
 }
 
 func currentOf(s reduce.Snapshot, kind model.Kind) []reduce.Record {
@@ -203,6 +204,8 @@ func preset(project store.Project, s reduce.Snapshot, prefix []model.Bundle, req
 			return err
 		}
 		todoInto(s, p, request.Limit)
+	case "disposal-loss":
+		p.Disposal = disposalLoss(s, *request.Disposal)
 	case "context":
 		if request.ID == "" {
 			claimsAndRulings(s, p)

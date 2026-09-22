@@ -169,16 +169,24 @@ func (s *state) disposalSeeds(e *model.ArtifactDispose) []supportNode {
 		if len(owners) == 0 {
 			continue
 		}
-		artifacts := []model.ArtifactRef{}
-		artifactRefs(reflect.ValueOf(event), &artifacts)
-		for _, artifact := range artifacts {
-			if sameArtifact(artifact, e.Artifact) || (artifact.Content != nil && artifact.Content.SHA256 == e.Digest) {
-				seeds = append(seeds, owners...)
-				break
-			}
+		if citesDisposed(event, e) {
+			seeds = append(seeds, owners...)
 		}
 	}
 	return seeds
+}
+
+// citesDisposed is the one definition of "this event cites the disposed bytes":
+// the same artifact identity, or any content pin with the disposal's digest.
+func citesDisposed(event model.TypedEvent, e *model.ArtifactDispose) bool {
+	artifacts := []model.ArtifactRef{}
+	artifactRefs(reflect.ValueOf(event), &artifacts)
+	for _, artifact := range artifacts {
+		if sameArtifact(artifact, e.Artifact) || (artifact.Content != nil && artifact.Content.SHA256 == e.Digest) {
+			return true
+		}
+	}
+	return false
 }
 
 // supportLosses traverses the complete admitted graph at query time. References
@@ -241,6 +249,26 @@ func (s Snapshot) DisposalLoss(e model.ArtifactDispose) []model.RecordRef {
 			out = append(out, model.RecordRef{Project: node.record.Project, RecordID: node.record.ID, Revision: node.record.Revision})
 		}
 		queue = append(queue, s.inner().dependents(node)...)
+	}
+	return out
+}
+
+// ArtifactCitation is one admitted event whose payload cites the disposed bytes.
+type ArtifactCitation struct {
+	Origin Origin          `json:"origin"`
+	Type   model.EventType `json:"type"`
+}
+
+// DisposalCitations lists every admitted event that cites the disposal's
+// artifact, in ledger order: the evidence a disposal leaves unverifiable. It
+// includes events that establish no record; DisposalLoss says which records
+// that costs.
+func (s Snapshot) DisposalCitations(e model.ArtifactDispose) []ArtifactCitation {
+	out := []ArtifactCitation{}
+	for _, o := range s.inner().eventOrder() {
+		if event := s.inner().events[o]; citesDisposed(event, &e) {
+			out = append(out, ArtifactCitation{Origin: o, Type: event.EventType()})
+		}
 	}
 	return out
 }

@@ -20,6 +20,7 @@ type Request struct {
 	SelfAdmitted model.SelfAdmissionState // empty means no filter; history only, without ID
 	Limit        int                      // optional-result cap for context, continue and todo; 0 means none
 	Observed     *Observation             // continue only: the caller's fresh workspace observation
+	Disposal     *DisposalTarget          // disposal-loss only: the artifact a disposal would name
 	Provider     Provider                 // optional; nil works fully offline
 	Context      context.Context          // for the provider only; nil means Background
 }
