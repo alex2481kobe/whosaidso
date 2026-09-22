@@ -42,7 +42,7 @@ stale. Nothing below is written by hand, so it cannot quietly stop being true.
 datum
 |-- cmd/
 |   `-- datum          (no package comment)
-|          2 files, 171 lines (212 test), largest write.go at 150 -- uses model, store, write
+|          3 files, 270 lines (407 test), largest write.go at 150 -- uses model, query, store, write
 |-- internal/
 |   |-- acceptance     (tests only, no production code)
 |   |      4492 lines of tests
@@ -50,6 +50,8 @@ datum
 |   |      2 files, 1449 lines (1558 test), largest resolve.go at 1070 -- uses model
 |   |-- model          wire vocabulary every other package shares: identities, references, packets and bundles, plus the strict encode/decode boundary
 |   |      8 files, 2608 lines (1095 test), largest events.go at 809 -- leaf
+|   |-- query          selects admitted facts before either output format renders them
+|   |      2 files, 350 lines (511 test), largest query.go at 277 -- uses model, reduce, store
 |   |-- reduce         folds admitted bundles into the state every Datum answer is read from
 |   |      9 files, 2645 lines (2692 test), largest proof.go at 692 -- uses model
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
