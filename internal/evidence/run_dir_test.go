@@ -66,15 +66,17 @@ func TestNonCanonicalPathsMatchNothing(t *testing.T) {
 	ref := func(p string) model.ArtifactRef {
 		return contentRef(criterionExample, "application/json", []string{p}, "whole", "")
 	}
-	other := b + "/out/result.json"
+	dot := "record/./artifacts/runs/" + string(invocationB) + "/out/result.json"
+	dbl := "record//artifacts/runs/" + string(invocationB) + "/out/result.json"
 	for _, tc := range []struct {
 		name, contract, output string
 		match                  bool
 	}{
 		{"control-own-run-dir", "out/result.json", a + "/out/result.json", true},
 		{"control-bare-form", "out/result.json", "out/result.json", true},
-		{"contract-dot-segment-to-other-run", "record/./artifacts/runs/" + string(invocationB) + "/out/result.json", other, false},
-		{"contract-double-slash-to-other-run", "record//artifacts/runs/" + string(invocationB) + "/out/result.json", other, false},
+		{"control-other-run-clean", b + "/out/result.json", b + "/out/result.json", false},
+		{"contract-dot-segment-to-other-run", dot, dot, false},
+		{"contract-double-slash-to-other-run", dbl, dbl, false},
 		{"contract-dot-segment-bare", "out/./result.json", "out/./result.json", false},
 		{"contract-trailing-slash", "out/result.json/", "out/result.json/", false},
 		{"output-double-slash-in-own-run-dir", "out/result.json", a + "//out/result.json", false},
