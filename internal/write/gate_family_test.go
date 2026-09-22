@@ -224,7 +224,6 @@ func TestGateOperationsStillUnavailable(t *testing.T) {
 	// Isolate the operation boundary so schema or reference failures cannot
 	// conceal a widened allowlist. These stay closed until a unit opens them.
 	for _, event := range []model.TypedEvent{
-		&model.DecisionDispose{},
 		&model.Supersede{}, &model.ReviewAdmit{}, &model.ArtifactDispose{},
 	} {
 		t.Run(string(event.EventType()), func(t *testing.T) {

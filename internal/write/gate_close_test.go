@@ -2,8 +2,7 @@ package write
 
 // Tests for the operations U12 opened outside proof: task.close (authority
 // carrier, terminal attempts, success witnesses, containment) and
-// decision.open/revise. Decision disposition stays refused; see
-// TestGateOperationsStillUnavailable.
+// decision.open/revise. Decision disposition is tested in gate_dispose_test.go.
 
 import (
 	"context"
@@ -147,7 +146,4 @@ func TestDecisionOpenAndReviseAdmitWithoutDisposition(t *testing.T) {
 	if !ok || d.Status != reduce.StatusOpen || d.Decision.Revision != 2 {
 		t.Fatalf("decision did not stay OPEN at revision 2: %+v", d)
 	}
-	dispose := &model.DecisionDispose{Decision: f.ref(open.ID, 2), Disposition: "approved", Quote: "ship it", Scope: scope,
-		Authority: model.Authority{Actor: model.Actor{ID: "owner"}, SourceRef: admissionContent([]byte("ruling")), Selector: model.Selector{Kind: "whole"}, Scope: scope}}
-	f.refuse(f.request(f.capture(nil, dispose)), "unavailable-until-integrated")
 }
