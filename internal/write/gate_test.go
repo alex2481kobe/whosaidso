@@ -314,7 +314,8 @@ func TestAdmissionStableTieBreakAndExternalReferences(t *testing.T) {
 }
 
 func TestAdmissionOnlyFirstGateOperations(t *testing.T) {
-	for _, operation := range []string{"decision", "review"} {
+	// decision.open is enabled by U12 (TestDecisionOpenAndReviseAdmitWithoutDisposition).
+	for _, operation := range []string{"review"} {
 		t.Run(operation, func(t *testing.T) {
 			f := newAdmissionFixture(t)
 			control := f.goodControl()

@@ -63,6 +63,9 @@ func gatePackets(project model.ProjectID, snapshot reduce.Snapshot, packets []mo
 			if err := gateAuthorities(event, sources); err != nil {
 				return nil, err
 			}
+			if err := gateCloseAuthority(event, sources); err != nil {
+				return nil, err
+			}
 			refs, err := model.SameProjectReferences(event, project)
 			if err != nil {
 				return nil, err
