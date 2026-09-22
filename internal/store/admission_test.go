@@ -2,11 +2,14 @@
 
 package store
 
-// The admission lock's confinement and TransactAdmission's retry contract.
-// Publication ordering and crash recovery are tested in publish_test.go.
+// The admission lock's confinement, TransactAdmission's retry contract, and the
+// verified intake read an admission reuses. Publication ordering and crash
+// recovery are tested in publish_test.go; intake capture in intake_test.go.
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -91,4 +94,35 @@ func TestTransactAdmissionAnswersRetriesFromThePublishedBundle(t *testing.T) {
 		}})
 	requireFault(t, err, "invalid-field")
 	readControl(t, p, 2)
+}
+
+// A packet's ref binds its stored bytes. Re-indented JSON still verifies, since
+// the request digest covers content, so only the ref can tell the files apart.
+func TestVerifiedIntakeKeepsWhatVerificationComputed(t *testing.T) {
+	p := intakeProject(t)
+	ref := capturedControl(t, p, commandID(1), "kept bytes")
+	path := filepath.Join(packetDir(t, p, ref.CommandID), "packet.json")
+	stored, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var indented bytes.Buffer
+	if err := json.Indent(&indented, stored, "", "\t"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, indented.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	verified, err := ReadVerifiedIntake(p, []model.ID{ref.CommandID})
+	if err != nil {
+		t.Fatalf("control: re-indented content still verifies: %v", err)
+	}
+	v := verified[0]
+	if v.Ref.CommandID != ref.CommandID || v.Ref.Digest != model.HashBytes(indented.Bytes()) || v.Ref.Digest == ref.Digest {
+		t.Fatalf("ref must hash the bytes on disk now, got %+v (captured %s)", v.Ref, ref.Digest)
+	}
+	want := CapturedBlob{SHA256: model.HashBytes([]byte("kept bytes")), Length: uint64(len("kept bytes"))}
+	if len(v.Blobs) != 1 || v.Blobs[0] != want || v.Packet.CommandID != ref.CommandID {
+		t.Fatalf("verified read lost its inventory or packet: %+v", v)
+	}
 }
