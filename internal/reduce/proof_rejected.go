@@ -1,13 +1,30 @@
 package reduce
 
-// Rejected criterion family members (R10.3) live here: finding invocations that
-// a rejected or correction-requested review recorded, and the only way a proof
-// may name one. Admitted family closure and support rules stay in
-// proof_admission.go; review bookkeeping stays in events.go.
+// Criterion family membership beyond the exact revision lives here: runs that a
+// rejected or correction-requested review recorded (R10.3), runs under earlier
+// revisions of the same criterion, and the only way a proof may name either.
+// Admitted family closure and support rules stay in proof_admission.go; review
+// bookkeeping stays in events.go.
 
 import (
 	"datum/internal/model"
 )
+
+// CriterionFamily reports whether a run carrying ref belongs to the evaluation
+// family of a proof under criterion, and whether it does only through an
+// earlier revision. A new revision cannot erase known counterevidence, so runs
+// under earlier revisions of the same criterion on the same claim revision stay
+// members; they can only be dispositioned inapplicable or inconclusive.
+func CriterionFamily(ref model.Availability[model.CriterionRef], criterion model.CriterionRef) (member, earlier bool) {
+	if ref.State != model.Known || ref.Value == nil {
+		return false, false
+	}
+	v := *ref.Value
+	if v.Claim != criterion.Claim || v.CriterionID != criterion.CriterionID || v.Revision > criterion.Revision {
+		return false, false
+	}
+	return true, v.Revision < criterion.Revision
+}
 
 // rejectedMembers returns the invocations that a non-accepted review recorded
 // as carrying criterion and that the ledger never admitted. They are family
@@ -19,7 +36,7 @@ func (s *state) rejectedMembers(criterion model.CriterionRef) map[InvocationKey]
 			continue
 		}
 		for _, inv := range review.Invocations {
-			if inv.CriterionRef.State != model.Known || inv.CriterionRef.Value == nil || *inv.CriterionRef.Value != criterion {
+			if member, _ := CriterionFamily(inv.CriterionRef, criterion); !member {
 				continue
 			}
 			key := InvocationKey{Project: review.Key.Project, InvocationID: inv.InvocationID}
@@ -47,8 +64,9 @@ func (s *state) rejectedRecorded(ref model.InvocationRef) bool {
 }
 
 // rejectedMemberDisposition is the only honest disposition of a run that was
-// never admitted: its reading is not canonical, so it cannot support or be
-// weighed as a contradiction, only set aside with a reason under the judgment.
+// never admitted, or that tested an earlier criterion revision: it cannot
+// support this revision or be weighed as its contradiction, only be set aside
+// with a reason under the judgment.
 func rejectedMemberDisposition(disposition string) bool {
 	return disposition == "inapplicable" || disposition == "inconclusive"
 }

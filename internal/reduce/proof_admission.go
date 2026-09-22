@@ -53,8 +53,15 @@ func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 		if !ok && rejected[invocationKey(member.InvocationRef)] && rejectedMemberDisposition(member.Disposition) {
 			continue // R10.3: accounted for, never support
 		}
-		if !ok || inv.Key.Project != b.Project || inv.Seal == nil || inv.Start.CriterionRef.Value == nil || *inv.Start.CriterionRef.Value != e.CriterionRef {
+		inFamily, earlier := CriterionFamily(inv.Start.CriterionRef, e.CriterionRef)
+		if !ok || inv.Key.Project != b.Project || inv.Seal == nil || !inFamily {
 			return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "proof requires local sealed observations of the exact criterion")
+		}
+		if earlier {
+			if !rejectedMemberDisposition(member.Disposition) {
+				return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "a run under an earlier criterion revision can only be dispositioned inapplicable or inconclusive")
+			}
+			continue
 		}
 		if !criterion.Origin.before(inv.Started) {
 			return faultAt(CodeInvalidTransition, b.Sequence, idx, "criterion_ref", "criterion was not fixed before the invocation start")
@@ -85,7 +92,7 @@ func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 		listed[invocationKey(member.InvocationRef)] = true
 	}
 	for _, inv := range s.invocationsSorted() {
-		if inv.Start.CriterionRef.State != model.Known || inv.Start.CriterionRef.Value == nil || *inv.Start.CriterionRef.Value != e.CriterionRef {
+		if inFamily, _ := CriterionFamily(inv.Start.CriterionRef, e.CriterionRef); !inFamily {
 			continue
 		}
 		if inv.Seal == nil {

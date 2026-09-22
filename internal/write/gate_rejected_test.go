@@ -127,3 +127,45 @@ func TestProofRejectedRunReadmittedWithTheProof(t *testing.T) {
 		t.Fatal("an identical run readmitted with its proof did not prove")
 	}
 }
+
+// A run launched before its criterion froze is refused, and once rejected it
+// stays in that revision's family; R10.3 makes it resolvable by disposition.
+func TestProofRefusesCriterionFixedAfterTheRun(t *testing.T) {
+	w := newProofWorld(t, true)
+	late := w.fixEvent(w.claim)
+	lateRef := model.CriterionRef{Claim: w.claim, CriterionID: late.CriterionID, Revision: 1}
+	// The run starts first and names a criterion nobody has admitted yet.
+	env := w.envelope(lateRef)
+	start := w.f.capture(nil, &model.InvocationStart{Envelope: env})
+	seal := w.f.capture([][]byte{[]byte(proofPass)}, proofSealed(env, proofPass))
+	fix := w.f.capture(nil, late)
+	// In one set the gate would order the criterion first; that is not freezing.
+	w.f.refuse(w.f.request(fix, start, seal), "criterion-not-frozen")
+	// Admitted in its own earlier bundle, it is still later than the run.
+	w.f.accept(fix)
+	w.f.refuse(w.f.request(start, seal), "criterion-not-frozen")
+	// A run started after the criterion is admitted is itself admissible.
+	pass, s, e := w.run(lateRef, proofPass)
+	w.f.accept(s, e)
+	proof := w.f.capture(nil, w.proof(lateRef, map[model.InvocationRef]string{pass: "supports"}))
+	// The refused run is still durable intake carrying this criterion.
+	w.f.refuse(w.f.request(proof), "pending-reconciliation")
+	// Rejecting it does not make it vanish: that criterion revision keeps it.
+	reject := w.f.request(start, seal)
+	reject.Outcome = "rejected"
+	if _, err := Admit(context.Background(), w.f.project, reject); err != nil {
+		t.Fatal(err)
+	}
+	w.f.refuse(w.f.request(proof), "rejected-family-member")
+	// R10.3: no longer permanently blocked. The judgment accounts for it.
+	early := model.InvocationRef{Project: w.f.project.ID, InvocationID: env.InvocationID}
+	w.f.refuse(w.f.request(w.f.capture(nil, w.proof(lateRef, map[model.InvocationRef]string{pass: "supports", early: "supports"}))), "rejected-family-member")
+	w.f.accept(w.f.capture(nil, w.proof(lateRef, map[model.InvocationRef]string{pass: "supports", early: "inapplicable"})))
+	if w.status(t) != reduce.StatusProven {
+		t.Fatal("the dispositioned rejected run left the criterion revision blocked")
+	}
+	// The control: a criterion fixed before every run carrying it.
+	clean, s2, e2 := w.run(w.criterion, proofPass)
+	w.f.accept(s2, e2)
+	w.f.accept(w.f.capture(nil, w.proof(w.criterion, map[model.InvocationRef]string{clean: "supports"})))
+}

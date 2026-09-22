@@ -68,7 +68,7 @@ func gateRejectedMembers(snapshot reduce.Snapshot, event model.TypedEvent, provi
 			continue
 		}
 		for _, fact := range review.Invocations {
-			if fact.CriterionRef.State != model.Known || fact.CriterionRef.Value == nil || *fact.CriterionRef.Value != proof.CriterionRef {
+			if member, _ := reduce.CriterionFamily(fact.CriterionRef, proof.CriterionRef); !member {
 				continue
 			}
 			ref := model.InvocationRef{Project: review.Key.Project, InvocationID: fact.InvocationID}

@@ -1,7 +1,7 @@
 package write
 
 // Proof admission's evaluation-family checks live here: closure over admitted
-// and pending invocations carrying the criterion, per-member dispositions
+// and pending invocations carrying the criterion or an earlier revision of it, per-member dispositions
 // against the member's own computed verdict, criterion satisfaction, and
 // re-resolution of each supporting instrument's validation artifact. Rejected
 // members recorded in the ledger live in gate_rejected.go. Enabling operations,
@@ -22,8 +22,11 @@ func gateProofFamily(ctx context.Context, project store.Project, after reduce.Sn
 	if !ok {
 		return admissionFault("unknown-reference", "criterion_ref", "proof names no admitted criterion")
 	}
+	// The family includes runs under earlier revisions of this criterion: a new
+	// revision cannot erase known counterevidence.
 	carries := func(env model.InvocationEnvelope) bool {
-		return env.CriterionRef.State == model.Known && env.CriterionRef.Value != nil && *env.CriterionRef.Value == e.CriterionRef
+		member, _ := reduce.CriterionFamily(env.CriterionRef, e.CriterionRef)
+		return member
 	}
 	listed := map[model.InvocationRef]bool{}
 	for _, member := range e.Evidence {
@@ -58,6 +61,9 @@ func gateProofFamily(ctx context.Context, project store.Project, after reduce.Sn
 		inv, ok := after.Invocation(reduce.InvocationKey{Project: member.InvocationRef.Project, InvocationID: member.InvocationRef.InvocationID})
 		if !ok || inv.Seal == nil {
 			return admissionFault("pending-reconciliation", path, "member has no admitted seal")
+		}
+		if _, earlier := reduce.CriterionFamily(inv.Start.CriterionRef, e.CriterionRef); earlier {
+			continue // accounted for under the judgment, never evaluated or support
 		}
 		observation, err := resolver.Observe(ctx, criterion.Fix, *inv.Seal)
 		if err != nil {
