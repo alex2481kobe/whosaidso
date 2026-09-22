@@ -80,11 +80,11 @@ func Admit(ctx context.Context, project store.Project, request AdmitRequest) (mo
 			}
 		}
 		selfAdmission, reason := admissionDetails(request, packets)
-		reason += gateProofLimit(request.Outcome, packets)
-		review, err := model.EncodeEvent(&model.ReviewAdmit{
-			Packets: lockedRefs, Outcome: request.Outcome, Actor: request.Admitter,
-			Reason: reason, SelfAdmission: selfAdmission,
-		})
+		invocations, err := reviewedInvocations(request.Outcome, packets)
+		if err != nil {
+			return model.Bundle{}, err
+		}
+		review, err := model.EncodeEvent(&model.ReviewAdmit{Packets: lockedRefs, Outcome: request.Outcome, Actor: request.Admitter, Reason: reason, SelfAdmission: selfAdmission, Invocations: invocations})
 		if err != nil {
 			return model.Bundle{}, err
 		}

@@ -157,6 +157,22 @@ type ReviewAdmit struct {
 	// Omission is reserved for legacy reviews and projects as unknown, never false.
 	// When present, every reviewed packet must have exactly one explicit state.
 	SelfAdmission map[ID]SelfAdmissionState `json:"self_admission,omitempty"`
+	// Invocations (R10.3) records, on a rejected or correction-requested review,
+	// each invocation.start/seal its packets carried: extracted facts, never the
+	// packet. A refused run stays a ledger-visible criterion family member, so
+	// proof validity never depends on which machine's intake holds its bytes.
+	Invocations []ReviewedInvocation `json:"invocations,omitempty"`
+}
+
+// ReviewedInvocation is one invocation event of a packet that was not accepted.
+// EnvelopeDigest is the digest of the canonical envelope encoding, so a later
+// admitted start or seal for the same invocation can be compared byte for byte.
+type ReviewedInvocation struct {
+	Packet         ID                         `json:"packet"`
+	Event          string                     `json:"event"`
+	InvocationID   ID                         `json:"invocation_id"`
+	CriterionRef   Availability[CriterionRef] `json:"criterion_ref"`
+	EnvelopeDigest Digest                     `json:"envelope_digest"`
 }
 
 // SelfAdmissionState records identity equality, not permission to admit.
@@ -195,6 +211,18 @@ func (e ReviewAdmit) validate(p string) error {
 			if Blank(e.Actor.ID) && state != SelfAdmissionUnknown {
 				return invalid(p+".self_admission", "an unknown admitter requires an unknown comparison")
 			}
+		}
+	}
+	if e.Outcome == "accepted" && len(e.Invocations) != 0 {
+		return invalid(p+".invocations", "an accepted review admits its invocations as events, not as review facts")
+	}
+	for i, inv := range e.Invocations {
+		at := fmt.Sprintf("%s.invocations[%d]", p, i)
+		if !seen[inv.Packet] {
+			return invalid(at+".packet", "names an unreviewed packet")
+		}
+		if err := oneOf(inv.Event, at+".event", "invocation.start", "invocation.seal"); err != nil {
+			return err
 		}
 	}
 	return oneOf(e.Outcome, p+".outcome", "accepted", "correction-requested", "rejected")

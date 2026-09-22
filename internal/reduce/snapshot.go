@@ -187,7 +187,7 @@ func (s Snapshot) Reviews() []Review {
 		}
 		return out[i].Key.CommandID < out[j].Key.CommandID
 	})
-	return out
+	return deepCopySlice(out)
 }
 
 // Sources returns every captured source, sorted by project then id.

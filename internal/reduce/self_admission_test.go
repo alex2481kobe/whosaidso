@@ -126,7 +126,7 @@ func TestReviewSelfAdmissionEmptySnapshot(t *testing.T) {
 	if got := s.Reviews(); got == nil || len(got) != 0 {
 		t.Fatalf("empty snapshot should have an empty audit inventory: %+v", got)
 	}
-	if got, ok := s.Review(ReviewKey{Project: testProject, CommandID: newID("A")}); ok || got != (Review{}) {
+	if got, ok := s.Review(ReviewKey{Project: testProject, CommandID: newID("A")}); ok || !reflect.DeepEqual(got, Review{}) {
 		t.Fatalf("missing packet invented a review: %+v", got)
 	}
 }

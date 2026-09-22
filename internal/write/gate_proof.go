@@ -2,10 +2,10 @@ package write
 
 // U12 operations the gate enables — claim/instrument revision, trust withdrawal,
 // criterion fixing, invocation start/seal, proof, task closure, decision
-// open/revise and correction — and the post-replay checks that need artifact
-// bytes, ledger times or the intake inbox live here. Operations that stay
-// disabled (decision disposition, supersession, review, disposal) and the admission
-// transaction itself do not. Proof family evaluation lives in gate_family.go.
+// open/revise/dispose and correction — and the post-replay checks that need
+// artifact bytes, ledger times or pending intake live here. Operations that stay
+// disabled (supersession, review, disposal) and the admission transaction
+// itself do not. Proof family evaluation lives in gate_family.go.
 
 import (
 	"context"
@@ -17,10 +17,6 @@ import (
 	"datum/internal/store"
 )
 
-// proofIntakeLimit is recorded with every admitted proof. Completeness is
-// checked against what this machine holds, never against intake it never saw.
-const proofIntakeLimit = "Proof family completeness covered the ledger and this machine's intake inbox only, including rejected packets whose bytes remain there; invocations captured elsewhere and never delivered here could not be checked."
-
 func gateProofOperation(event model.TypedEvent, author model.Actor) (*model.Provenance, error) {
 	switch e := event.(type) {
 	case *model.ClaimRevise:
@@ -29,6 +25,15 @@ func gateProofOperation(event model.TypedEvent, author model.Actor) (*model.Prov
 		return &e.Provenance, nil
 	case *model.DecisionRevise:
 		return &e.Provenance, nil
+	case *model.DecisionDispose:
+		// R10.1 as overruled: an agent writes the packet that records a ruling.
+		// The packet author stays whoever wrote it and is never checked against
+		// or replaced by the authority; author, authority and the exact quote
+		// (nonblank by schema) are all recorded: visible, not blocked.
+		if model.Blank(e.Authority.Actor.ID) {
+			return nil, admissionFault("authority-unavailable", "authority.actor", "a disposition must name the authority that ruled")
+		}
+		return nil, nil
 	case *model.TaskClose:
 		// Authority is checked against its durable carrier in gateCloseAuthority;
 		// whether the closure takes effect is checked after replay.
@@ -114,14 +119,21 @@ func gateProofArtifacts(event model.TypedEvent) []model.ArtifactRef {
 		gateWalkArtifacts(reflect.ValueOf(event), &out)
 		return out
 	case *model.TaskClose:
-		out := []model.ArtifactRef{}
-		gateWalkArtifacts(reflect.ValueOf(event), &out)
-		// The ruling itself is read through the authority's selector too.
-		selected := e.Authority.SourceRef
-		selected.Selector = e.Authority.Selector
-		return append(out, selected)
+		return gateAuthorityArtifacts(event, e.Authority)
+	case *model.DecisionDispose:
+		return gateAuthorityArtifacts(event, e.Authority)
 	}
 	return nil
+}
+
+// gateAuthorityArtifacts walks the payload and also reads the ruling itself
+// through the authority's selector.
+func gateAuthorityArtifacts(event model.TypedEvent, authority model.Authority) []model.ArtifactRef {
+	out := []model.ArtifactRef{}
+	gateWalkArtifacts(reflect.ValueOf(event), &out)
+	selected := authority.SourceRef
+	selected.Selector = authority.Selector
+	return append(out, selected)
 }
 
 func gateWalkArtifacts(value reflect.Value, out *[]model.ArtifactRef) {
@@ -168,6 +180,10 @@ func gateProofs(ctx context.Context, project store.Project, prefix []model.Bundl
 				if err := gateCriterionFrozen(prefix, before, project.ID, e.Envelope); err != nil {
 					return err
 				}
+			case *model.InvocationSeal:
+				if err := gatePendingRealSeal(project, after, e.Envelope); err != nil {
+					return err
+				}
 			case *model.ProofAdmit:
 				if err := gateProofFamily(ctx, project, after, e); err != nil {
 					return err
@@ -204,21 +220,6 @@ func gateCriterionFrozen(prefix []model.Bundle, before reduce.Snapshot, project 
 		}
 	}
 	return admissionFault("criterion-not-frozen", "envelope.criterion_ref", "the criterion's admitting bundle is not in the prefix")
-}
-
-// gateProofLimit is the review-reason suffix recording proofIntakeLimit.
-func gateProofLimit(outcome string, packets []model.Packet) string {
-	if outcome != "accepted" {
-		return ""
-	}
-	for _, packet := range packets {
-		for _, raw := range packet.Events {
-			if raw.Type == "proof.admit" {
-				return "\n" + proofIntakeLimit
-			}
-		}
-	}
-	return ""
 }
 
 // gateCloseAuthority: a closure cites a named authority whose exact words are an

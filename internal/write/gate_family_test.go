@@ -223,7 +223,6 @@ func TestGateOperationsStillUnavailable(t *testing.T) {
 	// Isolate the operation boundary so schema or reference failures cannot
 	// conceal a widened allowlist. These stay closed until a unit opens them.
 	for _, event := range []model.TypedEvent{
-		&model.DecisionDispose{},
 		&model.Supersede{}, &model.ReviewAdmit{}, &model.ArtifactDispose{},
 	} {
 		t.Run(string(event.EventType()), func(t *testing.T) {
@@ -256,51 +255,6 @@ func TestProofRefusesIncomparableOrUnreadableSupport(t *testing.T) {
 			w.f.accept(w.f.capture(nil, w.proof(w.criterion, map[model.InvocationRef]string{first: "supports", second: "inconclusive"})))
 			if w.status(t) != reduce.StatusProven {
 				t.Fatal("control with the unusable member marked inconclusive did not prove")
-			}
-		})
-	}
-}
-
-// A rejected contradicting run never leaves the family. It is accounted for
-// only when the ledger holds that exact invocation, so a replacement seal with
-// a different (passing) reading cannot stand in for the rejected one.
-func TestProofRejectedRunStaysInTheFamily(t *testing.T) {
-	for _, route := range []string{"rejected-failing-run", "correction-requested", "substitute-passing-seal", "recaptured-identical"} {
-		t.Run(route, func(t *testing.T) {
-			w := newProofWorld(t, true)
-			pass, s1, e1 := w.run(w.criterion, proofPass)
-			w.f.accept(s1, e1)
-			env := w.envelope(w.criterion)
-			fail := model.InvocationRef{Project: w.f.project.ID, InvocationID: env.InvocationID}
-			start := w.f.capture(nil, &model.InvocationStart{Envelope: env})
-			failSeal := proofSealed(env, proofFail)
-			seal := w.f.capture([][]byte{[]byte(proofFail)}, failSeal)
-			disposition := w.f.request(start, seal)
-			disposition.Outcome = "rejected"
-			if route == "correction-requested" {
-				disposition.Outcome = route
-			}
-			if _, err := Admit(context.Background(), w.f.project, disposition); err != nil {
-				t.Fatal(err)
-			}
-			members := map[model.InvocationRef]string{pass: "supports"}
-			switch route {
-			case "rejected-failing-run", "correction-requested":
-				w.f.refuse(w.f.request(w.f.capture(nil, w.proof(w.criterion, members))), "rejected-family-member")
-			case "substitute-passing-seal":
-				// Same invocation, a passing reading nobody observed, captured fresh.
-				w.f.accept(w.f.capture(nil, &model.InvocationStart{Envelope: env}), w.f.capture([][]byte{[]byte(proofPass)}, proofSealed(env, proofPass)))
-				members[fail] = "supports"
-				w.f.refuse(w.f.request(w.f.capture(nil, w.proof(w.criterion, members))), "rejected-family-member")
-			case "recaptured-identical":
-				// The same bytes admitted: the run is back in the admitted family,
-				// where its failing reading is counterevidence like any other.
-				w.f.accept(w.f.capture(nil, &model.InvocationStart{Envelope: env}), w.f.capture([][]byte{[]byte(proofFail)}, failSeal))
-				members[fail] = "inconclusive"
-				w.f.refuse(w.f.request(w.f.capture(nil, w.proof(w.criterion, members))), "counterevidence-unresolved")
-			}
-			if w.status(t) != reduce.StatusMeasured {
-				t.Fatal("a rejected failing run was hidden by rejection")
 			}
 		})
 	}

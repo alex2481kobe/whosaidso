@@ -187,6 +187,12 @@ func (s *state) checkReferences(b model.Bundle, idx int, e model.TypedEvent) err
 			}
 		case r.Invocation != nil:
 			if _, ok := s.invocations[invocationKey(*r.Invocation)]; !ok {
+				if rejected, err := s.rejectedEvidence(b, idx, e, *r.Invocation, r.Path); rejected {
+					if err != nil {
+						return err
+					}
+					continue
+				}
 				return faultAt(CodeUnknownReference, b.Sequence, idx, r.Path,
 					fmt.Sprintf("no admitted invocation %s", r.Invocation.InvocationID))
 			}

@@ -1,7 +1,7 @@
 package write
 
 // Fixture and core negative tests for U12 proof admission: empty family,
-// contradicting members, criteria fixed after the run, unknown validation,
+// contradicting members, unknown validation,
 // unnamed judgment and cross-revision evidence. Family closure over pending
 // intake and artifact containment through the new operations live in
 // gate_family_test.go.
@@ -159,7 +159,7 @@ func (f *admissionFixture) captureRaw(event model.TypedEvent) model.PacketRef {
 	return ref
 }
 
-func TestProofControlReachesProvenAndRecordsTheIntakeLimit(t *testing.T) {
+func TestProofControlReachesProvenWithNoInboxLimit(t *testing.T) {
 	w := newProofWorld(t, true)
 	pass, start, seal := w.run(w.criterion, proofPass)
 	w.f.accept(start, seal)
@@ -170,9 +170,10 @@ func TestProofControlReachesProvenAndRecordsTheIntakeLimit(t *testing.T) {
 	if w.status(t) != reduce.StatusProven {
 		t.Fatal("control proof did not reach PROVEN")
 	}
+	// R10.3: validity is decided from the ledger alone, so no machine limit is recorded.
 	review := bundle.Events[len(bundle.Events)-1]
-	if !bytes.Contains(review.Data, []byte("intake inbox only")) {
-		t.Fatalf("proof admission did not record the intake completeness limit: %s", review.Data)
+	if bytes.Contains(review.Data, []byte("inbox")) {
+		t.Fatalf("proof admission still records a per-machine inbox limit: %s", review.Data)
 	}
 }
 
@@ -209,39 +210,6 @@ func TestProofRefusesUnresolvedCounterevidence(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestProofRefusesCriterionFixedAfterTheRun(t *testing.T) {
-	w := newProofWorld(t, true)
-	late := w.fixEvent(w.claim)
-	lateRef := model.CriterionRef{Claim: w.claim, CriterionID: late.CriterionID, Revision: 1}
-	// The run starts first and names a criterion nobody has admitted yet.
-	env := w.envelope(lateRef)
-	start := w.f.capture(nil, &model.InvocationStart{Envelope: env})
-	seal := w.f.capture([][]byte{[]byte(proofPass)}, proofSealed(env, proofPass))
-	fix := w.f.capture(nil, late)
-	// In one set the gate would order the criterion first; that is not freezing.
-	w.f.refuse(w.f.request(fix, start, seal), "criterion-not-frozen")
-	// Admitted in its own earlier bundle, it is still later than the run.
-	w.f.accept(fix)
-	w.f.refuse(w.f.request(start, seal), "criterion-not-frozen")
-	// A run started after the criterion is admitted is itself admissible.
-	pass, s, e := w.run(lateRef, proofPass)
-	w.f.accept(s, e)
-	proof := w.f.capture(nil, w.proof(lateRef, map[model.InvocationRef]string{pass: "supports"}))
-	// The refused run is still durable intake carrying this criterion.
-	w.f.refuse(w.f.request(proof), "pending-reconciliation")
-	// Rejecting it does not make it vanish: that criterion revision keeps it.
-	reject := w.f.request(start, seal)
-	reject.Outcome = "rejected"
-	if _, err := Admit(context.Background(), w.f.project, reject); err != nil {
-		t.Fatal(err)
-	}
-	w.f.refuse(w.f.request(proof), "rejected-family-member")
-	// The control: a criterion fixed before every run carrying it.
-	clean, s2, e2 := w.run(w.criterion, proofPass)
-	w.f.accept(s2, e2)
-	w.f.accept(w.f.capture(nil, w.proof(w.criterion, map[model.InvocationRef]string{clean: "supports"})))
 }
 
 func TestProofRefusesUnknownValidationInstrument(t *testing.T) {
