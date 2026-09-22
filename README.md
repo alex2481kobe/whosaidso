@@ -58,7 +58,7 @@ datum
 |          3 files, 1213 lines (1204 test), largest run.go at 574 -- uses evidence, model, reduce, store
 `-- tools/
     `-- archtree       instrument that reports how this module's packages fit together
-           1 files, 355 lines (0 test), largest main.go at 355 -- leaf
+           3 files, 386 lines (0 test), largest scan.go at 232 -- leaf
 ```
 <!-- archtree:end -->
 
