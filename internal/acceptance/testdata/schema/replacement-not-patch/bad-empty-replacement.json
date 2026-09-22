@@ -1,0 +1,30 @@
+{
+  "data": {
+    "expected_revision": 2,
+    "provenance": {
+      "author": {
+        "id": "lane-e"
+      },
+      "source_refs": [
+        {
+          "git": {
+            "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "object_format": "sha1",
+            "path": "documentation/design/research/BUILD-PLAN-DATUM.md"
+          },
+          "kind": "git",
+          "selector": {
+            "kind": "whole"
+          }
+        }
+      ]
+    },
+    "replacement": {},
+    "target": {
+      "project": "datum/acceptance",
+      "record_id": "01K5V8R0010000000000000000",
+      "revision": 2
+    }
+  },
+  "type": "task.amend"
+}

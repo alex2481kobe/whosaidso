@@ -1,0 +1,116 @@
+{
+  "data": {
+    "expected_revision": 2,
+    "provenance": {
+      "author": {
+        "id": "lane-e"
+      },
+      "source_refs": [
+        {
+          "git": {
+            "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "object_format": "sha1",
+            "path": "documentation/design/research/BUILD-PLAN-DATUM.md"
+          },
+          "kind": "git",
+          "selector": {
+            "kind": "whole"
+          }
+        }
+      ]
+    },
+    "replacement": {
+      "acceptance_criteria": [
+        {
+          "criterion": "each negative fails for its own reason",
+          "id": "01K5V8R0210000000000000000",
+          "revision": 1
+        }
+      ],
+      "constraint_refs": [
+        {
+          "project": "datum/acceptance",
+          "record_id": "01K5V8R0230000000000000000",
+          "revision": 2
+        }
+      ],
+      "context_refs": [
+        {
+          "project": "datum/acceptance",
+          "record_id": "01K5V8R0220000000000000000",
+          "revision": 3
+        }
+      ],
+      "intent": "refuse a payload that can carry a forged observation",
+      "next_actor": {
+        "id": "coordinator"
+      },
+      "prerequisites": [
+        {
+          "authority": {
+            "actor": {
+              "id": "owner"
+            },
+            "scope": {
+              "applies_when": "the payload is decoded at the wire boundary",
+              "context_refs": [
+                {
+                  "project": "datum/acceptance",
+                  "record_id": "01K5V8R0250000000000000000",
+                  "revision": 1
+                }
+              ],
+              "limitations": "says nothing about whether this event may be admitted",
+              "source_paths": [
+                "internal/model/records.go"
+              ]
+            },
+            "selector": {
+              "kind": "json-pointer",
+              "pointer": "/rulings/3"
+            },
+            "source_ref": {
+              "git": {
+                "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "object_format": "sha1",
+                "path": "OWNER-RULINGS-DATUM.md"
+              },
+              "kind": "git",
+              "selector": {
+                "kind": "whole"
+              }
+            }
+          },
+          "kind": "claim-proof",
+          "target": {
+            "project": "datum/acceptance",
+            "record_id": "01K5V8R0240000000000000000",
+            "revision": 4
+          },
+          "waiver_policy": "allow-with-authority"
+        }
+      ],
+      "scope": {
+        "applies_when": "the payload is decoded at the wire boundary",
+        "context_refs": [
+          {
+            "project": "datum/acceptance",
+            "record_id": "01K5V8R0200000000000000000",
+            "revision": 1
+          }
+        ],
+        "limitations": "says nothing about whether this event may be admitted",
+        "source_paths": [
+          "internal/model/records.go"
+        ]
+      },
+      "subject": "internal/model/records.go"
+    },
+    "target": {
+      "project": "datum/acceptance",
+      "record_id": "01K5V8R0010000000000000000",
+      "revision": 2
+    }
+  },
+  "type": "task.amend"
+}

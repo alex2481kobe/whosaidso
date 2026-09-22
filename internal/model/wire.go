@@ -282,7 +282,7 @@ func ValidDigest(s Digest) bool {
 // blank reports whether a required semantic string is effectively empty. A
 // single space is not a value. This is the defect the contract names directly:
 // a "non-empty" rule that a space satisfies is not a rule.
-func blank(s string) bool { return strings.TrimSpace(s) == "" }
+func blank(s string) bool { return Blank(s) }
 
 func SameActor(a, b Actor) bool {
 	// An actor carrying BOTH branches is malformed, and two malformed actors

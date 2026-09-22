@@ -1,0 +1,14 @@
+{
+  "data": {
+    "actor": {
+      "id": "lane-e"
+    },
+    "attempt_id": "01K5V8R0700000000000000000",
+    "task": {
+      "project": "datum/acceptance",
+      "record_id": "01K5V8R0010000000000000000",
+      "revision": 2
+    }
+  },
+  "type": "record.update"
+}

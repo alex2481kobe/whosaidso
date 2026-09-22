@@ -3,7 +3,6 @@ package store
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -127,10 +126,15 @@ func TestDistinctDeclaredProjectsSharingGit(t *testing.T) {
 			t.Fatal(err)
 		}
 		dir, err := IntakeDir(project)
-		if err != nil || seen[dir] || filepath.Base(dir) != base64.RawURLEncoding.EncodeToString([]byte(id)) {
+		// Assert the PROPERTY, not the encoding. This originally required the
+		// name to equal base64 of the id, which pinned an implementation rather
+		// than the rule, and the rule is that two declared ids never share an
+		// inbox. Compared case-folded, because the filesystem folds case and
+		// that is what actually decides whether two names are one directory.
+		if err != nil || seen[strings.ToLower(dir)] {
 			t.Fatalf("inbox identity collision: %s, %v", dir, err)
 		}
-		seen[dir] = true
+		seen[strings.ToLower(dir)] = true
 		capturedControl(t, project, commandID(1), fmt.Sprintf("source %d", i))
 		packets, err := ReadIntake(project, nil)
 		if err != nil || len(packets) != 1 || packets[0].Project != id {

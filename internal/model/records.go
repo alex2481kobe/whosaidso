@@ -9,7 +9,38 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 )
+
+// Blank reports whether a required semantic string carries nothing a reader can
+// see. strings.TrimSpace answers "is every rune Unicode White_Space", which is a
+// different question: a zero width space, a byte order mark, a right to left
+// mark and a word joiner are all category Cf, render as nothing, and are not
+// White_Space. Lane E accepted an instrument whose blind_to was U+200B, which is
+// an instrument declaring no blind spot at all.
+//
+// This is the one emptiness rule. Everything that needs one calls it.
+// stripInvisible removes what Blank would ignore, so a reserved name cannot be
+// smuggled past an exact comparison with padding a reader cannot see. Found by
+// lane E: a knob called "status " was not the reserved name "status".
+func stripInvisible(s string) string {
+	return strings.TrimSpace(strings.Map(func(r rune) rune {
+		if unicode.Is(unicode.Cf, r) || r == '\uFEFF' {
+			return -1
+		}
+		return r
+	}, s))
+}
+
+func Blank(s string) bool {
+	for _, r := range s {
+		if unicode.IsSpace(r) || unicode.Is(unicode.Cf, r) || r == '\uFEFF' {
+			continue
+		}
+		return false
+	}
+	return true
+}
 
 // Availability keeps absence separate from observed zero, false, or an empty set.
 // U07 evaluates it, U10 captures it, and U12 refuses inferences it cannot support.
@@ -33,7 +64,7 @@ func (a Availability[T]) validate(p string) error {
 			return invalid(p, "known requires a value and no reason")
 		}
 	case Unknown:
-		if a.Value != nil || strings.TrimSpace(a.Reason) == "" {
+		if a.Value != nil || Blank(a.Reason) {
 			return invalid(p, "unknown requires a reason and no value")
 		}
 	default:
@@ -104,13 +135,13 @@ func (p TaskProgress) validate(at string) error {
 	// not: a summary of " " reads as recorded progress and says nothing. This
 	// is the same defect as a minLength rule a single space satisfies, which is
 	// the bug this whole system exists to catch.
-	if p.Summary != "" && strings.TrimSpace(p.Summary) == "" {
+	if p.Summary != "" && Blank(p.Summary) {
 		return invalid(at+".summary", "present but blank")
 	}
-	if p.NextAction != "" && strings.TrimSpace(p.NextAction) == "" {
+	if p.NextAction != "" && Blank(p.NextAction) {
 		return invalid(at+".next_action", "present but blank")
 	}
-	if strings.TrimSpace(p.Summary) == "" && strings.TrimSpace(p.NextAction) == "" {
+	if Blank(p.Summary) && Blank(p.NextAction) {
 		return invalid(at, "progress needs a summary or next action")
 	}
 	return nil
@@ -212,7 +243,7 @@ type InstrumentValidation struct {
 func (s InstrumentSpec) validate(p string) error {
 	seen := map[string]bool{}
 	for i, n := range s.ConfigSurface {
-		if n == "status" || seen[n] {
+		if stripInvisible(n) == "status" || seen[n] {
 			return invalid(fmt.Sprintf("%s.config_surface[%d]", p, i), "reserved or duplicate configuration name")
 		}
 		seen[n] = true
@@ -482,11 +513,11 @@ func (o ProcessOutcome) validate(p string) error {
 			return invalid(p, "exit requires only a nonnegative exit code")
 		}
 	case "signal":
-		if o.Signal == nil || strings.TrimSpace(*o.Signal) == "" || o.ExitCode != nil || o.Diagnostic != nil {
+		if o.Signal == nil || Blank(*o.Signal) || o.ExitCode != nil || o.Diagnostic != nil {
 			return invalid(p, "signal requires only an observed signal")
 		}
 	case "spawn-failed":
-		if o.Diagnostic == nil || strings.TrimSpace(*o.Diagnostic) == "" || o.ExitCode != nil || o.Signal != nil {
+		if o.Diagnostic == nil || Blank(*o.Diagnostic) || o.ExitCode != nil || o.Signal != nil {
 			return invalid(p, "spawn failure requires only a diagnostic")
 		}
 	default:
@@ -586,7 +617,7 @@ func (l VisualLimits) validate(p string) error {
 	}{{"unviewed_surfaces", l.UnviewedSurfaces}, {"untested_backends", l.UntestedBackends}} {
 		if field.value.State == Known && field.value.Value != nil {
 			for i, s := range *field.value.Value {
-				if strings.TrimSpace(s) == "" {
+				if Blank(s) {
 					return invalid(fmt.Sprintf("%s.%s[%d]", p, field.name, i), "whitespace-only is empty")
 				}
 			}
@@ -606,14 +637,14 @@ func (v VisualObservation) validate(p string) error {
 	return nil
 }
 func observedText(v Availability[string], p string) error {
-	if v.State == Known && v.Value != nil && strings.TrimSpace(*v.Value) == "" {
+	if v.State == Known && v.Value != nil && Blank(*v.Value) {
 		return invalid(p, "known observation needs nonblank text")
 	}
 	return nil
 }
 
 func (e InvocationEnvelope) validate(p string) error {
-	if len(e.Argv) == 0 || strings.TrimSpace(e.Argv[0]) == "" {
+	if len(e.Argv) == 0 || Blank(e.Argv[0]) {
 		return invalid(p+".argv", "an executable argv array is required")
 	}
 	if e.ObservedAt.State == Known && e.ObservedAt.Value != nil && e.ObservedAt.Value.Before(e.StartedAt) {
@@ -711,7 +742,12 @@ func checkJSONShape(tree any, t reflect.Type, p string) error {
 		}
 		seen := map[string]bool{}
 		for _, m := range fields {
-			if m.key == "status" {
+			if strings.TrimSpace(strings.Map(func(r rune) rune {
+				if unicode.Is(unicode.Cf, r) || r == '\uFEFF' {
+					return -1
+				}
+				return r
+			}, m.key)) == "status" {
 				return invalid(p+".status", "status is a projection, never writable")
 			}
 			f, ok := known[m.key]
@@ -720,7 +756,7 @@ func checkJSONShape(tree any, t reflect.Type, p string) error {
 			}
 			seen[m.key] = true
 			if f.Tag.Get("semantic") == "text" {
-				if text, ok := m.value.(string); ok && strings.TrimSpace(text) == "" {
+				if text, ok := m.value.(string); ok && Blank(text) {
 					return invalid(p+"."+m.key, "whitespace-only is empty")
 				}
 			}
@@ -739,7 +775,7 @@ func checkJSONShape(tree any, t reflect.Type, p string) error {
 			return invalid(p, "expected object")
 		}
 		for _, m := range fields {
-			if strings.TrimSpace(m.key) == "" || m.key == "status" {
+			if Blank(m.key) || m.key == "status" {
 				return invalid(p+"."+m.key, "blank or reserved map key")
 			}
 			if err := checkJSONShape(m.value, t.Elem(), p+"."+m.key); err != nil {
@@ -796,7 +832,7 @@ func validateValue(v reflect.Value, p string) error {
 			return invalid(p, "not a ULID")
 		}
 	case ProjectID:
-		if strings.TrimSpace(string(s)) == "" {
+		if Blank(string(s)) {
 			return invalid(p, "empty project")
 		}
 	case Digest:
@@ -811,7 +847,7 @@ func validateValue(v reflect.Value, p string) error {
 		if err := validActor(s, p); err != nil {
 			return err
 		}
-		if strings.TrimSpace(s.ID) == "" && strings.TrimSpace(s.UnknownReason) == "" {
+		if Blank(s.ID) && Blank(s.UnknownReason) {
 			return invalid(p, "actor identity or unknown reason is blank")
 		}
 	case ArtifactRef:
@@ -826,7 +862,7 @@ func validateValue(v reflect.Value, p string) error {
 			return err
 		}
 	case ContentPin:
-		if strings.TrimSpace(s.MediaType) == "" {
+		if Blank(s.MediaType) {
 			return invalid(p+".media_type", "blank media type")
 		}
 	case Locator:
@@ -875,12 +911,12 @@ func validateValue(v reflect.Value, p string) error {
 				continue
 			}
 			at := p + "." + tag
-			if f.Tag.Get("semantic") == "text" && strings.TrimSpace(fv.String()) == "" {
+			if f.Tag.Get("semantic") == "text" && Blank(fv.String()) {
 				return invalid(at, "whitespace-only is empty")
 			}
 			if f.Tag.Get("semantic") == "texts" {
 				for j := 0; j < fv.Len(); j++ {
-					if strings.TrimSpace(fv.Index(j).String()) == "" {
+					if Blank(fv.Index(j).String()) {
 						return invalid(fmt.Sprintf("%s[%d]", at, j), "whitespace-only is empty")
 					}
 				}
@@ -923,7 +959,7 @@ func relativePaths(paths []string, p string) error {
 	return nil
 }
 func relativePath(s, p string) error {
-	if strings.TrimSpace(s) == "" || strings.ContainsAny(s, "\\\x00") || path.IsAbs(s) || strings.Contains(s, ":") {
+	if Blank(s) || strings.ContainsAny(s, "\\\x00") || path.IsAbs(s) || strings.Contains(s, ":") {
 		return invalid(p, "expected a nonblank project-relative path")
 	}
 	for _, part := range strings.Split(s, "/") {

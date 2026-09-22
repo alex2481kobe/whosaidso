@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -49,7 +48,14 @@ func IntakeDir(project Project) (string, error) {
 	if err != nil || !filepath.IsAbs(home) {
 		return "", storeFault("io", "home", "an absolute user home directory is required")
 	}
-	encoded := base64.RawURLEncoding.EncodeToString([]byte(project.ID))
+	// Lowercase hex, not base64. base64 IS injective over byte strings, which is
+	// a true measurement of the wrong property: the inbox is a filesystem PATH,
+	// and macOS APFS folds case, so "datum/aaa" and "datum/aaG" encode to names
+	// differing only in case and become ONE directory. Both projects' packets
+	// land together and then neither can read its own. Found by lane E.
+	//
+	// Hex has one case, so two different ids cannot fold onto each other.
+	encoded := hex.EncodeToString([]byte(project.ID))
 	return filepath.Join(home, ".datum", "intake", encoded), nil
 }
 

@@ -1,0 +1,65 @@
+{
+  "data": {
+    "id": "01K5V8R0040000000000000000",
+    "provenance": {
+      "author": {
+        "id": "lane-e"
+      },
+      "source_refs": [
+        {
+          "git": {
+            "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "object_format": "sha1",
+            "path": "documentation/design/research/BUILD-PLAN-DATUM.md"
+          },
+          "kind": "git",
+          "selector": {
+            "kind": "whole"
+          }
+        }
+      ]
+    },
+    "spec": {
+      "blind_to": "whether the referenced records exist in the ledger",
+      "config_surface": [
+        "strict",
+        "max_depth"
+      ],
+      "dangerous_defaults": [
+        "strict defaults to on and hides a permissive caller"
+      ],
+      "implementation_ref": {
+        "git": {
+          "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "object_format": "sha1",
+          "path": "internal/model/events.go"
+        },
+        "kind": "git",
+        "selector": {
+          "kind": "whole"
+        }
+      },
+      "not_answered": "whether the authored claim is true",
+      "question_answered": "does this payload decode into exactly one typed event",
+      "valid_range": "payloads under one megabyte of UTF-8 JSON",
+      "validation": {
+        "state": "KNOWN",
+        "value": {
+          "ref": {
+            "git": {
+              "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "object_format": "sha1",
+              "path": "internal/model/events_test.go"
+            },
+            "kind": "git",
+            "selector": {
+              "kind": "whole"
+            }
+          },
+          "version": "u02-1"
+        }
+      }
+    }
+  },
+  "type": "instrument.declare"
+}

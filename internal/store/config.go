@@ -110,6 +110,13 @@ func parseConfig(data []byte, path string) (map[string]string, error) {
 		if _, exists := values[key]; !exists {
 			return nil, storeFault("config-missing-key", path, "missing required key "+key)
 		}
+		if model.Blank(values[key]) {
+			// Discover never applied the emptiness rule that model already
+			// had, so an id of one space became a real project identity and
+			// then a real inbox name. Found by lane E.
+			return nil, storeFault("config-invalid-value", path,
+				"value of "+key+" renders as nothing")
+		}
 	}
 	return values, nil
 }

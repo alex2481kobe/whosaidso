@@ -219,8 +219,27 @@ type InvocationSeal struct {
 }
 
 func (e InvocationStart) validate(p string) error {
-	if e.Envelope.Outcome.State != Unknown || e.Envelope.ObservedAt.State != Unknown || e.Envelope.OutputRefs.State != Unknown {
-		return invalid(p+".envelope", "pre-launch intent cannot claim a terminal observation or outputs")
+	// Every field here is something only a completed run can know. The guard
+	// originally covered three of six, so a pre-launch intent could assert the
+	// conditions it ran under, an effective configuration the process never
+	// reported, and a clean isolation, before anything had launched. Those are
+	// exactly the facts a proof compares when deciding whether two runs are
+	// comparable and whether isolation held. Found by lane E.
+	for _, f := range []struct {
+		name  string
+		state AvailabilityState
+	}{
+		{"outcome", e.Envelope.Outcome.State},
+		{"observed_at", e.Envelope.ObservedAt.State},
+		{"output_refs", e.Envelope.OutputRefs.State},
+		{"conditions_observed", e.Envelope.ConditionsObserved.State},
+		{"config_effective", e.Envelope.ConfigEffective.State},
+		{"isolation", e.Envelope.Isolation.State},
+	} {
+		if f.state != Unknown {
+			return invalid(p+".envelope."+f.name,
+				"pre-launch intent cannot claim what only a completed run observes")
+		}
 	}
 	return nil
 }
@@ -287,7 +306,7 @@ type ResponsibleJudgment struct {
 }
 
 func (j ResponsibleJudgment) validate(p string) error {
-	if strings.TrimSpace(j.Actor.ID) == "" {
+	if Blank(j.Actor.ID) {
 		return invalid(p+".actor", "proof judgment requires a named responsible actor")
 	}
 	return nil
