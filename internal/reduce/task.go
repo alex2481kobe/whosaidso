@@ -88,10 +88,19 @@ type TaskProjection struct {
 	CommitsDenied bool
 }
 
-// Task projects one task. The second result is false when no TASK with that
-// identity is admitted, which is different from a task with nothing to say.
+// Task projects one task at its current revision. The second result is false
+// when no TASK with that identity is admitted, which is different from a task
+// with nothing to say.
 func (s Snapshot) Task(id Ident) (TaskProjection, bool) {
 	p, ok := s.inner().task(id)
+	return deepCopy(p), ok
+}
+
+// TaskAt projects one exact task revision: its prerequisites and acceptance
+// criteria are that revision's, never the current one's. Attempts, holds and
+// closure belong to the task identity and are shared by every revision.
+func (s Snapshot) TaskAt(ref model.RecordRef) (TaskProjection, bool) {
+	p, ok := s.inner().taskRevision(recordKey(ref))
 	return deepCopy(p), ok
 }
 
@@ -128,7 +137,11 @@ func (s *state) task(id Ident) (TaskProjection, bool) {
 	if !ok {
 		return TaskProjection{}, false
 	}
-	key := RecordKey{Project: id.Project, ID: id.ID, Revision: rev}
+	return s.taskRevision(RecordKey{Project: id.Project, ID: id.ID, Revision: rev})
+}
+
+func (s *state) taskRevision(key RecordKey) (TaskProjection, bool) {
+	id := Ident{Project: key.Project, ID: key.ID}
 	rec, ok := s.records[key]
 	if !ok || rec.Kind != model.Task {
 		return TaskProjection{}, false
@@ -264,12 +277,15 @@ func (s *state) prerequisites(rec Record) []PrerequisiteResult {
 		switch r.Kind {
 		case "task-success":
 			res.Truth, res.Detail = s.closedSuccess(r.Target)
+		case "claim-proof":
+			res.Truth, res.Detail = s.claimProof(r.Target)
+		case "decision-approved":
+			res.Truth, res.Detail = s.decisionApproved(r.Target)
 		default:
-			// claim-proof and decision-approved need the CLAIM and DECISION
-			// fold, which is U06. An unreduced dependency is UNKNOWN, never
-			// TRUE, so the honest answer here blocks rather than dispatches.
+			// The model refuses any other kind at decode; an unrecognised one
+			// is UNKNOWN, never TRUE, so it blocks rather than dispatches.
 			res.Truth = TruthUnknown
-			res.Detail = r.Kind + " support is reduced in U06; an unreduced dependency is UNKNOWN"
+			res.Detail = "unrecognised prerequisite kind " + r.Kind
 		}
 		// A waiver counts only where the consumer explicitly permits one AND
 		// cites authority. A "forbid" policy is not overridable by anyone, and

@@ -601,21 +601,21 @@ func TestUnresolvedDependenciesAreUnknownNeverTrue(t *testing.T) {
 			})
 			return l
 		}},
-		{"claim proof is not folded here", func(t *testing.T) *ledgerBuilder {
+		{"cross-project claim proof", func(t *testing.T) *ledgerBuilder {
 			l := newLedger()
-			l.add(t, &model.ClaimAssert{Provenance: provenance("lane-a"), ID: newID("CMA1"), Spec: claimSpec()})
 			l.add(t, &model.TaskCreate{
 				Provenance: provenance("lane-b"), ID: newID("TSKB"),
-				Spec: taskSpec(withPrerequisite("claim-proof", ref(newID("CMA1"), 1), "forbid", nil)),
+				Spec: taskSpec(withPrerequisite("claim-proof",
+					model.RecordRef{Project: "datum/other", RecordID: newID("CMA1"), Revision: 1}, "forbid", nil)),
 			})
 			return l
 		}},
-		{"decision approval is not folded here", func(t *testing.T) *ledgerBuilder {
+		{"cross-project decision approval", func(t *testing.T) *ledgerBuilder {
 			l := newLedger()
-			l.add(t, &model.DecisionOpen{Provenance: provenance("lane-a"), ID: newID("DCS1"), Spec: decisionSpec()})
 			l.add(t, &model.TaskCreate{
 				Provenance: provenance("lane-b"), ID: newID("TSKB"),
-				Spec: taskSpec(withPrerequisite("decision-approved", ref(newID("DCS1"), 1), "forbid", nil)),
+				Spec: taskSpec(withPrerequisite("decision-approved",
+					model.RecordRef{Project: "datum/other", RecordID: newID("DCS1"), Revision: 1}, "forbid", nil)),
 			})
 			return l
 		}},

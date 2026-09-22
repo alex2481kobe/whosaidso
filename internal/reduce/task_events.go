@@ -73,6 +73,13 @@ func (s *state) start(b model.Bundle, idx int, o Origin, e *model.TaskStart) err
 				fmt.Sprintf("attempt %s is still live; use takeover", a.Key.Attempt))
 		}
 	}
+	// An attempt starts only on a READY task. BLOCKED wins over READY, so an
+	// owed prerequisite, hold, acceptance or reconciliation refuses the start
+	// here, where replay enforces it too, not only at one admission entrance.
+	if p, _ := s.taskRevision(recordKey(e.Task)); p.Status != StatusReady {
+		return faultAt(CodeInvalidTransition, b.Sequence, idx, "task",
+			fmt.Sprintf("task is %s and cannot start until it is READY", p.Status))
+	}
 	s.attempts[key] = Attempt{
 		Key:          key,
 		TaskRevision: e.Task.Revision,
