@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // HashBytes is the one hash in the system: raw SHA-256 over exact bytes.
@@ -31,6 +32,13 @@ func Encode(v any) ([]byte, error) {
 	first, err := json.Marshal(v)
 	if err != nil {
 		return nil, fault("invalid-field", "", "value cannot be encoded as JSON: "+err.Error())
+	}
+	// encoding/json silently replaces invalid UTF-8 with U+FFFD. That makes an
+	// invalid byte and a real U+FFFD produce IDENTICAL bytes and one digest -
+	// two different inputs with one identity, which is the collision a digest
+	// exists to prevent. Refuse instead. Found by lane E.
+	if !utf8.Valid(first) {
+		return nil, fault("invalid-field", "", "value contains invalid UTF-8; it would be silently rewritten")
 	}
 	tree, err := parseOrdered(first)
 	if err != nil {
@@ -58,7 +66,9 @@ func parseOrdered(b []byte) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if dec.More() {
+	// dec.More() returns false for a stray "}" or "]", so it never saw trailing
+	// garbage. Reading the next token does. Found by lane E.
+	if _, err := dec.Token(); err != io.EOF {
 		return nil, fault("invalid-json", "$", "trailing content after the top-level value")
 	}
 	return v, nil
@@ -131,6 +141,20 @@ func parseArray(dec *json.Decoder, path string) (any, error) {
 	return items, nil
 }
 
+// writeJSONString emits a JSON string literal. strconv.Quote produces GO
+// escapes - it renders a NUL as \x00, which is not valid JSON at all, so any
+// control character made the whole document unparseable. Found by lane E.
+func writeJSONString(w *bytes.Buffer, s string) {
+	// SetEscapeHTML(false) keeps <, > and & literal: still deterministic, and
+	// the bytes stay readable in a diff.
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(s)
+	w.Write(bytes.TrimRight(b.Bytes(), "\n"))
+}
+
+// writeOrdered renders the normalized tree. Keys sort; arrays do not.
 func writeOrdered(w *bytes.Buffer, v any, depth int) {
 	pad := func(n int) { w.WriteString(strings.Repeat("  ", n)) }
 	switch t := v.(type) {
@@ -145,7 +169,7 @@ func writeOrdered(w *bytes.Buffer, v any, depth int) {
 		w.WriteString("{\n")
 		for i, m := range sorted {
 			pad(depth + 1)
-			w.WriteString(strconv.Quote(m.key))
+			writeJSONString(w, m.key)
 			w.WriteString(": ")
 			writeOrdered(w, m.value, depth+1)
 			if i < len(sorted)-1 {
@@ -174,7 +198,7 @@ func writeOrdered(w *bytes.Buffer, v any, depth int) {
 	case json.Number:
 		w.WriteString(t.String()) // exact token, no reformatting
 	case string:
-		w.WriteString(strconv.Quote(t))
+		writeJSONString(w, t)
 	case bool:
 		w.WriteString(strconv.FormatBool(t))
 	case nil:
@@ -184,11 +208,65 @@ func writeOrdered(w *bytes.Buffer, v any, depth int) {
 
 // ---- strict decoding -----------------------------------------------------
 
+// envelopeKeys lists the exact JSON names each envelope accepts. Go's decoder
+// matches case-insensitively, so "Version" lands in Version and neither
+// DisallowUnknownFields nor a duplicate-key check notices. An alias that
+// overwrites a field is indistinguishable from the real one downstream.
+// Found by lane E.
+var envelopeKeys = map[string]map[string]bool{
+	"packet": {"version": true, "project": true, "command_id": true,
+		"request_digest": true, "author": true, "captured_at": true, "events": true},
+	"bundle": {"version": true, "project": true, "sequence": true, "command_id": true,
+		"predecessor": true, "request_digest": true, "admitter": true,
+		"recorded_at": true, "packets": true, "events": true},
+}
+
 func strictUnmarshal(b []byte, into any, what string) error {
-	// Two passes on purpose: the ordered parse catches duplicate keys and
-	// trailing content, which the struct decoder would silently accept.
-	if _, err := parseOrdered(b); err != nil {
+	// The DECODER accepted invalid UTF-8 even once the encoder refused it: the
+	// same collision, entering from the other side. Found by lane E.
+	if !utf8.Valid(b) {
+		return fault("invalid-json", what, "input contains invalid UTF-8")
+	}
+	// Three passes on purpose: the ordered parse catches duplicate keys and
+	// trailing content; the exact-name check catches case aliases; the struct
+	// decoder catches everything else.
+	tree, err := parseOrdered(b)
+	if err != nil {
 		return err
+	}
+	if allowed, ok := envelopeKeys[what]; ok {
+		top, isObject := tree.([]member)
+		if !isObject {
+			return fault("invalid-json", what, "top-level value is not an object")
+		}
+		for _, m := range top {
+			if !allowed[m.key] {
+				return fault("invalid-field", what+"."+m.key,
+					"unknown field, or a case variant of a known one")
+			}
+			// The envelope check stopped at the top level, so a case alias
+			// INSIDE an event still overwrote its type. Found by lane E.
+			if m.key != "events" {
+				continue
+			}
+			list, isArray := m.value.([]any)
+			if !isArray {
+				return fault("invalid-field", what+".events", "events is not an array")
+			}
+			for i, item := range list {
+				obj, isObject := item.([]member)
+				if !isObject {
+					return fault("invalid-field", fmt.Sprintf("%s.events[%d]", what, i), "event is not an object")
+				}
+				for _, em := range obj {
+					if !eventKeys[em.key] {
+						return fault("invalid-field",
+							fmt.Sprintf("%s.events[%d].%s", what, i, em.key),
+							"unknown field, or a case variant of a known one")
+					}
+				}
+			}
+		}
 	}
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.DisallowUnknownFields()
@@ -276,6 +354,11 @@ func DecodeBundle(b []byte) (Bundle, error) {
 	return bd, nil
 }
 
+// eventKeys is the exact spelling an event object accepts. The envelope check
+// stops at the top level, so a case alias INSIDE an event slipped through and
+// overwrote its type. Found by lane E.
+var eventKeys = map[string]bool{"type": true, "data": true}
+
 func validEvents(events []Event, path string) error {
 	if len(events) == 0 {
 		return fault("invalid-field", path, "no events; an empty write is not a fact")
@@ -295,6 +378,16 @@ func validEvents(events []Event, path string) error {
 		}
 	}
 	return nil
+}
+
+func lowerHex(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return len(s) > 0
 }
 
 // ValidateArtifactRef checks the tagged-locator shape: exactly one pin kind is
@@ -319,9 +412,11 @@ func ValidateArtifactRef(a ArtifactRef, path string) error {
 		} else if a.Git.ObjectFormat != "sha1" {
 			return fault("invalid-field", path+".git.object_format", `object format must be "sha1" or "sha256"`)
 		}
-		if len(a.Git.Commit) != want {
+		if len(a.Git.Commit) != want || !lowerHex(a.Git.Commit) {
+			// Length alone let "gggg...g" through - a true measurement of the
+			// wrong property. Found by lane E.
 			return fault("invalid-field", path+".git.commit",
-				fmt.Sprintf("commit must be %d hex characters for %s", want, a.Git.ObjectFormat))
+				fmt.Sprintf("commit must be %d lowercase hex characters for %s", want, a.Git.ObjectFormat))
 		}
 		if a.Git.Path == "" {
 			return fault("invalid-field", path+".git.path", "empty path")

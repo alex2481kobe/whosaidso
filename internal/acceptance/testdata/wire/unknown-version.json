@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "project": "datum/acceptance",
+  "command_id": "01K5V8Q1110000000000000000",
+  "request_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "author": {"id": "lane-e"},
+  "captured_at": "2026-09-21T12:34:56Z",
+  "events": [{"type": "task.create", "data": {}}]
+}

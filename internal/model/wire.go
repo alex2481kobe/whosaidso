@@ -133,6 +133,28 @@ type Bundle struct {
 	Events        []Event     `json:"events"`
 }
 
+// Packet and Bundle normalize their timestamps to UTC when encoding. Without
+// this the SAME INSTANT captured in two zones produced different bytes and
+// different digests - one moment with two identities, which breaks the rule
+// that two runs compare only when their conditions match. Found by lane E.
+//
+// The alias type is the standard trick to marshal a struct from inside its own
+// MarshalJSON without recursing forever.
+
+func (p Packet) MarshalJSON() ([]byte, error) {
+	type alias Packet
+	a := alias(p)
+	a.CapturedAt = a.CapturedAt.UTC()
+	return json.Marshal(a)
+}
+
+func (b Bundle) MarshalJSON() ([]byte, error) {
+	type alias Bundle
+	a := alias(b)
+	a.RecordedAt = a.RecordedAt.UTC()
+	return json.Marshal(a)
+}
+
 // Fault is a refusal with a machine-readable code and enough location to act on.
 // Diagnostic text is not an invariant; the code and location are.
 type Fault struct {
@@ -225,6 +247,13 @@ func ValidID(s ID) bool {
 	if len(s) != 26 {
 		return false
 	}
+	// 26 Crockford characters encode 130 bits, but a ULID is 128. Every id above
+	// 7ZZZZZZZZZZZZZZZZZZZZZZZZZ overflows, and an overflowing spelling could
+	// decode to the same 128 bits as a valid one - two strings, one identity.
+	// Found by lane E: ValidID accepted "80000000000000000000000000".
+	if s[0] > '7' {
+		return false
+	}
 	for i := 0; i < len(s); i++ {
 		if crockfordValue[s[i]] < 0 {
 			return false
@@ -250,12 +279,23 @@ func ValidDigest(s Digest) bool {
 // SameActor is true only for two KNOWN, identical ids. Two unknowns are not the
 // same actor, so an unknown author and an unknown admitter never establish
 // self-admission by accident.
+// blank reports whether a required semantic string is effectively empty. A
+// single space is not a value. This is the defect the contract names directly:
+// a "non-empty" rule that a space satisfies is not a rule.
+func blank(s string) bool { return strings.TrimSpace(s) == "" }
+
 func SameActor(a, b Actor) bool {
-	return a.ID != "" && a.ID == b.ID
+	// An actor carrying BOTH branches is malformed, and two malformed actors
+	// must never compare equal - that would manufacture self-admission out of
+	// invalid input. Found by lane E.
+	if !blank(a.UnknownReason) || !blank(b.UnknownReason) {
+		return false
+	}
+	return !blank(a.ID) && a.ID == b.ID
 }
 
 func validActor(a Actor, path string) *Fault {
-	known, unknown := a.ID != "", a.UnknownReason != ""
+	known, unknown := !blank(a.ID), !blank(a.UnknownReason)
 	switch {
 	case known && unknown:
 		return fault("invalid-field", path, "actor has both an id and an unknown reason")
