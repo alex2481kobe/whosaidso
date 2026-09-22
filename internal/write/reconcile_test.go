@@ -93,3 +93,52 @@ func TestReconcileRefusesWhatIsNotADeadRunner(t *testing.T) {
 		t.Fatalf("reconcile hid a pending real seal: %v", err)
 	}
 }
+
+// handUnknown is an UNKNOWN-outcome seal captured by hand, with no reading.
+func handUnknown(env model.InvocationEnvelope) *model.InvocationSeal {
+	return &model.InvocationSeal{StartRef: model.InvocationRef{Project: env.ExecutionSourceIdentity.Project, InvocationID: env.InvocationID}, Envelope: env}
+}
+
+// The pending-real-seal rule is enforced at admission, not only by Reconcile:
+// a slow runner's seal can arrive after reconciliation was captured, and an
+// UNKNOWN seal can be captured by hand.
+func TestUnknownSealRefusedWhileARealSealIsPending(t *testing.T) {
+	for _, route := range []string{"reconcile-then-real-seal", "hand-captured", "other-unknown-pending", "real-seal-rejected"} {
+		t.Run(route, func(t *testing.T) {
+			w, _, dead, env := deadRun(t)
+			var unknown model.PacketRef
+			if route == "reconcile-then-real-seal" {
+				ref, err := Reconcile(context.Background(), w.f.project, ReconcileRequest{Author: w.f.author, InvocationID: dead.InvocationID, Reason: "presumed dead"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				unknown = ref
+			} else {
+				unknown = w.f.capture(nil, handUnknown(env))
+			}
+			switch route {
+			case "other-unknown-pending":
+				// Another UNKNOWN seal is not a real observation and blocks nothing.
+				w.f.capture(nil, handUnknown(env))
+				w.f.accept(unknown)
+				return
+			case "real-seal-rejected":
+				real := w.f.request(w.f.capture([][]byte{[]byte(proofFail)}, proofSealed(env, proofFail)))
+				real.Outcome = "rejected"
+				if _, err := Admit(context.Background(), w.f.project, real); err != nil {
+					t.Fatal(err)
+				}
+				w.f.accept(unknown)
+				return
+			}
+			real := w.f.capture([][]byte{[]byte(proofFail)}, proofSealed(env, proofFail))
+			w.f.refuse(w.f.request(unknown), "pending-real-seal")
+			// The real observation is still admissible and becomes the seal.
+			w.f.accept(real)
+			inv, _ := w.f.snapshot().Invocation(reduce.InvocationKey{Project: dead.Project, InvocationID: dead.InvocationID})
+			if inv.Seal == nil || inv.Seal.Outcome.State != model.Known {
+				t.Fatalf("the real seal was shut out: %+v", inv.Seal)
+			}
+		})
+	}
+}

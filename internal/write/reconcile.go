@@ -2,8 +2,10 @@ package write
 
 // Reconciliation of a dead runner lives here: an attributable seal recording
 // that the invocation's terminal observation is UNKNOWN, built from the admitted
-// start and carrying no reading. The gate rule that refuses any UNKNOWN-outcome
-// seal carrying an observation lives in gate_proof.go. Run and its real seal do not.
+// start and carrying no reading, and the admission rule that refuses such a
+// seal while a real one is pending. The gate rule that refuses any
+// UNKNOWN-outcome seal carrying an observation lives in gate_proof.go. Run and
+// its real seal do not.
 
 import (
 	"context"
@@ -75,4 +77,37 @@ func Reconcile(ctx context.Context, project store.Project, r ReconcileRequest) (
 		return model.PacketRef{}, err
 	}
 	return store.WriteIntake(ctx, project, store.IntakeRequest{Author: r.Author, Events: []model.Event{event}})
+}
+
+// gatePendingRealSeal: an UNKNOWN-outcome seal records that nobody observed the
+// end of the run. It is refused at admission while a seal with a known outcome
+// for the same invocation waits unreviewed in intake, since admitting it would
+// shut the real observation out as already sealed. Reconcile checks this when
+// it captures; the gate repeats it because the real seal can arrive later and
+// an UNKNOWN seal can be captured by hand. Packets reviewed in this admission
+// set are not pending.
+func gatePendingRealSeal(project store.Project, after reduce.Snapshot, env model.InvocationEnvelope) error {
+	if env.Outcome.State != model.Unknown {
+		return nil
+	}
+	intake, err := store.ReadIntake(project, nil)
+	if err != nil {
+		return err
+	}
+	for _, packet := range intake {
+		if _, reviewed := after.Review(reduce.ReviewKey{Project: project.ID, CommandID: packet.CommandID}); reviewed {
+			continue
+		}
+		for _, raw := range packet.Events {
+			event, err := model.DecodeEvent(raw)
+			if err != nil {
+				continue
+			}
+			if seal, ok := event.(*model.InvocationSeal); ok && seal.Envelope.InvocationID == env.InvocationID && seal.Envelope.Outcome.State != model.Unknown {
+				return admissionFault("pending-real-seal", "intake/"+string(packet.CommandID),
+					fmt.Sprintf("a seal with a known outcome for %s is pending review; review it before admitting an UNKNOWN outcome", env.InvocationID))
+			}
+		}
+	}
+	return nil
 }

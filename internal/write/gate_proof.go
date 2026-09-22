@@ -180,6 +180,10 @@ func gateProofs(ctx context.Context, project store.Project, prefix []model.Bundl
 				if err := gateCriterionFrozen(prefix, before, project.ID, e.Envelope); err != nil {
 					return err
 				}
+			case *model.InvocationSeal:
+				if err := gatePendingRealSeal(project, after, e.Envelope); err != nil {
+					return err
+				}
 			case *model.ProofAdmit:
 				if err := gateProofFamily(ctx, project, after, e); err != nil {
 					return err
