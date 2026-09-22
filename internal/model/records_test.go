@@ -368,3 +368,36 @@ func TestVisualFramingAndAppearanceRequiredFacts(t *testing.T) {
 	l.UntestedBackends = schemaKnown([]string{" "})
 	badSchemaValue(t, l)
 }
+
+func TestKnownBranchesAndPartialAuthoredProgress(t *testing.T) {
+	instrument := schemaInstrument()
+	instrument.Validation = schemaKnown(InstrumentValidation{Ref: schemaArtifact(), Version: "validated-implementation-v1"})
+	goodSchemaValue(t, instrument)
+	for _, progress := range []TaskProgress{{Summary: "fixtures authored", WitnessRefs: []ArtifactRef{}}, {NextAction: "run fixtures", WitnessRefs: []ArtifactRef{}}} {
+		s := schemaTask()
+		s.Progress = &progress
+		goodSchemaValue(t, s)
+	}
+	for _, scalar := range []Scalar{{Type: "string", String: ptr("")}, {Type: "bool", Bool: ptr(false)}, schemaNumber("0")} {
+		goodSchemaValue(t, scalar)
+		if ok, err := CompareScalars(scalar, Equal, scalar); err != nil || !ok {
+			t.Fatalf("valid equality: %v %v", ok, err)
+		}
+		e := schemaEvents()[13].(*CriterionFix)
+		e.Expression.Target = scalar
+		requireSchemaGood(t, e)
+	}
+	// A Go json.Number zero value marshals as 0; validate it before encoding so it
+	// cannot masquerade as an observation of zero.
+	e := schemaEvents()[13].(*CriterionFix)
+	requireSchemaGood(t, e)
+	e.Expression.Target = schemaNumber("")
+	if _, err := EncodeEvent(e); err == nil {
+		t.Fatal("empty number became an observed zero")
+	}
+	e = schemaEvents()[13].(*CriterionFix)
+	e.Policy.Retry = "latest-passing"
+	if _, err := EncodeEvent(e); err == nil {
+		t.Fatal("retry policy dropped inconvenient observations")
+	}
+}
