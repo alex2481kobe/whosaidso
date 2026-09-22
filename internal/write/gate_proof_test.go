@@ -159,7 +159,7 @@ func (f *admissionFixture) captureRaw(event model.TypedEvent) model.PacketRef {
 	return ref
 }
 
-func TestProofControlReachesProvenAndRecordsTheIntakeLimit(t *testing.T) {
+func TestProofControlReachesProvenWithNoInboxLimit(t *testing.T) {
 	w := newProofWorld(t, true)
 	pass, start, seal := w.run(w.criterion, proofPass)
 	w.f.accept(start, seal)
@@ -170,9 +170,10 @@ func TestProofControlReachesProvenAndRecordsTheIntakeLimit(t *testing.T) {
 	if w.status(t) != reduce.StatusProven {
 		t.Fatal("control proof did not reach PROVEN")
 	}
+	// R10.3: validity is decided from the ledger alone, so no machine limit is recorded.
 	review := bundle.Events[len(bundle.Events)-1]
-	if !bytes.Contains(review.Data, []byte("intake inbox only")) {
-		t.Fatalf("proof admission did not record the intake completeness limit: %s", review.Data)
+	if bytes.Contains(review.Data, []byte("inbox")) {
+		t.Fatalf("proof admission still records a per-machine inbox limit: %s", review.Data)
 	}
 }
 
@@ -237,7 +238,14 @@ func TestProofRefusesCriterionFixedAfterTheRun(t *testing.T) {
 	if _, err := Admit(context.Background(), w.f.project, reject); err != nil {
 		t.Fatal(err)
 	}
-	w.f.refuse(w.f.request(proof), "rejected-family-member")
+	w.f.refuse(w.f.request(proof), "invalid-transition")
+	// R10.3: no longer permanently blocked. The judgment accounts for it.
+	early := model.InvocationRef{Project: w.f.project.ID, InvocationID: env.InvocationID}
+	w.f.refuse(w.f.request(w.f.capture(nil, w.proof(lateRef, map[model.InvocationRef]string{pass: "supports", early: "supports"}))), "invalid-transition")
+	w.f.accept(w.f.capture(nil, w.proof(lateRef, map[model.InvocationRef]string{pass: "supports", early: "inapplicable"})))
+	if w.status(t) != reduce.StatusProven {
+		t.Fatal("the dispositioned rejected run left the criterion revision blocked")
+	}
 	// The control: a criterion fixed before every run carrying it.
 	clean, s2, e2 := w.run(w.criterion, proofPass)
 	w.f.accept(s2, e2)

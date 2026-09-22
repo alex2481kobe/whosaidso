@@ -1,15 +1,15 @@
 package write
 
-// Proof admission's evaluation-family checks live here: closure over admitted,
-// pending and rejected invocations carrying the criterion, per-member dispositions
+// Proof admission's evaluation-family checks live here: closure over admitted
+// and pending invocations carrying the criterion, per-member dispositions
 // against the member's own computed verdict, criterion satisfaction, and
-// re-resolution of each supporting instrument's validation artifact.
-// Enabling operations, criterion freezing and the transaction do not.
+// re-resolution of each supporting instrument's validation artifact. Rejected
+// members recorded in the ledger live in gate_rejected.go. Enabling operations,
+// criterion freezing and the transaction do not.
 
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	"datum/internal/evidence"
 	"datum/internal/model"
@@ -41,13 +41,20 @@ func gateProofFamily(ctx context.Context, project store.Project, after reduce.Sn
 			return admissionFault("incomplete-family", "evidence", fmt.Sprintf("proof omits sealed family member %s", inv.Key.InvocationID))
 		}
 	}
-	if err := gateIntakeFamily(project, after, carries); err != nil {
+	if err := gatePendingIntake(project, after, carries); err != nil {
+		return err
+	}
+	rejected, err := gateRejectedFamily(after, e, carries)
+	if err != nil {
 		return err
 	}
 	resolver := evidence.NewResolver(project.Root)
 	supports := []evidence.Observation{}
 	for i, member := range e.Evidence {
 		path := fmt.Sprintf("evidence[%d]", i)
+		if rejected[member.InvocationRef] {
+			continue // dispositioned in gateRejectedFamily, never support
+		}
 		inv, ok := after.Invocation(reduce.InvocationKey{Project: member.InvocationRef.Project, InvocationID: member.InvocationRef.InvocationID})
 		if !ok || inv.Seal == nil {
 			return admissionFault("pending-reconciliation", path, "member has no admitted seal")
@@ -105,19 +112,17 @@ func gateInstrumentValidation(ctx context.Context, resolver *evidence.Resolver, 
 	return nil
 }
 
-// gateIntakeFamily: durable intake carrying the criterion belongs to the family.
-// Unreviewed packets must be admitted in this set. A rejected or correction-
-// requested packet cannot make its run vanish: the ledger must hold that same
-// invocation with identical start or seal bytes (so it is in the admitted family
-// and dispositioned there), or the proof is refused.
-func gateIntakeFamily(project store.Project, after reduce.Snapshot, carries func(model.InvocationEnvelope) bool) error {
+// gatePendingIntake: durable intake nobody has reviewed yet that carries the
+// criterion must be admitted in this set, so a proof is not admitted ahead of a
+// run waiting in review. This is an admission-time "not yet", never a validity
+// rule: reviewed packets, accepted or not, are judged from the ledger alone.
+func gatePendingIntake(project store.Project, after reduce.Snapshot, carries func(model.InvocationEnvelope) bool) error {
 	intake, err := store.ReadIntake(project, nil)
 	if err != nil {
 		return err
 	}
 	for _, packet := range intake {
-		review, reviewed := after.Review(reduce.ReviewKey{Project: project.ID, CommandID: packet.CommandID})
-		if reviewed && review.Outcome == "accepted" {
+		if _, reviewed := after.Review(reduce.ReviewKey{Project: project.ID, CommandID: packet.CommandID}); reviewed {
 			continue
 		}
 		for _, raw := range packet.Events {
@@ -125,29 +130,21 @@ func gateIntakeFamily(project store.Project, after reduce.Snapshot, carries func
 			if err != nil {
 				return err
 			}
-			var env *model.InvocationEnvelope
-			sealed := false
-			switch t := event.(type) {
-			case *model.InvocationStart:
-				env = &t.Envelope
-			case *model.InvocationSeal:
-				env, sealed = &t.Envelope, true
-			}
-			if env == nil || !carries(*env) {
-				continue
-			}
-			path := "intake/" + string(packet.CommandID)
-			if !reviewed {
-				return admissionFault("pending-reconciliation", path,
+			if env := invocationEnvelope(event); env != nil && carries(*env) {
+				return admissionFault("pending-reconciliation", "intake/"+string(packet.CommandID),
 					fmt.Sprintf("unadmitted intake carries invocation %s of this criterion; admit it in the same set", env.InvocationID))
 			}
-			inv, ok := after.Invocation(reduce.InvocationKey{Project: project.ID, InvocationID: env.InvocationID})
-			same := ok && (!sealed && reflect.DeepEqual(inv.Start, *env) || sealed && inv.Seal != nil && reflect.DeepEqual(*inv.Seal, *env))
-			if !same {
-				return admissionFault("rejected-family-member", path,
-					fmt.Sprintf("%s packet carries invocation %s of this criterion and the ledger does not hold it; a rejected run stays in the family", review.Outcome, env.InvocationID))
-			}
 		}
+	}
+	return nil
+}
+
+func invocationEnvelope(event model.TypedEvent) *model.InvocationEnvelope {
+	switch t := event.(type) {
+	case *model.InvocationStart:
+		return &t.Envelope
+	case *model.InvocationSeal:
+		return &t.Envelope
 	}
 	return nil
 }

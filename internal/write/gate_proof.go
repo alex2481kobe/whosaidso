@@ -3,7 +3,7 @@ package write
 // U12 operations the gate enables — claim/instrument revision, trust withdrawal,
 // criterion fixing, invocation start/seal, proof, task closure, decision
 // open/revise and correction — and the post-replay checks that need artifact
-// bytes, ledger times or the intake inbox live here. Operations that stay
+// bytes, ledger times or pending intake live here. Operations that stay
 // disabled (decision disposition, supersession, review, disposal) and the admission
 // transaction itself do not. Proof family evaluation lives in gate_family.go.
 
@@ -16,10 +16,6 @@ import (
 	"datum/internal/reduce"
 	"datum/internal/store"
 )
-
-// proofIntakeLimit is recorded with every admitted proof. Completeness is
-// checked against what this machine holds, never against intake it never saw.
-const proofIntakeLimit = "Proof family completeness covered the ledger and this machine's intake inbox only, including rejected packets whose bytes remain there; invocations captured elsewhere and never delivered here could not be checked."
 
 func gateProofOperation(event model.TypedEvent, author model.Actor) (*model.Provenance, error) {
 	switch e := event.(type) {
@@ -204,21 +200,6 @@ func gateCriterionFrozen(prefix []model.Bundle, before reduce.Snapshot, project 
 		}
 	}
 	return admissionFault("criterion-not-frozen", "envelope.criterion_ref", "the criterion's admitting bundle is not in the prefix")
-}
-
-// gateProofLimit is the review-reason suffix recording proofIntakeLimit.
-func gateProofLimit(outcome string, packets []model.Packet) string {
-	if outcome != "accepted" {
-		return ""
-	}
-	for _, packet := range packets {
-		for _, raw := range packet.Events {
-			if raw.Type == "proof.admit" {
-				return "\n" + proofIntakeLimit
-			}
-		}
-	}
-	return ""
 }
 
 // gateCloseAuthority: a closure cites a named authority whose exact words are an

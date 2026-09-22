@@ -3,6 +3,7 @@ package write
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"datum/internal/model"
@@ -220,6 +221,11 @@ func gateReference(snapshot reduce.Snapshot, ref model.Reference) (gateKey, bool
 	}
 	if ref.Invocation != nil {
 		_, exists := snapshot.Invocation(reduce.InvocationKey{Project: ref.Invocation.Project, InvocationID: ref.Invocation.InvocationID})
+		if !exists && strings.HasPrefix(ref.Path, "evidence[") {
+			// R10.3: a proof may name a run the ledger recorded as rejected;
+			// gateRejectedFamily and the reducer decide its disposition.
+			exists = gateRejectedRecorded(snapshot, *ref.Invocation)
+		}
 		return gateKey{Invocation: *ref.Invocation}, exists
 	}
 	return gateKey{}, false

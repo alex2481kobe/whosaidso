@@ -201,6 +201,9 @@ type Review struct {
 	Reason        string
 	Origin        Origin
 	SelfAdmission model.SelfAdmissionState
+	// Invocations are the invocation facts this packet carried when it was not
+	// accepted (R10.3). Empty for accepted packets.
+	Invocations []model.ReviewedInvocation
 }
 
 // Source is one captured original.

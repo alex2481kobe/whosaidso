@@ -16,6 +16,7 @@ import (
 	"datum/internal/evidence"
 	"datum/internal/model"
 	"datum/internal/reduce"
+	"datum/internal/store"
 )
 
 func TestProofRefusesPendingFamilyMembersUntilAdmittedTogether(t *testing.T) {
@@ -261,9 +262,10 @@ func TestProofRefusesIncomparableOrUnreadableSupport(t *testing.T) {
 	}
 }
 
-// A rejected contradicting run never leaves the family. It is accounted for
-// only when the ledger holds that exact invocation, so a replacement seal with
-// a different (passing) reading cannot stand in for the rejected one.
+// A rejected contradicting run never leaves the family (R10.3). The review
+// records its invocation facts in the ledger, so the proof must disposition it
+// inapplicable or inconclusive even on a machine whose inbox never held it, and
+// a replacement seal with a different (passing) reading cannot stand in for it.
 func TestProofRejectedRunStaysInTheFamily(t *testing.T) {
 	for _, route := range []string{"rejected-failing-run", "correction-requested", "substitute-passing-seal", "recaptured-identical"} {
 		t.Run(route, func(t *testing.T) {
@@ -286,7 +288,23 @@ func TestProofRejectedRunStaysInTheFamily(t *testing.T) {
 			members := map[model.InvocationRef]string{pass: "supports"}
 			switch route {
 			case "rejected-failing-run", "correction-requested":
-				w.f.refuse(w.f.request(w.f.capture(nil, w.proof(w.criterion, members))), "rejected-family-member")
+				wantReviewedInvocations(t, w.f, fail.InvocationID, 2)
+				// Another machine: the ledger alone, with no intake inbox at all.
+				dropInbox(t, w.f)
+				w.f.refuse(w.f.request(w.f.capture(nil, w.proof(w.criterion, members))), "invalid-transition")
+				for _, disposition := range []string{"supports", "contradicts"} {
+					members[fail] = disposition
+					w.f.refuse(w.f.request(w.f.capture(nil, w.proof(w.criterion, members))), "invalid-transition")
+				}
+				if w.status(t) != reduce.StatusMeasured {
+					t.Fatal("a rejected failing run was hidden by rejection")
+				}
+				members[fail] = "inapplicable"
+				w.f.accept(w.f.capture(nil, w.proof(w.criterion, members)))
+				if w.status(t) != reduce.StatusProven {
+					t.Fatal("a rejected run dispositioned under the judgment did not resolve")
+				}
+				return
 			case "substitute-passing-seal":
 				// Same invocation, a passing reading nobody observed, captured fresh.
 				w.f.accept(w.f.capture(nil, &model.InvocationStart{Envelope: env}), w.f.capture([][]byte{[]byte(proofPass)}, proofSealed(env, proofPass)))
@@ -303,5 +321,35 @@ func TestProofRejectedRunStaysInTheFamily(t *testing.T) {
 				t.Fatal("a rejected failing run was hidden by rejection")
 			}
 		})
+	}
+}
+
+// wantReviewedInvocations asserts the ledger's review recorded n invocation
+// events for id, extracted facts only.
+func wantReviewedInvocations(t *testing.T, f *admissionFixture, id model.ID, n int) {
+	t.Helper()
+	got := 0
+	for _, review := range f.snapshot().Reviews() {
+		for _, fact := range review.Invocations {
+			if fact.InvocationID == id && fact.CriterionRef.State == model.Known {
+				got++
+			}
+		}
+	}
+	if got != n {
+		t.Fatalf("ledger recorded %d invocation facts for %s, want %d", got, id, n)
+	}
+}
+
+// dropInbox removes every intake packet, standing in for a machine that holds
+// the same ledger but never saw the rejected packets.
+func dropInbox(t *testing.T, f *admissionFixture) {
+	t.Helper()
+	dir, err := store.IntakeDir(f.project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
 	}
 }

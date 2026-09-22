@@ -215,7 +215,13 @@ func (s *state) reviewAdmit(b model.Bundle, idx int, o Origin, e *model.ReviewAd
 		if e.SelfAdmission != nil {
 			selfAdmission = e.SelfAdmission[p.CommandID]
 		}
-		s.reviews[key] = Review{Key: key, Packet: p, Outcome: e.Outcome, Actor: e.Actor, Reason: e.Reason, Origin: o, SelfAdmission: selfAdmission}
+		var invocations []model.ReviewedInvocation
+		for _, inv := range e.Invocations {
+			if inv.Packet == p.CommandID {
+				invocations = append(invocations, inv)
+			}
+		}
+		s.reviews[key] = Review{Key: key, Packet: p, Outcome: e.Outcome, Actor: e.Actor, Reason: e.Reason, Origin: o, SelfAdmission: selfAdmission, Invocations: invocations}
 	}
 	return nil
 }

@@ -47,8 +47,12 @@ func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 	}
 	supported := false
 	criterion := s.criteria[criterionKey(e.CriterionRef)]
+	rejected := s.rejectedMembers(e.CriterionRef)
 	for _, member := range e.Evidence {
 		inv, ok := s.invocations[invocationKey(member.InvocationRef)]
+		if !ok && rejected[invocationKey(member.InvocationRef)] && rejectedMemberDisposition(member.Disposition) {
+			continue // R10.3: accounted for, never support
+		}
 		if !ok || inv.Key.Project != b.Project || inv.Seal == nil || inv.Start.CriterionRef.Value == nil || *inv.Start.CriterionRef.Value != e.CriterionRef {
 			return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "proof requires local sealed observations of the exact criterion")
 		}
@@ -89,6 +93,11 @@ func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 		}
 		if !listed[inv.Key] {
 			return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "proof omits a sealed member of the criterion family")
+		}
+	}
+	for key := range rejected {
+		if !listed[key] {
+			return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "proof omits a rejected member of the criterion family")
 		}
 	}
 	if len(s.supportLosses(recordNode(e.Claim))) != 0 {
