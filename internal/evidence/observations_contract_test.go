@@ -9,8 +9,9 @@ import (
 	"datum/internal/model"
 )
 
-// R8.3 as decided for U12: the criterion's contract path resolves inside the
-// observing run's own directory and never reaches another run's files.
+// R8.3 as decided for U12, R9: the criterion's contract path resolves inside the
+// observing run's own directory, never at the bare project path and never in
+// another run's files.
 func TestContractPathResolvesInThisRunsDirectoryOnly(t *testing.T) {
 	a, b := RunDir(invocationA), RunDir(invocationB)
 	contract := func(p string) model.ArtifactRef {
@@ -26,11 +27,11 @@ func TestContractPathResolvesInThisRunsDirectoryOnly(t *testing.T) {
 		want     string // matched path, or "" for no match
 	}{
 		{"own-run-directory", "out/result.json", []string{a + "/out/result.json"}, a + "/out/result.json"},
-		{"project-path-form", "out/result.json", []string{"out/result.json"}, "out/result.json"},
+		{"bare-contract-path-names-nothing", "out/result.json", []string{"out/result.json"}, ""},
 		{"another-runs-directory", "out/result.json", []string{b + "/out/result.json"}, ""},
 		{"escape-by-dot-dot", "../" + string(invocationB) + "/out/result.json", []string{b + "/out/result.json"}, ""},
 		{"named-other-run-directly", b + "/out/result.json", []string{b + "/out/result.json"}, ""},
-		{"both-forms-are-ambiguous", "out/result.json", []string{"out/result.json", a + "/out/result.json"}, ""},
+		{"beside-a-bare-output-only-the-run-dir-counts", "out/result.json", []string{"out/result.json", a + "/out/result.json"}, a + "/out/result.json"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			outs := []model.ArtifactRef{}

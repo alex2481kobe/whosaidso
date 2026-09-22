@@ -76,7 +76,7 @@ func testEnvelope(t *testing.T, id model.ID) model.InvocationEnvelope {
 		AttemptID:               attemptID,
 		InstrumentRef:           model.RecordRef{Project: projectID, RecordID: instrumentI, Revision: 1},
 		CriterionRef:            model.Availability[model.CriterionRef]{State: model.Known, Value: &ref},
-		ExecutionSourceIdentity: model.ExecutionIdentity{Project: projectID},
+		ExecutionSourceIdentity: testExecution(),
 		Argv:                    []string{"./tools/penetration-check"},
 		ConfigRequested:         map[string]model.Scalar{},
 		ConfigEffective:         config("camera_pos", "12"),
@@ -89,6 +89,18 @@ func testEnvelope(t *testing.T, id model.ID) model.InvocationEnvelope {
 }
 
 // ---- observation builders ------------------------------------------------
+
+// testMachine is the one machine every fixture run executes on, so families
+// compare unless a test says otherwise.
+const testMachine model.ID = "01ARZ3NDEKTSV4RRFFQ69G5FZZ"
+
+func testExecution() model.ExecutionIdentity {
+	machine := testMachine
+	return model.ExecutionIdentity{Project: projectID, SourceRefs: []model.ArtifactRef{},
+		MachineID: model.Availability[model.ID]{State: model.Known, Value: &machine},
+		Head:      model.Availability[model.GitHead]{State: model.Unknown, Reason: "fixture"},
+		Dirty:     model.Availability[bool]{State: model.Unknown, Reason: "fixture"}}
+}
 
 func config(pairs ...string) model.Availability[map[string]model.Availability[model.Scalar]] {
 	m := map[string]model.Availability[model.Scalar]{}
@@ -135,6 +147,8 @@ func observation(id model.ID, result Reading, population Reading) Observation {
 	return Observation{
 		InvocationRef:      model.InvocationRef{Project: projectID, InvocationID: id},
 		CriterionRef:       model.Availability[model.CriterionRef]{State: model.Known, Value: &ref},
+		Instrument:         model.RecordRef{Project: projectID, RecordID: instrumentI, Revision: 1},
+		Execution:          testExecution(),
 		Outcome:            model.Availability[model.ProcessOutcome]{State: model.Known, Value: &outcome},
 		ConfigEffective:    config("camera_pos", "12"),
 		ConditionsObserved: config("backend", "1"),

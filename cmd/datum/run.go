@@ -76,7 +76,7 @@ func runCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.Wr
 	request := write.RunRequest{Author: author, AttemptID: model.ID(*attempt), InstrumentRef: model.RecordRef{Project: project.ID, RecordID: current.Instrument.ID, Revision: current.Instrument.Revision},
 		Instrument: *current.Spec, Argv: flags.Args(), Timeout: *timeout,
 		CriterionRef:            model.Availability[model.CriterionRef]{State: model.Unknown, Reason: "no criterion named for this run"},
-		ExecutionSourceIdentity: model.ExecutionIdentity{Project: project.ID, SourceRefs: []model.ArtifactRef{}, MachineID: model.Availability[model.ID]{State: model.Unknown, Reason: "not captured by the CLI"}, Head: model.Availability[model.GitHead]{State: model.Unknown, Reason: "not captured by the CLI"}, Dirty: model.Availability[bool]{State: model.Unknown, Reason: "not captured by the CLI"}}}
+		ExecutionSourceIdentity: write.RunExecutionIdentity(ctx, project)}
 	if *criterion != "" || *claim != "" {
 		ref := model.CriterionRef{Claim: model.RecordRef{Project: project.ID, RecordID: model.ID(*claim), Revision: model.Revision(*claimRevision)}, CriterionID: model.ID(*criterion), Revision: model.Revision(*criterionRevision)}
 		if _, ok := snapshot.Criterion(ref); !ok {

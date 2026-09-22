@@ -25,13 +25,14 @@ const resultArtifact = `{
 func observeFixture(t *testing.T) (*Resolver, model.CriterionFix, model.InvocationEnvelope) {
 	t.Helper()
 	root := t.TempDir()
-	writeFile(t, root, "out/result.json", resultArtifact)
+	out := RunDir(invocationA) + "/out/result.json"
+	writeFile(t, root, out, resultArtifact)
 
 	c := testCriterion(t)
 	env := testEnvelope(t, invocationA)
 	env.OutputRefs = model.Availability[[]model.ArtifactRef]{
 		State: model.Known,
-		Value: &[]model.ArtifactRef{contentRef(resultArtifact, "application/json", []string{"out/result.json"}, "whole", "")},
+		Value: &[]model.ArtifactRef{contentRef(resultArtifact, "application/json", []string{out}, "whole", "")},
 	}
 	return NewResolver(root), c, env
 }
@@ -157,9 +158,10 @@ func TestPinnedBytesDecideTheVerdict(t *testing.T) {
 
 	observe := func(t *testing.T, body string, sel model.Selector) Observation {
 		t.Helper()
-		writeFile(t, root, "out/result.json", body)
+		out := RunDir(invocationA) + "/out/result.json"
+		writeFile(t, root, out, body)
 		env := testEnvelope(t, invocationA)
-		ref := contentRef(body, "application/json", []string{"out/result.json"}, sel.Kind, sel.Pointer)
+		ref := contentRef(body, "application/json", []string{out}, sel.Kind, sel.Pointer)
 		env.OutputRefs = model.Availability[[]model.ArtifactRef]{State: model.Known, Value: &[]model.ArtifactRef{ref}}
 		o, err := r.Observe(ctx, c, env)
 		if err != nil {
@@ -188,9 +190,10 @@ func TestPinnedBytesDecideTheVerdict(t *testing.T) {
 		expr := c.Expression
 		expr.ResultSelector = contentRef(criterionExample, "application/json", []string{"out/result.json"}, "whole", "")
 		whole.Expression = expr
-		writeFile(t, root, "out/result.json", resultArtifact)
+		out := RunDir(invocationA) + "/out/result.json"
+		writeFile(t, root, out, resultArtifact)
 		env := testEnvelope(t, invocationA)
-		ref := contentRef(resultArtifact, "application/json", []string{"out/result.json"}, "whole", "")
+		ref := contentRef(resultArtifact, "application/json", []string{out}, "whole", "")
 		env.OutputRefs = model.Availability[[]model.ArtifactRef]{State: model.Known, Value: &[]model.ArtifactRef{ref}}
 		o, err := r.Observe(ctx, whole, env)
 		if err != nil {
@@ -203,9 +206,10 @@ func TestPinnedBytesDecideTheVerdict(t *testing.T) {
 
 	t.Run("bytes that no longer match the pin", func(t *testing.T) {
 		env := testEnvelope(t, invocationA)
-		ref := contentRef(resultArtifact, "application/json", []string{"out/result.json"}, "json-pointer", "/results")
+		out := RunDir(invocationA) + "/out/result.json"
+		ref := contentRef(resultArtifact, "application/json", []string{out}, "json-pointer", "/results")
 		env.OutputRefs = model.Availability[[]model.ArtifactRef]{State: model.Known, Value: &[]model.ArtifactRef{ref}}
-		writeFile(t, root, "out/result.json", failing)
+		writeFile(t, root, out, failing)
 		o, err := r.Observe(ctx, c, env)
 		if err != nil {
 			t.Fatal(err)

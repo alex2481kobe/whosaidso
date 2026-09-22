@@ -164,6 +164,16 @@ func TestCLIFreshProcessesRunToProven(t *testing.T) {
 	if err := json.Unmarshal(out, &result); err != nil || result.SealPacket.CommandID == "" {
 		t.Fatalf("run printed no packets: %s, %v", out, err)
 	}
+	// The run records this machine's persistent id, and says why it has no git
+	// state: the fixture root is not a git checkout.
+	identity := result.Envelope.ExecutionSourceIdentity
+	machine, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".datum", store.MachineIDFile))
+	if err != nil || identity.MachineID.State != model.Known || string(*identity.MachineID.Value)+"\n" != string(machine) {
+		t.Fatalf("run must record the persistent machine id %q: %+v, %v", machine, identity.MachineID, err)
+	}
+	if identity.Head.State != model.Unknown || identity.Dirty.State != model.Unknown || !strings.Contains(identity.Head.Reason, "not a readable git checkout") {
+		t.Fatalf("head and dirty outside a git checkout must be UNKNOWN with the reason: %+v, %+v", identity.Head, identity.Dirty)
+	}
 	if _, err := e2eInvoke(t, root, nil, "admit", "--command-id", string(cliID(900)), "--actor", "coordinator", "--outcome", "accepted", "--reason", "admit the run", string(result.StartPacket.CommandID), string(result.SealPacket.CommandID)); err != nil {
 		t.Fatal(err)
 	}
@@ -183,8 +193,9 @@ func TestCLIFreshProcessesRunToProven(t *testing.T) {
 	}
 }
 
-// A producer outside write.Run may declare its output at the contract path
-// itself; fresh processes still carry the claim from UNMEASURED to PROVEN.
+// A producer outside write.Run declares its output in its own run directory,
+// the one output form (R9); fresh processes carry the claim from UNMEASURED to
+// PROVEN. The bare contract-path form is refused in internal/write tests.
 func TestCLIFreshProcessesCaptureAdmitProofToProven(t *testing.T) {
 	root, criterion, instrument, attempt := e2eWorld(t)
 	if status := e2eStatus(t, root, criterion.Claim); status != reduce.StatusUnmeasured {
@@ -202,7 +213,9 @@ func TestCLIFreshProcessesCaptureAdmitProofToProven(t *testing.T) {
 	seal := env
 	exit := 0
 	seal.ObservedAt, seal.Outcome = e2eKnown(env.StartedAt.Add(time.Millisecond)), e2eKnown(model.ProcessOutcome{Kind: "exit", ExitCode: &exit})
-	seal.OutputRefs = e2eKnown([]model.ArtifactRef{e2ePin(e2ePass, "out/result.json", "application/json")})
+	output := "record/artifacts/runs/" + string(env.InvocationID) + "/out/result.json"
+	proofWrite(t, root, output, e2ePass)
+	seal.OutputRefs = e2eKnown([]model.ArtifactRef{e2ePin(e2ePass, output, "application/json")})
 	steps := [][]string{{"capture", "--command-id", string(cliID(701))}, {"capture", "--command-id", string(cliID(702))}}
 	for i, event := range []model.TypedEvent{&model.InvocationStart{Envelope: env}, &model.InvocationSeal{StartRef: model.InvocationRef{Project: "test/cli", InvocationID: env.InvocationID}, Envelope: seal}} {
 		if _, err := e2eInvoke(t, root, []model.TypedEvent{event}, steps[i]...); err != nil {
