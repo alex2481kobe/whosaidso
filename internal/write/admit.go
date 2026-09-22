@@ -99,6 +99,9 @@ func Admit(ctx context.Context, project store.Project, request AdmitRequest) (mo
 			return model.Bundle{}, err
 		}
 		if request.Outcome == "accepted" {
+			if err := gateDisposals(after, packets); err != nil {
+				return model.Bundle{}, err
+			}
 			if err := materializeAdmission(ctx, project, packets); err != nil {
 				return model.Bundle{}, err
 			}

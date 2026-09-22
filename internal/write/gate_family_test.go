@@ -221,10 +221,8 @@ func TestNewOperationsCannotEscapeRootThroughSymlink(t *testing.T) {
 
 func TestGateOperationsStillUnavailable(t *testing.T) {
 	// Isolate the operation boundary so schema or reference failures cannot
-	// conceal a widened allowlist. These stay closed until a unit opens them.
-	for _, event := range []model.TypedEvent{
-		&model.Supersede{}, &model.ReviewAdmit{}, &model.ArtifactDispose{},
-	} {
+	// conceal a widened allowlist. Admission alone writes review.admit.
+	for _, event := range []model.TypedEvent{&model.ReviewAdmit{}} {
 		t.Run(string(event.EventType()), func(t *testing.T) {
 			if err := gateOperation(event, model.Actor{ID: "author"}); admissionErrorCode(err) != "unavailable-until-integrated" {
 				t.Fatalf("operation became available: %v", err)

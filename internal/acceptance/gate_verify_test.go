@@ -275,9 +275,10 @@ func TestGateVerifyClosedEventSet(t *testing.T) {
 // decision.open/revise, correction, instrument.declare/revise and
 // trust.withdraw, each behind its own rules. Owner ruling R10 then enabled
 // decision.dispose: the ruling quote and a named authority are recorded, and
-// accountability is visibility, not an author check. Packet authors still
-// cannot mint supersession, reviews (admission alone writes those) or disposal.
-var gateVerifyStillDisabled = map[model.EventType]bool{"supersede": true, "review.admit": true, "artifact.dispose": true}
+// accountability is visibility, not an author check. supersede and
+// artifact.dispose followed under the same rule. Packet authors still cannot
+// mint reviews: admission alone writes those.
+var gateVerifyStillDisabled = map[model.EventType]bool{"review.admit": true}
 
 func gateVerifyPayloadAuthor(event model.TypedEvent, fallback model.Actor) model.Actor {
 	switch e := event.(type) {
