@@ -132,8 +132,12 @@ reliably produces ids that parse and mean nothing.
 Early construction. Nothing here is stable yet.
 
 Datum records its own construction: `record/events/` is this project's ledger,
-and the task it holds is the task of building this project. Two decisions are
-open and two tests fail on purpose until they are ruled on.
+and the task it holds is the task of building this project. It is currently
+BLOCKED there, honestly, on a resume hold recorded when the implementing tool
+ran out of quota.
+
+Stable target for now is macOS. CI also runs every test on Linux; Windows is
+untested.
 
 Go 1.22, standard library only, no dependencies. CI compiles and tests on
 1.22, runs the race detector, fails if a `go.sum` appears, and checks that the
