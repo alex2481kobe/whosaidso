@@ -187,7 +187,7 @@ func TestGateVerifyClosedEventSet(t *testing.T) {
 	f := gateVerifyNew(t)
 	f.control()
 	a := model.Actor{ID: "gate-reviewer"}
-	// Exercise all seven allowed operations with satisfiable dependencies.
+	// Exercise the seven pre-U11 allowed operations with satisfiable dependencies.
 	task := &model.TaskCreate{ID: f.id(), Provenance: model.Provenance{Author: a, SourceRefs: []model.ArtifactRef{}}, Spec: laneEReduceSpec(1)}
 	ref := model.RecordRef{Project: f.p.ID, RecordID: task.ID, Revision: 1}
 	body := []byte(`{"ruling":"blocker resolved"}`)
@@ -210,10 +210,19 @@ func TestGateVerifyClosedEventSet(t *testing.T) {
 		}
 		seen[event.EventType()] = true
 	}
+	// Exception: U11 explicitly enabled task.takeover and attempt.terminal.
+	// Their API and admission integration landed; this is the authorised unit
+	// boundary moving, not permission to weaken tests to match arbitrary code.
+	// Require successful admission AND their own rule refusals before exempting
+	// just these two types from the allowlist expectation. The other 23 stay as-is.
+	gateVerifyU11(t, f, a, allowed[5].(*model.TaskStart))
+	seen["task.takeover"], seen["attempt.terminal"] = true, true
+	refused := 0
 	for _, event := range evAll() {
 		if seen[event.EventType()] {
 			continue
 		}
+		refused++
 		t.Run(string(event.EventType()), func(t *testing.T) {
 			g := gateVerifyNew(t)
 			control := g.control()
@@ -241,6 +250,73 @@ func TestGateVerifyClosedEventSet(t *testing.T) {
 	}
 	if len(seen) != 25 {
 		t.Fatalf("expected all 25 closed event types, exercised %d", len(seen))
+	}
+	if refused != 16 {
+		t.Fatalf("expected 16 allowlist refusals (25 total minus 7 pre-U11 and 2 U11 operations), exercised %d", refused)
+	}
+}
+
+func gateVerifyU11(t *testing.T, f *gateVerifyFixture, a model.Actor, start *model.TaskStart) {
+	t.Helper()
+	// Each refusal uses the same otherwise valid operation that subsequently
+	// admits. Unrelated schema/reference errors cannot stand in for its rule.
+	refuse := func(event model.TypedEvent, code, path string) {
+		t.Helper()
+		before, err := store.ReadPrefix(f.p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = f.admit(a, a, f.claim(a), event)
+		var fault *model.Fault
+		if !errors.As(err, &fault) || fault.Code != code || fault.Path != path {
+			t.Fatalf("expected %s's own rule refusal %s at %s, got %v", event.EventType(), code, path, err)
+		}
+		after, err := store.ReadPrefix(f.p)
+		beforeBytes, beforeErr := model.Encode(before)
+		afterBytes, afterErr := model.Encode(after)
+		if err != nil || beforeErr != nil || afterErr != nil || !bytes.Equal(beforeBytes, afterBytes) {
+			t.Fatalf("refused %s partially published its bundled claim or operation: %v", event.EventType(), err)
+		}
+	}
+	takeover := &model.TaskTakeover{Task: start.Task, Actor: a, AttemptID: f.id(), PriorAttemptID: start.AttemptID,
+		StoppedConfirmationRef: gateVerifyContent([]byte(`{"writer":"stopped"}`), "stopped.json")}
+	refuse(takeover, "unavailable", "artifact.content")
+	gateVerifyPut(t, filepath.Join(f.p.Root, "stopped.json"), []byte(`{"writer":"stopped"}`))
+	if _, err := f.admit(a, a, takeover); err != nil {
+		t.Fatalf("U11: takeover with resolvable prior-writer confirmation must admit: %v", err)
+	}
+	terminal := &model.AttemptTerminal{Task: start.Task, AttemptID: takeover.AttemptID, Outcome: model.AttemptBlockedMidTask,
+		Reason: "lane reached a boundary", NextAction: "owner supplies a resolution", DeliveryRefs: []model.ArtifactRef{}}
+	refuse(terminal, "missing-hold", "attempt.terminal")
+	hold := &model.BlockerHold{Task: start.Task, BlockerID: f.id(), Reason: model.BlockerResume, Actor: a, Criterion: "owner resolves the boundary"}
+	bundle, err := f.admit(a, a, terminal, hold)
+	if err != nil {
+		t.Fatalf("U11: blocked-mid-task receipt with its bundled hold must admit: %v", err)
+	}
+	prefix, err := store.ReadPrefix(f.p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := reduce.Replay(prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projection, ok := snapshot.Task(reduce.Ident{Project: f.p.ID, ID: start.Task.RecordID})
+	if !ok || len(projection.Attempts) != 2 || len(projection.LiveAttempts) != 1 || len(projection.Blockers) != 2 {
+		t.Fatalf("U11 operations did not survive fresh replay: %+v", projection)
+	}
+	for _, attempt := range projection.Attempts {
+		if attempt.Key.Attempt == start.AttemptID && attempt.Terminal != nil {
+			t.Fatal("takeover fabricated the prior writer's terminal receipt")
+		}
+		if attempt.Key.Attempt == takeover.AttemptID && (!attempt.Takeover || attempt.PriorAttempt != start.AttemptID || attempt.Terminal == nil || attempt.Terminal.Outcome != terminal.Outcome || attempt.Terminal.Origin.Sequence != bundle.Sequence) {
+			t.Fatalf("takeover or terminal receipt lost: %+v", attempt)
+		}
+	}
+	for _, blocker := range projection.Blockers {
+		if blocker.Key.Blocker == hold.BlockerID && (!blocker.Open() || blocker.Held.Sequence != bundle.Sequence) {
+			t.Fatal("blocked-mid-task receipt escaped its atomic hold")
+		}
 	}
 }
 

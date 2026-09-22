@@ -16,9 +16,20 @@ import (
 
 const writeUsage = `datum capture [--command-id ULID] [--actor ID] [--events FILE|-] [--blob FILE ...]
 datum admit --command-id ULID [--actor ID] --outcome accepted|rejected|correction-requested --reason TEXT PACKET_ID ...
+datum handback [--command-id ULID] [--actor ID] --attempt-id ULID --outcome OUTCOME --reason TEXT --next-action TEXT
+              [--commits-denied] [--reconciliation-owed] [--delivery-refs FILE|-]
+              [--hold-id ULID --hold-reason REASON --hold-actor ID --hold-criterion TEXT]
 
 Capture reads a JSON array of typed events and writes only immutable intake.
 Admission reviews a packet set and is the only command that publishes a bundle.
+Handback captures a receipt for an admitted attempt; admit its returned packet ID.
+OUTCOME: success, stopped, refused, no-reading, measurement-impossible,
+runner-died, harness-broken, out-of-scope, blocked-mid-task. No meaning is defaulted.
+Delivery refs are a JSON array of artifact references. A hold is captured with the receipt.
+Blocked-mid-task admission needs an open hold in the same bundle; out-of-scope
+needs a resume hold with an authored reassignment criterion and actor.
+Hold reasons: prerequisite, awaiting-acceptance, resume, reconciliation.
+Missing hold attribution is unknown; --hold-actor never inherits the receipt actor.
 Actor falls back to DATUM_ACTOR. Missing attribution is recorded as unknown.
 `
 
@@ -36,7 +47,7 @@ func writeCLI(ctx context.Context, args []string, cwd string, stdin io.Reader, s
 		return err
 	}
 	verb := args[0]
-	if verb != "capture" && verb != "admit" {
+	if verb != "capture" && verb != "admit" && verb != "handback" {
 		return fmt.Errorf("unavailable-until-integrated: command %q is not enabled by the first gate", verb)
 	}
 	flags := flag.NewFlagSet(verb, flag.ContinueOnError)
@@ -45,12 +56,27 @@ func writeCLI(ctx context.Context, args []string, cwd string, stdin io.Reader, s
 	actor := flags.String("actor", "", "attributed actor")
 	var eventsPath, outcome, reason string
 	var blobs blobPaths
+	var handback write.HandbackRequest
+	var attemptID, holdID, holdReason, holdActor, deliveryPath string
+	var hold write.HandbackHold
 	if verb == "capture" {
 		flags.StringVar(&eventsPath, "events", "-", "typed event array file or stdin")
 		flags.Var(&blobs, "blob", "file whose exact bytes are captured")
-	} else {
+	} else if verb == "admit" {
 		flags.StringVar(&outcome, "outcome", "", "review disposition")
 		flags.StringVar(&reason, "reason", "", "review reason")
+	} else {
+		flags.StringVar(&attemptID, "attempt-id", "", "admitted attempt ULID")
+		flags.StringVar(&outcome, "outcome", "", "authored outcome: success|stopped|refused|no-reading|measurement-impossible|runner-died|harness-broken|out-of-scope|blocked-mid-task")
+		flags.StringVar(&reason, "reason", "", "authored reason (required)")
+		flags.StringVar(&handback.NextAction, "next-action", "", "authored next action (required)")
+		flags.BoolVar(&handback.CommitsDenied, "commits-denied", false, "commits were denied")
+		flags.BoolVar(&handback.ReconciliationOwed, "reconciliation-owed", false, "reconciliation is owed")
+		flags.StringVar(&deliveryPath, "delivery-refs", "", "artifact reference array file or stdin (-)")
+		flags.StringVar(&holdID, "hold-id", "", "bundled hold ULID")
+		flags.StringVar(&holdReason, "hold-reason", "", "prerequisite|awaiting-acceptance|resume|reconciliation")
+		flags.StringVar(&holdActor, "hold-actor", "", "authored hold assignment; missing is unknown")
+		flags.StringVar(&hold.Criterion, "hold-criterion", "", "authored hold discharge criterion")
 	}
 	if err := flags.Parse(args[1:]); err != nil {
 		if err == flag.ErrHelp {
@@ -58,10 +84,13 @@ func writeCLI(ctx context.Context, args []string, cwd string, stdin io.Reader, s
 		}
 		return err
 	}
-	actorSet := false
+	actorSet, holdSet := false, false
 	flags.Visit(func(f *flag.Flag) {
 		if f.Name == "actor" {
 			actorSet = true
+		}
+		if strings.HasPrefix(f.Name, "hold-") {
+			holdSet = true
 		}
 	})
 	if !actorSet {
@@ -81,6 +110,25 @@ func writeCLI(ctx context.Context, args []string, cwd string, stdin io.Reader, s
 			return fmt.Errorf("capture takes event and blob flags, not positional arguments")
 		}
 		result, err = captureCLI(ctx, project, model.ID(*id), attribution, eventsPath, blobs, stdin)
+	} else if verb == "handback" {
+		if len(flags.Args()) != 0 {
+			return fmt.Errorf("handback takes flags, not positional arguments")
+		}
+		handback.CommandID, handback.Author = model.ID(*id), attribution
+		handback.AttemptID, handback.Outcome, handback.Reason = model.ID(attemptID), model.AttemptOutcome(outcome), reason
+		if holdSet {
+			hold.BlockerID, hold.Reason, hold.Actor = model.ID(holdID), model.BlockerReason(holdReason), model.Actor{ID: holdActor}
+			if model.Blank(holdActor) {
+				hold.Actor = model.Actor{UnknownReason: "no actor supplied by --hold-actor"}
+			}
+			handback.Holds = []write.HandbackHold{hold}
+		}
+		if deliveryPath != "" {
+			if err := handbackDeliveryRefs(deliveryPath, stdin, &handback.DeliveryRefs); err != nil {
+				return err
+			}
+		}
+		result, err = write.Handback(ctx, project, handback)
 	} else {
 		ids := make([]model.ID, len(flags.Args()))
 		for i, value := range flags.Args() {
@@ -99,6 +147,35 @@ func writeCLI(ctx context.Context, args []string, cwd string, stdin io.Reader, s
 	}
 	_, err = stdout.Write(encoded)
 	return err
+}
+
+func handbackDeliveryRefs(path string, stdin io.Reader, refs *[]model.ArtifactRef) error {
+	reader := stdin
+	if path != "-" {
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		reader = f
+	}
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return err
+	}
+	// The canonical codec rejects duplicate keys and trailing JSON values.
+	if _, err := model.Encode(json.RawMessage(data)); err != nil {
+		return err
+	}
+	d := json.NewDecoder(strings.NewReader(string(data)))
+	d.DisallowUnknownFields()
+	if err := d.Decode(refs); err != nil {
+		return err
+	}
+	if *refs == nil {
+		return fmt.Errorf("handback delivery refs must be an array")
+	}
+	return nil
 }
 
 func captureCLI(ctx context.Context, project store.Project, id model.ID, author model.Actor, eventsPath string, blobs []string, stdin io.Reader) (model.PacketRef, error) {
