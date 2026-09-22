@@ -42,22 +42,22 @@ stale. Nothing below is written by hand, so it cannot quietly stop being true.
 datum
 |-- cmd/
 |   `-- datum          whole command surface: the write side that captures and admits, and the read side that answers from what was admitted
-|          3 files, 277 lines (407 test), largest write.go at 150 -- uses model, query, store, write
+|          3 files, 354 lines (555 test), largest write.go at 227 -- uses model, query, store, write
 |-- internal/
 |   |-- acceptance     (tests only, no production code)
-|   |      5617 lines of tests
+|   |      5693 lines of tests
 |   |-- evidence       turns a reference into the exact bytes it names, and a frozen criterion into a verdict over what those bytes actually say
-|   |      7 files, 1556 lines (1889 test), largest criterion.go at 382 -- uses model
+|   |      7 files, 1581 lines (2038 test), largest criterion.go at 277 -- uses model
 |   |-- model          wire vocabulary every other package shares: identities, references, packets and bundles, plus the strict encode/decode boundary
-|   |      13 files, 2659 lines (1275 test), largest wire.go at 322 -- leaf
+|   |      13 files, 2689 lines (1488 test), largest wire.go at 322 -- leaf
 |   |-- query          selects admitted facts before either output format renders them
 |   |      2 files, 365 lines (579 test), largest query.go at 292 -- uses model, reduce, store
 |   |-- reduce         folds admitted bundles into the state every Datum answer is read from
-|   |      12 files, 2702 lines (3163 test), largest task.go at 438 -- uses model
+|   |      12 files, 2723 lines (3373 test), largest task.go at 438 -- uses model
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
 |   |      9 files, 1503 lines (2166 test), largest publish.go at 395 -- uses model
 |   `-- write          joins immutable capture to canonical state through one admission gate
-|          4 files, 1487 lines (1792 test), largest run.go at 631 -- uses evidence, model, reduce, store
+|          4 files, 1493 lines (1869 test), largest run.go at 631 -- uses evidence, model, reduce, store
 `-- tools/
     |-- archtree       instrument that reports how this module's packages fit together
     |      3 files, 386 lines (0 test), largest scan.go at 232 -- leaf
@@ -75,18 +75,63 @@ What the tree cannot see is written at the top of `tools/archtree/main.go`, and
 matters more than the numbers: it reads imports rather than use, and it is
 blind to coupling through an interface or a callback.
 
-## Build
+## Using it
 
 ```
 go build -o datum ./cmd/datum
-go test ./...
 ```
 
-Go 1.22, standard library only, no dependencies.
+Writing. Capture puts a packet in immutable intake and publishes nothing.
+Admission is the only command that writes a bundle.
+
+```
+datum capture --actor ID --events events.json
+datum admit --command-id ULID --actor ID \
+    --outcome accepted|rejected|correction-requested --reason TEXT PACKET_ID
+```
+
+Ending an attempt. Nine outcomes, and eight of them say the work did not get
+done. That symmetry is deliberate: if the honest answers are awkward to reach,
+people reach for `success`.
+
+```
+datum handback --attempt-id ULID --outcome OUTCOME \
+    --reason TEXT --next-action TEXT \
+    [--commits-denied] [--reconciliation-owed] \
+    [--hold-id ULID --hold-reason REASON --hold-actor ID --hold-criterion TEXT]
+```
+
+`success` closes the ATTEMPT, not the task obligation; with no acceptance or
+delivery witness the task lands in the awaiting-acceptance queue. `stopped`,
+`refused`, `no-reading`, `measurement-impossible`, `runner-died` and
+`harness-broken` leave the task open. `out-of-scope` needs a bundled
+reassignment, and `blocked-mid-task` needs its hold in the same transaction.
+
+Reading. Text and JSON render one structure, so the two surfaces cannot
+disagree, and every answer carries the ledger watermark it was read at.
+
+```
+datum show [--json] [RECORD_ID]
+datum history [--json] [RECORD_ID]
+datum task todo [--json]
+datum intake pending [--json]
+```
+
+A record needs an identifier, and `go run ./tools/mintid` prints one. Nothing
+else here will give you a valid ULID, and hand-writing Crockford base32
+reliably produces ids that parse and mean nothing.
 
 ## Status
 
 Early construction. Nothing here is stable yet.
+
+Datum records its own construction: `record/events/` is this project's ledger,
+and the task it holds is the task of building this project. Two decisions are
+open and two tests fail on purpose until they are ruled on.
+
+Go 1.22, standard library only, no dependencies. CI compiles and tests on
+1.22, runs the race detector, fails if a `go.sum` appears, and checks that the
+generated tree above is current.
 
 ## Licence
 
