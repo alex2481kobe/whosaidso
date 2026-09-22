@@ -3,7 +3,7 @@ package write
 
 // Admission request identity, packet verification, and the transaction live here.
 // Artifact resolution and durable blob preservation do not.
-// This file stays below 200 lines to keep the admission transaction whole.
+// This file stays near 200 lines to keep the admission transaction whole.
 
 import (
 	"bytes"
@@ -70,6 +70,7 @@ func Admit(ctx context.Context, project store.Project, request AdmitRequest) (mo
 			}
 		}
 		proposal := model.Bundle{Admitter: request.Admitter, Packets: lockedRefs, Events: []model.Event{}}
+		var eventPackets []model.ID
 		if request.Outcome == "accepted" {
 			packets, err = gatePackets(project.ID, snapshot, packets)
 			if err != nil {
@@ -77,14 +78,18 @@ func Admit(ctx context.Context, project store.Project, request AdmitRequest) (mo
 			}
 			for _, packet := range packets {
 				proposal.Events = append(proposal.Events, packet.Events...)
+				for range packet.Events {
+					eventPackets = append(eventPackets, packet.CommandID)
+				}
 			}
 		}
-		selfAdmission, reason := admissionDetails(request, packets)
+		selfAdmission, authors, reason := admissionDetails(request, packets)
 		invocations, err := reviewedInvocations(request.Outcome, packets)
 		if err != nil {
 			return model.Bundle{}, err
 		}
-		review, err := model.EncodeEvent(&model.ReviewAdmit{Packets: lockedRefs, Outcome: request.Outcome, Actor: request.Admitter, Reason: reason, SelfAdmission: selfAdmission, Invocations: invocations})
+		review, err := model.EncodeEvent(&model.ReviewAdmit{Packets: lockedRefs, Outcome: request.Outcome, Actor: request.Admitter, Reason: reason,
+			SelfAdmission: selfAdmission, Invocations: invocations, Authors: authors, EventPackets: eventPackets})
 		if err != nil {
 			return model.Bundle{}, err
 		}
@@ -173,8 +178,9 @@ func admissionPackets(project store.Project, ids []model.ID) ([]model.Packet, []
 }
 
 // admissionDetails renders the readable suffix from the same facts we persist.
-func admissionDetails(r AdmitRequest, packets []model.Packet) (map[model.ID]model.SelfAdmissionState, string) {
+func admissionDetails(r AdmitRequest, packets []model.Packet) (map[model.ID]model.SelfAdmissionState, map[model.ID]model.Actor, string) {
 	states := make(map[model.ID]model.SelfAdmissionState, len(packets))
+	authors := make(map[model.ID]model.Actor, len(packets))
 	var reason strings.Builder
 	reason.WriteString(r.Reason)
 	for _, p := range packets {
@@ -184,14 +190,14 @@ func admissionDetails(r AdmitRequest, packets []model.Packet) (map[model.ID]mode
 		} else if !model.Blank(p.Author.ID) && !model.Blank(r.Admitter.ID) {
 			self = model.SelfAdmissionFalse
 		}
-		states[p.CommandID] = self
+		states[p.CommandID], authors[p.CommandID] = self, p.Author
 		author := "unknown: " + p.Author.UnknownReason
 		if !model.Blank(p.Author.ID) {
 			author = p.Author.ID
 		}
 		fmt.Fprintf(&reason, "\nPacket %s author %s. Self-admitted: %s.", p.CommandID, strconv.Quote(author), self)
 	}
-	return states, reason.String()
+	return states, authors, reason.String()
 }
 
 func admissionFault(code, path, detail string) error {

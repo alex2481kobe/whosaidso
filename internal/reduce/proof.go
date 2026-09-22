@@ -34,6 +34,7 @@ type ProofAdmission struct {
 type DecisionDisposition struct {
 	Disposition model.DecisionDispose
 	Origin      Origin
+	Author      PacketAuthor // who wrote the packet, beside the authority and quote
 }
 
 type TrustWithdrawal struct {
@@ -155,7 +156,7 @@ func (s Snapshot) decisionAt(ref model.RecordRef) (DecisionProjection, bool) {
 	p := DecisionProjection{Decision: rec.Key, Spec: rec.Decision, Status: StatusOpen}
 	for _, o := range s.inner().eventOrder() {
 		if e, ok := s.inner().events[o].(*model.DecisionDispose); ok && e.Decision == ref {
-			p.Dispositions = append(p.Dispositions, DecisionDisposition{Disposition: *e, Origin: o})
+			p.Dispositions = append(p.Dispositions, DecisionDisposition{Disposition: *e, Origin: o, Author: s.inner().eventAuthor(o)})
 			p.Status = StatusDecided
 		}
 	}

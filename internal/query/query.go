@@ -72,6 +72,7 @@ type Unknown struct {
 
 type Record struct {
 	Fact           reduce.Record                `json:"fact"`
+	Author         reduce.PacketAuthor          `json:"author"` // who wrote the packet that carried Fact
 	Task           *Task                        `json:"task,omitempty"`
 	Claim          *reduce.ClaimProjection      `json:"claim,omitempty"`
 	Decision       *reduce.DecisionProjection   `json:"decision,omitempty"`
@@ -99,11 +100,12 @@ type Holder struct {
 	Actor   any               `json:"actor"` // Actor or Unknown
 }
 type Event struct {
-	Origin    reduce.Origin     `json:"origin"`
-	CommandID model.ID          `json:"command_id"`
-	Admitter  model.Actor       `json:"admitter"`
-	Packets   []model.PacketRef `json:"packets"`
-	Event     model.Event       `json:"event"`
+	Origin    reduce.Origin       `json:"origin"`
+	CommandID model.ID            `json:"command_id"`
+	Admitter  model.Actor         `json:"admitter"`
+	Packets   []model.PacketRef   `json:"packets"`
+	Event     model.Event         `json:"event"`
+	Author    reduce.PacketAuthor `json:"author"` // who wrote the packet that carried Event
 }
 type Packet struct {
 	CommandID   model.ID      `json:"command_id"`
@@ -189,7 +191,7 @@ func Read(project store.Project, request Request) (Answer, error) {
 			for i, event := range bundle.Events {
 				origin := reduce.Origin{Sequence: bundle.Sequence, EventIndex: i}
 				if request.ID == "" || selected[origin] {
-					a.History = append(a.History, Event{origin, bundle.CommandID, bundle.Admitter, bundle.Packets, event})
+					a.History = append(a.History, Event{origin, bundle.CommandID, bundle.Admitter, bundle.Packets, event, snapshot.EventAuthor(origin)})
 				}
 			}
 		}

@@ -162,6 +162,14 @@ type ReviewAdmit struct {
 	// packet. A refused run stays a ledger-visible criterion family member, so
 	// proof validity never depends on which machine's intake holds its bytes.
 	Invocations []ReviewedInvocation `json:"invocations,omitempty"`
+	// Authors (R10.1 revised) binds each packet command ID to the Actor the
+	// packet was captured with, so who wrote an admitted act is in the ledger,
+	// not only in local intake. Omission is legacy and projects as unknown.
+	Authors map[ID]Actor `json:"authors,omitempty"`
+	// EventPackets names, on an accepted review, the packet of each bundle
+	// event before this one, in bundle order. Admission orders packets by
+	// dependency, so the ledger cannot otherwise attribute an event to a packet.
+	EventPackets []ID `json:"event_packets,omitempty"`
 }
 
 // ReviewedInvocation is one invocation event of a packet that was not accepted.
@@ -211,6 +219,20 @@ func (e ReviewAdmit) validate(p string) error {
 			if Blank(e.Actor.ID) && state != SelfAdmissionUnknown {
 				return invalid(p+".self_admission", "an unknown admitter requires an unknown comparison")
 			}
+		}
+	}
+	if e.Authors != nil && len(e.Authors) != len(e.Packets) {
+		return invalid(p+".authors", "must cover exactly the reviewed packets")
+	}
+	// Each author Actor is checked by the schema walk like every other Actor.
+	for id := range e.Authors {
+		if !seen[id] {
+			return invalid(p+".authors", "names an unreviewed packet")
+		}
+	}
+	for i, id := range e.EventPackets {
+		if e.Outcome != "accepted" || !seen[id] {
+			return invalid(fmt.Sprintf("%s.event_packets[%d]", p, i), "must name a packet of an accepted review")
 		}
 	}
 	if e.Outcome == "accepted" && len(e.Invocations) != 0 {

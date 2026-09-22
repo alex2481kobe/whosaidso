@@ -18,7 +18,7 @@ func actor(a model.Actor) any {
 
 func describe(s reduce.Snapshot, fact reduce.Record) Record {
 	id := reduce.Ident{Project: fact.Key.Project, ID: fact.Key.ID}
-	r := Record{Fact: fact, Sources: []reduce.Source{}}
+	r := Record{Fact: fact, Author: s.EventAuthor(fact.Origin), Sources: []reduce.Source{}}
 	if p, ok := s.Task(id); ok {
 		outcome := string(p.Outcome)
 		if outcome == "" {
