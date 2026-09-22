@@ -105,6 +105,8 @@ func TestCLICaptureRejectsMalformedEvents(t *testing.T) {
 		`[{"TYPE":"task.start","type":"task.create","data":{}}]`,
 		`[{"type":"task.create","Data":{}}]`,
 		"[{\"type\":\"task.create\",\"data\":{},\"x-\xff\":1}]",
+		// A valid event whose last-wins alias would otherwise decode cleanly.
+		strings.Replace(string(data), `"type": "task.create"`, `"TYPE": "task.start", "type": "task.create"`, 1),
 	} {
 		if _, err := callWriteCLI(t, root, []byte(input), "capture", "--actor", "lane"); err == nil {
 			t.Fatalf("malformed intake was acknowledged: %s", input)
