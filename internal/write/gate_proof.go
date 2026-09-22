@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	"datum/internal/model"
 	"datum/internal/reduce"
@@ -182,7 +183,7 @@ func gateProofs(ctx context.Context, project store.Project, prefix []model.Bundl
 			}
 			switch e := event.(type) {
 			case *model.InvocationStart:
-				if err := gateCriterionFrozen(prefix, before, project.ID, e.Envelope); err != nil {
+				if err := gateCriterionFrozen(prefix, before, project.ID, e.Envelope, packet.CapturedAt); err != nil {
 					return err
 				}
 			case *model.InvocationSeal:
@@ -204,9 +205,17 @@ func gateProofs(ctx context.Context, project store.Project, prefix []model.Bundl
 }
 
 // gateCriterionFrozen: a run may name a criterion only if that criterion was
-// admitted in an earlier bundle recorded before the run started. Ledger order
-// alone is not enough, because one admission set can order a late criterion first.
-func gateCriterionFrozen(prefix []model.Bundle, before reduce.Snapshot, project model.ProjectID, env model.InvocationEnvelope) error {
+// admitted in an earlier bundle recorded before the run started, and a run
+// cannot start after intake captured it. So criterion admission < started_at
+// <= captured_at: the capture time, stamped by intake and recorded in the
+// ledger by review.admit, bounds any start the author writes. Ledger order
+// alone is not enough, because one admission set can order a late criterion
+// first; started_at alone is not enough, because the author writes it.
+func gateCriterionFrozen(prefix []model.Bundle, before reduce.Snapshot, project model.ProjectID, env model.InvocationEnvelope, captured time.Time) error {
+	if env.StartedAt.After(captured) {
+		return admissionFault("start-after-capture", "envelope.started_at",
+			fmt.Sprintf("the run claims to start at %s, after it was captured at %s", stamp(env.StartedAt), stamp(captured)))
+	}
 	if env.CriterionRef.State != model.Known || env.CriterionRef.Value == nil {
 		return nil
 	}
@@ -219,13 +228,15 @@ func gateCriterionFrozen(prefix []model.Bundle, before reduce.Snapshot, project 
 		if bundle.Sequence == criterion.Origin.Sequence {
 			if !bundle.RecordedAt.Before(env.StartedAt) {
 				return admissionFault("criterion-not-frozen", "envelope.criterion_ref",
-					fmt.Sprintf("criterion admitted at %s, not before the run started at %s", bundle.RecordedAt.Format("2006-01-02T15:04:05.999999999Z07:00"), env.StartedAt.Format("2006-01-02T15:04:05.999999999Z07:00")))
+					fmt.Sprintf("criterion admitted at %s, not before the run started at %s", stamp(bundle.RecordedAt), stamp(env.StartedAt)))
 			}
 			return nil
 		}
 	}
 	return admissionFault("criterion-not-frozen", "envelope.criterion_ref", "the criterion's admitting bundle is not in the prefix")
 }
+
+func stamp(t time.Time) string { return t.UTC().Format("2006-01-02T15:04:05.999999999Z07:00") }
 
 // gateCloseAuthority: a closure cites a named authority whose exact words are an
 // admitted or bundled source.intake spoken by that actor about this revision.
