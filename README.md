@@ -41,8 +41,8 @@ is stale. Nothing below is written by hand, so it cannot quietly stop being true
 ```text
 datum
 |-- cmd/
-|   `-- datum          whole command surface: the write side that captures and admits, and the read side that answers from what was admitted
-|          3 files, tested -- uses model, query, reduce, store, write
+|   `-- datum          This file holds `datum id [N]`, which prints N fresh record identifiers (default one)
+|          5 files, tested -- uses model, query, reduce, store, write
 |-- internal/
 |   |-- acceptance     (tests only, no production code)
 |   |      tests only
@@ -51,18 +51,16 @@ datum
 |   |-- model          wire vocabulary every other package shares: identities, references, packets and bundles, plus the strict encode/decode boundary
 |   |      14 files, tested -- leaf
 |   |-- query          selects admitted facts before either output format renders them
-|   |      8 files, tested -- uses model, reduce, store
+|   |      9 files, tested -- uses model, reduce, store
 |   |-- reduce         folds admitted bundles into the state every Datum answer is read from
 |   |      12 files, tested -- uses model
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
 |   |      9 files, tested -- uses model
 |   `-- write          joins immutable capture to canonical state through one admission gate
-|          10 files, tested -- uses evidence, model, reduce, store
+|          11 files, tested -- uses evidence, model, reduce, store
 `-- tools/
-    |-- archtree       instrument that reports how this module's packages fit together
-    |      4 files, tested -- leaf
-    `-- mintid         prints fresh record identifiers
-           1 files, no tests -- uses model
+    `-- archtree       instrument that reports how this module's packages fit together
+           4 files, tested -- leaf
 ```
 <!-- archtree:end -->
 
@@ -123,8 +121,8 @@ datum task todo [--json]
 datum intake pending [--json]
 ```
 
-A record needs an identifier, and `go run ./tools/mintid` prints one. Nothing
-else here will give you a valid ULID, and hand-writing Crockford base32
+A record needs an identifier, and `datum id` prints one (`datum id 5` prints
+five). Use it rather than inventing one: hand-writing Crockford base32
 reliably produces ids that parse and mean nothing.
 
 ## Status
