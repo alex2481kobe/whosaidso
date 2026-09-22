@@ -159,7 +159,7 @@ func cliHandbackControl(t *testing.T) (string, store.Project, []string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	event, err := model.EncodeEvent(&model.TaskStart{Task: model.RecordRef{Project: p.ID, RecordID: cliID(1), Revision: 1}, Actor: model.Actor{ID: "lane"}, AttemptID: cliID(7)})
+	event, err := model.EncodeEvent(&model.TaskStart{Task: model.RecordRef{Project: p.ID, RecordID: cliID(1), Revision: 1}, Actor: model.Actor{ID: "holder-é-持有者-🦊-�"}, AttemptID: cliID(7)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,21 +167,20 @@ func cliHandbackControl(t *testing.T) (string, store.Project, []string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := callWriteCLI(t, root, data, "capture", "--command-id", string(cliID(5)), "--actor", "lane"); err != nil {
+	if _, err := callWriteCLI(t, root, data, "capture", "--command-id", string(cliID(5)), "--actor", "holder-é-持有者-🦊-�"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := callWriteCLI(t, root, nil, "admit", "--command-id", string(cliID(6)), "--actor", "reviewer", "--outcome", "accepted", "--reason", "start checked", string(cliID(5))); err != nil {
 		t.Fatal(err)
 	}
-	return root, p, []string{"handback", "--command-id", string(cliID(8)), "--attempt-id", string(cliID(7)), "--outcome", "stopped", "--reason", "  exact reason\n", "--next-action", "  exact next action\n"}
+	return root, p, []string{"handback", "--command-id", string(cliID(8)), "--attempt-id", string(cliID(7)), "--outcome", "stopped", "--reason", "  exact reason é / e\u0301 / 理由 / 🦊 / �\r\n", "--next-action", "  exact next action é / 次 / 🦊\n"}
 }
 
 func TestCLIHandbackOutcomesAndAttribution(t *testing.T) {
 	for _, name := range []string{"success", "stopped", "refused", "no-reading", "measurement-impossible", "runner-died", "harness-broken", "out-of-scope", "blocked-mid-task", "unknown", "explicit-empty"} {
 		t.Run(name, func(t *testing.T) {
 			root, p, args := cliHandbackControl(t)
-			outcome, author := name, model.Actor{ID: "lane"}
-			env := "lane"
+			outcome, author, env := name, model.Actor{ID: "holder-é-持有者-🦊-�"}, "holder-é-持有者-🦊-�"
 			if name == "unknown" || name == "explicit-empty" {
 				outcome, author = "stopped", model.Actor{UnknownReason: "no actor supplied by --actor or DATUM_ACTOR"}
 				if name == "unknown" {
@@ -190,7 +189,7 @@ func TestCLIHandbackOutcomesAndAttribution(t *testing.T) {
 					args = append(args, "--actor", "")
 				}
 			} else if name == "success" {
-				env, args = "wrong-environment-actor", append(args, "--actor", "lane")
+				env, args = "wrong-environment-actor", append(args, "--actor", "holder-é-持有者-🦊-�")
 			}
 			args[6] = outcome
 			withHold := outcome == "blocked-mid-task" || outcome == "out-of-scope"
@@ -258,22 +257,24 @@ func TestCLIHandbackOutcomesAndAttribution(t *testing.T) {
 
 func TestCLIHandbackRefusesMissingMeaning(t *testing.T) {
 	root, p, control := cliHandbackControl(t)
-	for _, flag := range []string{"--outcome", "--reason", "--next-action", "--attempt-id"} {
-		for _, value := range []string{"omitted", "", "\u200b", " "} {
+	for flag, i := range map[string]int{"--outcome": 5, "--reason": 7, "--next-action": 9, "--attempt-id": 3, "--actor": 11} {
+		for _, value := range []string{"omitted", "", "\u200b", " ", "invalid-\xff", "truncated-\xe2\x82"} {
 			t.Run(flag+"/"+value, func(t *testing.T) {
-				args := append([]string(nil), control...)
-				for i := 1; i < len(args); i += 2 {
-					if args[i] == flag {
-						args[i+1] = value
-						if value == "omitted" {
-							args = append(args[:i], args[i+2:]...)
-						}
-						break
-					}
+				if flag == "--actor" && !strings.Contains(value, "-") {
+					return
+				}
+				args := append(append([]string(nil), control...), "--actor", "lane")
+				args[i+1] = value
+				if value == "omitted" {
+					args = append(args[:i], args[i+2:]...)
 				}
 				out, err := callWriteCLI(t, root, nil, args...)
 				if err == nil || len(out) != 0 {
 					t.Fatalf("missing authored %s was acknowledged: %s, %v", flag, out, err)
+				}
+				field := map[string]string{"--reason": "reason", "--next-action": "next_action", "--actor": "author.id"}[flag]
+				if field != "" && strings.Contains(value, "-") && !strings.Contains(err.Error(), field+": input contains invalid UTF-8") {
+					t.Fatalf("missing field/UTF-8 diagnostic: %v", err)
 				}
 				packets, err := store.ReadIntake(p, nil)
 				if err != nil || len(packets) != 2 {

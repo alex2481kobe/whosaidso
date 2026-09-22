@@ -3,6 +3,7 @@ package write
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	"datum/internal/model"
@@ -13,6 +14,7 @@ import (
 func handbackControl(t *testing.T) (*admissionFixture, *model.TaskCreate, HandbackRequest) {
 	t.Helper()
 	f := newAdmissionFixture(t)
+	f.author = model.Actor{ID: "holder-é-持有者-🦊-�"}
 	task := f.goodControl()
 	attempt := f.id()
 	f.accept(f.capture(nil, &model.TaskStart{Task: f.ref(task.ID, 1), Actor: f.author, AttemptID: attempt}))
@@ -20,7 +22,7 @@ func handbackControl(t *testing.T) (*admissionFixture, *model.TaskCreate, Handba
 	if p.Status != reduce.StatusInFlight || len(p.LiveAttempts) != 1 {
 		t.Fatal("control attempt did not start")
 	}
-	return f, task, HandbackRequest{CommandID: f.id(), Author: f.author, AttemptID: attempt, Outcome: model.AttemptStopped, Reason: "  writer's exact reason\n", NextAction: "  owner's exact next action\n"}
+	return f, task, HandbackRequest{CommandID: f.id(), Author: f.author, AttemptID: attempt, Outcome: model.AttemptStopped, Reason: "  writer's exact reason é / e\u0301 / 理由 / 🦊 / �\r\n", NextAction: "  owner's exact next action é / 次 / 🦊\n"}
 }
 
 func captureHandback(t *testing.T, f *admissionFixture, r HandbackRequest) model.PacketRef {
@@ -30,7 +32,7 @@ func captureHandback(t *testing.T, f *admissionFixture, r HandbackRequest) model
 		t.Fatal(err)
 	}
 	packets, err := store.ReadIntake(f.project, []model.ID{ref.CommandID})
-	if err != nil || len(packets) != 1 || packets[0].CapturedAt.IsZero() {
+	if err != nil || len(packets) != 1 || packets[0].CapturedAt.IsZero() || packets[0].Author != r.Author {
 		t.Fatalf("receipt was not durable: %v", err)
 	}
 	return ref
@@ -85,19 +87,20 @@ func TestHandbackNineHonestOutcomes(t *testing.T) {
 func TestHandbackProseOnlyAndMissingSemanticsFail(t *testing.T) {
 	f, _, control := handbackControl(t)
 	captureHandback(t, f, control)
-	for _, field := range []string{"outcome", "reason", "next_action"} {
+	for _, tc := range []struct{ field, value string }{
+		{"outcome", ""}, {"reason", "\u200b"}, {"next_action", ""},
+		{"reason", "reason-\xff"}, {"next_action", "action-\xff"}, {"reason", "truncated-\xe2\x82"},
+		{"author.id", "holder-\xff"}, {"author.unknown_reason", "unknown-\xff"},
+	} {
 		r := control
 		r.CommandID = f.id()
-		switch field {
-		case "outcome":
-			r.Outcome = ""
-		case "reason":
-			r.Reason = "\u200b"
-		case "next_action":
-			r.NextAction = ""
+		*map[string]*string{"outcome": (*string)(&r.Outcome), "reason": &r.Reason, "next_action": &r.NextAction, "author.id": &r.Author.ID, "author.unknown_reason": &r.Author.UnknownReason}[tc.field] = tc.value
+		_, err := Handback(context.Background(), f.project, r)
+		if err == nil {
+			t.Fatalf("broken %s acknowledged", tc.field)
 		}
-		if _, err := Handback(context.Background(), f.project, r); err == nil {
-			t.Fatalf("prose-only/missing %s admitted", field)
+		if strings.Contains(tc.value, "-") && !strings.Contains(err.Error(), tc.field+": input contains invalid UTF-8") {
+			t.Fatalf("expected field-specific UTF-8 refusal for %s: %v", tc.field, err)
 		}
 	}
 }

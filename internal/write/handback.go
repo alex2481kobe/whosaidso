@@ -3,6 +3,7 @@ package write
 import (
 	"context"
 	"time"
+	"unicode/utf8"
 
 	"datum/internal/model"
 	"datum/internal/reduce"
@@ -43,6 +44,16 @@ type HandbackHold struct {
 // suppress this final capture; a separate bounded context matches Run's seal.
 // Invalid requests and storage failures return errors, never a durability claim.
 func Handback(ctx context.Context, project store.Project, r HandbackRequest) (model.PacketRef, error) {
+	// Like the model codec's strictUnmarshal, check the original bytes before
+	// encoding/json can replace them; CLI handbacks share this boundary.
+	for _, field := range []struct{ path, value string }{
+		{"reason", r.Reason}, {"next_action", r.NextAction},
+		{"author.id", r.Author.ID}, {"author.unknown_reason", r.Author.UnknownReason},
+	} {
+		if !utf8.Valid([]byte(field.value)) {
+			return model.PacketRef{}, admissionFault("invalid-field", field.path, "input contains invalid UTF-8")
+		}
+	}
 	if r.Envelope != nil {
 		if r.Envelope.ExecutionSourceIdentity.Project != project.ID || r.AttemptID != "" && r.AttemptID != r.Envelope.AttemptID {
 			return model.PacketRef{}, admissionFault("invalid-field", "envelope", "envelope must identify the same project and attempt")

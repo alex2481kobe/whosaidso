@@ -145,8 +145,20 @@ func TestSelfAdmissionRealLedgerRemainsUnknown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.Watermark.Sequence != 2 || len(a.Reviews) != 2 {
-		t.Fatalf("expected two legacy reviews: %+v", a)
+	// Deliberately no assertion on the watermark or the review COUNT. This
+	// test reads the repository's own live ledger, which is the strongest
+	// regression evidence available here: real bytes, committed, written by
+	// an earlier version of the code. It is also append-only, so pinning its
+	// size or head position makes every legitimate record a test failure.
+	// The first version asserted sequence == 2 and exactly two reviews, and
+	// broke the moment two instruments were declared.
+	//
+	// Inventory, not invariant, in a repository whose own rule is the
+	// opposite. What matters is that a review written BEFORE the
+	// SelfAdmission field existed still reports UNKNOWN and is never inferred
+	// from the prose still sitting in its reason.
+	if len(a.Reviews) == 0 {
+		t.Fatalf("the live ledger must still contain legacy reviews: %+v", a)
 	}
 	found := false
 	for _, r := range a.Reviews {
@@ -160,10 +172,24 @@ func TestSelfAdmissionRealLedgerRemainsUnknown(t *testing.T) {
 	if !found {
 		t.Fatal("lost original first-bundle self-admission prose")
 	}
+	// The same inventory-versus-invariant correction as above. This asserted
+	// that NO review is classified true or false, which held only while the
+	// ledger contained nothing written after the field existed. Two
+	// instruments were then declared and admitted by their own author, which
+	// is genuinely self-admitted and correctly recorded as true.
+	//
+	// The invariant is narrower and survives growth: a review from BEFORE the
+	// field existed is never classified either way. Sequences 1 and 2 are
+	// those records, and no later record can move them.
 	for _, state := range []model.SelfAdmissionState{"true", "false"} {
 		selected, err := Read(p, Request{Command: "history", SelfAdmitted: state})
-		if err != nil || len(selected.Reviews) != 0 || selected.Watermark != a.Watermark {
-			t.Fatalf("legacy classified as %s: %+v %v", state, selected, err)
+		if err != nil || selected.Watermark != a.Watermark {
+			t.Fatalf("classified read failed for %s: %+v %v", state, selected, err)
+		}
+		for _, r := range selected.Reviews {
+			if r.Origin.Sequence <= 2 {
+				t.Fatalf("a review predating the field was classified as %s, which can only have come from reading its prose: %+v", state, r)
+			}
 		}
 	}
 }
