@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -563,5 +564,132 @@ func TestAdmissionUnknownIdentityIsNotSelfAdmission(t *testing.T) {
 	event, err := model.DecodeEvent(bundle.Events[len(bundle.Events)-1])
 	if err != nil || !strings.Contains(event.(*model.ReviewAdmit).Reason, "Self-admitted: unknown") {
 		t.Fatalf("matching unknown reasons were mistaken for an identity: %v, %v", event, err)
+	}
+}
+
+// attemptPackets captures a takeover, its blocked-mid-task receipt and an open
+// hold as three packets in the named ULID order. Event IDs are drawn before any
+// capture, so every order carries byte-identical events.
+func attemptPackets(t *testing.T, order string) (*admissionFixture, []model.PacketRef) {
+	f, task, r := handbackControl(t)
+	ref, body := f.ref(task.ID, 1), []byte("prior writer stopped")
+	takeover := &model.TaskTakeover{Task: ref, Actor: f.author, AttemptID: f.id(), PriorAttemptID: r.AttemptID, StoppedConfirmationRef: admissionContent(body)}
+	terminal := &model.AttemptTerminal{Task: ref, AttemptID: takeover.AttemptID, Outcome: model.AttemptBlockedMidTask, Reason: "new writer reached a boundary", NextAction: "owner resumes", DeliveryRefs: []model.ArtifactRef{}}
+	hold := &model.BlockerHold{Task: ref, BlockerID: f.id(), Reason: model.BlockerResume, Actor: f.author, Criterion: "owner supplies missing input"}
+	var packets []model.PacketRef
+	for _, name := range strings.Split(order, ",") {
+		switch name {
+		case "takeover":
+			packets = append(packets, f.capture([][]byte{body}, takeover))
+		case "receipt":
+			packets = append(packets, f.capture(nil, terminal))
+		case "hold":
+			packets = append(packets, f.capture(nil, hold))
+		}
+	}
+	return f, packets
+}
+
+func TestAdmissionAttemptDependencyOrder(t *testing.T) {
+	var dependent []byte
+	for _, c := range []struct{ order, want string }{
+		{"takeover,receipt,hold", "task.takeover,attempt.terminal,blocker.hold"},
+		// The receipt's lower ULID must not strand it before its attempt.
+		{"receipt,takeover,hold", "task.takeover,attempt.terminal,blocker.hold"},
+		// Independent packets keep authored (ULID) order around the dependency.
+		{"hold,receipt,takeover", "blocker.hold,task.takeover,attempt.terminal"},
+	} {
+		f, packets := attemptPackets(t, c.order)
+		request := f.request(packets...)
+		bundle, err := Admit(context.Background(), f.project, request)
+		if err != nil {
+			t.Fatalf("%s: valid takeover, receipt and hold must admit in any ULID order: %v", c.order, err)
+		}
+		var got []string
+		for _, event := range bundle.Events[:3] {
+			got = append(got, string(event.Type))
+		}
+		if strings.Join(got, ",") != c.want {
+			t.Fatalf("%s: got event order %v, want %s", c.order, got, c.want)
+		}
+		// Separate admissions differ in clock fields, never in admitted events.
+		events, err := model.Encode(bundle.Events[:3])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c.want == "task.takeover,attempt.terminal,blocker.hold" {
+			if dependent != nil && !bytes.Equal(dependent, events) {
+				t.Fatalf("%s: admitted events differ from the other packet order", c.order)
+			}
+			dependent = events
+		}
+		// The same command with a permuted request returns identical bytes.
+		permuted := request
+		permuted.PacketIDs = []model.ID{request.PacketIDs[2], request.PacketIDs[0], request.PacketIDs[1]}
+		again, err := Admit(context.Background(), f.project, permuted)
+		first, firstErr := model.Encode(bundle)
+		second, secondErr := model.Encode(again)
+		if err != nil || firstErr != nil || secondErr != nil || !bytes.Equal(first, second) {
+			t.Fatalf("%s: permuted retry must return identical bundle bytes: %v", c.order, err)
+		}
+	}
+}
+
+func TestAdmissionAttemptDependencyRefusals(t *testing.T) {
+	for _, c := range []struct{ name, code, path string }{
+		{"cycle", "dependency-cycle", "packets"},
+		{"missing-receipt-attempt", "unknown-reference", "attempt_id"},
+		{"missing-prior-attempt", "unknown-reference", "prior_attempt_id"},
+		{"duplicate-attempt", "conflict", "packets"},
+		{"takeover-chain", "", ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f, task, r := handbackControl(t)
+			ref, body := f.ref(task.ID, 1), []byte("prior writer stopped")
+			takeover := &model.TaskTakeover{Task: ref, Actor: f.author, AttemptID: f.id(), PriorAttemptID: r.AttemptID, StoppedConfirmationRef: admissionContent(body)}
+			terminal := &model.AttemptTerminal{Task: ref, AttemptID: takeover.AttemptID, Outcome: model.AttemptBlockedMidTask, Reason: "boundary", NextAction: "owner resumes", DeliveryRefs: []model.ArtifactRef{}}
+			hold := &model.BlockerHold{Task: ref, BlockerID: f.id(), Reason: model.BlockerResume, Actor: f.author, Criterion: "owner supplies missing input"}
+			missing := f.id()
+			var packets []model.PacketRef
+			switch c.name {
+			case "cycle":
+				// The receipt needs the takeover's attempt; the takeover's
+				// packet clears the hold bundled with the receipt.
+				clear := &model.BlockerClear{Task: ref, BlockerID: hold.BlockerID, HoldRef: model.BlockerRef{Task: ref, BlockerID: hold.BlockerID}, ResolvingWitness: admissionContent(body)}
+				packets = []model.PacketRef{f.capture([][]byte{body}, takeover, clear), f.capture(nil, hold, terminal)}
+			case "missing-receipt-attempt":
+				terminal.AttemptID = missing
+				packets = []model.PacketRef{f.capture(nil, terminal, hold)}
+			case "missing-prior-attempt":
+				takeover.PriorAttemptID = missing
+				packets = []model.PacketRef{f.capture([][]byte{body}, takeover)}
+			case "duplicate-attempt":
+				packets = []model.PacketRef{f.capture([][]byte{body}, takeover), f.capture([][]byte{body}, takeover)}
+			case "takeover-chain":
+				// The later takeover's lower ULID must wait for its prior attempt.
+				chained := *takeover
+				chained.AttemptID, chained.PriorAttemptID = f.id(), takeover.AttemptID
+				packets = []model.PacketRef{f.capture([][]byte{body}, &chained), f.capture([][]byte{body}, takeover)}
+			}
+			if c.code == "" {
+				bundle := f.accept(packets...)
+				if bundle.Events[0].Type != "task.takeover" || bundle.Events[1].Type != "task.takeover" || len(f.snapshot().Attempts(reduce.Ident{Project: f.project.ID, ID: task.ID})) != 3 {
+					t.Fatalf("takeover chain did not admit in dependency order: %+v", bundle.Events)
+				}
+				return
+			}
+			before := f.snapshot().Watermark()
+			_, err := Admit(context.Background(), f.project, f.request(packets...))
+			var fault *model.Fault
+			if !errors.As(err, &fault) || fault.Code != c.code || fault.Path != c.path {
+				t.Fatalf("wanted %s at %s, got %v", c.code, c.path, err)
+			}
+			if c.code == "unknown-reference" && !strings.Contains(fault.Detail, string(missing)) {
+				t.Fatalf("refusal must name the missing attempt %s: %v", missing, err)
+			}
+			if f.snapshot().Watermark() != before {
+				t.Fatal("refusal published")
+			}
+		})
 	}
 }

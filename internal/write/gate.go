@@ -9,10 +9,12 @@ import (
 	"datum/internal/reduce"
 )
 
-// gateKey follows typed references; bundled authority artifacts resolve separately.
+// gateKey follows typed references and attempt identities; bundled authority
+// artifacts resolve separately.
 type gateKey struct {
 	Record  model.RecordRef
 	Blocker model.ID
+	Attempt model.ID
 }
 
 func gatePackets(project model.ProjectID, snapshot reduce.Snapshot, packets []model.Packet) ([]model.Packet, error) {
@@ -39,10 +41,16 @@ func gatePackets(project model.ProjectID, snapshot reduce.Snapshot, packets []mo
 			}
 			if key, ok := gateProvides(project, event); ok {
 				if _, duplicate := providers[key]; duplicate {
-					return nil, admissionFault("conflict", "packets", "two proposals establish the same revision or blocker")
+					return nil, admissionFault("conflict", "packets", "two proposals establish the same revision, blocker or attempt")
 				}
 				providers[key] = i
 			}
+		}
+	}
+	admitted := map[model.ID]bool{}
+	for _, task := range snapshot.Tasks() {
+		for _, attempt := range task.Attempts {
+			admitted[attempt.Key.Attempt] = true
 		}
 	}
 	dependencies := make([]map[int]bool, len(packets))
@@ -68,6 +76,18 @@ func gatePackets(project model.ProjectID, snapshot reduce.Snapshot, packets []mo
 				if provider != i {
 					dependencies[i][provider] = true
 				}
+			}
+			// A receipt or takeover depends on the packet creating its attempt.
+			path, attempt := gateAttemptNeed(event)
+			if attempt == "" || admitted[attempt] {
+				continue
+			}
+			provider, ok := providers[gateKey{Attempt: attempt}]
+			if !ok {
+				return nil, admissionFault("unknown-reference", path, fmt.Sprintf("attempt %s is neither admitted nor proposed in this packet set", attempt))
+			}
+			if provider != i {
+				dependencies[i][provider] = true
 			}
 		}
 	}
@@ -143,8 +163,22 @@ func gateProvides(project model.ProjectID, event model.TypedEvent) (gateKey, boo
 		return gateKey{Record: target}, true
 	case *model.BlockerHold:
 		return gateKey{Record: e.Task, Blocker: e.BlockerID}, true
+	case *model.TaskStart:
+		return gateKey{Attempt: e.AttemptID}, true
+	case *model.TaskTakeover:
+		return gateKey{Attempt: e.AttemptID}, true
 	}
 	return gateKey{}, false
+}
+
+func gateAttemptNeed(event model.TypedEvent) (string, model.ID) {
+	switch e := event.(type) {
+	case *model.AttemptTerminal:
+		return "attempt_id", e.AttemptID
+	case *model.TaskTakeover:
+		return "prior_attempt_id", e.PriorAttemptID
+	}
+	return "", ""
 }
 
 func gateReference(snapshot reduce.Snapshot, ref model.Reference) (gateKey, bool) {
