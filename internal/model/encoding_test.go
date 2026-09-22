@@ -97,3 +97,29 @@ func TestEncodeRoundTripsValidUnicodeExactly(t *testing.T) {
 		}
 	}
 }
+
+// EncodeEvent and ValidateSchema refuse before their own json.Marshal, so an
+// event payload can no longer turn "holder-\xff" into "holder-�".
+func TestEventEncodingRefusesInvalidUTF8BeforeMarshalling(t *testing.T) {
+	hold := func(actor, criterion string) *BlockerHold {
+		return &BlockerHold{Task: schemaRef(1), BlockerID: schemaID(13), Reason: BlockerAwaitingAcceptance,
+			Actor: Actor{ID: actor}, Criterion: criterion}
+	}
+	if _, err := EncodeEvent(hold("holder-�", "why �")); err != nil {
+		t.Fatalf("control: a literal U+FFFD is valid text: %v", err)
+	}
+	for path, value := range map[string]any{
+		"payload.actor.id":  hold("holder-\xff", "why"),
+		"payload.criterion": hold("holder", "why\xff"),
+	} {
+		event, err := EncodeEvent(value.(*BlockerHold))
+		var f *Fault
+		if !errors.As(err, &f) || f.Code != "invalid-field" || f.Path != path {
+			t.Errorf("EncodeEvent: want invalid-field at %s, got %v and %q", path, err, event.Data)
+		}
+	}
+	var f *Fault
+	if err := ValidateSchema(Actor{ID: "holder-\xff"}); !errors.As(err, &f) || f.Path != "payload.id" {
+		t.Errorf("ValidateSchema: want invalid-field at payload.id, got %v", err)
+	}
+}
