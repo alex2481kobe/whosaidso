@@ -174,6 +174,22 @@ func (s Snapshot) Review(key ReviewKey) (Review, bool) {
 	return deepCopy(r), ok
 }
 
+// Reviews returns all dispositions sorted by project then packet command ID.
+// Audits can select SelfAdmission without intake bytes or reason parsing.
+func (s Snapshot) Reviews() []Review {
+	out := make([]Review, 0, len(s.inner().reviews))
+	for _, r := range s.inner().reviews {
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Key.Project != out[j].Key.Project {
+			return out[i].Key.Project < out[j].Key.Project
+		}
+		return out[i].Key.CommandID < out[j].Key.CommandID
+	})
+	return out
+}
+
 // Sources returns every captured source, sorted by project then id.
 func (s Snapshot) Sources() []Source {
 	return deepCopySlice(s.inner().sourcesSorted())

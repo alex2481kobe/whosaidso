@@ -194,12 +194,13 @@ type Invocation struct {
 
 // Review is one admitted disposition of one intake packet.
 type Review struct {
-	Key     ReviewKey
-	Packet  model.PacketRef
-	Outcome string
-	Actor   model.Actor
-	Reason  string
-	Origin  Origin
+	Key           ReviewKey
+	Packet        model.PacketRef
+	Outcome       string
+	Actor         model.Actor
+	Reason        string
+	Origin        Origin
+	SelfAdmission model.SelfAdmissionState
 }
 
 // Source is one captured original.

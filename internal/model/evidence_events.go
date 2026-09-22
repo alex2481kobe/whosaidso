@@ -2,7 +2,6 @@ package model
 
 // Invocation capture, source intake, proof, review, and evidence withdrawal payloads live here.
 // Authored record revisions, task ownership, and stateful admission decisions do not.
-// This file stays just below 200 lines to keep the evidence lifecycle payloads together.
 
 import (
 	"fmt"
@@ -154,6 +153,24 @@ type ReviewAdmit struct {
 	Outcome string      `json:"outcome"`
 	Actor   Actor       `json:"actor"`
 	Reason  string      `json:"reason" semantic:"text"`
+	// SelfAdmission binds each packet command ID to the author/admitter comparison.
+	// Omission is reserved for legacy reviews and projects as unknown, never false.
+	// When present, every reviewed packet must have exactly one explicit state.
+	SelfAdmission map[ID]SelfAdmissionState `json:"self_admission,omitempty"`
+}
+
+// SelfAdmissionState records identity equality, not permission to admit.
+// Unknown means at least one actor was unknown, or a legacy review omitted it.
+type SelfAdmissionState string
+
+const (
+	SelfAdmissionTrue    SelfAdmissionState = "true"
+	SelfAdmissionFalse   SelfAdmissionState = "false"
+	SelfAdmissionUnknown SelfAdmissionState = "unknown"
+)
+
+func (s SelfAdmissionState) validate(p string) error {
+	return oneOf(string(s), p, "true", "false", "unknown")
 }
 
 func (e ReviewAdmit) validate(p string) error {
@@ -166,6 +183,19 @@ func (e ReviewAdmit) validate(p string) error {
 			return invalid(fmt.Sprintf("%s.packets[%d]", p, i), "duplicate packet")
 		}
 		seen[r.CommandID] = true
+	}
+	if e.SelfAdmission != nil {
+		if len(e.SelfAdmission) != len(e.Packets) {
+			return invalid(p+".self_admission", "must cover exactly the reviewed packets")
+		}
+		for id, state := range e.SelfAdmission {
+			if !seen[id] {
+				return invalid(p+".self_admission", "names an unreviewed packet")
+			}
+			if Blank(e.Actor.ID) && state != SelfAdmissionUnknown {
+				return invalid(p+".self_admission", "an unknown admitter requires an unknown comparison")
+			}
+		}
 	}
 	return oneOf(e.Outcome, p+".outcome", "accepted", "correction-requested", "rejected")
 }

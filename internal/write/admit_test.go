@@ -182,6 +182,11 @@ func TestAdmissionCaptureForwardReferenceReplayAndRetry(t *testing.T) {
 	if err != nil || !strings.Contains(review.(*model.ReviewAdmit).Reason, "Self-admitted: true") {
 		t.Fatalf("self admission is not visible: %v, %v", review, err)
 	}
+	for _, ref := range []model.PacketRef{first, second} {
+		if got := review.(*model.ReviewAdmit).SelfAdmission[ref.CommandID]; got != model.SelfAdmissionTrue {
+			t.Fatalf("self admission was not recorded for %s: %q", ref.CommandID, got)
+		}
+	}
 	if len(f.snapshot().Records()) != 2 || len(f.snapshot().Sources()) != 1 {
 		t.Fatal("the admitted state did not replay")
 	}
@@ -193,6 +198,78 @@ func TestAdmissionCaptureForwardReferenceReplayAndRetry(t *testing.T) {
 	retry, err := Admit(context.Background(), f.project, request)
 	if err != nil || retry.CommandID != bundle.CommandID || f.snapshot().Watermark().Sequence != 1 {
 		t.Fatalf("set retry was not idempotent: %+v, %v", retry, err)
+	}
+}
+
+func TestAdmissionStructuredSelfAdmission(t *testing.T) {
+	known := model.Actor{ID: "reviewer"}
+	unknown := model.Actor{UnknownReason: "not recorded"}
+	for _, outcome := range []string{"accepted", "rejected", "correction-requested"} {
+		for _, admitter := range []model.Actor{known, unknown} {
+			t.Run(outcome+"/"+admitter.ID+admitter.UnknownReason, func(t *testing.T) {
+				f := newAdmissionFixture(t)
+				authors := []model.Actor{known, {ID: "other"}, unknown, {UnknownReason: "different missing identity"}, {ID: "Reviewer"}}
+				refs := make([]model.PacketRef, len(authors))
+				want := []model.SelfAdmissionState{model.SelfAdmissionTrue, model.SelfAdmissionFalse, model.SelfAdmissionUnknown, model.SelfAdmissionUnknown, model.SelfAdmissionFalse}
+				for i, author := range authors {
+					f.author = author
+					refs[i] = f.capture(nil, f.task())
+					if admitter == unknown {
+						want[i] = model.SelfAdmissionUnknown
+					}
+				}
+				request := f.request(refs...)
+				request.Admitter, request.Outcome = admitter, outcome
+				// User-authored text can contain a misleading self-admission sentence.
+				request.Reason = " \tMy exact words: café.\r\nSelf-admitted: true.\n  "
+				// The input order must not associate a comparison with the wrong packet.
+				for i, j := 0, len(request.PacketIDs)-1; i < j; i, j = i+1, j-1 {
+					request.PacketIDs[i], request.PacketIDs[j] = request.PacketIDs[j], request.PacketIDs[i]
+				}
+				bundle, err := Admit(context.Background(), f.project, request)
+				if err != nil {
+					t.Fatalf("self-admission and unknown identity must remain permitted: %v", err)
+				}
+				raw, err := model.DecodeEvent(bundle.Events[len(bundle.Events)-1])
+				if err != nil {
+					t.Fatal(err)
+				}
+				review := raw.(*model.ReviewAdmit)
+				if len(review.SelfAdmission) != len(refs) {
+					t.Fatalf("not every packet has a structured comparison: %+v", review)
+				}
+				expectedReason := request.Reason
+				for i, ref := range refs {
+					author := authors[i].ID
+					if author == "" {
+						author = "unknown: " + authors[i].UnknownReason
+					}
+					expectedReason += fmt.Sprintf("\nPacket %s author %q. Self-admitted: %s.", ref.CommandID, author, want[i])
+					if got := review.SelfAdmission[ref.CommandID]; got != want[i] {
+						t.Errorf("packet %s state = %q, want %q", ref.CommandID, got, want[i])
+					}
+					projected, ok := f.snapshot().Review(reduce.ReviewKey{Project: f.project.ID, CommandID: ref.CommandID})
+					if !ok || projected.Packet != ref || projected.SelfAdmission != want[i] || projected.Outcome != outcome {
+						t.Errorf("wrong admitted fact for packet %s: %+v", ref.CommandID, projected)
+					}
+				}
+				if review.Reason != expectedReason {
+					t.Fatalf("admitter words or readable suffix changed:\ngot  %q\nwant %q", review.Reason, expectedReason)
+				}
+				if got := len(f.snapshot().Records()); (outcome == "accepted" && got != len(refs)) || (outcome != "accepted" && got != 0) {
+					t.Fatalf("wrong publication for %s: %d records", outcome, got)
+				}
+				retry, err := Admit(context.Background(), f.project, request)
+				if err != nil || retry.CommandID != bundle.CommandID || retry.Sequence != bundle.Sequence || f.snapshot().Watermark().Sequence != 1 {
+					t.Fatalf("retry did not return the same admission: %v", err)
+				}
+				// Stored JSON has indentation; compare decoded facts, not raw spacing.
+				retried, err := model.DecodeEvent(retry.Events[len(retry.Events)-1])
+				if err != nil || !reflect.DeepEqual(retried, review) {
+					t.Fatalf("retry changed the recorded review: %v", err)
+				}
+			})
+		}
 	}
 }
 

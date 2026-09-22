@@ -211,7 +211,11 @@ func (s *state) reviewAdmit(b model.Bundle, idx int, o Origin, e *model.ReviewAd
 			return faultAt(CodeInvalidTransition, b.Sequence, idx, fmt.Sprintf("packets[%d]", i),
 				fmt.Sprintf("packet already dispositioned %q at sequence %d", prior.Outcome, prior.Origin.Sequence))
 		}
-		s.reviews[key] = Review{Key: key, Packet: p, Outcome: e.Outcome, Actor: e.Actor, Reason: e.Reason, Origin: o}
+		selfAdmission := model.SelfAdmissionUnknown
+		if e.SelfAdmission != nil {
+			selfAdmission = e.SelfAdmission[p.CommandID]
+		}
+		s.reviews[key] = Review{Key: key, Packet: p, Outcome: e.Outcome, Actor: e.Actor, Reason: e.Reason, Origin: o, SelfAdmission: selfAdmission}
 	}
 	return nil
 }

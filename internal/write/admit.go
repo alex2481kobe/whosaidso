@@ -77,9 +77,10 @@ func Admit(ctx context.Context, project store.Project, request AdmitRequest) (mo
 				proposal.Events = append(proposal.Events, packet.Events...)
 			}
 		}
+		selfAdmission, reason := admissionDetails(request, packets)
 		review, err := model.EncodeEvent(&model.ReviewAdmit{
 			Packets: lockedRefs, Outcome: request.Outcome, Actor: request.Admitter,
-			Reason: admissionReason(request, packets),
+			Reason: reason, SelfAdmission: selfAdmission,
 		})
 		if err != nil {
 			return model.Bundle{}, err
@@ -164,21 +165,26 @@ func admissionPackets(project store.Project, ids []model.ID) ([]model.Packet, []
 	return packets, refs, nil
 }
 
-func admissionReason(r AdmitRequest, packets []model.Packet) string {
+// admissionDetails renders the readable suffix from the same facts we persist.
+func admissionDetails(r AdmitRequest, packets []model.Packet) (map[model.ID]model.SelfAdmissionState, string) {
+	states := make(map[model.ID]model.SelfAdmissionState, len(packets))
 	var reason strings.Builder
 	reason.WriteString(r.Reason)
 	for _, p := range packets {
-		self := "unknown"
+		self := model.SelfAdmissionUnknown
+		if model.SameActor(p.Author, r.Admitter) {
+			self = model.SelfAdmissionTrue
+		} else if !model.Blank(p.Author.ID) && !model.Blank(r.Admitter.ID) {
+			self = model.SelfAdmissionFalse
+		}
+		states[p.CommandID] = self
 		author := "unknown: " + p.Author.UnknownReason
-		if p.Author.ID != "" {
+		if !model.Blank(p.Author.ID) {
 			author = p.Author.ID
-			if r.Admitter.ID != "" {
-				self = strconv.FormatBool(p.Author.ID == r.Admitter.ID)
-			}
 		}
 		fmt.Fprintf(&reason, "\nPacket %s author %s. Self-admitted: %s.", p.CommandID, strconv.Quote(author), self)
 	}
-	return reason.String()
+	return states, reason.String()
 }
 
 func materializeAdmission(ctx context.Context, project store.Project, packets []model.Packet) error {
