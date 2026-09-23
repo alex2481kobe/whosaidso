@@ -94,12 +94,13 @@ func Transact(ctx context.Context, project Project, admissionID model.ID, reques
 // what digest this request would carry against that bundle, from the bundle
 // alone, so an identical retry is recognised without rereading anything the
 // original admission consumed, such as machine-local intake. Propose runs only
-// when nothing is published under ID, receives the prefix read under the lock
-// and returns the request digest together with the proposal.
+// when nothing is published under ID, receives the prefix selected under the
+// lock (its snapshot, and its bundles on demand) and returns the request digest
+// together with the proposal.
 type Admission struct {
 	ID          model.ID
 	RetryDigest func(published model.Bundle) (model.Digest, error)
-	Propose     func(prefix []model.Bundle) (model.Digest, model.Bundle, error)
+	Propose     func(prefix State) (model.Digest, model.Bundle, error)
 }
 
 // TransactAdmission is Transact for a caller that must read its inputs under
@@ -116,89 +117,113 @@ func transact(ctx context.Context, project Project, admissionID model.ID, reques
 	}
 	admission := Admission{ID: admissionID, RetryDigest: func(model.Bundle) (model.Digest, error) { return requestDigest, nil }}
 	if propose != nil {
-		admission.Propose = func(prefix []model.Bundle) (model.Digest, model.Bundle, error) {
-			proposed, err := propose(prefix)
+		admission.Propose = func(prefix State) (model.Digest, model.Bundle, error) {
+			bundles, err := prefix.Bundles()
+			if err != nil {
+				return "", model.Bundle{}, err
+			}
+			// The callback gets its own copy. What it does to that slice cannot
+			// change the prefix this transaction assigns its sequence from.
+			proposed, err := propose(append([]model.Bundle(nil), bundles...))
 			return requestDigest, proposed, err
 		}
 	}
 	return transactAdmission(ctx, project, admission, disk)
 }
 
+// transactAdmission publishes under the lock, then, with the lock released,
+// refreshes the snapshot cache to the state including the new bundle. The
+// ledger is published and durable first; the cache refresh is best effort and
+// its failure is never the admission's, so a crash or error between the two
+// leaves an image one bundle behind, which the next command catches up.
 func transactAdmission(ctx context.Context, project Project, admission Admission, disk publishIO) (model.Bundle, error) {
+	bundle, after, err := admitLocked(ctx, project, admission, disk)
+	if err == nil && after != nil {
+		_ = saveState(*after)
+	}
+	return bundle, err
+}
+
+func admitLocked(ctx context.Context, project Project, admission Admission, disk publishIO) (model.Bundle, *State, error) {
 	var zero model.Bundle
 	admissionID := admission.ID
 	if err := publicationDurability(); err != nil {
-		return zero, err
+		return zero, nil, err
 	}
 	if err := ctx.Err(); err != nil {
-		return zero, err
+		return zero, nil, err
 	}
 	if project.ID == "" {
-		return zero, storeFault("invalid-field", "project.id", "an admission needs the declared project id")
+		return zero, nil, storeFault("invalid-field", "project.id", "an admission needs the declared project id")
 	}
 	if project.Ledger == "" {
-		return zero, storeFault("invalid-field", "project.ledger", "empty ledger path")
+		return zero, nil, storeFault("invalid-field", "project.ledger", "empty ledger path")
 	}
 	if !model.ValidID(admissionID) {
-		return zero, storeFault("invalid-field", "admission.command_id", "not a ULID")
+		return zero, nil, storeFault("invalid-field", "admission.command_id", "not a ULID")
 	}
 	if admission.Propose == nil || admission.RetryDigest == nil {
-		return zero, storeFault("invalid-field", "admission.propose", "no transaction callback")
+		return zero, nil, storeFault("invalid-field", "admission.propose", "no transaction callback")
 	}
 	if err := ensureLedgerDir(project.Ledger, disk); err != nil {
-		return zero, err
+		return zero, nil, err
 	}
 	lock, err := holdAdmissionLock(ctx, project.Ledger)
 	if err != nil {
-		return zero, err
+		return zero, nil, err
 	}
 	defer lockRelease(lock)
 
 	// Recovery first, while the lock guarantees no other publisher is mid-write.
 	if err := recoverLedger(project.Ledger); err != nil {
-		return zero, err
+		return zero, nil, err
 	}
-	prefix, err := readLedger(project)
+	// The prefix selected under the lock, through the same validated loader
+	// every read uses: the cache can shorten the fold, never the checks.
+	prefix, err := Load(project)
 	if err != nil {
-		return zero, err
-	}
-	for _, bundle := range prefix {
-		if bundle.CommandID != admissionID {
-			continue
+		// A ledger that reads but does not fold is still this transaction's
+		// to sequence: the store checks the chain, the caller the semantics.
+		bundles, readErr := readLedger(project)
+		if readErr != nil {
+			return zero, nil, readErr
 		}
+		prefix = State{project: project, bundles: bundles, foldErr: err}
+	}
+	if bundle, published, err := prefix.published(admissionID); err != nil {
+		return zero, nil, err
+	} else if published {
 		requestDigest, err := admission.RetryDigest(bundle)
 		if err != nil {
-			return zero, err
+			return zero, nil, err
 		}
 		if bundle.RequestDigest != requestDigest {
-			return zero, storeFault("conflict", filepath.Join(project.Ledger, bundleFileName(bundle)),
+			return zero, nil, storeFault("conflict", filepath.Join(project.Ledger, bundleFileName(bundle)),
 				"this admission id already published different content")
 		}
 		// The identical admission, already published. The previous attempt may
 		// have died between the rename and the flush, so reflush before
 		// promising durability this time, and publish nothing.
 		if err := syncLedgerPath(project.Ledger, disk); err != nil {
-			return zero, uncertainPublication(admissionID, filepath.Join(project.Ledger, bundleFileName(bundle)), err)
+			return zero, nil, uncertainPublication(admissionID, filepath.Join(project.Ledger, bundleFileName(bundle)), err)
 		}
-		return bundle, nil
+		return bundle, nil, nil
 	}
-	// The callback gets its own copy. What it does to that slice cannot change
-	// the prefix this transaction assigns its sequence from.
-	requestDigest, proposed, err := admission.Propose(append([]model.Bundle(nil), prefix...))
+	requestDigest, proposed, err := admission.Propose(prefix)
 	if err != nil {
-		return zero, err
+		return zero, nil, err
 	}
 	if !model.ValidDigest(requestDigest) {
-		return zero, storeFault("invalid-field", "admission.request_digest", "not lowercase sha-256 hex")
+		return zero, nil, storeFault("invalid-field", "admission.request_digest", "not lowercase sha-256 hex")
 	}
-	bundle, err := sealBundle(project, prefix, admissionID, requestDigest, proposed)
+	bundle, err := sealBundle(project, prefix.head(), admissionID, requestDigest, proposed)
 	if err != nil {
-		return zero, err
+		return zero, nil, err
 	}
 	if err := publishBundle(ctx, project.Ledger, bundle, disk); err != nil {
-		return zero, err
+		return zero, nil, err
 	}
-	return bundle, nil
+	return bundle, prefix.extended(bundle), nil
 }
 
 // sealBundle assigns the clerical fields from the prefix read under the lock.
@@ -208,7 +233,7 @@ func transactAdmission(ctx context.Context, project Project, admission Admission
 // vouch for, which in practice means a tail read before the lock. Refusing is
 // what makes "the caller cannot supply a tail as authority" a property of the
 // code rather than a rule callers are asked to remember.
-func sealBundle(project Project, prefix []model.Bundle, admissionID model.ID, requestDigest model.Digest, proposed model.Bundle) (model.Bundle, error) {
+func sealBundle(project Project, head selectedHead, admissionID model.ID, requestDigest model.Digest, proposed model.Bundle) (model.Bundle, error) {
 	assigned := ""
 	switch {
 	case proposed.Version != 0:
@@ -233,11 +258,9 @@ func sealBundle(project Project, prefix []model.Bundle, admissionID model.ID, re
 	bundle := proposed
 	bundle.Version = model.WireVersion
 	bundle.Project = project.ID
-	bundle.Sequence = uint64(len(prefix)) + 1
+	bundle.Sequence = head.sequence + 1
 	bundle.CommandID = admissionID
-	if len(prefix) > 0 {
-		bundle.Predecessor = prefix[len(prefix)-1].CommandID
-	}
+	bundle.Predecessor = head.command
 	bundle.RequestDigest = requestDigest
 	bundle.RecordedAt = time.Now().UTC()
 	return bundle, nil

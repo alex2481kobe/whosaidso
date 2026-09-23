@@ -34,6 +34,7 @@ func BenchmarkProofBatch(b *testing.B) {
 			packet := f.capture(nil, events...)
 			defer removePacket(b, f, packet.CommandID)
 			request := f.request(packet)
+			restore := keepCache(b, f)
 			b.ReportAllocs()
 			b.ResetTimer()
 			measured(b, "ProofBatch", func() {
@@ -47,6 +48,7 @@ func BenchmarkProofBatch(b *testing.B) {
 					name, err := model.BundleName(bundle.Sequence, bundle.CommandID)
 					must(b, err)
 					must(b, os.Remove(filepath.Join(f.Project.Ledger, name)))
+					restore()
 					b.StartTimer()
 				}
 			})

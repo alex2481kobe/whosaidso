@@ -53,7 +53,7 @@ func Admit(ctx context.Context, project store.Project, request AdmitRequest) (mo
 			}
 			return retryDigest(project, request, published.Packets)
 		},
-		Propose: func(prefix []model.Bundle) (model.Digest, model.Bundle, error) {
+		Propose: func(prefix store.State) (model.Digest, model.Bundle, error) {
 			proposal, digest, err := proposeAdmission(ctx, project, request, ids, prefix)
 			return digest, proposal, err
 		},
@@ -87,9 +87,9 @@ func admissionDigest(project store.Project, request AdmitRequest, refs []model.P
 	return model.HashBytes(data), nil
 }
 
-// proposeAdmission runs under the lock against the prefix read there.
-func proposeAdmission(ctx context.Context, project store.Project, request AdmitRequest, ids []model.ID, prefix []model.Bundle) (model.Bundle, model.Digest, error) {
-	snapshot, err := reduce.Replay(prefix)
+// proposeAdmission runs under the lock against the prefix selected there.
+func proposeAdmission(ctx context.Context, project store.Project, request AdmitRequest, ids []model.ID, prefix store.State) (model.Bundle, model.Digest, error) {
+	snapshot, err := prefix.Folded()
 	if err != nil {
 		return model.Bundle{}, "", err
 	}

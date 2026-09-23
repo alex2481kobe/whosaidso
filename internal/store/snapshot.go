@@ -32,6 +32,9 @@ type State struct {
 	files    []selectedFile
 	bundles  []model.Bundle
 	restored int
+	// foldErr is set only on an admission's prefix that reads but does not
+	// fold; Folded reports it, and no read ever answers from such a state.
+	foldErr error
 }
 
 type selectedFile struct {
@@ -41,6 +44,11 @@ type selectedFile struct {
 
 // Snapshot is the reduced state of exactly this prefix.
 func (s State) Snapshot() reduce.Snapshot { return s.snapshot }
+
+// Folded is the snapshot, or the error folding this prefix gave. Only an
+// admission's prefix can carry one: the store sequences a ledger it can read,
+// and leaves semantic refusal to the caller.
+func (s State) Folded() (reduce.Snapshot, error) { return s.snapshot, s.foldErr }
 
 // Restored is how many of the prefix's bundles came from a cached image
 // rather than being folded in this process: zero on a rebuild.

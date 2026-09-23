@@ -60,14 +60,11 @@ func Handback(ctx context.Context, project store.Project, r HandbackRequest) (mo
 		}
 		r.AttemptID = r.Envelope.AttemptID
 	}
-	prefix, err := store.ReadPrefix(project)
+	loaded, err := store.Load(project)
 	if err != nil {
 		return model.PacketRef{}, err
 	}
-	snapshot, err := reduce.Replay(prefix)
-	if err != nil {
-		return model.PacketRef{}, err
-	}
+	snapshot := loaded.Snapshot()
 	var task model.RecordRef
 	for _, projection := range snapshot.Tasks() {
 		for _, attempt := range projection.Attempts {

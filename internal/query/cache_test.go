@@ -66,11 +66,28 @@ func TestCachedReadsEqualFullReplayOnTheRichFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	requireCachedParity(t, p, "corrupted", 0)
-	appendEvents(t, p, 200, testTask(200))
-	requireCachedParity(t, p, "+1", n)
-	for i := 0; i < 100; i++ {
-		appendEvents(t, p, 300+i, testTask(300+i))
+	// Admissions keep the image current; putting the older image back leaves
+	// it behind the ledger, as bundles from a pull would, so reads catch up.
+	behind := func(add func()) {
+		t.Helper()
+		kept, err := os.ReadFile(image)
+		if err != nil {
+			t.Fatal(err)
+		}
+		add()
+		if err := os.WriteFile(image, kept, 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
+	behind(func() { appendEvents(t, p, 200, testTask(200)) })
+	requireCachedParity(t, p, "+1", n)
+	behind(func() {
+		for i := 0; i < 100; i++ {
+			appendEvents(t, p, 300+i, testTask(300+i))
+		}
+	})
 	requireCachedParity(t, p, "+100", n+1)
 	requireCachedParity(t, p, "warm again", n+101)
+	appendEvents(t, p, 500, testTask(500))
+	requireCachedParity(t, p, "admitted", n+102)
 }

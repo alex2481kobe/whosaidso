@@ -76,6 +76,10 @@ func BenchmarkCommands(b *testing.B) {
 	for _, n := range []int{10, 1000, 10000} {
 		b.Run(fmt.Sprintf("N%d", n), func(b *testing.B) {
 			f := getFixture(b, n)
+			// Warm: the fixture's cache image matches its ledger, as it does
+			// after any command. Cold and catch-up loads are BenchmarkCache's.
+			_, err := store.Load(f.Project)
+			must(b, err)
 			for _, c := range readCases(f) {
 				b.Run(c.name, func(b *testing.B) {
 					var answer query.Answer
@@ -146,6 +150,7 @@ func benchAdmit(b *testing.B, f *fixture, proof bool) {
 	packet := f.capture(nil, event)
 	defer removePacket(b, f, packet.CommandID)
 	request := f.request(packet)
+	restore := keepCache(b, f)
 	b.ReportAllocs()
 	b.ResetTimer()
 	measured(b, name, func() {
@@ -159,12 +164,26 @@ func benchAdmit(b *testing.B, f *fixture, proof bool) {
 			name, err := model.BundleName(bundle.Sequence, bundle.CommandID)
 			must(b, err)
 			must(b, os.Remove(filepath.Join(f.Project.Ledger, name)))
+			restore()
 			b.StartTimer()
 		}
 	})
 }
 
-// Run includes the CLI's prefix replay, instrument projection, fresh execution
+// keepCache warms the fixture's cache image and returns a function putting
+// that image back. An admission publishes the image including its bundle;
+// after the bundle is removed to restore the baseline, the image must go back
+// too, or the next measured command would be a cold rebuild.
+func keepCache(b *testing.B, f *fixture) func() {
+	_, err := store.Load(f.Project)
+	must(b, err)
+	image := filepath.Join(f.Project.CacheDir(), "snapshot")
+	kept, err := os.ReadFile(image)
+	must(b, err)
+	return func() { must(b, os.WriteFile(image, kept, 0o600)) }
+}
+
+// Run includes the CLI's validated prefix load, instrument projection, fresh execution
 // identity, actual child execution, two captures, and result encoding. Only flag
 // parsing and starting the datum executable itself are omitted. /usr/bin/printf
 // is a tiny measurement producer; its workload is deliberately constant.
@@ -175,11 +194,9 @@ func benchRun(b *testing.B, f *fixture) {
 		for i := 0; i < b.N; i++ {
 			project, err := store.Discover(f.Project.Root)
 			must(b, err)
-			prefix, err := store.ReadPrefix(project)
+			loaded, err := store.Load(project)
 			must(b, err)
-			s, err := reduce.Replay(prefix)
-			must(b, err)
-			instrument, ok := s.Instrument(reduce.Ident{Project: project.ID, ID: f.Instrument.RecordID})
+			instrument, ok := loaded.Snapshot().Instrument(reduce.Ident{Project: project.ID, ID: f.Instrument.RecordID})
 			if !ok {
 				b.Fatal("fixture instrument missing")
 			}

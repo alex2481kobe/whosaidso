@@ -35,7 +35,17 @@ func cacheTask(n int) func([]model.Bundle) (model.Bundle, error) {
 	}
 }
 
+// appendTasks admits tasks without refreshing the cache, as bundles that
+// arrive from elsewhere (a pull, another checkout) do: the image stays behind
+// and the next read must catch up. admitCached is the ordinary admission.
 func appendTasks(t testing.TB, p Project, from, count int) {
+	t.Helper()
+	publishImage = func(Project, cacheImage) error { return errImage }
+	defer func() { publishImage = writeImage }()
+	admitCached(t, p, from, count)
+}
+
+func admitCached(t testing.TB, p Project, from, count int) {
 	t.Helper()
 	for n := from; n < from+count; n++ {
 		if _, err := Transact(context.Background(), p, admissionID(n), digestFor(n), cacheTask(n)); err != nil {
@@ -312,7 +322,7 @@ func TestInterruptedAndFailedPublicationsChangeNoAnswer(t *testing.T) {
 	// A publication that fails answers correctly and leaves the old image.
 	publishImage = func(Project, cacheImage) error { return fmt.Errorf("disk full") }
 	defer func() { publishImage = writeImage }()
-	appendTasks(t, p, 6, 1)
+	admitCached(t, p, 6, 1)
 	requireReplayed(t, p, 5)
 	requireReplayed(t, p, 5)
 	publishImage = writeImage
@@ -407,4 +417,74 @@ func TestBundlesAreTheSelectedPrefixOrAnError(t *testing.T) {
 	if _, err := s.Bundles(); err == nil {
 		t.Fatal("bundles changed after selection were returned under the old selection")
 	}
+}
+
+// An admission publishes the ledger first and then the image of the state
+// including its bundle, so the next read restores everything and folds
+// nothing. A crash or failure between the two leaves the ledger admitted and
+// the image one bundle behind: the admission still succeeds, is durable, and
+// the next read catches up.
+func TestAdmissionKeepsTheCacheCurrentAndSurvivesACacheFailure(t *testing.T) {
+	p := warmProject(t)
+	admitCached(t, p, 5, 1)
+	requireReplayed(t, p, 5)
+	crashed := false
+	publishImage = func(Project, cacheImage) error { crashed = true; return fmt.Errorf("killed before the cache publish") }
+	bundle, err := Transact(context.Background(), p, admissionID(6), digestFor(6), cacheTask(6))
+	publishImage = writeImage
+	if err != nil || bundle.Sequence != 6 || !crashed {
+		t.Fatalf("a failed cache publish must not fail or undo the admission: %+v, %v (publish attempted %t)", bundle, err, crashed)
+	}
+	if _, err := os.Stat(ledgerPath(t, p, 6, admissionID(6))); err != nil {
+		t.Fatalf("the admitted bundle is not in the ledger: %v", err)
+	}
+	requireReplayed(t, p, 5)
+	requireReplayed(t, p, 6)
+	// An identical retry answers from the ledger and publishes nothing new.
+	again, err := Transact(context.Background(), p, admissionID(6), digestFor(6), cacheTask(6))
+	if err != nil || again.Sequence != 6 {
+		t.Fatalf("an identical retry after a cache failure: %+v, %v", again, err)
+	}
+	requireReplayed(t, p, 6)
+	// A retry that finds the image behind (the crash case) still succeeds.
+	image := imageBytes(t, p)
+	admitCached(t, p, 7, 1)
+	must(t, os.WriteFile(imagePath(p), image, 0o600))
+	if again, err := Transact(context.Background(), p, admissionID(7), digestFor(7), cacheTask(7)); err != nil || again.Sequence != 7 {
+		t.Fatalf("a retry over a stale image: %+v, %v", again, err)
+	}
+	requireReplayed(t, p, 7)
+}
+
+// Two writers and readers race; the ledger never forks and the final image
+// answers exactly as full replay.
+func TestConcurrentAdmissionsKeepOneChainAndACorrectCache(t *testing.T) {
+	p := warmProject(t)
+	var wg sync.WaitGroup
+	errs := make(chan error, 40)
+	for w := 0; w < 3; w++ {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := 0; i < 6; i++ {
+				n := 100 + w*10 + i
+				if _, err := Transact(context.Background(), p, admissionID(n), digestFor(n), cacheTask(n)); err != nil {
+					errs <- err
+				}
+				if _, err := Load(p); err != nil {
+					errs <- err
+				}
+			}
+		}(w)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	requireChain(t, readControl(t, p, 22))
+	if _, err := Load(p); err != nil {
+		t.Fatal(err)
+	}
+	requireReplayed(t, p, 22)
 }
