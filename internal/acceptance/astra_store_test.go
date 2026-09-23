@@ -66,7 +66,7 @@ func TestAstraStoreRetrySurvivesIntakeLoss(t *testing.T) {
 	}
 	before := w.ledger()
 	reads := map[string]map[string]any{}
-	for _, verb := range []string{"show", "history", "state", "now", "todo", "context"} {
+	for _, verb := range []string{"show", "history", "todo"} { // R19: the views replace state, now and context
 		reads[verb] = w.readJSON(verb)
 	}
 	// Leave only datum.toml and .datum/events, with an empty machine inbox.

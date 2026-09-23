@@ -38,7 +38,7 @@ func hbVerifyStart(t *testing.T, f *gateVerifyFixture, actor model.Actor) (model
 
 func hbVerifyTask(t *testing.T, f *gateVerifyFixture, ref model.RecordRef) *query.Task {
 	t.Helper()
-	a, err := query.Read(f.p, query.Request{Command: "show", ID: ref.RecordID})
+	a, err := gateVerifyShow(f.p, ref.RecordID)
 	if err != nil || len(a.Records) != 1 || a.Records[0].Task == nil {
 		t.Fatalf("expected task from fresh public read, got %+v, error=%v", a, err)
 	}

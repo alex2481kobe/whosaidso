@@ -28,8 +28,7 @@ datum run [--actor ID] --attempt-id ULID --instrument ID [--claim ID --claim-rev
 datum reconcile [--actor ID] --invocation-id ULID --reason TEXT
 datum id [N]
 datum template EVENT-TYPE
-datum criterion check --events FILE [--blob FILE] [--output FILE]
-datum proof check [--actor ID] --events FILE [--packet ID ...]
+datum check criterion|admission|disposal ...
 
 Each write prints one line per durable act; --json prints its full result.
 An omitted command id is minted and printed; give it to make a retry exact.
@@ -62,9 +61,8 @@ and prints both packet IDs; admit them. The instrument and any criterion must
 already be admitted: a criterion admitted after launch cannot freeze this run.
 Reconcile captures an UNKNOWN-outcome seal, with no reading, for an admitted run
 whose observer died; admit its packet. It needs an identified actor.
-Template prints a capture-ready skeleton of any event type; the two checks
-dry-run a criterion and a proof through admission's own evaluator and gate,
-and write nothing. Each prints its own usage with --help.
+Template prints a capture-ready skeleton of any event type. check dry-runs a
+criterion, an admission or a disposal and writes nothing; see datum check --help.
 Actor falls back to DATUM_ACTOR. Missing attribution is recorded as unknown.
 `
 
@@ -88,11 +86,11 @@ func writeCLI(ctx context.Context, args []string, cwd string, stdin io.Reader, s
 	if verb == "template" {
 		return templateCLI(args[1:], stdout, stderr)
 	}
-	if verb == "criterion" || verb == "proof" {
+	if verb == "check" {
 		return checkCLI(ctx, args, cwd, stdin, stdout, stderr, getenv)
 	}
 	if verb != "capture" && verb != "admit" && verb != "handback" {
-		return fmt.Errorf("unavailable-until-integrated: command %q is not enabled by the first gate", verb)
+		return usageError("unknown command %q", verb)
 	}
 	flags := flag.NewFlagSet(verb, flag.ContinueOnError)
 	flags.SetOutput(stderr)

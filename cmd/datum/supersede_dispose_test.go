@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"datum/internal/model"
+	"datum/internal/query"
 	"datum/internal/reduce"
 )
 
@@ -56,7 +57,7 @@ func TestCLISupersededRecordStaysInShowAndHistory(t *testing.T) {
 	}
 	show := readProcess(t, root, nil, "show", string(old.RecordID))
 	t.Logf("datum show %s:\n%s", old.RecordID, show)
-	answer := readJSON(t, readProcess(t, root, nil, "show", "--json", string(old.RecordID)))
+	answer := readJSON[query.ShowAnswer](t, readProcess(t, root, nil, "show", "--json", string(old.RecordID)))
 	if len(answer.Records) != 1 || answer.Records[0].Fact.Key.ID != old.RecordID || len(answer.Records[0].Supersessions) != 1 {
 		t.Fatalf("superseded record is hidden or unmarked: %+v", answer.Records)
 	}
@@ -66,9 +67,9 @@ func TestCLISupersededRecordStaysInShowAndHistory(t *testing.T) {
 	if answer.Records[0].CurrentSupport != reduce.TruthFalse {
 		t.Fatalf("a superseded ruling still reads as current: %s", answer.Records[0].CurrentSupport)
 	}
-	history := readJSON(t, readProcess(t, root, nil, "history", "--json", string(old.RecordID)))
+	history := readJSON[query.HistoryAnswer](t, readProcess(t, root, nil, "history", "--json", string(old.RecordID)))
 	seen := map[model.EventType]string{}
-	for _, e := range history.History {
+	for _, e := range history.Events {
 		seen[e.Event.Type] = e.Author.Author.ID
 	}
 	if seen["decision.open"] != "lane" || seen["decision.dispose"] != "lane" || seen["supersede"] != "agent-sol" {
@@ -114,9 +115,9 @@ func TestCLIDisposedArtifactLeavesItsProofUnverifiable(t *testing.T) {
 	}
 	show := readProcess(t, root, nil, "show", string(criterion.Claim.RecordID))
 	t.Logf("datum show %s:\n%s", criterion.Claim.RecordID, show)
-	answer := readJSON(t, readProcess(t, root, nil, "show", "--json", string(criterion.Claim.RecordID)))
+	answer := readJSON[query.ShowAnswer](t, readProcess(t, root, nil, "show", "--json", string(criterion.Claim.RecordID)))
 	claim := answer.Records[0].Claim
-	if claim.Support.EvidenceAvailable != reduce.TruthFalse || answer.Records[0].CurrentSupport == reduce.TruthTrue {
-		t.Fatalf("a proof citing a disposed artifact still reads as verified: %+v", claim.Support)
+	if answer.Records[0].Support.EvidenceAvailable != reduce.TruthFalse || answer.Records[0].CurrentSupport == reduce.TruthTrue {
+		t.Fatalf("a proof citing a disposed artifact still reads as verified: %+v, %s", answer.Records[0].Support, claim.Status)
 	}
 }

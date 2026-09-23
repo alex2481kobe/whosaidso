@@ -5,7 +5,7 @@ package query
 // JSON export at the path it was read from, and equal to it, or for a string
 // shown truncated, a prefix of it marked with "…"; every count is the length
 // of the array at its path; nothing is shown as absent. The brief is not
-// lossless: --json and the default outline are.
+// lossless: --json is.
 
 import (
 	"bytes"
@@ -13,9 +13,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"datum/internal/model"
+	"datum/internal/store"
 )
 
 func jsonAt(t *testing.T, root any, path []string) (any, bool) {
@@ -44,27 +44,6 @@ func jsonAt(t *testing.T, root any, path []string) (any, bool) {
 		}
 	}
 	return v, true
-}
-
-// assertBriefAgrees checks the agreement rule above and returns the text.
-func assertBriefAgrees(t *testing.T, a Answer) string {
-	t.Helper()
-	var exported, text, again bytes.Buffer
-	if err := RenderJSON(&exported, a); err != nil {
-		t.Fatal(err)
-	}
-	if err := RenderBrief(&text, a); err != nil {
-		t.Fatal(err)
-	}
-	if err := RenderBrief(&again, a); err != nil || again.String() != text.String() {
-		t.Fatalf("%s brief must render deterministically", a.Command)
-	}
-	b, err := brief(a)
-	if err != nil {
-		t.Fatal(err)
-	}
-	checkBriefFacts(t, a.Command, exported.Bytes(), text.String(), b.facts, a.Watermark.Sequence)
-	return text.String()
 }
 
 // checkBriefFacts is the agreement rule above over one export and its brief.
@@ -118,61 +97,47 @@ func checkBriefFacts(t *testing.T, name string, exported []byte, text string, fa
 	}
 }
 
-func TestBriefAgreesWithJSONOnEveryPreset(t *testing.T) {
-	p := testProject(t)
-	presetWorld(t, p)
-	requests := []Request{{Command: "show"}, {Command: "history"}, {Command: "now"}, {Command: "todo"}, {Command: "state"},
-		{Command: "instruments"}, {Command: "context"}, {Command: "context", ID: testID(20)}, {Command: "show", ID: testID(999)}}
-	at := time.Now().UTC()
-	requests = append(requests, Request{Command: "continue", ID: testID(1), Observed: &Observation{
-		ObservedAt: model.Availability[time.Time]{State: model.Known, Value: &at},
-		Head:       notKnown[model.GitHead]("not a git checkout"), Dirty: notKnown[bool]("not a git checkout")}})
-	for _, r := range requests {
-		a, err := Read(p, r)
-		if err != nil {
-			t.Fatalf("control %s read must succeed: %v", r.Command, err)
-		}
-		text := assertBriefAgrees(t, a)
-		t.Logf("%s", text)
-		if a.Result == "UNKNOWN" && !strings.Contains(text, "\nreason: no admitted record "+string(testID(999))) {
-			t.Fatalf("an UNKNOWN answer's brief must say why, got\n%s", text)
-		}
+func viewAnswerOf(t *testing.T, p store.Project, r ViewRequest) ViewAnswer {
+	t.Helper()
+	a, err := ReadView(p, r)
+	if err != nil {
+		t.Fatalf("control %s view must answer: %v", r.View, err)
 	}
+	return a
 }
 
+// R19: the brief is the views' default text; these ran over the old presets
+// and now read the views that absorbed them (now and intake pending -> todo).
 func TestBriefNamesStatusReasonAndNextActorPerRecord(t *testing.T) {
 	p := testProject(t)
 	readyControl(t, p)
 	appendEvents(t, p, 101, testTask(2), &model.BlockerHold{Task: testRef(2, 1), BlockerID: testID(80), Reason: model.BlockerResume,
 		Actor: model.Actor{ID: "owner"}, Criterion: "resume is authorized"})
-	todo := assertBriefAgrees(t, presetAnswer(t, p, Request{Command: "todo"}))
+	todo := assertViewHonest(t, viewAnswerOf(t, p, ViewRequest{View: "todo"}))
 	for _, want := range []string{
 		"blocked: 1\n  TASK " + string(testID(2)) + " rev 1 BLOCKED next acceptance-owner\n    Build U09 of Datum",
 		"    blocked: resume waits on owner hold " + string(testID(80)) + " - resume is authorized\n",
 		"ready: 1\n  TASK " + string(testID(1)) + " rev 1 READY next acceptance-owner\n",
+		"attention: 1\n  task-blocked-owed " + string(testID(2)) + " rev 1 waits on owner\n",
 	} {
 		if !strings.Contains(todo, want) {
 			t.Fatalf("todo brief must carry %q, got\n%s", want, todo)
 		}
 	}
-	now := assertBriefAgrees(t, presetAnswer(t, p, Request{Command: "now"}))
-	if !strings.Contains(now, "attention: 1\n  task-blocked-owed "+string(testID(2))+" rev 1 waits on owner\n") {
-		t.Fatalf("now brief must name the owed hold and who it waits on, got\n%s", now)
-	}
-	if strings.Contains(todo+now, `"Key"`) || strings.Contains(todo+now, "null") {
-		t.Fatalf("the brief must not dump structure, got\n%s%s", todo, now)
+	if strings.Contains(todo, `"Key"`) || strings.Contains(todo, "null") {
+		t.Fatalf("the brief must not dump structure, got\n%s", todo)
 	}
 }
 
 func TestBriefShowsReviewedIntakeWithItsDisposition(t *testing.T) {
 	p := testProject(t)
 	readyControl(t, p)
-	if empty := assertBriefAgrees(t, readAnswer(t, p, "intake pending", "")); !strings.Contains(empty, "\nintake: none\n") {
-		t.Fatalf("the list a command is about must say none, not vanish, got\n%s", empty)
+	if empty := assertViewHonest(t, viewAnswerOf(t, p, ViewRequest{View: "todo"})); !strings.Contains(empty, "\nintake pending: none\n") {
+		t.Fatalf("an empty section must say none, not vanish, got\n%s", empty)
 	}
 	reviewPacket(t, p, 101, capturePacket(t, p, 2), "rejected")
 	capturePacket(t, p, 3)
-	text := assertBriefAgrees(t, readAnswer(t, p, "intake pending", ""))
+	text := assertViewHonest(t, viewAnswerOf(t, p, ViewRequest{View: "todo"}))
 	for _, want := range []string{"packet " + string(testID(1002)) + " rejected\n", "    reviewed rejected by reviewer\n",
 		"packet " + string(testID(1003)) + " pending\n    author author events 1 task.create\n"} {
 		if !strings.Contains(text, want) {
@@ -195,7 +160,7 @@ func TestBriefCannotBeForgedByAuthoredText(t *testing.T) {
 	ellipsis := testTask(4)
 	ellipsis.Spec.Intent = "done…"
 	appendEvents(t, p, 100, forged, controls, long, ellipsis)
-	text := assertBriefAgrees(t, readAnswer(t, p, "show", ""))
+	text := assertViewHonest(t, viewAnswerOf(t, p, ViewRequest{View: "show"}))
 	if strings.Contains(text, "\x1b") || strings.Contains(text, "0009 rev 1") || !strings.Contains(text, "    fine…\n") ||
 		!strings.Contains(text, `"clear\u001b[2J screen \"quoted\""`) || !strings.Contains(text, "    "+strings.Repeat("λ", briefWidth-1)+"…\n") || !strings.Contains(text, "    \"done…\"\n") {
 		t.Fatalf("authored text must be cut, quoted and marked, got\n%s", text)

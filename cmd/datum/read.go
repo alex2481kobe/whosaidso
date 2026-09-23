@@ -16,45 +16,23 @@ import (
 	"datum/internal/write"
 )
 
-const readUsage = `datum show [--json|--full] [RECORD_ID]
-datum history [--json|--full] [RECORD_ID]
-datum history [--json|--full] --self-admitted[=true|false|unknown]
-datum intake pending [--json|--full]
-datum instruments|state|now [--json|--full]
-datum state --stale [--json|--full]
-datum todo [--json|--full] [--limit N]
-datum context [--json|--full] [--limit N] [RECORD_ID]
-datum continue [--json|--full] [--limit N] TASK_ID
-datum disposal-loss [--json|--full] --digest SHA256 [--git FORMAT:COMMIT:PATH]
+const readUsage = `datum todo [--limit N] [--json]
+datum continue RECORD_ID [--limit N] [--json]
+datum show [RECORD_ID] [--kind task|claim|decision|instrument] [--stale] [--json]
+datum history [RECORD_ID] [--self-admitted[=true|false|unknown]] [--json]
 
-Show selects current admitted records. History selects admitted events in order.
-Pending includes rejected and correction-requested packets.
-History without an ID also lists per-packet reviews. --self-admitted selects only
-matching reviews, including rejected packets, without needing local intake bytes.
-The bare flag selects true; false excludes unknown. Legacy facts remain UNKNOWN.
-This audit filter cannot be combined with a record ID.
-Every answer carries its ledger watermark. Flags precede the optional record ID.
-Output is generated on stdout. The default text is the brief: one short block
-per record with kind, id, revision, status, why it is in this view and who acts
-next. Every value it shows is read from the JSON export at a fixed path; long
-text is cut at its first line or 72 characters and marked with …. It is not
-lossless: --json (for agents) and --full (a complete text outline of that same
-JSON) are. --brief names the default and may be omitted.
-NOW lists IN FLIGHT work, its runs and OPEN decisions, and raises under
-attention every hold, acceptance or reconciliation a BLOCKED task is waiting
-on, with the actor it waits on. The full blocked record stays in TODO.
-INSTRUMENTS shows validation first; UNKNOWN validation is listed under attention.
---limit cuts only optional results (READY tasks, context refs), never blockers,
-mandatory constraints, prerequisites, corrections or supersessions.
-continue observes git HEAD, dirty state and the time now, and writes nothing.
-state --stale adds, per observed current claim, whether code under its scope
-changed between the commit its last run recorded and HEAD (TRUE, FALSE, or
-UNKNOWN with the reason), so re-measuring happens when it matters. It runs git,
-so it is off unless asked. It cannot see uncommitted changes.
-disposal-loss prints the support_loss targets an artifact.dispose of exactly that
-identity must record at this watermark (give --git when the disposal names a git
-pin), and the admitted events citing it. Reasons are yours to write; admission
-recomputes the list and stays the authority.
+todo is everything owed, in flight first: in-flight tasks and their runs,
+tasks awaiting acceptance, blocked and ready tasks, open decisions, pending
+intake and attention. continue resumes any record: its detail, closure,
+context and, for a task, progress, attempts, runs and what is owed, plus a
+fresh look at git HEAD, dirty state and the time. show ID is one record;
+bare show is a summary, every current record by kind and every run; --kind
+keeps one kind; --stale adds, per observed claim, whether code under its
+scope changed since its last run (it runs git and cannot see uncommitted
+changes). history is admitted events in order, and without an ID every
+per-packet review; --self-admitted selects reviews by self-admission.
+Every answer carries its ledger watermark. The default text is the brief;
+--json is the complete answer. --limit cuts only optional results.
 `
 
 // A bare audit flag means true, while explicit values retain all three states.
@@ -77,82 +55,49 @@ func isReadCommand(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "show", "history", "intake", "read", "instruments", "state", "now", "todo", "context", "continue", "disposal-loss":
+	case "todo", "continue", "show", "history":
 		return true
 	}
 	return false
 }
 
-// This adapter is intentionally shorter than the usual file range: discovery,
-// flag parsing and output selection are its entire role. It never writes files.
+// readCLI answers one of the four views. Discovery, flag parsing and output
+// selection are its entire role. It never writes files.
 func readCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.Writer) error {
-	if len(args) == 0 || args[0] == "read" && (len(args) == 1 || len(args) == 2 && (args[1] == "--help" || args[1] == "-h")) {
-		_, err := io.WriteString(stdout, readUsage)
-		return err
-	}
-	command, rest := args[0], args[1:]
-	if command == "intake" {
-		if len(rest) == 0 || rest[0] != "pending" {
-			return fmt.Errorf("expected intake pending; see datum read --help")
-		}
-		command, rest = command+" "+rest[0], rest[1:]
-	}
-	presets := map[string]bool{"instruments": true, "state": true, "now": true, "todo": true, "context": true, "continue": true, "disposal-loss": true}
-	if command != "show" && command != "history" && command != "intake pending" && !presets[command] {
-		return fmt.Errorf("unknown read command %q; see datum read --help", command)
-	}
-	withID := command == "show" || command == "history" || command == "context" || command == "continue"
-	flags := flag.NewFlagSet(command, flag.ContinueOnError)
+	view, rest := args[0], args[1:]
+	flags := flag.NewFlagSet(view, flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.Usage = func() { fmt.Fprint(stderr, readUsage) }
-	jsonOutput := flags.Bool("json", false, "export the answer as JSON")
-	fullOutput := flags.Bool("full", false, "print the complete text outline of the JSON answer")
-	briefOutput := flags.Bool("brief", false, "print the brief (the default)")
+	jsonOutput := flags.Bool("json", false, "print the complete answer as JSON")
+	request := query.ViewRequest{View: view}
 	var selfAdmitted selfAdmissionFlag
-	limit := 0
-	if command == "todo" || command == "context" || command == "continue" {
-		flags.IntVar(&limit, "limit", 0, "cap optional results; mandatory facts are never cut")
-	}
-	if command == "history" {
-		flags.Var(&selfAdmitted, "self-admitted", "select per-packet reviews by true, false, or unknown (bare flag: true)")
-	}
 	stale := false
-	if command == "state" {
-		flags.BoolVar(&stale, "stale", false, "add the claims whose scoped code changed since their last run (runs git)")
-	}
-	var digest, git string
-	if command == "disposal-loss" {
-		flags.StringVar(&digest, "digest", "", "sha-256 of the artifact a disposal would name (required)")
-		flags.StringVar(&git, "git", "", "the disposal's git pin as FORMAT:COMMIT:PATH, when it names one")
+	switch view {
+	case "todo", "continue":
+		flags.IntVar(&request.Limit, "limit", 0, "cap optional results; mandatory facts are never cut")
+	case "show":
+		flags.StringVar(&request.Kind, "kind", "", "bare show restricted to one kind: task, claim, decision or instrument")
+		flags.BoolVar(&stale, "stale", false, "add whether each observed claim's scoped code changed since its last run (runs git)")
+	case "history":
+		flags.Var(&selfAdmitted, "self-admitted", "select per-packet reviews by true, false, or unknown (bare flag: true)")
 	}
 	if err := flags.Parse(rest); err != nil {
 		if err == flag.ErrHelp {
 			return nil
 		}
-		return err
+		return usageError("%v", err)
 	}
-	if chosen := btoi(*jsonOutput) + btoi(*fullOutput) + btoi(*briefOutput); chosen > 1 {
-		return fmt.Errorf("%s: --json, --full and --brief are three renderings; choose one", command)
-	}
-	request := query.Request{Command: command, SelfAdmitted: model.SelfAdmissionState(selfAdmitted), Limit: limit}
-	if command == "disposal-loss" {
-		request.Disposal = &query.DisposalTarget{Digest: model.Digest(digest)}
-		if git != "" {
-			parts := strings.SplitN(git, ":", 3)
-			if len(parts) != 3 {
-				return fmt.Errorf("disposal-loss: --git must be FORMAT:COMMIT:PATH")
-			}
-			request.Disposal.Git = &model.GitPin{ObjectFormat: parts[0], Commit: parts[1], Path: parts[2]}
-		}
-	}
-	if flags.NArg() > 1 || flags.NArg() > 0 && !withID {
-		return fmt.Errorf("%s: unexpected positional arguments", command)
-	}
-	if flags.NArg() == 1 {
+	request.SelfAdmitted = model.SelfAdmissionState(selfAdmitted)
+	switch {
+	case flags.NArg() > 1 || flags.NArg() > 0 && view == "todo":
+		return usageError("%s: unexpected positional arguments", view)
+	case flags.NArg() == 0 && view == "continue":
+		return usageError("continue needs a RECORD_ID")
+	case flags.NArg() == 1:
 		request.ID = model.ID(flags.Arg(0))
-		if !model.ValidID(request.ID) {
-			return fmt.Errorf("%s: RECORD_ID must be a ULID", command)
-		}
+	}
+	if err := query.CheckView(request); err != nil {
+		return usageError("%s: %v", view, err)
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -161,7 +106,7 @@ func readCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.W
 	if err != nil {
 		return err
 	}
-	if command == "continue" {
+	if view == "continue" {
 		observed := observe(ctx, project.Root)
 		request.Observed = &observed
 	}
@@ -174,7 +119,7 @@ func readCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.W
 			return out
 		}
 	}
-	answer, err := query.Read(project, request)
+	answer, err := query.ReadView(project, request)
 	if err != nil {
 		return err
 	}
@@ -182,19 +127,9 @@ func readCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.W
 		return err
 	}
 	if *jsonOutput {
-		return query.RenderJSON(stdout, answer)
+		return query.RenderViewJSON(stdout, answer)
 	}
-	if *fullOutput {
-		return query.RenderText(stdout, answer)
-	}
-	return query.RenderBrief(stdout, answer)
-}
-
-func btoi(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
+	return query.RenderViewBrief(stdout, answer)
 }
 
 // observe is continue's fresh look at the workspace. Anything git cannot

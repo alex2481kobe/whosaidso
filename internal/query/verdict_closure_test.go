@@ -2,7 +2,8 @@ package query
 
 // R14.1 and R15.1 as the reads show them: a refuted claim's standing says
 // REFUTED, never UNMEASURED, and a closed task names its closer and whether
-// the closer also did the work, in the brief and in --json alike.
+// the closer also did the work, in the brief and in --json alike. R19: read
+// through show, which absorbed the old state preset.
 
 import (
 	"bytes"
@@ -16,7 +17,7 @@ import (
 
 // refutedAndClosedWorld is presetWorld plus a refutation of claim 21 (its only
 // run failed) and task 1 closed by lane-a, who also wrote its success receipt.
-func refutedAndClosedWorld(t *testing.T) Answer {
+func refutedAndClosedWorld(t *testing.T) *ShowAnswer {
 	t.Helper()
 	p := testProject(t)
 	presetWorld(t, p)
@@ -30,19 +31,16 @@ func refutedAndClosedWorld(t *testing.T) Answer {
 	appendEvents(t, p, 107, admitted(107, &model.TaskClose{Task: testRef(1, 1), Outcome: model.ClosureSuccess,
 		AcceptanceWitnessRefs: []model.AcceptanceWitness{{CriterionID: testID(90), CriterionRevision: 1, WitnessRef: testArtifact()}},
 		DeliveryWitnessRefs:   []model.ArtifactRef{testArtifact()}})...)
-	return presetAnswer(t, p, Request{Command: "state"})
+	return viewAnswerOf(t, p, ViewRequest{View: "show"}).(*ShowAnswer)
 }
 
 func TestRefutedClaimAndClosureReadHonestly(t *testing.T) {
 	a := refutedAndClosedWorld(t)
-	text := assertBriefAgrees(t, a)
-	var claim *ClaimView
-	if a.Preset.Claims == nil {
-		t.Fatal("state must list the claims")
-	}
-	for i, c := range *a.Preset.Claims {
-		if c.Ref == testRef(21, 1) {
-			claim = &(*a.Preset.Claims)[i]
+	text := assertViewHonest(t, a)
+	var claim *ClaimDetail
+	for _, r := range a.Records {
+		if r.Ref == testRef(21, 1) {
+			claim = r.Claim
 		}
 	}
 	if claim == nil || claim.Status != reduce.StatusRefuted || !strings.HasPrefix(claim.Standing, "REFUTED at revision 1") ||
@@ -56,7 +54,7 @@ func TestRefutedClaimAndClosureReadHonestly(t *testing.T) {
 		t.Fatalf("the brief must name the closer and self-acceptance:\n%s", text)
 	}
 	var exported bytes.Buffer
-	if err := RenderJSON(&exported, a); err != nil {
+	if err := RenderViewJSON(&exported, a); err != nil {
 		t.Fatal(err)
 	}
 	var root map[string]any
@@ -64,9 +62,11 @@ func TestRefutedClaimAndClosureReadHonestly(t *testing.T) {
 		t.Fatal(err)
 	}
 	found := false
-	for _, r := range root["preset"].(map[string]any)["closed"].([]any) {
-		c, _ := r.(map[string]any)["task"].(map[string]any)["closure"].(map[string]any)
-		closer, _ := c["closer"].(map[string]any)["actor"].(map[string]any)
+	for _, r := range root["records"].([]any) {
+		task, _ := r.(map[string]any)["task"].(map[string]any)
+		c, _ := task["closure"].(map[string]any)
+		by, _ := c["closer"].(map[string]any)
+		closer, _ := by["actor"].(map[string]any)
 		if closer["id"] == "lane-a" && c["self_accepted"] == "TRUE" {
 			found = true
 		}

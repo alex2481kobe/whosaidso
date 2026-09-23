@@ -44,7 +44,7 @@ var viewKinds = map[string]model.Kind{"task": model.Task, "claim": model.Claim, 
 
 // ReadView selects the immutable ledger prefix once and answers one view.
 func ReadView(project store.Project, request ViewRequest) (ViewAnswer, error) {
-	if err := checkView(request); err != nil {
+	if err := CheckView(request); err != nil {
 		return nil, err
 	}
 	source, err := store.Load(project)
@@ -56,13 +56,14 @@ func ReadView(project store.Project, request ViewRequest) (ViewAnswer, error) {
 
 // ReadViewFrom answers from one already selected prefix.
 func ReadViewFrom(project store.Project, request ViewRequest, source Source) (ViewAnswer, error) {
-	if err := checkView(request); err != nil {
+	if err := CheckView(request); err != nil {
 		return nil, err
 	}
 	return view(project, request, source)
 }
 
-func checkView(r ViewRequest) error {
+// CheckView refuses a request no view can answer, before any ledger is read.
+func CheckView(r ViewRequest) error {
 	switch {
 	case r.View != "todo" && r.View != "continue" && r.View != "show" && r.View != "history":
 		return fmt.Errorf("unknown view %q: todo, continue, show or history", r.View)

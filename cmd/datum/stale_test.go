@@ -1,8 +1,8 @@
 package main
 
-// `datum state --stale` (R14.2) through a fresh process: the stale-claims
-// section appears only when asked, git runs only when asked, and the flag
-// belongs to state alone. What staleness is (TRUE, FALSE, UNKNOWN against a
+// `datum show --stale` (R14.2; R19: formerly state --stale) through a fresh
+// process: the stale-claims section appears only when asked, git runs only
+// when asked, and the flag belongs to show alone. What staleness is (TRUE, FALSE, UNKNOWN against a
 // real repository) is tested in internal/write.
 
 import (
@@ -15,7 +15,7 @@ import (
 	"testing"
 )
 
-func TestCLIStateStaleRunsGitOnlyWhenAsked(t *testing.T) {
+func TestCLIShowStaleRunsGitOnlyWhenAsked(t *testing.T) {
 	root, _, records := disposalWorld(t)
 	claim := string(records[0].RecordID)
 	// A git that records every call and answers nothing. The fixture is not a
@@ -40,46 +40,47 @@ func TestCLIStateStaleRunsGitOnlyWhenAsked(t *testing.T) {
 		}
 		return stdout.Bytes(), nil
 	}
-	plain, err := read("state", "--json")
+	plain, err := read("show", "--json")
 	if err != nil {
-		t.Fatalf("control: state must answer: %v %s", err, plain)
+		t.Fatalf("control: show must answer: %v %s", err, plain)
 	}
 	if bytes.Contains(plain, []byte(`"stale"`)) {
-		t.Fatal("state without --stale must carry no stale section")
+		t.Fatal("show without --stale must carry no stale section")
 	}
 	if _, err := os.Stat(log); !os.IsNotExist(err) {
-		t.Fatal("state without --stale ran git; reads stay cheap unless asked")
+		t.Fatal("show without --stale ran git; reads stay cheap unless asked")
 	}
-	out, err := read("state", "--stale", "--json")
+	out, err := read("show", "--stale", "--json")
 	if err != nil {
-		t.Fatalf("state --stale: %v %s", err, out)
+		t.Fatalf("show --stale: %v %s", err, out)
 	}
 	var answer struct {
-		Preset struct {
-			Stale []struct {
+		Stale struct {
+			BlindSpot string `json:"blind_spot"`
+			Claims    []struct {
 				Claim struct {
 					RecordID string `json:"record_id"`
 				} `json:"claim"`
 				Stale  string `json:"stale"`
 				Reason string `json:"reason"`
-			} `json:"stale"`
-		} `json:"preset"`
+			} `json:"claims"`
+		} `json:"stale"`
 	}
 	if err := json.Unmarshal(out, &answer); err != nil {
 		t.Fatal(err)
 	}
-	stale := answer.Preset.Stale
+	stale := answer.Stale.Claims
 	if len(stale) != 1 || stale[0].Claim.RecordID != claim || stale[0].Stale != "UNKNOWN" || stale[0].Reason == "" {
 		t.Fatalf("the observed claim must read stale UNKNOWN with git's reason: %s", out)
 	}
-	if calls, err := os.ReadFile(log); err != nil || len(calls) == 0 {
-		t.Fatalf("state --stale must ask git: %v", err)
+	if calls, err := os.ReadFile(log); err != nil || len(calls) == 0 || !strings.Contains(answer.Stale.BlindSpot, "uncommitted changes") {
+		t.Fatalf("show --stale must ask git and state its blind spot: %v %q", err, answer.Stale.BlindSpot)
 	}
-	brief, err := read("state", "--stale")
+	brief, err := read("show", "--stale")
 	if err != nil || !strings.Contains(string(brief), "stale claims: 1\n  CLAIM "+claim+" rev 1 stale UNKNOWN") {
 		t.Fatalf("the brief must list the stale section: %v\n%s", err, brief)
 	}
-	if out, err := read("now", "--stale"); err == nil {
-		t.Fatalf("--stale belongs to state alone, now accepted it: %s", out)
+	if out, err := read("todo", "--stale"); err == nil {
+		t.Fatalf("--stale belongs to show alone, todo accepted it: %s", out)
 	}
 }

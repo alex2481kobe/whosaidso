@@ -71,7 +71,7 @@ func (f *gateVerifyFixture) admitRaw(author, admitter model.Actor, events ...mod
 
 func (f *gateVerifyFixture) unmeasured(id model.ID) {
 	f.t.Helper()
-	a, err := query.Read(f.p, query.Request{Command: "show", ID: id})
+	a, err := gateVerifyShow(f.p, id)
 	if err != nil || a.Result != "KNOWN" || len(a.Records) != 1 || a.Records[0].Claim == nil {
 		f.t.Fatalf("admitted claim must survive a fresh public read: answer=%+v, error=%v", a, err)
 	}
@@ -79,6 +79,15 @@ func (f *gateVerifyFixture) unmeasured(id model.ID) {
 	if c.Status != reduce.StatusUnmeasured || len(c.Proofs) != 0 || len(c.Observations) != 0 || c.Support.ApplicableScope != reduce.TruthFalse || c.Support.EvidenceAvailable != reduce.TruthUnknown {
 		f.t.Fatalf("expected UNMEASURED with no proof or observations; got %+v. External tags and prose must not grant local proof authority", c)
 	}
+}
+
+// gateVerifyShow is `datum show ID` (R19: read through the show view).
+func gateVerifyShow(p store.Project, id model.ID) (*query.ShowAnswer, error) {
+	a, err := query.ReadView(p, query.ViewRequest{View: "show", ID: id})
+	if err != nil {
+		return nil, err
+	}
+	return a.(*query.ShowAnswer), nil
 }
 
 func (f *gateVerifyFixture) control() model.Bundle {
@@ -129,7 +138,7 @@ func TestGateVerifyClaimAttributionAndUnmeasuredStatus(t *testing.T) {
 		if _, err := f.admit(author, author, task); err != nil {
 			t.Fatalf("control: task waiting on an admitted claim must itself admit: %v", err)
 		}
-		answer, err := query.Read(f.p, query.Request{Command: "show", ID: task.ID})
+		answer, err := gateVerifyShow(f.p, task.ID)
 		if err != nil || len(answer.Records) != 1 || answer.Records[0].Task == nil || answer.Records[0].Task.Status != reduce.StatusBlocked {
 			t.Fatalf("expected task BLOCKED on the unmeasured claim, got %+v, error=%v; external VERIFIED must not satisfy claim-proof", answer, err)
 		}
@@ -143,14 +152,19 @@ func TestGateVerifyClaimAttributionAndUnmeasuredStatus(t *testing.T) {
 		if author.ID == "" {
 			want = model.SelfAdmissionUnknown
 		}
-		audit, err := query.Read(f.p, query.Request{Command: "history", SelfAdmitted: want})
+		// R19: read through the history view.
+		audit, err := query.ReadView(f.p, query.ViewRequest{View: "history", SelfAdmitted: want})
+		reviews := []query.Review{}
+		if h, ok := audit.(*query.HistoryAnswer); ok {
+			reviews = h.Reviews
+		}
 		for _, packet := range review.Packets {
 			found := false
-			for _, r := range audit.Reviews {
+			for _, r := range reviews {
 				found = found || r.Key.CommandID == packet.CommandID
 			}
 			if err != nil || !found {
-				t.Errorf("expected packet %s selected as self-admitted %q, got %+v, error=%v; two unknown identities must not become a known match", packet.CommandID, want, audit.Reviews, err)
+				t.Errorf("expected packet %s selected as self-admitted %q, got %+v, error=%v; two unknown identities must not become a known match", packet.CommandID, want, reviews, err)
 			}
 		}
 		for _, forged := range []model.Actor{{ID: "somebody-else"}, {UnknownReason: "different missing attribution"}} {

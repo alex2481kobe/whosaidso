@@ -93,9 +93,8 @@ func TestCLICaptureAdmissionAndExplicitUnavailable(t *testing.T) {
 	cliControl(t, root, data)
 	// run is enabled by U12; TestCLIRunRefusesBeforeLaunch covers its refusals.
 	for _, command := range []string{"publish", "append", "decision", "claim"} {
-		_, err := callWriteCLI(t, root, nil, command)
-		if err == nil || !strings.Contains(err.Error(), "unavailable-until-integrated") {
-			t.Fatalf("unchecked command %s was not refused: %v", command, err)
+		if out, errs, code := cliRun(t, root, nil, "", command); code != 2 || out != "" || !strings.Contains(errs, "unknown command") {
+			t.Fatalf("unknown command %s must be a usage error: %d %q %q", command, code, out, errs)
 		}
 	}
 	_, err := callWriteCLI(t, root, nil, "admit", "--command-id", string(cliID(4)), "--actor", "reviewer", "--outcome", "rejected", "--reason", "changed judgment", string(cliID(3)))
