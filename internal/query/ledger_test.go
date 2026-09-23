@@ -38,21 +38,21 @@ func realLedger(t *testing.T) (store.Project, reduce.Snapshot) {
 
 func TestRealLedgerInstrumentsNeverHideUnknownValidation(t *testing.T) {
 	p, s := realLedger(t)
-	a := presetAnswer(t, p, Request{Command: "instruments"})
-	assertHonestRendering(t, a)
+	a := view_(t, p, ViewRequest{View: "show", Kind: "instrument"}).(*ShowAnswer)
+	assertViewHonest(t, a)
 	if a.Watermark.Bundles != int(a.Watermark.Sequence) || a.Watermark.Bundles == 0 {
 		t.Fatalf("the watermark must describe the whole selected prefix, got %+v", a.Watermark)
 	}
 	views := map[model.RecordRef]InstrumentView{}
-	for _, v := range *a.Preset.Instruments {
-		views[v.Ref] = v
+	for _, d := range a.Records {
+		views[d.Instrument.Ref] = *d.Instrument
 	}
 	current := s.Instruments()
 	if len(views) != len(current) {
-		t.Fatalf("INSTRUMENTS must list every current instrument: %d shown, %d admitted", len(views), len(current))
+		t.Fatalf("show --kind instrument must list every current instrument: %d shown, %d admitted", len(views), len(current))
 	}
 	raised := map[model.RecordRef]bool{}
-	for _, note := range a.Preset.Attention {
+	for _, note := range a.Attention {
 		if note.Kind == "instrument-validation-unknown" {
 			raised[note.Ref] = true
 		}
@@ -77,38 +77,36 @@ func TestRealLedgerInstrumentsNeverHideUnknownValidation(t *testing.T) {
 	}
 }
 
-func TestRealLedgerPresetsKeepTheirInvariants(t *testing.T) {
+func TestRealLedgerViewsKeepTheirInvariants(t *testing.T) {
 	p, s := realLedger(t)
 	before := treeBytes(t, p.Ledger)
-	for _, command := range []string{"state", "now", "todo", "context"} {
-		a := presetAnswer(t, p, Request{Command: command})
-		assertHonestRendering(t, a)
-		again := presetAnswer(t, p, Request{Command: command})
-		if !reflect.DeepEqual(a, again) {
-			t.Fatalf("%s must answer identically from the same prefix", command)
+	for _, r := range []ViewRequest{{View: "show"}, {View: "show", Kind: "claim"}, {View: "todo"}} {
+		a := view_(t, p, r)
+		assertViewHonest(t, a)
+		if again := view_(t, p, r); !reflect.DeepEqual(a, again) {
+			t.Fatalf("%s must answer identically from the same prefix", r.View)
 		}
-		if a.Preset.Claims != nil {
-			for _, c := range *a.Preset.Claims {
-				if c.Status != reduce.StatusProven && (c.CurrentSupport == reduce.TruthTrue || !strings.Contains(c.Standing, "not established")) {
+		if show, ok := a.(*ShowAnswer); ok {
+			for _, d := range show.Records {
+				if c := d.Claim; c != nil && c.Status != reduce.StatusProven && (c.CurrentSupport == reduce.TruthTrue || !strings.Contains(c.Standing, "not established")) {
 					t.Fatalf("%s claim %s reads as established without proof", c.Status, c.Ref.RecordID)
 				}
 			}
 		}
 	}
-	full := presetAnswer(t, p, Request{Command: "todo"})
-	cut := presetAnswer(t, p, Request{Command: "todo", Limit: 1})
-	if !reflect.DeepEqual(full.Preset.Blocked, cut.Preset.Blocked) || !reflect.DeepEqual(full.Preset.AwaitingAcceptance, cut.Preset.AwaitingAcceptance) {
-		t.Fatal("a TODO limit hid blocked or awaiting-acceptance work on the real ledger")
+	full := view_(t, p, ViewRequest{View: "todo"}).(*TodoAnswer)
+	cut := view_(t, p, ViewRequest{View: "todo", Limit: 1}).(*TodoAnswer)
+	if !reflect.DeepEqual(full.Blocked, cut.Blocked) || !reflect.DeepEqual(full.AwaitingAcceptance, cut.AwaitingAcceptance) {
+		t.Fatal("a todo limit hid blocked or awaiting-acceptance work on the real ledger")
 	}
 	for _, task := range s.Tasks() {
-		ctx := presetAnswer(t, p, Request{Command: "context", ID: task.Task.ID})
-		narrow := presetAnswer(t, p, Request{Command: "context", ID: task.Task.ID, Limit: 1})
-		if !reflect.DeepEqual(ctx.Preset.Closure.Mandatory, narrow.Preset.Closure.Mandatory) {
+		c := view_(t, p, ViewRequest{View: "continue", ID: task.Task.ID}).(*ContinueAnswer)
+		narrow := view_(t, p, ViewRequest{View: "continue", ID: task.Task.ID, Limit: 1}).(*ContinueAnswer)
+		if !reflect.DeepEqual(c.Closure.Mandatory, narrow.Closure.Mandatory) {
 			t.Fatalf("a limit changed task %s's mandatory closure", task.Task.ID)
 		}
-		c := presetAnswer(t, p, Request{Command: "continue", ID: task.Task.ID})
-		assertHonestRendering(t, c)
-		if len(c.Preset.Continue.Attempts) != len(task.Attempts) || c.Watermark != ctx.Watermark {
+		assertViewHonest(t, c)
+		if len(*c.Attempts) != len(task.Attempts) || c.Watermark != narrow.Watermark {
 			t.Fatalf("continue for %s must show every attempt at the same watermark", task.Task.ID)
 		}
 	}

@@ -1,13 +1,14 @@
 package query
 
-// Mandatory closure tests: deep constraint and prerequisite chains, cycles,
-// supersession and correction expansion, cross-project links, and a limit
-// that can cut only optional topic refs.
+// Mandatory closure tests, read through the continue view: deep constraint
+// and prerequisite chains, cycles, supersession and correction expansion,
+// cross-project links, and a limit that can cut only optional topic refs.
 
 import (
 	"testing"
 
 	"datum/internal/model"
+	"datum/internal/store"
 )
 
 func taskWith(n int, edit func(*model.TaskSpec)) *model.TaskCreate {
@@ -20,7 +21,7 @@ func taskWith(n int, edit func(*model.TaskSpec)) *model.TaskCreate {
 // constrained by task 2 again (a cycle). Task 3 also names decision 31, which
 // was superseded by decision 32. A correction on claim 20 names claim 21 too.
 // Task 1 has three topic refs and one cross-project constraint.
-func closureWorld(t *testing.T) (Answer, func(limit int) Closure) {
+func closureWorld(t *testing.T) (*ContinueAnswer, func(limit int) *ContinueAnswer) {
 	t.Helper()
 	p := testProject(t)
 	foreign := model.RecordRef{Project: "other/project", RecordID: testID(900), Revision: 1}
@@ -50,17 +51,20 @@ func closureWorld(t *testing.T) (Answer, func(limit int) Closure) {
 		&model.Supersede{Prior: testRef(31, 1), Replacement: testRef(32, 1), Reason: "the owner restated the ruling"},
 		&model.Correction{Target: model.CorrectionTarget{Kind: "record", Record: ptrRef(testRef(20, 1))},
 			AffectedRevisions: []model.RecordRef{testRef(20, 1), testRef(21, 1)}, Reason: "wrong denominator", CorrectiveRef: testArtifact()})
-	a := presetAnswer(t, p, Request{Command: "context", ID: testID(1)})
-	return a, func(limit int) Closure {
-		return *presetAnswer(t, p, Request{Command: "context", ID: testID(1), Limit: limit}).Preset.Closure
-	}
+	at := func(limit int) *ContinueAnswer { return continueOf(t, p, testID(1), limit) }
+	return at(0), at
+}
+
+func continueOf(t *testing.T, p store.Project, id model.ID, limit int) *ContinueAnswer {
+	t.Helper()
+	return view_(t, p, ViewRequest{View: "continue", ID: id, Limit: limit}).(*ContinueAnswer)
 }
 
 func ptrRef(r model.RecordRef) *model.RecordRef { return &r }
 
-func mandatoryRefs(c Closure) map[model.RecordRef]ClosureNode {
-	out := map[model.RecordRef]ClosureNode{}
-	for _, n := range c.Mandatory {
+func mandatoryRefs(a *ContinueAnswer) map[model.RecordRef]ClosureRef {
+	out := map[model.RecordRef]ClosureRef{}
+	for _, n := range a.Closure.Mandatory {
 		out[n.Ref] = n
 	}
 	return out
@@ -68,9 +72,9 @@ func mandatoryRefs(c Closure) map[model.RecordRef]ClosureNode {
 
 func TestClosureExpandsEveryMandatoryLinkFullyWithCycleDetection(t *testing.T) {
 	a, _ := closureWorld(t)
-	assertHonestRendering(t, a)
-	c := *a.Preset.Closure
-	got := mandatoryRefs(c)
+	assertViewHonest(t, a)
+	c := a.Closure
+	got := mandatoryRefs(a)
 	// Task 2 constrains; task 3 is its prerequisite; decision 31 and claim 20
 	// constrain task 3 revision 1 only through task 2's exact-revision link.
 	for _, want := range []model.RecordRef{testRef(2, 1), testRef(3, 1), testRef(31, 1), testRef(32, 1), testRef(20, 1), testRef(21, 1)} {
@@ -78,10 +82,10 @@ func TestClosureExpandsEveryMandatoryLinkFullyWithCycleDetection(t *testing.T) {
 			t.Fatalf("mandatory closure is missing %v; one hop is not enough for authority. Got %v", want, c.Mandatory)
 		}
 	}
-	if n := got[testRef(32, 1)]; n.Decision == nil || n.Via[0].Relation != "superseded-by" {
+	if n := got[testRef(32, 1)]; a.Records[recordKey(n.Ref)].Decision == nil || n.Via[0].Relation != "superseded-by" {
 		t.Fatalf("a superseded constraint must lead to its replacement, got %+v", n)
 	}
-	if n := got[testRef(20, 1)]; len(n.Corrections) != 1 || n.Claim == nil {
+	if n := a.Records[recordKey(testRef(20, 1))]; len(n.Corrections) != 1 || n.Claim == nil {
 		t.Fatalf("a corrected constraint must carry its correction, got %+v", n)
 	}
 	foreign := got[model.RecordRef{Project: "other/project", RecordID: testID(900), Revision: 1}]
@@ -100,14 +104,14 @@ func TestClosureReportsACycleInsteadOfLooping(t *testing.T) {
 	appendEvents(t, p, 102, &model.TaskAmend{Target: testRef(2, 1), ExpectedRevision: 1, Provenance: prov("author"),
 		Replacement: taskWith(2, func(s *model.TaskSpec) { s.ConstraintRefs = []model.RecordRef{testRef(3, 1)} }).Spec})
 	appendEvents(t, p, 103, &model.Supersede{Prior: testRef(2, 1), Replacement: testRef(2, 2), Reason: "restated"})
-	a := presetAnswer(t, p, Request{Command: "context", ID: testID(3)})
-	assertHonestRendering(t, a)
-	c := *a.Preset.Closure
+	a := continueOf(t, p, testID(3), 0)
+	assertViewHonest(t, a)
+	c := a.Closure
 	if len(c.Cycles) != 1 || len(c.Cycles[0]) != 4 || c.Cycles[0][0] != testRef(3, 1) || c.Cycles[0][3] != testRef(3, 1) {
 		t.Fatalf("3 -> 2@1 -> 2@2 -> 3 must be reported once as a cycle, got %v", c.Cycles)
 	}
 	found := false
-	for _, note := range a.Preset.Attention {
+	for _, note := range a.Attention {
 		found = found || note.Kind == "closure-cycle"
 	}
 	if !found || len(c.Mandatory) != 2 {
@@ -120,17 +124,17 @@ func TestClosureLimitCutsOnlyOptionalTopicRefs(t *testing.T) {
 	full := at(0)
 	for _, limit := range []int{1, 2} {
 		cut := at(limit)
-		if len(cut.Mandatory) != len(full.Mandatory) || len(cut.Cycles) != len(full.Cycles) {
-			t.Fatalf("limit %d changed the mandatory closure: %d vs %d nodes", limit, len(cut.Mandatory), len(full.Mandatory))
+		if len(cut.Closure.Mandatory) != len(full.Closure.Mandatory) || len(cut.Closure.Cycles) != len(full.Closure.Cycles) {
+			t.Fatalf("limit %d changed the mandatory closure: %d vs %d nodes", limit, len(cut.Closure.Mandatory), len(full.Closure.Mandatory))
 		}
-		if len(cut.Optional) != limit || cut.Limit.Offered != 3 || cut.Limit.Omitted != 3-limit || cut.Limit.Requested != limit {
-			t.Fatalf("limit %d must keep %d optional refs and report the rest, got %+v", limit, limit, cut.Limit)
+		if len(cut.Context.Refs) != limit || cut.Context.Limit.Offered != 3 || cut.Context.Limit.Omitted != 3-limit || cut.Context.Limit.Requested != limit {
+			t.Fatalf("limit %d must keep %d optional refs and report the rest, got %+v", limit, limit, cut.Context.Limit)
 		}
 	}
-	if len(full.Optional) != 3 || full.Limit.Requested != "none" {
-		t.Fatalf("with no limit every topic ref not already mandatory is offered, got %+v", full.Optional)
+	if len(full.Context.Refs) != 3 || full.Context.Limit.Requested != "none" {
+		t.Fatalf("with no limit every topic ref not already mandatory is offered, got %+v", full.Context.Refs)
 	}
-	for _, n := range full.Optional {
+	for _, n := range full.Context.Refs {
 		if n.Ref == testRef(2, 1) {
 			t.Fatal("a record already in the mandatory closure must not reappear as an optional topic")
 		}
@@ -148,9 +152,10 @@ func TestClosureTaskNodeIsTheExactRevision(t *testing.T) {
 	appendEvents(t, p, 102, &model.TaskAmend{Target: testRef(5, 1), ExpectedRevision: 1, Provenance: prov("author"),
 		Replacement: testTask(5).Spec})
 	appendEvents(t, p, 103, taskWith(7, func(s *model.TaskSpec) { s.ConstraintRefs = []model.RecordRef{testRef(5, 1)} }))
-	a := presetAnswer(t, p, Request{Command: "context", ID: testID(7)})
-	n, ok := mandatoryRefs(*a.Preset.Closure)[testRef(5, 1)]
-	if !ok || n.Task == nil || n.Current != 2 {
+	a := continueOf(t, p, testID(7), 0)
+	_, ok := mandatoryRefs(a)[testRef(5, 1)]
+	n := a.Records[recordKey(testRef(5, 1))]
+	if !ok || n.Task == nil || n.CurrentRevision != 2 {
 		t.Fatalf("control: the constrained task must resolve with current revision 2, got %+v", n)
 	}
 	if n.Task.Revision != 1 || len(n.Task.Prerequisites) != 1 {

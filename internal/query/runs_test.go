@@ -11,11 +11,11 @@ import (
 	"datum/internal/reduce"
 )
 
-func runsByID(t *testing.T, a Answer) map[model.ID]RunView {
+func runsByID(t *testing.T, a *ShowAnswer) map[model.ID]RunView {
 	t.Helper()
 	out := map[model.ID]RunView{}
-	for _, r := range *a.Preset.Runs {
-		out[r.Invocation] = r
+	for _, r := range *a.Runs {
+		out[r.Invocation] = r.RunView
 	}
 	return out
 }
@@ -23,8 +23,8 @@ func runsByID(t *testing.T, a Answer) map[model.ID]RunView {
 func TestRunsShowDurationAndFlagInputsOutsideTaskScope(t *testing.T) {
 	p := testProject(t)
 	presetWorld(t, p)
-	a := presetAnswer(t, p, Request{Command: "state"})
-	assertHonestRendering(t, a)
+	a := view_(t, p, ViewRequest{View: "show"}).(*ShowAnswer) // bare show lists every run
+	assertViewHonest(t, a)
 	byID := runsByID(t, a)
 	long, outside, open := byID[testID(50)], byID[testID(51)], byID[testID(52)]
 	if d, ok := long.Duration.(Duration); !ok || d.Nanoseconds != int64(2*time.Hour) || d.Text != "2h0m0s" {
@@ -46,13 +46,13 @@ func TestRunsShowDurationAndFlagInputsOutsideTaskScope(t *testing.T) {
 		t.Fatalf("a content-only input has an UNKNOWN path, not a blank one, got %+v", open.InputPaths)
 	}
 	flagged := 0
-	for _, note := range a.Preset.Attention {
+	for _, note := range a.Attention {
 		if note.Kind == "run-outside-task-scope" {
 			flagged++
 		}
 	}
 	if flagged != 1 {
-		t.Fatalf("exactly the out-of-scope run must be raised under attention, got %+v", a.Preset.Attention)
+		t.Fatalf("exactly the out-of-scope run must be raised under attention, got %+v", a.Attention)
 	}
 }
 

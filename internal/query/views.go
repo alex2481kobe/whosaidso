@@ -1,8 +1,8 @@
 package query
 
-// Per-record views for the read presets: instruments, claims and decisions,
-// plus the rendered label. Each view is built from one exact admitted revision
-// and says only what the reducer projected. Preset routing, runs, closure and
+// Per-record shapes the views share: instruments, claims and decisions, plus
+// the rendered label. Each is built from one exact admitted revision and says
+// only what the reducer projected. View routing, runs, closure and
 // continuation live in their own files; nothing here reads prose for meaning.
 
 import (
@@ -14,7 +14,7 @@ import (
 	"datum/internal/reduce"
 )
 
-// Attention is a fact the reader must not miss, surfaced first in a preset.
+// Attention is a fact the reader must not miss, surfaced first in a view.
 // WaitingActor is set only when the fact is owed by someone: an Actor, or
 // Unknown when the ledger names nobody.
 type Attention struct {
@@ -116,12 +116,6 @@ func validation(v model.Availability[model.InstrumentValidation]) Validation {
 	return Validation{State: "UNKNOWN", Reason: reason}
 }
 
-func instrumentView(s reduce.Snapshot, p reduce.InstrumentProjection) (InstrumentView, []Attention) {
-	ref := asRef(p.Instrument)
-	rec, _ := s.Record(ref)
-	return instrumentViewFrom(p, rec.Provenance.Author, readSupport(s, ref).ActiveTrust)
-}
-
 // instrumentViewFrom is instrumentView over facts the caller already read.
 func instrumentViewFrom(p reduce.InstrumentProjection, author model.Actor, trust reduce.Truth) (InstrumentView, []Attention) {
 	ref, spec := asRef(p.Instrument), p.Spec
@@ -155,16 +149,6 @@ func standing(p reduce.ClaimProjection, current reduce.Truth) (string, []string)
 	return "UNMEASURED: asserted only, never observed locally; not established", []string{"local observation", "admitted proof"}
 }
 
-func claimView(s reduce.Snapshot, p reduce.ClaimProjection) ClaimView {
-	ref := asRef(p.Claim)
-	rec, _ := s.Record(ref)
-	v := claimViewFrom(p, rec.Provenance.Author, readSupport(s, ref), supersessionsOf(s, ref), correctionsOf(s, ref))
-	for _, inv := range p.Observations {
-		v.Observations = append(v.Observations, runView(s, inv))
-	}
-	return v
-}
-
 // claimViewFrom is claimView over facts the caller already read, with no
 // observations: the caller decides how its answer carries runs.
 func claimViewFrom(p reduce.ClaimProjection, author model.Actor, support reduce.SupportFacts,
@@ -177,12 +161,6 @@ func claimViewFrom(p reduce.ClaimProjection, author model.Actor, support reduce.
 		Supersessions: supersessions, Corrections: corrections}
 	v.Standing, v.Missing = standing(p, v.CurrentSupport)
 	return v
-}
-
-func decisionView(s reduce.Snapshot, p reduce.DecisionProjection) DecisionView {
-	ref := asRef(p.Decision)
-	rec, _ := s.Record(ref)
-	return decisionViewFrom(p, rec.Provenance.Author, readSupport(s, ref).Current(), supersessionsOf(s, ref), correctionsOf(s, ref))
 }
 
 // decisionViewFrom is decisionView over facts the caller already read.
@@ -212,11 +190,6 @@ func nonNil[T any](xs []T) []T {
 
 func same(a, b model.RecordRef) bool { return a.Project == b.Project && a.RecordID == b.RecordID }
 
-// supersessionsOf lists every supersession naming this record identity on either side.
-func supersessionsOf(s reduce.Snapshot, ref model.RecordRef) []reduce.Supersession {
-	return supersessionsIn(s.Supersessions(), ref)
-}
-
 func supersessionsIn(all []reduce.Supersession, ref model.RecordRef) []reduce.Supersession {
 	out := []reduce.Supersession{}
 	for _, e := range all {
@@ -225,11 +198,6 @@ func supersessionsIn(all []reduce.Supersession, ref model.RecordRef) []reduce.Su
 		}
 	}
 	return out
-}
-
-// correctionsOf lists every correction whose typed target or affected revisions name this record.
-func correctionsOf(s reduce.Snapshot, ref model.RecordRef) []reduce.AdmittedCorrection {
-	return correctionsIn(s.Corrections(), ref)
 }
 
 func correctionsIn(all []reduce.AdmittedCorrection, ref model.RecordRef) []reduce.AdmittedCorrection {

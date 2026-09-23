@@ -12,7 +12,6 @@ import (
 
 	"datum/internal/model"
 	"datum/internal/reduce"
-	"datum/internal/store"
 )
 
 // eachObject visits every JSON object in the export.
@@ -163,25 +162,4 @@ func TestViewRequestsOutsideTheirViewAreRefused(t *testing.T) {
 			t.Errorf("%+v was accepted", r)
 		}
 	}
-}
-
-func TestHistoryViewIsTheHistoryRead(t *testing.T) {
-	p := testProject(t)
-	viewsWorld(t, p)
-	for _, r := range []Request{{Command: "history"}, {Command: "history", ID: testID(1)}, {Command: "history", SelfAdmitted: model.SelfAdmissionFalse}} {
-		old := readAnswerRequest(t, p, r)
-		a := view_(t, p, ViewRequest{View: "history", ID: r.ID, SelfAdmitted: r.SelfAdmitted}).(*HistoryAnswer)
-		if !reflect.DeepEqual(a.Events, old.History) || !reflect.DeepEqual(a.Reviews, old.Reviews) || a.Watermark != old.Watermark || len(a.Events)+len(a.Reviews) == 0 {
-			t.Fatalf("history %s differs from the history read", r.ID)
-		}
-	}
-}
-
-func readAnswerRequest(t *testing.T, p store.Project, r Request) Answer {
-	t.Helper()
-	a, err := Read(p, r)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return a
 }

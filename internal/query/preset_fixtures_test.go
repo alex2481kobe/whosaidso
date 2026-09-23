@@ -1,13 +1,11 @@
 package query
 
-// Builders for the read-preset tests: instruments, claims at each status,
-// decisions, invocations and the invariant walkers shared by several test
-// files. Assertions live in the *_test.go files that use these.
+// Builders for the view tests: instruments, claims at each status,
+// decisions and invocations shared by several test files. Assertions live in
+// the *_test.go files that use these.
 
 import (
-	"bytes"
 	"encoding/json"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -147,51 +145,4 @@ func admitted(n int, events ...model.TypedEvent) []model.TypedEvent {
 		review.CapturedAt[packet] = presetStart.Add(time.Minute).UTC()
 	}
 	return append(events, review)
-}
-
-func presetAnswer(t *testing.T, p store.Project, r Request) Answer {
-	t.Helper()
-	a, err := Read(p, r)
-	if err != nil {
-		t.Fatalf("%s read must succeed: %v", r.Command, err)
-	}
-	if r.ID == "" || a.Result == "KNOWN" {
-		if a.Preset == nil {
-			t.Fatalf("%s must answer with a preset section", r.Command)
-		}
-	}
-	return a
-}
-
-// assertHonestRendering checks the shared invariants of every preset answer:
-// text and JSON carry the same leaves, rendering is deterministic, the
-// watermark is present, and no leaf under the preset is a blank string.
-func assertHonestRendering(t *testing.T, a Answer) {
-	t.Helper()
-	var exported, rendered, again bytes.Buffer
-	if err := RenderJSON(&exported, a); err != nil {
-		t.Fatal(err)
-	}
-	if err := RenderText(&rendered, a); err != nil {
-		t.Fatal(err)
-	}
-	leaves := jsonLeaves(t, exported.Bytes())
-	if !reflect.DeepEqual(leaves, textLeaves(t, rendered.String())) {
-		t.Fatalf("%s text and JSON disagree; both must render the one answer", a.Command)
-	}
-	if err := RenderText(&again, a); err != nil || again.String() != rendered.String() {
-		t.Fatalf("%s must render deterministically", a.Command)
-	}
-	if _, ok := leaves["answer\n\"watermark\"\n\"bundles\""]; !ok {
-		t.Fatalf("%s answer carries no watermark", a.Command)
-	}
-	for path, value := range leaves {
-		// Two reused reducer identifiers are blank when not applicable, not
-		// unknown: prior_attempt without a takeover, blocker_id on a reason that
-		// is not a hold. Their siblings (takeover, kind) say which applies.
-		notApplicable := strings.HasSuffix(path, "\"prior_attempt\"") || strings.HasSuffix(path, "\"blocker_id\"")
-		if strings.Contains(path, "\"preset\"") && value == `""` && !notApplicable {
-			t.Fatalf("%s renders a blank string at %q; UNKNOWN must say UNKNOWN and why", a.Command, path)
-		}
-	}
 }

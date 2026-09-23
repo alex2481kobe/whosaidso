@@ -4,7 +4,7 @@ package query
 // continue, show and history. This file holds their request, the answer
 // header every view carries, request checks and routing. Each view's
 // selection lives in its own view_*.go file; the record detail they share is
-// detail.go. The older Read presets stay beside them until the CLI switches.
+// detail.go.
 
 import (
 	"fmt"
@@ -88,7 +88,21 @@ func CheckView(r ViewRequest) error {
 	case r.SelfAdmitted != "" && r.View != "history":
 		return fmt.Errorf("the self-admitted filter belongs only to history")
 	}
-	return checkRequest(Request{Command: "history", ID: r.ID, SelfAdmitted: r.SelfAdmitted}) // the history filter's own rules
+	return checkSelfAdmitted(r)
+}
+
+// checkSelfAdmitted holds the history filter's own rules.
+func checkSelfAdmitted(r ViewRequest) error {
+	if r.SelfAdmitted == "" {
+		return nil
+	}
+	if r.View != "history" || r.ID != "" {
+		return fmt.Errorf("self-admitted filter requires history without a record ULID")
+	}
+	if r.SelfAdmitted != model.SelfAdmissionTrue && r.SelfAdmitted != model.SelfAdmissionFalse && r.SelfAdmitted != model.SelfAdmissionUnknown {
+		return fmt.Errorf("self-admitted must be true, false, or unknown")
+	}
+	return nil
 }
 
 func watermarkOf(s reduce.Snapshot) Watermark {
@@ -140,9 +154,35 @@ type HistoryAnswer struct {
 }
 
 func historyView(project store.Project, source Source, h ViewHeader, r ViewRequest) (ViewAnswer, error) {
-	a, err := answer(project, Request{Command: "history", ID: r.ID, SelfAdmitted: r.SelfAdmitted}, source)
+	a := &HistoryAnswer{ViewHeader: h, Events: []Event{}, Reviews: []Review{}}
+	if h.Result == "UNKNOWN" {
+		return a, nil
+	}
+	snapshot := source.Snapshot()
+	// Review packet refs do not identify records. Audit the complete prefix
+	// independently of intake, without assigning bundle siblings to a packet.
+	if r.ID == "" {
+		for _, review := range snapshot.Reviews() {
+			if r.SelfAdmitted == "" || review.SelfAdmission == r.SelfAdmitted {
+				a.Reviews = append(a.Reviews, describeReview(review))
+			}
+		}
+	}
+	if r.SelfAdmitted != "" {
+		return a, nil
+	}
+	selected := historyOrigins(snapshot, reduce.Ident{Project: project.ID, ID: r.ID})
+	prefix, err := source.Bundles()
 	if err != nil {
 		return nil, err
 	}
-	return &HistoryAnswer{ViewHeader: h, Events: a.History, Reviews: a.Reviews}, nil
+	for _, bundle := range prefix {
+		for i, event := range bundle.Events {
+			origin := reduce.Origin{Sequence: bundle.Sequence, EventIndex: i}
+			if r.ID == "" || selected[origin] {
+				a.Events = append(a.Events, Event{origin, bundle.CommandID, bundle.Admitter, bundle.Packets, event, snapshot.EventAuthor(origin)})
+			}
+		}
+	}
+	return a, nil
 }

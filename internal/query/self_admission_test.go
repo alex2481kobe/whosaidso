@@ -55,10 +55,7 @@ func TestSelfAdmissionAuditThreeStatesAndLegacy(t *testing.T) {
 		{model.SelfAdmissionUnknown, []int{3, 13, 23, 31, 32}},
 	} {
 		t.Run(string(tc.filter), func(t *testing.T) {
-			a, err := Read(p, Request{Command: "history", SelfAdmitted: tc.filter})
-			if err != nil {
-				t.Fatal(err)
-			}
+			a := view_(t, p, ViewRequest{View: "history", SelfAdmitted: tc.filter}).(*HistoryAnswer)
 			if a.Result != "KNOWN" || a.Watermark.Sequence != 5 || a.Watermark.Bundles != 5 || a.Watermark.Events != 5 {
 				t.Fatalf("audit lost watermark: %+v", a)
 			}
@@ -83,34 +80,29 @@ func TestSelfAdmissionAuditThreeStatesAndLegacy(t *testing.T) {
 			if !reflect.DeepEqual(ids, wantIDs) {
 				t.Fatalf("filter %q: got %v want %v", tc.filter, ids, wantIDs)
 			}
-			if tc.filter == "" && len(a.History) != 5 || tc.filter != "" && len(a.History) != 0 {
-				t.Fatalf("audit must select packet reviews without attributing event siblings: %+v", a.History)
+			if tc.filter == "" && len(a.Events) != 5 || tc.filter != "" && len(a.Events) != 0 {
+				t.Fatalf("audit must select packet reviews without attributing event siblings: %+v", a.Events)
 			}
-			var jsonOut, textOut bytes.Buffer
-			if err := RenderJSON(&jsonOut, a); err != nil {
+			assertViewHonest(t, a)
+			var jsonOut bytes.Buffer
+			if err := RenderViewJSON(&jsonOut, a); err != nil {
 				t.Fatal(err)
 			}
-			if err := RenderText(&textOut, a); err != nil {
-				t.Fatal(err)
+			if tc.filter == model.SelfAdmissionUnknown && !strings.Contains(jsonOut.String(), `"self_admission": "UNKNOWN"`) {
+				t.Fatalf("unknown must render explicitly: %s", jsonOut.String())
 			}
-			if !reflect.DeepEqual(jsonLeaves(t, jsonOut.Bytes()), textLeaves(t, textOut.String())) {
-				t.Fatal("audit renderers disagree")
-			}
-			if tc.filter == model.SelfAdmissionUnknown && !strings.Contains(textOut.String(), `"self_admission": "UNKNOWN"`) {
-				t.Fatalf("unknown must render explicitly: %s", textOut.String())
-			}
-			again, err := Read(p, Request{Command: "history", SelfAdmitted: tc.filter})
-			if err != nil || !reflect.DeepEqual(a, again) {
+			again, err := ReadView(p, ViewRequest{View: "history", SelfAdmitted: tc.filter})
+			if err != nil || !reflect.DeepEqual(ViewAnswer(a), again) {
 				t.Fatalf("unstable audit: %v", err)
 			}
 		})
 	}
-	pending := readAnswer(t, p, "intake pending", "")
-	if len(pending.Intake) != 7 {
-		t.Fatalf("rejected/correction reviews vanished: %+v", pending.Intake)
+	pending := todoOf(t, p).IntakePending
+	if len(pending) != 7 {
+		t.Fatalf("rejected/correction reviews vanished: %+v", pending)
 	}
-	if pending.Intake[6].Review.SelfAdmission != "UNKNOWN" {
-		t.Fatalf("legacy pending review lost UNKNOWN: %+v", pending.Intake[6])
+	if pending[6].Review.SelfAdmission != "UNKNOWN" {
+		t.Fatalf("legacy pending review lost UNKNOWN: %+v", pending[6])
 	}
 	if !reflect.DeepEqual(before, treeBytes(t, p.Root)) {
 		t.Fatal("audit modified ledger")
@@ -119,22 +111,22 @@ func TestSelfAdmissionAuditThreeStatesAndLegacy(t *testing.T) {
 
 func TestSelfAdmissionFilterValidationAndEmptyAnswers(t *testing.T) {
 	p := testProject(t)
-	for _, request := range []Request{
-		{Command: "show", SelfAdmitted: "true"}, {Command: "intake pending", SelfAdmitted: "unknown"},
-		{Command: "history", SelfAdmitted: "no"},
-		{Command: "history", SelfAdmitted: "true", ID: testID(1)},
+	for _, request := range []ViewRequest{
+		{View: "show", SelfAdmitted: "true"}, {View: "todo", SelfAdmitted: "unknown"},
+		{View: "history", SelfAdmitted: "no"},
+		{View: "history", SelfAdmitted: "true", ID: testID(1)},
 	} {
-		if _, err := Read(p, request); err == nil {
+		if _, err := ReadView(p, request); err == nil {
 			t.Fatalf("invalid filter accepted: %+v", request)
 		}
 	}
 	for _, state := range []model.SelfAdmissionState{"true", "false", "unknown"} {
-		a, err := Read(p, Request{Command: "history", SelfAdmitted: state})
-		if err != nil || a.Result != "KNOWN" || a.Reviews == nil || len(a.Reviews) != 0 || a.Watermark.Sequence != 0 {
-			t.Fatalf("empty audit must succeed with watermark: %+v, %v", a, err)
+		a := view_(t, p, ViewRequest{View: "history", SelfAdmitted: state}).(*HistoryAnswer)
+		if a.Result != "KNOWN" || a.Reviews == nil || len(a.Reviews) != 0 || a.Watermark.Sequence != 0 {
+			t.Fatalf("empty audit must succeed with watermark: %+v", a)
 		}
 	}
-	a := readAnswer(t, p, "history", testID(99))
+	a := historyOf(t, p, testID(99))
 	if a.Result != "UNKNOWN" || a.Watermark.Sequence != 0 {
 		t.Fatalf("absent ID changed: %+v", a)
 	}
@@ -149,10 +141,7 @@ func TestSelfAdmissionRealLedgerRemainsUnknown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := Read(p, Request{Command: "history", SelfAdmitted: model.SelfAdmissionUnknown})
-	if err != nil {
-		t.Fatal(err)
-	}
+	a := view_(t, p, ViewRequest{View: "history", SelfAdmitted: model.SelfAdmissionUnknown}).(*HistoryAnswer)
 	// Deliberately no assertion on the watermark or the review COUNT. This
 	// test reads the repository's own live ledger, which is the strongest
 	// regression evidence available here: real bytes, committed, written by
@@ -194,9 +183,9 @@ func TestSelfAdmissionRealLedgerRemainsUnknown(t *testing.T) {
 	// computed from the recorded author and the admitter, step 7) none of
 	// them can be classified either way, and no later record can move them.
 	for _, state := range []model.SelfAdmissionState{"true", "false"} {
-		selected, err := Read(p, Request{Command: "history", SelfAdmitted: state})
-		if err != nil || selected.Watermark != a.Watermark {
-			t.Fatalf("classified read failed for %s: %+v %v", state, selected, err)
+		selected := view_(t, p, ViewRequest{View: "history", SelfAdmitted: state}).(*HistoryAnswer)
+		if selected.Watermark != a.Watermark {
+			t.Fatalf("classified read failed for %s: %+v", state, selected)
 		}
 		for _, r := range selected.Reviews {
 			if r.Origin.Sequence <= 4 {
