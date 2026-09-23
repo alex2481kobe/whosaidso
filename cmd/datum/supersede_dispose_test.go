@@ -95,7 +95,7 @@ func TestCLIDisposedArtifactLeavesItsProofUnverifiable(t *testing.T) {
 	if _, err := e2eInvoke(t, root, nil, "admit", "--command-id", string(cliID(900)), "--actor", "coordinator", "--outcome", "accepted", "--reason", "run", string(run.StartPacket.CommandID), string(run.SealPacket.CommandID)); err != nil {
 		t.Fatal(err)
 	}
-	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "lane"}, Reason: "the run passed"},
+	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Verdict: model.VerdictSupports, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "lane"}, Reason: "the run passed"},
 		Evidence: []model.ObservationDisposition{{InvocationRef: model.InvocationRef{Project: "test/cli", InvocationID: run.Envelope.InvocationID}, Disposition: "supports", Reason: "passed"}}}
 	if err := e2eAdmitOne(t, root, proof, 901, 902, "lane"); err != nil {
 		t.Fatal(err)

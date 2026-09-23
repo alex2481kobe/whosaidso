@@ -96,9 +96,16 @@ type ObservationDisposition struct {
 	InvocationRef InvocationRef `json:"invocation_ref"`
 	Disposition   string        `json:"disposition"`
 	Reason        string        `json:"reason" semantic:"text"`
+	// CodeChange (R14.2) is the recorded fact that lets a failing run of the
+	// proof's own criterion revision be set aside as inapplicable: code under
+	// the claim's scope changed since the run's commit (code_change.go).
+	CodeChange *CodeChange `json:"code_change,omitempty"`
 }
 
 func (d ObservationDisposition) validate(p string) error {
+	if d.CodeChange != nil && d.Disposition != "inapplicable" {
+		return invalid(p+".code_change", "a code change only sets a run aside as inapplicable")
+	}
 	return oneOf(d.Disposition, p+".disposition", "supports", "contradicts", "inapplicable", "inconclusive")
 }
 
@@ -116,14 +123,33 @@ func (j ResponsibleJudgment) validate(p string) error {
 
 // ProofAdmit supplies U06/U12 the family and responsible judgment, not a writable
 // PROVEN. Family completeness, timing and unresolved contradiction are gate checks.
+// Verdict (R14.1) says which way the judgment goes: supports or refutes. The
+// admission gate requires it on every new proof; a proof admitted before R14.1
+// has none and reads as supports, which is the only verdict it could carry.
 type ProofAdmit struct {
 	Claim        RecordRef                `json:"claim"`
 	CriterionRef CriterionRef             `json:"criterion_ref"`
 	Evidence     []ObservationDisposition `json:"evidence"`
 	Judgment     ResponsibleJudgment      `json:"judgment"`
+	Verdict      string                   `json:"verdict,omitempty" semantic:"text"`
 }
 
+// Proof verdicts (R14.1). Status stays projected from them, never written.
+const (
+	VerdictSupports = "supports"
+	VerdictRefutes  = "refutes"
+)
+
+// Refutes reports whether the proof's judgment is that the criterion failed.
+// An absent verdict is a legacy supports proof.
+func (e ProofAdmit) Refutes() bool { return e.Verdict == VerdictRefutes }
+
 func (e ProofAdmit) validate(p string) error {
+	if e.Verdict != "" {
+		if err := oneOf(e.Verdict, p+".verdict", "supports", "refutes"); err != nil {
+			return err
+		}
+	}
 	if e.Claim != e.CriterionRef.Claim {
 		return invalid(p+".criterion_ref", "criterion must name the same exact assertion")
 	}

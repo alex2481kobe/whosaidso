@@ -68,7 +68,7 @@ func TestTheFourStatuses(t *testing.T) {
 			l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
 			l.add(t, &model.TaskClose{
 				Task: ref(newID("TSKA"), 1), Outcome: model.ClosureCancelled,
-				Authority:             rulingAuthority("owner"),
+				Authority:             closeAuthority(),
 				AcceptanceWitnessRefs: []model.AcceptanceWitness{},
 				DeliveryWitnessRefs:   []model.ArtifactRef{},
 			})
@@ -95,7 +95,7 @@ func TestClosedIsNeverReadAlone(t *testing.T) {
 		l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
 		l.add(t, &model.TaskClose{
 			Task: ref(newID("TSKA"), 1), Outcome: outcome,
-			Authority:             rulingAuthority("owner"),
+			Authority:             closeAuthority(),
 			AcceptanceWitnessRefs: []model.AcceptanceWitness{},
 			DeliveryWitnessRefs:   []model.ArtifactRef{},
 		})
@@ -429,7 +429,7 @@ func TestStaleAcceptanceWitnessDoesNotClose(t *testing.T) {
 		})
 		l.add(t, &model.TaskClose{
 			Task: ref(newID("TSKA"), 2), Outcome: model.ClosureSuccess,
-			Authority: rulingAuthority("owner"),
+			Authority: closeAuthority(),
 			AcceptanceWitnessRefs: []model.AcceptanceWitness{
 				{CriterionID: newID("ACCA"), CriterionRevision: witnessRevision, WitnessRef: blobRef("acceptance")},
 			},
@@ -468,7 +468,7 @@ func TestSuccessClosureNeedsADeliveryWitness(t *testing.T) {
 	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
 	l.add(t, &model.TaskClose{
 		Task: ref(newID("TSKA"), 1), Outcome: model.ClosureSuccess,
-		Authority: rulingAuthority("owner"),
+		Authority: closeAuthority(),
 		AcceptanceWitnessRefs: []model.AcceptanceWitness{
 			{CriterionID: newID("ACCA"), CriterionRevision: 1, WitnessRef: blobRef("acceptance")},
 		},
@@ -553,7 +553,7 @@ func TestDependencyRuleRejectsEveryNonSuccessClosure(t *testing.T) {
 		l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
 		l.add(t, &model.TaskClose{
 			Task: ref(newID("TSKA"), 1), Outcome: outcome,
-			Authority: rulingAuthority("owner"), AcceptanceWitnessRefs: witnesses, DeliveryWitnessRefs: delivery,
+			Authority: closeAuthority(), AcceptanceWitnessRefs: witnesses, DeliveryWitnessRefs: delivery,
 		})
 		l.add(t, &model.TaskCreate{
 			Provenance: provenance("lane-b"), ID: newID("TSKB"),
@@ -662,7 +662,7 @@ func TestWaiverCountsOnlyWhereTheConsumerPermitsIt(t *testing.T) {
 		l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
 		l.add(t, &model.TaskClose{
 			Task: ref(newID("TSKA"), 1), Outcome: model.ClosureCancelled,
-			Authority:             rulingAuthority("owner"),
+			Authority:             closeAuthority(),
 			AcceptanceWitnessRefs: []model.AcceptanceWitness{},
 			DeliveryWitnessRefs:   []model.ArtifactRef{},
 		})
@@ -705,7 +705,7 @@ func TestAWaiverDoesNotWaiveAnyoneElsesDependency(t *testing.T) {
 	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
 	l.add(t, &model.TaskClose{
 		Task: ref(newID("TSKA"), 1), Outcome: model.ClosureCancelled,
-		Authority:             rulingAuthority("owner"),
+		Authority:             closeAuthority(),
 		AcceptanceWitnessRefs: []model.AcceptanceWitness{},
 		DeliveryWitnessRefs:   []model.ArtifactRef{},
 	})

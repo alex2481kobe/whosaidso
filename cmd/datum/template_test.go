@@ -453,3 +453,65 @@ func cliTree(t *testing.T, root string) string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+// A key the model decodes when absent but admission requires reads
+// "required", never "optional"; the table entry must name a real omitempty
+// field, or it is a note about nothing.
+func TestTemplateRequiredKeysAreNotOptional(t *testing.T) {
+	for field, why := range templateRequired {
+		f, ok := field.owner.FieldByName(field.field)
+		if !ok || !strings.Contains(f.Tag.Get("json"), ",omitempty") || why == "" {
+			t.Errorf("%s.%s: a required entry must name an omitempty field and say why", field.owner, field.field)
+		}
+	}
+	_, notes, err := buildTemplate("proof.admit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]string{}
+	for _, n := range notes {
+		kinds[templatePath(n.Path)] = n.Kind
+	}
+	if kinds["verdict"] != "required" || kinds["evidence[0].code_change"] != "optional" {
+		t.Fatalf("verdict must read required and a truly optional key optional: %v", kinds)
+	}
+	if text := renderTemplateNotes("proof.admit", notes); !strings.Contains(text, "required verdict: required at admission") || strings.Contains(text, "optional verdict") {
+		t.Fatalf("the notes misstate verdict:\n%s", text)
+	}
+}
+
+// A narrowed union keeps only the members the model accepts at that field:
+// the task's accepter is a known id, and the model refuses an unknown one.
+func TestTemplateAccepterIsAKnownIDOnly(t *testing.T) {
+	if len(templateFieldUnions) != 1 {
+		t.Fatalf("a new narrowed union needs its refusal checked here: %v", templateFieldUnions)
+	}
+	raw, notes, err := buildTemplate("task.create")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var skeleton []map[string]any
+	if err := json.Unmarshal(raw, &skeleton); err != nil {
+		t.Fatal(err)
+	}
+	if accepter := skeleton[0]["data"].(map[string]any)["spec"].(map[string]any)["accepter"].(map[string]any); len(accepter) != 1 || accepter["id"] == nil {
+		t.Fatalf("the accepter skeleton must hold only id: %v", accepter)
+	}
+	if text := renderTemplateNotes("task.create", notes); !strings.Contains(text, "only     spec.accepter: id only") || strings.Contains(text, "spec.accepter: id | unknown_reason") {
+		t.Fatalf("the notes misstate the accepter:\n%s", text)
+	}
+	for _, tc := range []struct {
+		accepter map[string]any
+		decodes  bool
+	}{{map[string]any{"id": "someone"}, true}, {map[string]any{"unknown_reason": "filled"}, false}} {
+		var tree []map[string]any
+		if err := json.Unmarshal(fillTemplate(t, "task.create", nil, map[string]bool{"spec.accepter": true}), &tree); err != nil {
+			t.Fatal(err)
+		}
+		tree[0]["data"].(map[string]any)["spec"].(map[string]any)["accepter"] = tc.accepter
+		data, _ := json.Marshal(tree)
+		if err := decodeTemplate(data); (err == nil) != tc.decodes {
+			t.Errorf("accepter %v: decodes=%v, want %v (%v)", tc.accepter, err == nil, tc.decodes, err)
+		}
+	}
+}

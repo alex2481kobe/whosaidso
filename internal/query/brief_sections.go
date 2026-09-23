@@ -34,6 +34,7 @@ func briefPreset(b *briefWriter, p cur) {
 		{"in_flight", "in flight", briefRecord}, {"blocked", "blocked", briefRecord},
 		{"awaiting_acceptance", "awaiting acceptance", briefRecord}, {"ready", "ready", briefRecord},
 		{"closed", "closed", briefRecord}, {"decisions", "decisions", briefDecision}, {"runs", "runs", briefRun},
+		{"stale", "stale claims", briefStale},
 	}
 	for _, s := range sections {
 		if p.at(s.key).ok() {
@@ -115,6 +116,11 @@ func briefRecord(b *briefWriter, indent int, r cur) {
 			pieces = append(pieces, "hold", reason.at("blocker_id"))
 		}
 		b.line(indent+1, append(pieces, "-", prefix(reason.at("detail")))...)
+	}
+	// R15.1: who closed the task, and whether they also did the work.
+	if c := r.at("task", "closure"); c.ok() {
+		closed := append([]any{"closed:", c.at("outcome"), "by"}, who(c.at("closer", "actor"))...)
+		b.line(indent+1, append(closed, "self-accepted", c.at("self_accepted"))...)
 	}
 	for _, h := range r.at("task", "attempt_holders").items() {
 		b.line(indent+1, append([]any{"attempt", h.at("attempt", "attempt"), "held by"}, who(h.at("actor"))...)...)

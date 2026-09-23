@@ -58,7 +58,9 @@ func EventReferences(event TypedEvent) ([]Reference, error) {
 		w.record(e.Task, "task")
 	case *TaskClose:
 		w.record(e.Task, "task")
-		w.authority(e.Authority, "authority")
+		if e.Authority != nil {
+			w.authority(*e.Authority, "authority")
+		}
 	case *BlockerHold:
 		w.record(e.Task, "task")
 	case *BlockerClear:

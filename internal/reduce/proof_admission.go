@@ -57,7 +57,21 @@ func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 			return err
 		}
 	}
-	supported := false
+	// R14.1: a supports proof counts supporting members and may not carry an
+	// unresolved contradiction; a refutes proof counts contradicting members
+	// and never counts a member as support. Either way the counted members
+	// meet the same observation and instrument bar.
+	refutes := e.Refutes()
+	// Every proof, either verdict, judges the claim's current criterion
+	// revision: the latest proof decides status, so a supports proof on a
+	// superseded revision would flip a refuted claim back to PROVEN.
+	if s.laterCriterionRevision(e.CriterionRef) {
+		if err := s.refuseProof(faultAt(CodeInvalidTransition, b.Sequence, idx, "criterion_ref.revision",
+			"a proof judges the claim's current criterion revision, and a later one is admitted")); err != nil {
+			return err
+		}
+	}
+	counted := false
 	listed := map[InvocationKey]string{}
 	for i, member := range e.Evidence {
 		key := invocationKey(member.InvocationRef)
@@ -77,18 +91,17 @@ func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 			if !setAside(member.Disposition) {
 				refusal = faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "a run under an earlier criterion revision can only be dispositioned inapplicable or inconclusive")
 			}
-		case member.Disposition == "contradicts":
+		case member.Disposition == "supports" && refutes:
+			refusal = faultAt(CodeInvalidTransition, b.Sequence, idx, fmt.Sprintf("evidence[%d].disposition", i), "a refuting proof counts no member as support")
+		case member.Disposition == "contradicts" && !refutes:
 			refusal = faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "contradicting evidence is unresolved")
-		case member.Disposition != "supports":
+		case member.Disposition != "supports" && member.Disposition != "contradicts":
 		default:
-			instrument, ok := s.records[recordKey(inv.Start.InstrumentRef)]
-			if !completedObservation(inv, e.Claim) || !ok || instrument.Kind != model.Instrument || instrument.Instrument.Validation.State != model.Known {
-				refusal = faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "support requires a completed observation from a validated local instrument")
-			} else if len(s.supportLosses(invocationNode(inv.Key))) != 0 {
-				refusal = faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "observation has unresolved support loss")
-			} else {
-				supported = true
-			}
+			refusal = s.countedMember(b, idx, e, inv)
+			counted = counted || refusal == nil
+		}
+		if refusal == nil && member.CodeChange != nil {
+			refusal = s.checkCodeChange(b, idx, i, e, inv, class)
 		}
 		if refusal != nil {
 			if err := s.refuseProof(refusal); err != nil {
@@ -96,8 +109,17 @@ func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 			}
 		}
 	}
-	if !supported {
-		if err := s.refuseProof(faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "proof has no supporting local observation")); err != nil {
+	if err := s.checkCurrentCommit(b, idx, e); err != nil {
+		if err = s.refuseProof(err); err != nil {
+			return err
+		}
+	}
+	if !counted {
+		detail := "proof has no supporting local observation"
+		if refutes {
+			detail = "a refuting proof names no contradicting run of its criterion revision"
+		}
+		if err := s.refuseProof(faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", detail)); err != nil {
 			return err
 		}
 	}
@@ -107,7 +129,9 @@ func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 	if err := s.checkRejectedFamily(b, idx, e, listed); err != nil {
 		return err
 	}
-	if len(s.supportLosses(recordNode(e.Claim))) != 0 {
+	// A refutation needs no support from the claim: losing support never
+	// stops a failing run from being recorded against it.
+	if !refutes && len(s.supportLosses(recordNode(e.Claim))) != 0 {
 		return s.refuseProof(faultAt(CodeInvalidTransition, b.Sequence, idx, "claim", "claim has unresolved support loss"))
 	}
 	return nil

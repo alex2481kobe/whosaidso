@@ -180,7 +180,7 @@ func TestCLIFreshProcessesRunToProven(t *testing.T) {
 	if status := e2eStatus(t, root, criterion.Claim); status != reduce.StatusMeasured {
 		t.Fatalf("admitted run left the claim %s", status)
 	}
-	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "lane"}, Reason: "the run passed"},
+	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Verdict: model.VerdictSupports, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "lane"}, Reason: "the run passed"},
 		Evidence: []model.ObservationDisposition{{InvocationRef: model.InvocationRef{Project: "test/cli", InvocationID: result.Envelope.InvocationID}, Disposition: "supports", Reason: "passed"}}}
 	if _, err := e2eInvoke(t, root, []model.TypedEvent{proof}, "capture", "--command-id", string(cliID(901))); err != nil {
 		t.Fatal(err)
@@ -225,7 +225,7 @@ func TestCLIFreshProcessesCaptureAdmitProofToProven(t *testing.T) {
 	if _, err := e2eInvoke(t, root, nil, "admit", "--command-id", string(cliID(703)), "--actor", "coordinator", "--outcome", "accepted", "--reason", "run", string(cliID(701)), string(cliID(702))); err != nil {
 		t.Fatal(err)
 	}
-	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "lane"}, Reason: "the complete family passes"},
+	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Verdict: model.VerdictSupports, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "lane"}, Reason: "the complete family passes"},
 		Evidence: []model.ObservationDisposition{{InvocationRef: model.InvocationRef{Project: "test/cli", InvocationID: env.InvocationID}, Disposition: "supports", Reason: "passed"}}}
 	if _, err := e2eInvoke(t, root, []model.TypedEvent{proof}, "capture", "--command-id", string(cliID(704))); err != nil {
 		t.Fatal(err)
@@ -276,7 +276,7 @@ func TestCLIRunKeepsArtifactsBesideAConfiguredLedger(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(moved, "artifacts", string(model.HashBytes([]byte(e2ePass))))); err != nil {
 		t.Fatalf("admission must store the run's output beside the configured ledger: %v", err)
 	}
-	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "lane"}, Reason: "the run passed"},
+	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Verdict: model.VerdictSupports, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "lane"}, Reason: "the run passed"},
 		Evidence: []model.ObservationDisposition{{InvocationRef: model.InvocationRef{Project: "test/cli", InvocationID: result.Envelope.InvocationID}, Disposition: "supports", Reason: "passed"}}}
 	if _, err := e2eInvoke(t, root, []model.TypedEvent{proof}, "capture", "--command-id", string(cliID(901))); err != nil {
 		t.Fatal(err)

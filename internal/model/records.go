@@ -48,7 +48,10 @@ type TaskSpec struct {
 	ConstraintRefs     []RecordRef           `json:"constraint_refs"`
 	Prerequisites      []Prerequisite        `json:"prerequisites"`
 	NextActor          Actor                 `json:"next_actor"`
-	Progress           *TaskProgress         `json:"progress,omitempty"`
+	// Accepter (R15.1), when named, is the only actor whose packet may close
+	// the task. Absent, anyone may close it; the closer is recorded either way.
+	Accepter *Actor        `json:"accepter,omitempty"`
+	Progress *TaskProgress `json:"progress,omitempty"`
 }
 
 // AcceptanceCriterion belongs to the task, independently of CLAIM proof criteria.
@@ -94,6 +97,10 @@ type Prerequisite struct {
 func (s TaskSpec) validate(p string) error {
 	if len(s.NonGoals) == 0 || len(s.AcceptanceCriteria) == 0 {
 		return invalid(p, "non-goals and acceptance criteria must be explicit")
+	}
+	// Two unknowns never match, so an unknown accepter could never close.
+	if s.Accepter != nil && Blank(s.Accepter.ID) {
+		return invalid(p+".accepter", "an accepter is a known actor; leave it out to let anyone accept")
 	}
 	seen := map[ID]bool{}
 	for i, c := range s.AcceptanceCriteria {

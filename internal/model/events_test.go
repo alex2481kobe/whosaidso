@@ -70,7 +70,7 @@ func schemaEvents() []TypedEvent {
 		&TaskStart{Task: schemaRef(1), Actor: Actor{ID: "lane-a"}, AttemptID: schemaID(10)},
 		&TaskTakeover{Task: schemaRef(1), Actor: Actor{ID: "lane-b"}, AttemptID: schemaID(10), PriorAttemptID: schemaID(12), StoppedConfirmationRef: schemaArtifact()},
 		&AttemptTerminal{Task: schemaRef(1), AttemptID: schemaID(10), Outcome: AttemptRunnerDied, Reason: "observer died", NextAction: "reconcile missing terminal observation", DeliveryRefs: []ArtifactRef{}, CommitsDenied: true, ReconciliationOwed: true},
-		&TaskClose{Task: schemaRef(1), Outcome: ClosureSuccess, Authority: schemaAuthority(), AcceptanceWitnessRefs: []AcceptanceWitness{{CriterionID: schemaID(3), CriterionRevision: 1, WitnessRef: schemaArtifact()}}, DeliveryWitnessRefs: []ArtifactRef{schemaArtifact()}},
+		&TaskClose{Task: schemaRef(1), Outcome: ClosureSuccess, Authority: ptr(schemaAuthority()), AcceptanceWitnessRefs: []AcceptanceWitness{{CriterionID: schemaID(3), CriterionRevision: 1, WitnessRef: schemaArtifact()}}, DeliveryWitnessRefs: []ArtifactRef{schemaArtifact()}},
 		&BlockerHold{Task: schemaRef(1), BlockerID: schemaID(13), Reason: BlockerAwaitingAcceptance, Actor: Actor{ID: "owner"}, Criterion: "owner has accepted the witnessed result"},
 		&BlockerClear{Task: schemaRef(1), BlockerID: schemaID(13), HoldRef: BlockerRef{Task: schemaRef(1), BlockerID: schemaID(13)}, ResolvingWitness: schemaArtifact()},
 		&InvocationStart{Envelope: schemaEnvelope()},

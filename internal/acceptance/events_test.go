@@ -167,8 +167,8 @@ func evAll() []model.TypedEvent {
 			DeliveryRefs:  []model.ArtifactRef{recContent(recDigest('e'), 64)},
 			CommitsDenied: true, ReconciliationOwed: false,
 		},
-		&model.TaskClose{
-			Task: recRef(recID(1), 3), Outcome: model.ClosureCancelled, Authority: recAuthority(recID(80)),
+		&model.TaskClose{ // R15.1: a closure's authority is optional, so it is a pointer.
+			Task: recRef(recID(1), 3), Outcome: model.ClosureCancelled, Authority: ptr(recAuthority(recID(80))),
 			AcceptanceWitnessRefs: []model.AcceptanceWitness{{
 				CriterionID: recID(21), CriterionRevision: 1, WitnessRef: recContent(recDigest('f'), 32),
 			}},

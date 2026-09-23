@@ -133,7 +133,7 @@ func (w *proofWorld) run(criterion model.CriterionRef, body string) (model.Invoc
 }
 
 func (w *proofWorld) proof(criterion model.CriterionRef, members map[model.InvocationRef]string) *model.ProofAdmit {
-	p := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Evidence: []model.ObservationDisposition{},
+	p := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Evidence: []model.ObservationDisposition{}, Verdict: model.VerdictSupports,
 		Judgment: model.ResponsibleJudgment{Actor: w.f.author, Reason: "the complete family satisfies the frozen criterion"}}
 	for ref, disposition := range members {
 		p.Evidence = append(p.Evidence, model.ObservationDisposition{InvocationRef: ref, Disposition: disposition, Reason: "reviewed"})

@@ -632,7 +632,8 @@ func (w *flowWorld) proofEvent(members map[model.ID]string) *model.ProofAdmit {
 		evidence = append(evidence, model.ObservationDisposition{InvocationRef: model.InvocationRef{Project: w.project, InvocationID: model.ID(id)},
 			Disposition: members[model.ID(id)], Reason: "dispositioned by the lane's judgment"})
 	}
-	return &model.ProofAdmit{Claim: w.claim, CriterionRef: w.criterion, Evidence: evidence,
+	// R14.1: a new proof states its verdict.
+	return &model.ProofAdmit{Claim: w.claim, CriterionRef: w.criterion, Evidence: evidence, Verdict: "supports",
 		Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: flowLane}, Reason: "the complete family satisfies the frozen criterion"}}
 }
 
@@ -1012,8 +1013,8 @@ func TestFlowAcceptance(t *testing.T) {
 	scope := task.spec.Scope
 	scope.ContextRefs = []model.RecordRef{task.ref}
 	closure := func(witnessed bool) *model.TaskClose {
-		c := &model.TaskClose{Task: task.ref, Outcome: model.ClosureSuccess,
-			Authority:             model.Authority{Actor: model.Actor{ID: "owner"}, SourceRef: rulingRef, Selector: model.Selector{Kind: "json-pointer", Pointer: "/ruling"}, Scope: scope},
+		c := &model.TaskClose{Task: task.ref, Outcome: model.ClosureSuccess, // R15.1: the authority is optional, so a pointer.
+			Authority:             &model.Authority{Actor: model.Actor{ID: "owner"}, SourceRef: rulingRef, Selector: model.Selector{Kind: "json-pointer", Pointer: "/ruling"}, Scope: scope},
 			AcceptanceWitnessRefs: []model.AcceptanceWitness{}, DeliveryWitnessRefs: []model.ArtifactRef{}}
 		if witnessed {
 			c.AcceptanceWitnessRefs = []model.AcceptanceWitness{{CriterionID: task.spec.AcceptanceCriteria[0].ID, CriterionRevision: 1, WitnessRef: rulingRef}}

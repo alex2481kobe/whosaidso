@@ -140,6 +140,9 @@ func standing(p reduce.ClaimProjection, current reduce.Truth) (string, []string)
 	switch p.Status {
 	case reduce.StatusProven:
 		return fmt.Sprintf("PROVEN at revision %d; current support is %s", p.Claim.Revision, current), []string{}
+	case reduce.StatusRefuted:
+		return fmt.Sprintf("REFUTED at revision %d: the proof in force judges that the criterion failed; not established", p.Claim.Revision),
+			[]string{"a supports proof on a new criterion revision, or with the failing runs set aside after a verified code change"}
 	case reduce.StatusMeasured:
 		return "MEASURED: observed locally, no admitted proof; not established", []string{"admitted proof"}
 	}

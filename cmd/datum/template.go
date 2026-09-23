@@ -33,7 +33,7 @@ keys are listed on stderr. Event types:
 
 type templateNote struct {
 	Path   []string
-	Kind   string // "choose", "optional" or "minted"
+	Kind   string // "choose", "optional", "required" or "minted"
 	Union  templateUnion
 	Detail string
 }
@@ -217,21 +217,38 @@ func (b *templateBuilder) object(t reflect.Type, path []string, union templateUn
 			continue
 		}
 		at := append(append([]string(nil), path...), tag[0])
+		// An untagged union's keys are exactly its branch keys; a narrowed
+		// union (templateFieldUnions) leaves the dropped members' keys out.
+		if isUnion && union.tag == "" && !branch[tag[0]] {
+			continue
+		}
+		here := templateField{t, f.Name}
 		var value any
-		if members, ok := templateEnumFields[templateField{t, f.Name}]; ok || (isUnion && tag[0] == union.tag) {
+		if members, ok := templateEnumFields[here]; ok || (isUnion && tag[0] == union.tag) {
 			if !ok {
 				members = union.members
 			}
 			value = "<one of: " + strings.Join(members, " | ") + ">"
+		} else if narrowed, ok := templateFieldUnions[here]; ok {
+			value = b.object(indirect(f.Type), at, narrowed, true)
 		} else {
 			value = b.walk(f.Type, at, f)
 		}
-		if strings.Contains(f.Tag.Get("json"), ",omitempty") && !branch[tag[0]] {
+		if why, ok := templateRequired[here]; ok {
+			b.notes = append(b.notes, templateNote{Path: at, Kind: "required", Detail: why})
+		} else if strings.Contains(f.Tag.Get("json"), ",omitempty") && !branch[tag[0]] {
 			b.notes = append(b.notes, templateNote{Path: at, Kind: "optional"})
 		}
 		out = append(out, templateMember{tag[0], value})
 	}
 	return out
+}
+
+func indirect(t reflect.Type) reflect.Type {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	return t
 }
 
 func writeTemplateJSON(buf *bytes.Buffer, v any) {
@@ -280,9 +297,15 @@ func renderTemplateNotes(event model.EventType, notes []templateNote) string {
 			b.WriteByte('\n')
 		case "optional":
 			fmt.Fprintf(&b, "optional %s: delete the key to omit it\n", at)
+		case "required":
+			fmt.Fprintf(&b, "required %s: %s\n", at, n.Detail)
 		case "choose":
 			if at == "" {
 				at = "(the event)"
+			}
+			if len(n.Union.members) == 1 && n.Union.tag == "" {
+				fmt.Fprintf(&b, "only     %s: %s only; %s\n", at, n.Union.members[0], n.Union.note)
+				continue
 			}
 			fmt.Fprintf(&b, "choose   %s", at)
 			if n.Union.tag != "" {

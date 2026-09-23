@@ -177,8 +177,11 @@ func (s Snapshot) support(ref model.RecordRef, context ...SupportContext) (Suppo
 	case model.Claim, model.Decision:
 		established := false
 		for _, o := range s.inner().log.proofs {
-			e := s.inner().events[o].(*model.ProofAdmit)
-			established = established || (rec.Kind == model.Claim && e.Claim == ref)
+			// The proof in force is the latest on this revision: a refutation
+			// establishes nothing, and a later supports proof re-establishes.
+			if e := s.inner().events[o].(*model.ProofAdmit); rec.Kind == model.Claim && e.Claim == ref {
+				established = !e.Refutes()
+			}
 		}
 		for _, o := range s.inner().log.decisionDisposals {
 			e := s.inner().events[o].(*model.DecisionDispose)

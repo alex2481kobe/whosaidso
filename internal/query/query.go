@@ -18,6 +18,7 @@ type Request struct {
 	Limit        int                      // optional-result cap for context, continue and todo; 0 means none
 	Observed     *Observation             // continue only: the caller's fresh workspace observation
 	Disposal     *DisposalTarget          // disposal-loss only: the artifact a disposal would name
+	Stale        StaleCheck               // state only, on request: runs git, so never by default
 }
 
 // Answer is the complete read result shared by text and JSON. UNKNOWN is a

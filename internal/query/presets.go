@@ -36,6 +36,7 @@ type Preset struct {
 	Closure            *Closure          `json:"closure,omitempty"`
 	Continue           *Continuation     `json:"continue,omitempty"`
 	Disposal           *DisposalLoss     `json:"disposal,omitempty"`
+	Stale              *[]StaleClaim     `json:"stale,omitempty"`
 }
 
 func list[T any](xs []T) *[]T {
@@ -53,6 +54,8 @@ func checkPresetRequest(r Request) error {
 		return fmt.Errorf("continue requires a TASK ULID")
 	case r.Observed != nil && r.Command != "continue":
 		return fmt.Errorf("a workspace observation belongs only to continue")
+	case r.Stale != nil && r.Command != "state":
+		return fmt.Errorf("the stale-claims check belongs only to state")
 	}
 	return checkDisposalRequest(r)
 }
@@ -229,6 +232,9 @@ func preset(project store.Project, s reduce.Snapshot, request Request, a *Answer
 		instrumentsInto(s, p)
 	case "state":
 		p = statePreset(s, describeTasks(s))
+		if request.Stale != nil {
+			p.Stale = list(request.Stale(s))
+		}
 	case "now":
 		p = nowPreset(s, describeTasks(s))
 	case "todo":

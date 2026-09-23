@@ -110,7 +110,7 @@ func (f *fixture) cycle(i int) {
 	criterion := model.CriterionRef{Claim: fix.Claim, CriterionID: fix.CriterionID, Revision: 1}
 	attempt := f.id()
 	f.append(nil, &model.TaskStart{Task: f.ref(task.ID), Actor: author, AttemptID: attempt})
-	proof := model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion,
+	proof := model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Verdict: model.VerdictSupports,
 		Evidence: []model.ObservationDisposition{}, Judgment: model.ResponsibleJudgment{Actor: author, Reason: "all three comparable runs satisfy the frozen criterion; production behavior remains unmeasured"}}
 	for j := 0; j < 3; j++ {
 		env := f.envelope(attempt, criterion)

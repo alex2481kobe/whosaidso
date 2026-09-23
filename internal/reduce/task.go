@@ -165,6 +165,8 @@ func (s *state) taskRevision(key RecordKey) (TaskProjection, bool) {
 	closure, closed := s.closed[id]
 	if closed {
 		c := closure
+		c.Closer = s.eventAuthor(c.Origin)
+		c.SelfAccepted = s.selfAccepted(c.Closer.Author, p.Attempts)
 		p.Closure = &c
 	}
 
@@ -344,7 +346,7 @@ func (s *state) owed(id Ident, rec Record, closure Closure, closed bool, prereqs
 				reasons = append(reasons, BlockedReason{
 					Kind:   ReasonAwaitingAcceptance,
 					Detail: fmt.Sprintf("attempt %s succeeded with no authorised closure", a.Key.Attempt),
-					Actor:  rec.Task.NextActor,
+					Actor:  acceptingActor(rec.Task, rec.Task.NextActor),
 					Truth:  TruthFalse,
 					Origin: a.Terminal.Origin,
 				})
@@ -359,10 +361,14 @@ func (s *state) owed(id Ident, rec Record, closure Closure, closed bool, prereqs
 				detail = fmt.Sprintf("the success closure does not witness acceptance criterion %s revision %d",
 					missing[0].ID, missing[0].Revision)
 			}
+			closer := s.eventAuthor(closure.Origin).Author
+			if closure.Authority != nil {
+				closer = closure.Authority.Actor
+			}
 			reasons = append(reasons, BlockedReason{
 				Kind:   ReasonAwaitingAcceptance,
 				Detail: detail,
-				Actor:  closure.Authority.Actor,
+				Actor:  acceptingActor(rec.Task, closer),
 				Truth:  TruthFalse,
 				Origin: closure.Origin,
 			})
