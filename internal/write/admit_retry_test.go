@@ -58,3 +58,36 @@ func TestAdmissionRetryNeedsNoIntake(t *testing.T) {
 		})
 	}
 }
+
+// Corrupt intake answers an identical retry from the ledger, but never lets a
+// new admission through: that one must still read and verify its packets.
+func TestAdmissionRetryIgnoresCorruptIntakeNewAdmissionDoesNot(t *testing.T) {
+	f := newAdmissionFixture(t)
+	f.goodControl()
+	packet := f.capture(nil, f.task())
+	request := f.request(packet)
+	want, err := Admit(context.Background(), f.project, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inbox, err := store.IntakeDir(f.project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(inbox, string(packet.CommandID), "packet.json"), []byte("not a packet"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Admit(context.Background(), f.project, request)
+	if err != nil {
+		t.Fatalf("identical retry over corrupt intake: %v", err)
+	}
+	a, errA := model.Encode(got)
+	b, errB := model.Encode(want)
+	if errA != nil || errB != nil || string(a) != string(b) {
+		t.Fatalf("retry returned a different bundle:\n%s\nwant\n%s", a, b)
+	}
+	changed := request
+	changed.Outcome = "rejected"
+	f.refuse(changed, "conflict")
+	f.refuse(f.request(packet), "intake-corrupt")
+}
