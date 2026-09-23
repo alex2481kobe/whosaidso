@@ -56,7 +56,7 @@ datum
 |   |-- query          selects admitted facts before either output format renders them
 |   |      12 files, tested -- uses model, reduce, store
 |   |-- reduce         folds admitted bundles into the state every Datum answer is read from
-|   |      20 files, tested -- uses model
+|   |      22 files, tested -- uses model
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
 |   |      10 files, tested -- uses model
 |   `-- write          joins immutable capture to canonical state through one admission gate
