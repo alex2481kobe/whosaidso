@@ -44,11 +44,15 @@ type fileLines struct {
 	Lines int    `json:"lines"`
 }
 
+// report has no report-wide unit. Datum's evaluator lets an object's direct
+// children inherit its "unit", so one here labelled /cycles and /packages as
+// counted in lines: a true word on the wrong question. Every number a criterion
+// may select is in Readings and states its own unit.
 type report struct {
 	Module   string     `json:"module"`
-	Unit     string     `json:"unit"`
 	Packages []pkg      `json:"packages"`
 	Cycles   [][]string `json:"cycles"`
+	Readings readingSet `json:"readings"`
 }
 
 func moduleName(root string) (string, error) {
@@ -71,8 +75,11 @@ func scan(root, mod string) ([]pkg, error) {
 			return err
 		}
 		if d.IsDir() {
+			// The root itself is never skipped, whatever it is called: -root
+			// ../.. has a base name starting with a dot, and skipping it
+			// reported an empty module rather than this one.
 			base := d.Name()
-			if base != "." && (strings.HasPrefix(base, ".") || base == "testdata") {
+			if path != root && (strings.HasPrefix(base, ".") || base == "testdata") {
 				return filepath.SkipDir
 			}
 			return nil

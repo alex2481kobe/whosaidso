@@ -61,7 +61,7 @@ datum
 |          16 files, tested -- uses evidence, model, reduce, store
 `-- tools/
     `-- archtree       instrument that reports how this module's packages fit together
-           4 files, tested -- leaf
+           5 files, tested -- leaf
 ```
 <!-- archtree:end -->
 
