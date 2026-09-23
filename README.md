@@ -1,7 +1,8 @@
 # Datum
 
 An agent-first way of keeping a project accountable, testable, provable and
-optimizable, with a seam for System 1 models.
+optimizable, where any model or agent in any harness proposes through capture
+and admission judges it.
 
 Datum is how work finishes. An agent runs a measurement, hands back a receipt,
 and the record exists. A task cannot close on prose alone. Everything you can
@@ -51,7 +52,7 @@ datum
 |   |-- model          wire vocabulary every other package shares: identities, references, packets and bundles, plus the strict encode/decode boundary
 |   |      14 files, tested -- leaf
 |   |-- query          selects admitted facts before either output format renders them
-|   |      10 files, tested -- uses model, reduce, store
+|   |      9 files, tested -- uses model, reduce, store
 |   |-- reduce         folds admitted bundles into the state every Datum answer is read from
 |   |      16 files, tested -- uses model
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
@@ -117,7 +118,6 @@ disagree, and every answer carries the ledger watermark it was read at.
 ```
 datum show [--json] [RECORD_ID]
 datum history [--json] [RECORD_ID]
-datum task todo [--json]
 datum intake pending [--json]
 ```
 

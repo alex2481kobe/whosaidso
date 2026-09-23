@@ -113,7 +113,7 @@ func TestSelfAdmissionFilterValidationAndEmptyAnswers(t *testing.T) {
 	p := testProject(t)
 	for _, request := range []Request{
 		{Command: "show", SelfAdmitted: "true"}, {Command: "intake pending", SelfAdmitted: "unknown"},
-		{Command: "task todo", SelfAdmitted: "false"}, {Command: "history", SelfAdmitted: "no"},
+		{Command: "history", SelfAdmitted: "no"},
 		{Command: "history", SelfAdmitted: "true", ID: testID(1)},
 	} {
 		if _, err := Read(p, request); err == nil {

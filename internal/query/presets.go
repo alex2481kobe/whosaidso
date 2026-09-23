@@ -34,7 +34,6 @@ type Preset struct {
 	Runs               *[]RunView        `json:"runs,omitempty"`
 	Limit              *LimitReport      `json:"limit,omitempty"`
 	Closure            *Closure          `json:"closure,omitempty"`
-	Proposals          *Proposal         `json:"proposals,omitempty"`
 	Continue           *Continuation     `json:"continue,omitempty"`
 	Disposal           *DisposalLoss     `json:"disposal,omitempty"`
 }
@@ -216,8 +215,6 @@ func preset(project store.Project, s reduce.Snapshot, prefix []model.Bundle, req
 		c := closure(s, asRef(root.Key), request.Limit)
 		p.Closure = &c
 		closureAttention(c, p)
-		q := propose(request.Context, request.Provider, Question{Operation: OperationRetrieve, Refs: []model.RecordRef{asRef(root.Key)}})
-		p.Proposals = &q
 	case "continue":
 		root, _ := s.Current(reduce.Ident{Project: project.ID, ID: request.ID})
 		if root.Kind != model.Task {
