@@ -14,6 +14,11 @@ const (
 	StatusUnmeasured ClaimStatus = "UNMEASURED"
 	StatusMeasured   ClaimStatus = "MEASURED"
 	StatusProven     ClaimStatus = "PROVEN"
+	// StatusRefuted (R14.1) is a claim whose proof in force, the latest
+	// admitted on this exact revision, has the verdict refutes. A later
+	// supports proof, under a new criterion revision or after R14.2 set the
+	// failing runs aside, proves it again.
+	StatusRefuted ClaimStatus = "REFUTED"
 )
 
 // DecisionStatus keeps negative rulings distinguishable from unanswered questions.
@@ -118,6 +123,9 @@ func (s Snapshot) claimAt(ref model.RecordRef) (ClaimProjection, bool) {
 		if e, ok := s.inner().events[o].(*model.ProofAdmit); ok && e.Claim == ref {
 			p.Proofs = append(p.Proofs, ProofAdmission{Admission: *e, Origin: o})
 			p.Status = StatusProven
+			if e.Refutes() {
+				p.Status = StatusRefuted
+			}
 		}
 	}
 	p.Support, _ = s.support(ref)

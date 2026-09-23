@@ -116,14 +116,33 @@ func (j ResponsibleJudgment) validate(p string) error {
 
 // ProofAdmit supplies U06/U12 the family and responsible judgment, not a writable
 // PROVEN. Family completeness, timing and unresolved contradiction are gate checks.
+// Verdict (R14.1) says which way the judgment goes: supports or refutes. The
+// admission gate requires it on every new proof; a proof admitted before R14.1
+// has none and reads as supports, which is the only verdict it could carry.
 type ProofAdmit struct {
 	Claim        RecordRef                `json:"claim"`
 	CriterionRef CriterionRef             `json:"criterion_ref"`
 	Evidence     []ObservationDisposition `json:"evidence"`
 	Judgment     ResponsibleJudgment      `json:"judgment"`
+	Verdict      string                   `json:"verdict,omitempty" semantic:"text"`
 }
 
+// Proof verdicts (R14.1). Status stays projected from them, never written.
+const (
+	VerdictSupports = "supports"
+	VerdictRefutes  = "refutes"
+)
+
+// Refutes reports whether the proof's judgment is that the criterion failed.
+// An absent verdict is a legacy supports proof.
+func (e ProofAdmit) Refutes() bool { return e.Verdict == VerdictRefutes }
+
 func (e ProofAdmit) validate(p string) error {
+	if e.Verdict != "" {
+		if err := oneOf(e.Verdict, p+".verdict", VerdictSupports, VerdictRefutes); err != nil {
+			return err
+		}
+	}
 	if e.Claim != e.CriterionRef.Claim {
 		return invalid(p+".criterion_ref", "criterion must name the same exact assertion")
 	}

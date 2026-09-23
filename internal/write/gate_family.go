@@ -53,17 +53,31 @@ func gateProofFamily(ctx context.Context, project store.Project, after reduce.Sn
 			return err
 		}
 		// FALSE is a computed counterexample. Only "contradicts" names it
-		// honestly, and the reducer refuses every unresolved contradiction.
+		// honestly; the reducer refuses it in a supports proof and counts it
+		// in a refutes proof. And "contradicts" names nothing else (R14.1):
+		// a run that does not fail the criterion cannot refute the claim.
 		if own.Verdict == evidence.False && member.Disposition != "contradicts" {
 			return admissionFault("counterevidence-unresolved", path+".disposition", "member fails the criterion: "+own.Reason)
 		}
-		if member.Disposition != "supports" {
+		if own.Verdict != evidence.False && member.Disposition == "contradicts" {
+			return admissionFault("contradiction-unfounded", path+".disposition", fmt.Sprintf("member does not fail the criterion: it evaluates %s", own.Verdict))
+		}
+		counted := "supports"
+		if e.Refutes() {
+			counted = "contradicts"
+		}
+		if member.Disposition != counted {
 			continue
 		}
 		if err := gateInstrumentValidation(ctx, resolver, after, inv.Start.InstrumentRef, path); err != nil {
 			return err
 		}
 		supports = append(supports, observation)
+	}
+	// A refutation stands on its own counted FALSE members, each checked
+	// above; there is no supporting family to satisfy.
+	if e.Refutes() {
+		return nil
 	}
 	// Every supporting member must be TRUE and comparable with the others;
 	// one UNKNOWN or incomparable member leaves the family unsatisfied.

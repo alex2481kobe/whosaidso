@@ -632,7 +632,8 @@ func (w *flowWorld) proofEvent(members map[model.ID]string) *model.ProofAdmit {
 		evidence = append(evidence, model.ObservationDisposition{InvocationRef: model.InvocationRef{Project: w.project, InvocationID: model.ID(id)},
 			Disposition: members[model.ID(id)], Reason: "dispositioned by the lane's judgment"})
 	}
-	return &model.ProofAdmit{Claim: w.claim, CriterionRef: w.criterion, Evidence: evidence,
+	// R14.1: a new proof states its verdict.
+	return &model.ProofAdmit{Claim: w.claim, CriterionRef: w.criterion, Evidence: evidence, Verdict: "supports",
 		Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: flowLane}, Reason: "the complete family satisfies the frozen criterion"}}
 }
 

@@ -406,7 +406,7 @@ func TestAdmissionClaimCannotAssertProofWithoutEvidence(t *testing.T) {
 	// observation, so a proof bundled with its claim has nothing to stand on.
 	proof := &model.ProofAdmit{Claim: ref, CriterionRef: model.CriterionRef{Claim: ref, CriterionID: f.id(), Revision: 1},
 		Evidence: []model.ObservationDisposition{{InvocationRef: model.InvocationRef{Project: f.project.ID, InvocationID: f.id()}, Disposition: "supports", Reason: "asserted without an observation"}},
-		Judgment: model.ResponsibleJudgment{Actor: f.author, Reason: "asserted proof without evidence"}}
+		Judgment: model.ResponsibleJudgment{Actor: f.author, Reason: "asserted proof without evidence"}, Verdict: model.VerdictSupports}
 	f.refuse(f.request(f.capture(nil, claim, proof)), "unknown-reference")
 	if _, exists := f.snapshot().ClaimAt(ref); exists {
 		t.Fatal("refused proof packet partially admitted its claim")

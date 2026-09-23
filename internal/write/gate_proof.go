@@ -50,7 +50,16 @@ func gateProofOperation(event model.TypedEvent, author model.Actor) (*model.Prov
 		// packet author in the review. Invocation facts are checked by the
 		// reducer, including criterion freezing, and by artifact resolution.
 		return nil, nil
-	case *model.CriterionFix, *model.ProofAdmit:
+	case *model.ProofAdmit:
+		// R14.1: every new proof states its verdict. Replay reads a missing
+		// one as supports, because proofs admitted before R14.1 carry none and
+		// could mean nothing else; this is the entrance that keeps it rare.
+		if e.Verdict == "" {
+			return nil, admissionFault("verdict-required", "verdict", "a proof must state its verdict: supports or refutes")
+		}
+		// The judgment must be the identified packet author: see CriterionFix.
+		return nil, nil
+	case *model.CriterionFix:
 		// The criterion author and the proof judgment must be the identified
 		// packet author. The reducer checks that from the review's recorded
 		// authors, on admission and replay alike (reduce/packet_author.go).

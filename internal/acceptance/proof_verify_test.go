@@ -182,7 +182,8 @@ func (w *pvWorld) proof(members map[model.ID]string) *model.ProofAdmit {
 	for id, disposition := range members {
 		evidence = append(evidence, model.ObservationDisposition{InvocationRef: model.InvocationRef{Project: w.p.ID, InvocationID: id}, Disposition: disposition, Reason: "dispositioned by the reviewer"})
 	}
-	return &model.ProofAdmit{Claim: w.claim, CriterionRef: w.criterion, Evidence: evidence, Judgment: model.ResponsibleJudgment{Actor: w.lane, Reason: "the complete family satisfies the frozen criterion"}}
+	// R14.1: a new proof states its verdict.
+	return &model.ProofAdmit{Claim: w.claim, CriterionRef: w.criterion, Evidence: evidence, Judgment: model.ResponsibleJudgment{Actor: w.lane, Reason: "the complete family satisfies the frozen criterion"}, Verdict: "supports"}
 }
 
 func (w *pvWorld) prove(members map[model.ID]string) error {
