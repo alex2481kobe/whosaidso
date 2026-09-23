@@ -76,3 +76,25 @@ func TestRefutingProofRefusals(t *testing.T) {
 		})
 	}
 }
+
+// The path the reducer rule closes, through admission: a claim refuted on its
+// current criterion revision cannot be proven again by a supports proof on a
+// superseded revision whose runs passed.
+func TestSupportsProofOnASupersededRevisionCannotUndoARefutation(t *testing.T) {
+	w := newProofWorld(t, true)
+	old, s1, e1 := w.run(w.criterion, proofPass)
+	w.f.accept(s1, e1)
+	rev2 := w.reviseCriterion()
+	fail, s2, e2 := w.run(rev2, proofFail)
+	w.f.accept(s2, e2)
+	refute := w.proof(rev2, map[model.InvocationRef]string{fail: "contradicts", old: "inapplicable"})
+	refute.Verdict, refute.Judgment.Reason = model.VerdictRefutes, "the failing run contradicts revision 2"
+	w.f.accept(w.f.capture(nil, refute))
+	if w.status(t) != reduce.StatusRefuted {
+		t.Fatalf("control: the refutation on revision 2 must project REFUTED, got %s", w.status(t))
+	}
+	w.f.refuse(w.f.request(w.f.capture(nil, w.proof(w.criterion, map[model.InvocationRef]string{old: "supports"}))), "invalid-transition")
+	if w.status(t) != reduce.StatusRefuted {
+		t.Fatalf("a proof on the superseded revision changed the claim to %s", w.status(t))
+	}
+}

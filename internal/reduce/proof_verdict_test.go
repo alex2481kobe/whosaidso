@@ -8,6 +8,8 @@ package reduce
 // in internal/write.
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"datum/internal/model"
@@ -112,4 +114,47 @@ func TestR141NewCriterionRevisionProvesARefutedClaim(t *testing.T) {
 	if len(p.Proofs) != 2 || !p.Proofs[0].Admission.Refutes() {
 		t.Fatalf("the refutation must stay visible beside the later proof: %+v", p.Proofs)
 	}
+}
+
+// Every proof, supports or refutes, judges the claim's current criterion
+// revision. A supports proof on a superseded revision would otherwise be the
+// latest proof and flip a REFUTED claim back to PROVEN with no new evidence.
+func TestProofOnASupersededCriterionRevisionIsRefusedForEitherVerdict(t *testing.T) {
+	stale := func(claim model.RecordRef, failed model.ID) *model.ProofAdmit {
+		p := admitProof(claim, newID("RNA1"))
+		p.Verdict = model.VerdictSupports
+		p.Evidence = append(p.Evidence, member(failed, "inconclusive"))
+		return p
+	}
+	// Control: the same supports proof, before any later revision, is admitted.
+	l, claim, failed, _ := familyLedger(t, true)
+	l.add(t, stale(claim, failed.InvocationID))
+	wantClaim(t, wantBoth(t, l, ""), claim, StatusProven)
+
+	l, claim, failed, _ = familyLedger(t, true)
+	l.add(t, refutation(claim, member(failed.InvocationID, "contradicts"), member(newID("RNA1"), "inconclusive")))
+	l.add(t, criterionRevision(claim, 2))
+	wantClaim(t, mustReplay(t, l.out), claim, StatusRefuted)
+	l.add(t, stale(claim, failed.InvocationID))
+	wantBoth(t, l, CodeInvalidTransition)
+	last := len(l.out) - 1
+	for name, err := range map[string]error{"replay": replayErr(l.out), "apply": applyErr(t, l)} {
+		var f *model.Fault
+		if !errors.As(err, &f) || !strings.HasSuffix(f.Path, "criterion_ref.revision") {
+			t.Errorf("%s: the refusal must be the superseded revision, got %v", name, err)
+		}
+	}
+	l.out = l.out[:last]
+	wantClaim(t, mustReplay(t, l.out), claim, StatusRefuted)
+}
+
+func replayErr(out []model.Bundle) error {
+	_, err := Replay(out)
+	return err
+}
+
+func applyErr(t *testing.T, l *ledgerBuilder) error {
+	last := len(l.out) - 1
+	_, err := Apply(mustReplay(t, l.out[:last]), l.out[last])
+	return err
 }

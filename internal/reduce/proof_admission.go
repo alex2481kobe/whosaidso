@@ -62,9 +62,12 @@ func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 	// and never counts a member as support. Either way the counted members
 	// meet the same observation and instrument bar.
 	refutes := e.Refutes()
-	if refutes && s.laterCriterionRevision(e.CriterionRef) {
+	// Every proof, either verdict, judges the claim's current criterion
+	// revision: the latest proof decides status, so a supports proof on a
+	// superseded revision would flip a refuted claim back to PROVEN.
+	if s.laterCriterionRevision(e.CriterionRef) {
 		if err := s.refuseProof(faultAt(CodeInvalidTransition, b.Sequence, idx, "criterion_ref.revision",
-			"a refuting proof judges the claim's current criterion revision, and a later one is admitted")); err != nil {
+			"a proof judges the claim's current criterion revision, and a later one is admitted")); err != nil {
 			return err
 		}
 	}
