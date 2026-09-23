@@ -172,9 +172,13 @@ func (s *state) close(b model.Bundle, idx int, o Origin, e *model.TaskClose) err
 	// task.go. They are not refused here: an authorised closure is a fact, and
 	// dropping it would hide that someone closed a task with a writer still in
 	// it. The admission gate refuses, the reducer records and then projects.
+	// Unmet prerequisites on a success closure are the exception, refused below.
 	who := ident(e.Task)
 	if _, ok := s.closed[who]; ok {
 		return faultAt(CodeInvalidTransition, b.Sequence, idx, "task", "the task is already closed")
+	}
+	if err := s.requirePrerequisites(b, idx, rec, e.Outcome); err != nil {
+		return err
 	}
 	s.closed[who] = Closure{
 		Task:                e.Task,
@@ -183,6 +187,28 @@ func (s *state) close(b model.Bundle, idx int, o Origin, e *model.TaskClose) err
 		AcceptanceWitnesses: e.AcceptanceWitnessRefs,
 		DeliveryWitnesses:   e.DeliveryWitnessRefs,
 		Origin:              o,
+	}
+	return nil
+}
+
+// requirePrerequisites is the success-closure rule: a task closes as success
+// only if every prerequisite of the revision it closes is satisfied (TRUE, or
+// carried by a permitted waiver) at this ledger position. Unlike witnesses and
+// live attempts this is refused, not projected: a success closure over an
+// unfinished prerequisite certifies work that could not yet have been done. It
+// reuses the READY/BLOCKED evaluation, which never recurses into another task,
+// so a prerequisite cycle refuses instead of looping. Replay and Apply both
+// reach it through apply. Non-success outcomes keep their own rules.
+func (s *state) requirePrerequisites(b model.Bundle, idx int, rec Record, outcome model.ClosureOutcome) error {
+	if outcome != model.ClosureSuccess {
+		return nil
+	}
+	for _, r := range s.prerequisites(rec) {
+		if !r.Satisfied() {
+			return faultAt(CodeInvalidTransition, b.Sequence, idx, "outcome",
+				fmt.Sprintf("a success closure needs every prerequisite satisfied; prerequisite %d (%s) is %s: %s",
+					r.Index, r.Kind, r.Truth, r.Detail))
+		}
 	}
 	return nil
 }
