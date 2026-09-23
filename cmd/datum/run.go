@@ -93,14 +93,11 @@ func runCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.Wr
 		}
 		return err
 	}
-	prefix, err := store.ReadPrefix(project)
+	loaded, err := store.Load(project)
 	if err != nil {
 		return err
 	}
-	snapshot, err := reduce.Replay(prefix)
-	if err != nil {
-		return err
-	}
+	snapshot := loaded.Snapshot()
 	current, ok := snapshot.Instrument(reduce.Ident{Project: project.ID, ID: model.ID(*instrument)})
 	if !ok {
 		return fmt.Errorf("run: instrument %q is not admitted", *instrument)

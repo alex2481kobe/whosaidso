@@ -67,8 +67,8 @@ func TestTransactAdmissionAnswersRetriesFromThePublishedBundle(t *testing.T) {
 	admitControl(t, p, 1)
 	ctx := context.Background()
 	first, err := TransactAdmission(ctx, p, Admission{ID: admissionID(2), RetryDigest: retryDigestOf(digestFor(99)),
-		Propose: func(prefix []model.Bundle) (model.Digest, model.Bundle, error) {
-			b, err := proposeFor(2)(prefix)
+		Propose: func(State) (model.Digest, model.Bundle, error) {
+			b, err := proposeFor(2)(nil)
 			return digestFor(2), b, err
 		}})
 	if err != nil || first.RequestDigest != digestFor(2) {
@@ -77,7 +77,7 @@ func TestTransactAdmissionAnswersRetriesFromThePublishedBundle(t *testing.T) {
 	var seen model.Bundle
 	retry, err := TransactAdmission(ctx, p, Admission{ID: admissionID(2),
 		RetryDigest: func(published model.Bundle) (model.Digest, error) { seen = published; return digestFor(2), nil },
-		Propose: func([]model.Bundle) (model.Digest, model.Bundle, error) {
+		Propose: func(State) (model.Digest, model.Bundle, error) {
 			t.Fatal("Propose ran on a retry of a published admission")
 			return "", model.Bundle{}, nil
 		}})
@@ -85,11 +85,11 @@ func TestTransactAdmissionAnswersRetriesFromThePublishedBundle(t *testing.T) {
 		t.Fatalf("identical retry: %+v, %v (RetryDigest saw %q)", retry, err, seen.CommandID)
 	}
 	_, err = TransactAdmission(ctx, p, Admission{ID: admissionID(2), RetryDigest: retryDigestOf(digestFor(99)),
-		Propose: func([]model.Bundle) (model.Digest, model.Bundle, error) { return "", model.Bundle{}, nil }})
+		Propose: func(State) (model.Digest, model.Bundle, error) { return "", model.Bundle{}, nil }})
 	requireFault(t, err, "conflict")
 	_, err = TransactAdmission(ctx, p, Admission{ID: admissionID(3), RetryDigest: retryDigestOf(digestFor(3)),
-		Propose: func(prefix []model.Bundle) (model.Digest, model.Bundle, error) {
-			b, err := proposeFor(3)(prefix)
+		Propose: func(State) (model.Digest, model.Bundle, error) {
+			b, err := proposeFor(3)(nil)
 			return "not-a-digest", b, err
 		}})
 	requireFault(t, err, "invalid-field")

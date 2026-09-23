@@ -36,7 +36,7 @@ func TestReadCLIPresetsLimitAndContinueObservation(t *testing.T) {
 	files := func() map[string]string {
 		out := map[string]string{}
 		filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-			if err == nil && !d.IsDir() {
+			if err == nil && !d.IsDir() && !cacheImagePath(path) {
 				data, _ := os.ReadFile(path)
 				out[path] = string(data)
 			}

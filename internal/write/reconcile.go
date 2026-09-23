@@ -32,14 +32,11 @@ func Reconcile(ctx context.Context, project store.Project, r ReconcileRequest) (
 	if model.Blank(r.Author.ID) || model.Blank(r.Reason) {
 		return model.PacketRef{}, fmt.Errorf("reconcile: an identified author and a reason are required")
 	}
-	prefix, err := store.ReadPrefix(project)
+	loaded, err := store.Load(project)
 	if err != nil {
 		return model.PacketRef{}, err
 	}
-	snapshot, err := reduce.Replay(prefix)
-	if err != nil {
-		return model.PacketRef{}, err
-	}
+	snapshot := loaded.Snapshot()
 	inv, ok := snapshot.Invocation(reduce.InvocationKey{Project: project.ID, InvocationID: r.InvocationID})
 	if !ok {
 		return model.PacketRef{}, fmt.Errorf("reconcile: invocation %s has no admitted start", r.InvocationID)

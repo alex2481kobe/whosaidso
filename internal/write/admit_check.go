@@ -167,14 +167,11 @@ func UncapturedPacket(project store.Project, author model.Actor, events []model.
 // the uncaptured ones through the gate and reports every refusal it collected.
 // The error return is for a check that could not run at all.
 func CheckAdmission(ctx context.Context, project store.Project, packetIDs []model.ID, uncaptured []model.Packet, admitter model.Actor) (AdmissionCheck, error) {
-	prefix, err := store.ReadPrefix(project)
+	loaded, err := store.Load(project)
 	if err != nil {
 		return AdmissionCheck{}, err
 	}
-	snapshot, err := reduce.Replay(prefix)
-	if err != nil {
-		return AdmissionCheck{}, err
-	}
+	snapshot := loaded.Snapshot()
 	check := AdmissionCheck{Head: snapshot.Watermark().Sequence}
 	var packets []model.Packet
 	var refs []model.PacketRef

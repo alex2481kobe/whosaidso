@@ -44,15 +44,11 @@ type ledgerFile struct {
 	name     string
 }
 
-// readLedger enumerates the ledger exactly once, selects the complete prefix
-// and validates it.
-//
-// Enumeration order decides nothing. Filesystems return directory entries in
-// whatever order suits their on-disk structure, so the sequence number in each
-// filename is sorted numerically and then checked against the body. Two files
-// claiming one sequence is a fork, which is refused by name rather than
-// resolved by picking whichever the filesystem happened to hand back first.
-func readLedger(project Project) ([]model.Bundle, error) {
+// inventory enumerates the ledger exactly once and returns its published
+// bundle files sorted by the sequence their names claim. It refuses every entry
+// a reader cannot account for and every doubly published sequence; it reads no
+// bundle, so gaps and bodies are the caller's to check, in sequence order.
+func inventory(project Project) ([]ledgerFile, error) {
 	if project.ID == "" {
 		return nil, storeFault("invalid-field", "project.id", "a ledger read needs the declared project id to check what it reads")
 	}
@@ -66,7 +62,7 @@ func readLedger(project Project) ([]model.Bundle, error) {
 		// is an empty ledger, not a broken one. It is also indistinguishable
 		// from a deleted ledger, which is why the first admission recreates the
 		// directory rather than trusting it to exist.
-		return []model.Bundle{}, nil
+		return []ledgerFile{}, nil
 	}
 	if err != nil {
 		return nil, storeFault("io", dir, err.Error())
@@ -120,6 +116,23 @@ func readLedger(project Project) ([]model.Bundle, error) {
 				"sequence "+strconv.FormatUint(files[i].sequence, 10)+" is published twice, also as "+files[i-1].name)
 		}
 	}
+	return files, nil
+}
+
+// readLedger enumerates the ledger exactly once, selects the complete prefix
+// and validates it.
+//
+// Enumeration order decides nothing. Filesystems return directory entries in
+// whatever order suits their on-disk structure, so the sequence number in each
+// filename is sorted numerically and then checked against the body. Two files
+// claiming one sequence is a fork, which is refused by name rather than
+// resolved by picking whichever the filesystem happened to hand back first.
+func readLedger(project Project) ([]model.Bundle, error) {
+	files, err := inventory(project)
+	if err != nil {
+		return nil, err
+	}
+	dir := project.Ledger
 	bundles := make([]model.Bundle, 0, len(files))
 	commands := make(map[model.ID]int, len(files))
 	for i, file := range files {

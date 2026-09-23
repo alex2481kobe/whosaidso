@@ -190,6 +190,34 @@ func (s Snapshot) Reviews() []Review {
 	return deepCopySlice(out)
 }
 
+// ReviewsInLedgerOrder returns every disposition in the order the ledger
+// admitted it: by its review event's origin, then by the packet's position in
+// that event. It is the order a walk over the prefix's review.admit events
+// meets them, answered from the snapshot so a reader needs no raw bundles.
+func (s Snapshot) ReviewsInLedgerOrder() []Review {
+	st := s.inner()
+	out := make([]Review, 0, len(st.reviews))
+	position := make(map[ReviewKey]int, len(st.reviews))
+	for _, r := range st.reviews {
+		out = append(out, r)
+		if e, ok := st.events[r.Origin].(*model.ReviewAdmit); ok {
+			for i, p := range e.Packets {
+				if p.CommandID == r.Key.CommandID {
+					position[r.Key] = i
+					break
+				}
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Origin != out[j].Origin {
+			return out[i].Origin.before(out[j].Origin)
+		}
+		return position[out[i].Key] < position[out[j].Key]
+	})
+	return deepCopySlice(out)
+}
+
 // Sources returns every captured source, sorted by project then id.
 func (s Snapshot) Sources() []Source {
 	return deepCopySlice(s.inner().sourcesSorted())

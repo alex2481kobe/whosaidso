@@ -54,11 +54,11 @@ datum
 |   |-- model          wire vocabulary every other package shares: identities, references, packets and bundles, plus the strict encode/decode boundary
 |   |      14 files, tested -- leaf
 |   |-- query          selects admitted facts before either output format renders them
-|   |      11 files, tested -- uses model, reduce, store
+|   |      12 files, tested -- uses model, reduce, store
 |   |-- reduce         folds admitted bundles into the state every Datum answer is read from
-|   |      20 files, tested -- uses model
+|   |      22 files, tested -- uses model
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
-|   |      10 files, tested -- uses model
+|   |      13 files, tested -- uses model, reduce
 |   `-- write          joins immutable capture to canonical state through one admission gate
 |          17 files, tested -- uses evidence, model, reduce, store
 `-- tools/
@@ -154,6 +154,13 @@ BLOCKED task is waiting on, with the actor it waits on. `todo` holds the full
 blocked, awaiting-acceptance and READY queues, plus intake. `intake pending`
 lists packets not yet accepted: unreviewed ones, and rejected or
 correction-requested ones with the review that dispositioned them.
+
+Commands keep a disposable snapshot in `.datum/cache/`, beside the ledger and
+gitignored. It is never read as truth: every command still reads and hashes
+every bundle, reuses the snapshot only when the whole prefix it was folded from
+matches byte for byte, folds only the bundles after it, and rebuilds it on any
+mismatch or damage. Deleting it changes no answer, only how long the next
+command takes.
 
 Before disposing of an artifact, `datum disposal-loss --digest SHA256` prints
 the `support_loss` targets an `artifact.dispose` of those bytes must record,

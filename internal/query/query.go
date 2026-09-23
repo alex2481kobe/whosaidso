@@ -118,33 +118,50 @@ type Packet struct {
 
 // Read selects the immutable ledger prefix once. Intake is a separate visible
 // inventory, read afterwards; its dispositions are always relative to this
-// answer's watermark, never a later ledger read. No generated files are read.
+// answer's watermark, never a later ledger read. The only generated file read
+// is the snapshot cache, and only after every byte of the prefix it was folded
+// from is checked (store.Load); deleting it changes no answer.
 func Read(project store.Project, request Request) (Answer, error) {
+	if err := checkRequest(request); err != nil {
+		return Answer{}, err
+	}
+	source, err := store.Load(project)
+	if err != nil {
+		return Answer{}, err
+	}
+	return answer(project, request, source)
+}
+
+// ReadFrom answers from one already selected prefix. Every view reads that one
+// Source, so no answer can combine two watermarks.
+func ReadFrom(project store.Project, request Request, source Source) (Answer, error) {
+	if err := checkRequest(request); err != nil {
+		return Answer{}, err
+	}
+	return answer(project, request, source)
+}
+
+func checkRequest(request Request) error {
 	if request.SelfAdmitted != "" {
 		if request.Command != "history" || request.ID != "" {
-			return Answer{}, fmt.Errorf("self-admitted filter requires history without a record ULID")
+			return fmt.Errorf("self-admitted filter requires history without a record ULID")
 		}
 		if request.SelfAdmitted != model.SelfAdmissionTrue && request.SelfAdmitted != model.SelfAdmissionFalse && request.SelfAdmitted != model.SelfAdmissionUnknown {
-			return Answer{}, fmt.Errorf("self-admitted must be true, false, or unknown")
+			return fmt.Errorf("self-admitted must be true, false, or unknown")
 		}
 	}
 	if request.Command != "show" && request.Command != "history" && request.Command != "intake pending" && !presetCommands[request.Command] {
-		return Answer{}, fmt.Errorf("unknown read command %q", request.Command)
+		return fmt.Errorf("unknown read command %q", request.Command)
 	}
 	if request.ID != "" && (!model.ValidID(request.ID) || request.Command != "show" && request.Command != "history" && !idPresets[request.Command]) {
-		return Answer{}, fmt.Errorf("only show, history, context and continue accept a record ULID")
+		return fmt.Errorf("only show, history, context and continue accept a record ULID")
 	}
-	if err := checkPresetRequest(request); err != nil {
-		return Answer{}, err
-	}
-	prefix, err := store.ReadPrefix(project)
-	if err != nil {
-		return Answer{}, err
-	}
-	snapshot, err := reduce.Replay(prefix)
-	if err != nil {
-		return Answer{}, err
-	}
+	return checkPresetRequest(request)
+}
+
+func answer(project store.Project, request Request, source Source) (Answer, error) {
+	var err error
+	snapshot := source.Snapshot()
 	w := snapshot.Watermark()
 	a := Answer{Command: request.Command, Project: project.ID, Result: "KNOWN",
 		Watermark: Watermark{Sequence: w.Sequence, Bundles: w.Bundles, Events: w.Events,
@@ -193,6 +210,10 @@ func Read(project store.Project, request Request) (Answer, error) {
 			break
 		}
 		selected := historyOrigins(snapshot, id)
+		prefix, err := source.Bundles()
+		if err != nil {
+			return Answer{}, err
+		}
 		for _, bundle := range prefix {
 			for i, event := range bundle.Events {
 				origin := reduce.Origin{Sequence: bundle.Sequence, EventIndex: i}
@@ -202,14 +223,14 @@ func Read(project store.Project, request Request) (Answer, error) {
 			}
 		}
 	case "intake pending":
-		a.Intake, err = pending(project, snapshot, prefix)
+		a.Intake, err = pending(project, snapshot)
 	default:
-		err = preset(project, snapshot, prefix, request, &a)
+		err = preset(project, snapshot, request, &a)
 	}
 	return a, err
 }
 
-func pending(project store.Project, s reduce.Snapshot, prefix []model.Bundle) ([]Packet, error) {
+func pending(project store.Project, s reduce.Snapshot) ([]Packet, error) {
 	packets, err := store.ReadIntake(project, nil)
 	if err != nil {
 		return nil, err
@@ -220,46 +241,31 @@ func pending(project store.Project, s reduce.Snapshot, prefix []model.Bundle) ([
 		byID[p.CommandID] = Packet{CommandID: p.CommandID, Packet: p, Disposition: "pending"}
 	}
 	// Review events are the admitted facts, even without envelope packet refs
-	// or a local copy of the intake bytes.
-	for _, bundle := range prefix {
-		var refs []model.PacketRef
-		for _, event := range bundle.Events {
-			if event.Type != "review.admit" {
-				continue
-			}
-			typed, err := model.DecodeEvent(event)
+	// or a local copy of the intake bytes. They are met in ledger order, so the
+	// first mismatch reported is the one a walk of the prefix would report.
+	for _, review := range s.ReviewsInLedgerOrder() {
+		ref := review.Packet
+		p, present := byID[ref.CommandID]
+		if present && p.Packet != nil {
+			dir, err := store.IntakeDir(project)
 			if err != nil {
 				return nil, err
 			}
-			refs = append(refs, typed.(*model.ReviewAdmit).Packets...)
+			data, err := os.ReadFile(filepath.Join(dir, string(ref.CommandID), "packet.json"))
+			if err != nil || model.HashBytes(data) != review.Packet.Digest {
+				return nil, fmt.Errorf("intake %s no longer matches its reviewed bytes: %v", ref.CommandID, err)
+			}
 		}
-		for _, ref := range refs {
-			review, ok := s.Review(reduce.ReviewKey{Project: project.ID, CommandID: ref.CommandID})
-			if !ok {
-				continue
-			}
-			p, present := byID[ref.CommandID]
-			if present && p.Packet != nil {
-				dir, err := store.IntakeDir(project)
-				if err != nil {
-					return nil, err
-				}
-				data, err := os.ReadFile(filepath.Join(dir, string(ref.CommandID), "packet.json"))
-				if err != nil || model.HashBytes(data) != review.Packet.Digest {
-					return nil, fmt.Errorf("intake %s no longer matches its reviewed bytes: %v", ref.CommandID, err)
-				}
-			}
-			if review.Outcome == "accepted" {
-				delete(byID, ref.CommandID)
-				continue
-			}
-			if !present {
-				p = Packet{CommandID: ref.CommandID, Unavailable: &Unknown{"UNKNOWN", "reviewed packet is absent from local intake"}}
-			}
-			projected := describeReview(review)
-			p.Disposition, p.Review = review.Outcome, &projected
-			byID[ref.CommandID] = p
+		if review.Outcome == "accepted" {
+			delete(byID, ref.CommandID)
+			continue
 		}
+		if !present {
+			p = Packet{CommandID: ref.CommandID, Unavailable: &Unknown{"UNKNOWN", "reviewed packet is absent from local intake"}}
+		}
+		projected := describeReview(review)
+		p.Disposition, p.Review = review.Outcome, &projected
+		byID[ref.CommandID] = p
 	}
 	out := make([]Packet, 0, len(byID))
 	for _, packet := range byID {

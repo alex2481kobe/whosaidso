@@ -20,7 +20,8 @@ import (
 )
 
 // checkTree fingerprints every file under the project root and the intake,
-// so "the check wrote nothing" is asked of the real directories.
+// so "the check wrote nothing" is asked of the real directories. The one
+// exception is the disposable snapshot cache's image, which changes no answer.
 func checkTree(t *testing.T, f *admissionFixture) string {
 	t.Helper()
 	inbox, err := store.IntakeDir(f.project)
@@ -32,6 +33,10 @@ func checkTree(t *testing.T, f *admissionFixture) string {
 		filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return nil
+			}
+			name := d.Name()
+			if path == f.project.CacheDir() || filepath.Dir(path) == f.project.CacheDir() && (name == "snapshot" || strings.HasPrefix(name, ".snapshot-")) {
+				return nil // the disposable snapshot cache may be refreshed by any read
 			}
 			info, _ := d.Info()
 			sum := ""

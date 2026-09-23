@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"datum/internal/model"
@@ -97,6 +98,10 @@ func reviewPacket(t *testing.T, p store.Project, n int, packet model.PacketRef, 
 		t.Fatalf("control %s disposition must be admitted: %v", outcome, err)
 	}
 }
+
+// treeBytes fingerprints every file under root except the disposable
+// snapshot cache's image and its temporaries: a read may refresh the cache,
+// which changes no answer, and must write nothing else.
 func treeBytes(t *testing.T, root string) map[string]string {
 	t.Helper()
 	files := map[string]string{}
@@ -104,7 +109,9 @@ func treeBytes(t *testing.T, root string) map[string]string {
 		if err != nil {
 			return err
 		}
-		if !entry.IsDir() {
+		name := entry.Name()
+		cached := filepath.Base(filepath.Dir(path)) == "cache" && (name == "snapshot" || strings.HasPrefix(name, ".snapshot-"))
+		if !entry.IsDir() && !cached {
 			data, err := os.ReadFile(path)
 			if err != nil {
 				return err
