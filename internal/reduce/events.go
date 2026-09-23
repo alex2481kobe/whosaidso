@@ -223,7 +223,7 @@ func (s *state) criterionFix(b model.Bundle, idx int, o Origin, e *model.Criteri
 	if _, ok := s.criteria[key]; ok {
 		return faultAt(CodeDuplicateRecord, b.Sequence, idx, "revision", "criterion revision already fixed")
 	}
-	s.criteria[key] = Criterion{Key: key, Fix: *e, Origin: o}
+	s.criteria[key] = Criterion{Key: key, Fix: *e, Origin: o, RecordedAt: b.RecordedAt.UTC()}
 	return nil
 }
 
@@ -247,5 +247,6 @@ func (s *state) reviewAdmit(b model.Bundle, idx int, o Origin, e *model.ReviewAd
 		s.reviews[key] = Review{Key: key, Packet: p, Outcome: e.Outcome, Actor: e.Actor, Reason: e.Reason, Origin: o, SelfAdmission: selfAdmission, Invocations: invocations,
 			Author: reviewAuthor(e, p.CommandID)}
 	}
-	return s.attributeEvents(b, idx, e)
+	s.attributeEvents(b, e)
+	return nil
 }

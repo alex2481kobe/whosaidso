@@ -7,8 +7,6 @@ package reduce
 // with an authority or an admitter, and never gates anything on it.
 
 import (
-	"fmt"
-
 	"datum/internal/model"
 )
 
@@ -36,20 +34,12 @@ func reviewAuthor(e *model.ReviewAdmit, packet model.ID) model.Actor {
 }
 
 // attributeEvents binds each bundle event before an accepted review to the
-// packet that carried it. The list must cover exactly those events, because a
-// shorter or longer one would attribute an event to the wrong author.
-func (s *state) attributeEvents(b model.Bundle, idx int, e *model.ReviewAdmit) error {
-	if e.EventPackets == nil {
-		return nil
-	}
-	if len(e.EventPackets) != idx {
-		return faultAt(CodeInvalidTransition, b.Sequence, idx, "event_packets",
-			fmt.Sprintf("names %d events but the review follows %d", len(e.EventPackets), idx))
-	}
+// packet that carried it. indexBundle has already checked the list covers
+// exactly those events.
+func (s *state) attributeEvents(b model.Bundle, e *model.ReviewAdmit) {
 	for i, packet := range e.EventPackets {
 		s.eventPackets[Origin{Sequence: b.Sequence, EventIndex: i}] = ReviewKey{Project: b.Project, CommandID: packet}
 	}
-	return nil
 }
 
 func (s *state) eventAuthor(o Origin) PacketAuthor {
