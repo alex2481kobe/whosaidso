@@ -28,12 +28,22 @@ type CapturedBlob struct {
 // IntakeDir is runtime-only: a portable, injective encoding keeps logical ids
 // containing slashes or Unicode distinct without making them filesystem paths.
 func IntakeDir(project Project) (string, error) {
-	if project.ID == "" || !utf8.ValidString(string(project.ID)) || strings.ContainsRune(string(project.ID), 0) {
-		return "", storeFault("invalid-field", "project.id", "expected a nonempty UTF-8 project id without NUL")
+	encoded, err := encodeProjectID(project.ID)
+	if err != nil {
+		return "", err
 	}
-	home, err := os.UserHomeDir()
-	if err != nil || !filepath.IsAbs(home) {
-		return "", storeFault("io", "home", "an absolute user home directory is required")
+	home, err := Home()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "intake", encoded), nil
+}
+
+// encodeProjectID names a project inside the Datum home: its intake, staging
+// and registry binding all use this one name.
+func encodeProjectID(id model.ProjectID) (string, error) {
+	if id == "" || !utf8.ValidString(string(id)) || strings.ContainsRune(string(id), 0) {
+		return "", storeFault("invalid-field", "project.id", "expected a nonempty UTF-8 project id without NUL")
 	}
 	// Lowercase hex, not base64. base64 IS injective over byte strings, which is
 	// a true measurement of the wrong property: the inbox is a filesystem PATH,
@@ -42,8 +52,7 @@ func IntakeDir(project Project) (string, error) {
 	// land together and then neither can read its own. Found by lane E.
 	//
 	// Hex has one case, so two different ids cannot fold onto each other.
-	encoded := hex.EncodeToString([]byte(project.ID))
-	return filepath.Join(home, ".datum", "intake", encoded), nil
+	return hex.EncodeToString([]byte(id)), nil
 }
 
 func captureBlob(ctx context.Context, dir string, reader io.Reader, disk intakeIO) (CapturedBlob, error) {

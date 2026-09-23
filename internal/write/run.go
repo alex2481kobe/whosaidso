@@ -26,7 +26,7 @@ const (
 
 // RunRequest carries intent only. Instrument is the spec at InstrumentRef so
 // reported configuration names can be checked without taking an admission lock.
-// Dir defaults to the project root. Env defaults to the inherited environment.
+// Dir defaults to the invoking checkout (Project.ExecRoot), not the home. Env defaults to the inherited environment.
 // Timeout zero leaves the execution deadline to ctx. Run never invokes a shell
 // implicitly and never treats an invocation outcome as an attempt outcome.
 type RunRequest struct {
@@ -118,7 +118,7 @@ func Run(ctx context.Context, project store.Project, request RunRequest) (RunRes
 	cmd := exec.CommandContext(ctx, envelope.Argv[0], envelope.Argv[1:]...)
 	cmd.Dir = request.Dir
 	if cmd.Dir == "" {
-		cmd.Dir = project.Root
+		cmd.Dir = project.ExecRoot()
 	}
 	cmd.Env = request.Env
 	if cmd.Env == nil {

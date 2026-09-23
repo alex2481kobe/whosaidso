@@ -93,6 +93,13 @@ are minted; every other id is a reference to look up. Reasons, dispositions
 and judgments stay placeholders. Choices, optional and minted keys are
 listed on stderr. Event types:
 ` + templateEventList() + "\n", define: templateVerb},
+		{name: "home", args: "[PATH]", summary: "show or set where this project's live ledger is", detail: `Bare, shows this project's binding on this machine: its home, or unbound,
+and whether the home is available. With PATH, binds the project to the
+checkout at PATH, which must hold datum.toml declaring the same project id,
+a ledger inside it and a readable history. Binding again elsewhere is the
+move: while the old home exists, PATH's history must continue it bundle for
+bundle; when it is gone, continuity: not-compared is printed.
+`, define: homeVerb},
 		{name: "id", args: "[N]", summary: "print N fresh record ids (default one)", detail: `Use it rather than inventing an id: hand-typed Crockford base32 parses and
 means nothing.
 `, define: idVerb},

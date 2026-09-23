@@ -270,6 +270,7 @@ func TestFreshProcessInstrumentsOnThisRepositoryShowUnknownValidation(t *testing
 		t.Fatal(err)
 	}
 	root := filepath.Join(cwd, "..", "..")
+	bindTestHome(t, root)
 	// R19: the instruments preset is show --kind instrument.
 	answer := readJSON[query.ShowAnswer](t, readProcess(t, root, nil, "show", "--kind", "instrument", "--json"))
 	if answer.Project != "datum/datum" || answer.Watermark.Bundles == 0 || len(answer.Records) == 0 {

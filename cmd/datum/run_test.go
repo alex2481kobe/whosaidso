@@ -167,7 +167,11 @@ func TestCLIFreshProcessesRunToProven(t *testing.T) {
 	// The run records this machine's persistent id, and says why it has no git
 	// state: the fixture root is not a git checkout.
 	identity := result.Envelope.ExecutionSourceIdentity
-	machine, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".datum", store.MachineIDFile))
+	home, err := store.Home()
+	if err != nil {
+		t.Fatal(err)
+	}
+	machine, err := os.ReadFile(filepath.Join(home, store.MachineIDFile))
 	if err != nil || identity.MachineID.State != model.Known || string(*identity.MachineID.Value)+"\n" != string(machine) {
 		t.Fatalf("run must record the persistent machine id %q: %+v, %v", machine, identity.MachineID, err)
 	}
