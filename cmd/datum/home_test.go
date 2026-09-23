@@ -239,3 +239,28 @@ func TestCLIRelocation(t *testing.T) {
 		t.Fatalf("relocation with the old home gone: %d %q %q", code, out, errOut)
 	}
 }
+
+// TestCLICaptureAdmitReadsSourcesFromTheInvokingCheckout: with the home
+// elsewhere, a source file that exists only in this checkout is captured.
+func TestCLICaptureAdmitReadsSourcesFromTheInvokingCheckout(t *testing.T) {
+	root, _ := cliFixture(t)
+	clone := t.TempDir()
+	data, err := os.ReadFile(filepath.Join(root, "datum.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := []byte("words that exist only in the invoking checkout")
+	if err := os.WriteFile(filepath.Join(clone, "datum.toml"), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(clone, "ruling.txt"), body, 0600); err != nil {
+		t.Fatal(err)
+	}
+	out, errOut, code := cliRun(t, clone, sourceEvents(t, body, "ruling.txt"), "lane", "capture", "--admit", "--reason", "source from here", "--events", "-")
+	if code != 0 || !strings.HasPrefix(out, "captured ") {
+		t.Fatalf("the source must be read from the invoking checkout, not the home: %d %q %q", code, out, errOut)
+	}
+	if homeLedgerFiles(t, root) != 1 || homeLedgerFiles(t, clone) != 0 {
+		t.Fatal("the admission must land in the home")
+	}
+}
