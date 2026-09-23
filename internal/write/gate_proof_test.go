@@ -271,7 +271,8 @@ func TestProofCannotBorrowAnotherRevisionsObservations(t *testing.T) {
 
 // TestAdmissionChecksInvocationConfigNames: a hand-captured start or seal
 // naming a knob the exact instrument revision never declared is refused at
-// admission, exactly as datum run refuses it before launch.
+// admission, exactly as datum run refuses it before launch. Admission reaches
+// the rule through reduce.Apply.
 func TestAdmissionChecksInvocationConfigNames(t *testing.T) {
 	w := newProofWorld(t, true)
 	_, start, seal := w.run(w.criterion, proofPass)
@@ -288,13 +289,6 @@ func TestAdmissionChecksInvocationConfigNames(t *testing.T) {
 	sealed.Envelope.ConfigEffective = proofKnown(map[string]model.Availability[model.Scalar]{"mode": proofKnown(undeclared["mode"])})
 	w.f.accept(w.f.capture(nil, &model.InvocationStart{Envelope: env}))
 	w.f.refuse(w.f.request(w.f.capture([][]byte{[]byte(proofPass)}, sealed)), "invalid-field")
-
-	// Moved from the removed runAdmissionConfig test: an unresolvable
-	// instrument revision is left to the reference gates.
-	unresolved := w.envelope(w.criterion)
-	unresolved.ConfigRequested = undeclared
-	unresolved.InstrumentRef.Revision = 9
-	if err := gateInvocationConfig(w.f.snapshot(), unresolved); err != nil {
-		t.Fatalf("an unresolvable revision is left to the reference gates: %v", err)
-	}
+	// The rule itself, and the unresolvable-revision case, are the reducer's:
+	// see reduce.TestInvocationConfigNamesTheExactInstrumentRevision.
 }

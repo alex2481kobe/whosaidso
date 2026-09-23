@@ -18,9 +18,7 @@ func sealNumber(s string) model.Scalar {
 
 func sealStart(t *testing.T) (*ledgerBuilder, model.InvocationEnvelope, Snapshot) {
 	t.Helper()
-	l := proofLedger(t, false)
-	l.out, l.seq = l.out[:3], 3
-	l.prev = l.out[2].CommandID
+	l := configLedger(t) // declares the "samples" knob the run requests
 	env := proofEnvelope(ref(newID("CMA1"), 1), newID("RNA"))
 	env.Argv = []string{"fixture-runner", "--seed", "7"}
 	env.InputRefs = []model.ArtifactRef{blobRef("input")}

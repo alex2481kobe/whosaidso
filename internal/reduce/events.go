@@ -137,6 +137,9 @@ func (s *state) invocationStart(b model.Bundle, idx int, o Origin, e *model.Invo
 		return faultAt(CodeUnknownReference, b.Sequence, idx, "envelope.attempt_id",
 			"no admitted attempt owns this invocation")
 	}
+	if err := s.checkInvocationConfig(b, idx, e.Envelope); err != nil {
+		return err
+	}
 	s.invocations[key] = Invocation{Key: key, Attempt: owner, Start: e.Envelope, Started: o}
 	return nil
 }
@@ -173,10 +176,30 @@ func (s *state) invocationSeal(b model.Bundle, idx int, o Origin, e *model.Invoc
 				"the seal disagrees with the admitted pre-launch intent")
 		}
 	}
+	if err := s.checkInvocationConfig(b, idx, e.Envelope); err != nil {
+		return err
+	}
 	seal := e.Envelope
 	inv.Seal = &seal
 	inv.Sealed = &o
 	s.invocations[key] = inv
+	return nil
+}
+
+// checkInvocationConfig holds requested and effective config names to the
+// exact instrument revision whenever it is in state, so replay and admission
+// share one rule. An unresolvable revision is the reference check's answer.
+func (s *state) checkInvocationConfig(b model.Bundle, idx int, env model.InvocationEnvelope) error {
+	rec, ok := s.records[recordKey(env.InstrumentRef)]
+	if !ok || rec.Kind != model.Instrument || rec.Instrument == nil {
+		return nil
+	}
+	if err := model.ValidateInvocationConfig(env, *rec.Instrument); err != nil {
+		if f, ok := err.(*model.Fault); ok {
+			return faultAt(f.Code, b.Sequence, idx, "envelope."+f.Path, f.Detail)
+		}
+		return faultAt(CodeInvalidField, b.Sequence, idx, "envelope", err.Error())
+	}
 	return nil
 }
 
