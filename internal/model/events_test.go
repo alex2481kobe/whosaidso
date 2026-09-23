@@ -79,7 +79,7 @@ func schemaEvents() []TypedEvent {
 		&ClaimAssert{ID: schemaID(1), Spec: schemaClaim(), Provenance: schemaProvenance()},
 		&ClaimRevise{Target: schemaRef(1), ExpectedRevision: 1, Replacement: schemaClaim(), Provenance: schemaProvenance()},
 		&CriterionFix{Claim: schemaRef(1), CriterionID: schemaID(8), Revision: 2, Expression: schemaExpression(), Policy: EvaluationPolicy{Inclusion: "entire-criterion-family", Retry: "retain-all"}, Author: Actor{ID: "predicate-author"}, SourceRefs: []ArtifactRef{schemaArtifact()}},
-		&ProofAdmit{Claim: schemaRef(1), CriterionRef: schemaCriterionRef(), Evidence: []ObservationDisposition{{InvocationRef: InvocationRef{Project: schemaProject, InvocationID: schemaID(9)}, Disposition: "supports", Reason: "every case matched the predicate"}}, Judgment: ResponsibleJudgment{Actor: Actor{ID: "coordinator"}, Reason: "the complete family supports the criterion"}},
+		&ProofAdmit{Claim: schemaRef(1), CriterionRef: schemaCriterionRef(), Evidence: []ObservationDisposition{{InvocationRef: InvocationRef{Project: schemaProject, InvocationID: schemaID(9)}, Disposition: "supports", Reason: "every case matched the predicate"}}, Judgment: ResponsibleJudgment{Actor: Actor{ID: "coordinator"}, Reason: "the complete family supports the criterion"}, Verdict: VerdictSupports},
 		&DecisionOpen{ID: schemaID(1), Spec: schemaDecision(), Provenance: schemaProvenance()},
 		&DecisionRevise{Target: schemaRef(1), ExpectedRevision: 1, Replacement: schemaDecision(), Provenance: schemaProvenance()},
 		&DecisionDispose{Decision: schemaRef(1), Disposition: "approved", Quote: "  Approve this scope.\n", Scope: schemaScope(), Authority: schemaAuthority()},
@@ -88,7 +88,8 @@ func schemaEvents() []TypedEvent {
 		&InstrumentDeclare{ID: schemaID(1), Spec: schemaInstrument(), Provenance: schemaProvenance()},
 		&InstrumentRevise{Target: schemaRef(1), ExpectedRevision: 1, Replacement: schemaInstrument(), Provenance: schemaProvenance()},
 		&TrustWithdraw{Instrument: schemaRef(1), Scope: schemaScope(), RevalidationCondition: "bind validation to the repaired implementation"},
-		&ReviewAdmit{Packets: []PacketRef{{CommandID: schemaID(16), Digest: HashBytes([]byte("packet"))}}, Outcome: "accepted", Actor: Actor{ID: "coordinator"}, Reason: "reviewed against the current record"},
+		&ReviewAdmit{Packets: []PacketRef{{CommandID: schemaID(16), Digest: HashBytes([]byte("packet"))}}, Outcome: "accepted", Actor: Actor{ID: "coordinator"}, Reason: "reviewed against the current record",
+			Authors: map[ID]Actor{schemaID(16): {ID: "lane-a"}}, CapturedAt: map[ID]Availability[time.Time]{schemaID(16): {State: Unknown, Reason: "not recorded"}}, EventPackets: []ID{}},
 		&ArtifactDispose{Artifact: schemaArtifact(), Digest: schemaArtifact().Content.SHA256, PreviousLocation: ".datum/artifacts/source.json", SupportLoss: []SupportLoss{{Target: schemaRef(1), Reason: "the observation is no longer verifiable"}}, Authority: schemaAuthority()},
 	}
 }

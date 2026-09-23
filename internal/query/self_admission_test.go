@@ -6,44 +6,63 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"datum/internal/model"
 	"datum/internal/store"
 )
 
-func TestSelfAdmissionAuditThreeStatesAndLegacy(t *testing.T) {
+// uncaptured records every packet's capture time as unknown: these reviews
+// carry no events, so no start is bounded by it.
+func uncaptured(refs []model.PacketRef) map[model.ID]model.Availability[time.Time] {
+	out := map[model.ID]model.Availability[time.Time]{}
+	for _, r := range refs {
+		out[r.CommandID] = model.Availability[time.Time]{State: model.Unknown, Reason: "not recorded"}
+	}
+	return out
+}
+
+// authoredBy records one known author for every packet.
+func authoredBy(id string, refs []model.PacketRef) map[model.ID]model.Actor {
+	out := map[model.ID]model.Actor{}
+	for _, r := range refs {
+		out[r.CommandID] = model.Actor{ID: id}
+	}
+	return out
+}
+
+func TestSelfAdmissionAuditThreeStates(t *testing.T) {
 	p := testProject(t)
-	states := []model.SelfAdmissionState{model.SelfAdmissionTrue, model.SelfAdmissionFalse, model.SelfAdmissionUnknown}
 	// C39: the answer is computed from each packet's recorded author and the
-	// admitter. The legacy stored field is rotated so it contradicts every
-	// computed answer; a filter that read it would select the wrong packets.
+	// admitter; the reason prose claims otherwise and is never read.
 	authors := []model.Actor{{ID: "reviewer"}, {ID: "other"}, {UnknownReason: "author not recorded"}}
 	expected := map[model.ID]string{}
 	// Different facts in one review must not borrow a sibling's comparison.
 	for i, outcome := range []string{"accepted", "rejected", "correction-requested"} {
 		refs := []model.PacketRef{}
-		stored := map[model.ID]model.SelfAdmissionState{}
 		recorded := map[model.ID]model.Actor{}
 		for j := 2; j >= 0; j-- {
 			id := testID(10*i + j + 1)
 			refs = append(refs, model.PacketRef{CommandID: id, Digest: model.HashBytes([]byte(id))})
-			stored[id] = states[(j+1)%3]
 			recorded[id] = authors[j]
 			expected[id] = []string{"true", "false", "UNKNOWN"}[j]
 		}
 		appendEvents(t, p, 100+i, &model.ReviewAdmit{Packets: refs, Outcome: outcome,
-			Actor: model.Actor{ID: "reviewer"}, Reason: "Self-admitted: true.", SelfAdmission: stored, Authors: recorded})
+			Actor: model.Actor{ID: "reviewer"}, Reason: "Self-admitted: true.", Authors: recorded,
+			CapturedAt: uncaptured(refs), EventPackets: []model.ID{}})
 	}
-	legacy := model.PacketRef{CommandID: testID(31), Digest: model.HashBytes([]byte("legacy"))}
-	appendEvents(t, p, 103, &model.ReviewAdmit{Packets: []model.PacketRef{legacy}, Outcome: "rejected",
-		Actor: model.Actor{ID: "reviewer"}, Reason: "Self-admitted: true."})
+	unrecorded := model.PacketRef{CommandID: testID(31), Digest: model.HashBytes([]byte("unrecorded"))}
+	appendEvents(t, p, 103, &model.ReviewAdmit{Packets: []model.PacketRef{unrecorded}, Outcome: "rejected",
+		Actor: model.Actor{ID: "reviewer"}, Reason: "Self-admitted: true.",
+		Authors:    map[model.ID]model.Actor{unrecorded.CommandID: {UnknownReason: "not recorded at admission (before R10.1)"}},
+		CapturedAt: uncaptured([]model.PacketRef{unrecorded}), EventPackets: []model.ID{}})
 	unknown := model.PacketRef{CommandID: testID(32), Digest: model.HashBytes([]byte("unknown actor"))}
-	expected[legacy.CommandID], expected[unknown.CommandID] = "UNKNOWN", "UNKNOWN"
+	expected[unrecorded.CommandID], expected[unknown.CommandID] = "UNKNOWN", "UNKNOWN"
 	appendEvents(t, p, 104, &model.ReviewAdmit{Packets: []model.PacketRef{unknown}, Outcome: "accepted",
 		Actor: model.Actor{UnknownReason: "identity not supplied"}, Reason: "Self-admitted: false.",
-		SelfAdmission: map[model.ID]model.SelfAdmissionState{unknown.CommandID: model.SelfAdmissionUnknown},
 		// Two unknowns with the same reason never match.
-		Authors: map[model.ID]model.Actor{unknown.CommandID: {UnknownReason: "identity not supplied"}}})
+		Authors:    map[model.ID]model.Actor{unknown.CommandID: {UnknownReason: "identity not supplied"}},
+		CapturedAt: uncaptured([]model.PacketRef{unknown}), EventPackets: []model.ID{}})
 	before := treeBytes(t, p.Root)
 	for _, tc := range []struct {
 		filter model.SelfAdmissionState
@@ -102,7 +121,7 @@ func TestSelfAdmissionAuditThreeStatesAndLegacy(t *testing.T) {
 		t.Fatalf("rejected/correction reviews vanished: %+v", pending)
 	}
 	if pending[6].Review.SelfAdmission != "UNKNOWN" {
-		t.Fatalf("legacy pending review lost UNKNOWN: %+v", pending[6])
+		t.Fatalf("pending review with an unrecorded author lost UNKNOWN: %+v", pending[6])
 	}
 	if !reflect.DeepEqual(before, treeBytes(t, p.Root)) {
 		t.Fatal("audit modified ledger")
@@ -151,16 +170,16 @@ func TestSelfAdmissionRealLedgerRemainsUnknown(t *testing.T) {
 	// broke the moment two instruments were declared.
 	//
 	// Inventory, not invariant, in a repository whose own rule is the
-	// opposite. What matters is that a review written BEFORE the
-	// SelfAdmission field existed still reports UNKNOWN and is never inferred
-	// from the prose still sitting in its reason.
+	// opposite. What matters is that a review whose author was never
+	// recorded (bundles 1-4, explicit unknowns since the R18.2 migration)
+	// reports UNKNOWN and is never inferred from the prose in its reason.
 	if len(a.Reviews) == 0 {
-		t.Fatalf("the live ledger must still contain legacy reviews: %+v", a)
+		t.Fatalf("the live ledger must still contain reviews with unrecorded authors: %+v", a)
 	}
 	found, early := false, 0
 	for _, r := range a.Reviews {
 		if r.SelfAdmission != "UNKNOWN" {
-			t.Fatalf("legacy fact inferred: %+v", r)
+			t.Fatalf("unknown filter selected a classified review: %+v", r)
 		}
 		if r.Origin.Sequence == 1 {
 			found = strings.Contains(r.Reason, "Self-admitted: true.")
@@ -178,10 +197,10 @@ func TestSelfAdmissionRealLedgerRemainsUnknown(t *testing.T) {
 	}
 	// The same inventory-versus-invariant correction as above, and it
 	// survives growth: a later review that records its packet authors may
-	// genuinely read true or false. Sequences 1-4 recorded no packet authors
-	// (3 and 4 store a legacy "true"), so under C39 (self-admission is
-	// computed from the recorded author and the admitter, step 7) none of
-	// them can be classified either way, and no later record can move them.
+	// genuinely read true or false. Sequences 1-4 record their packet authors
+	// as explicit unknowns, so under C39 (self-admission is computed from the
+	// recorded author and the admitter, step 7) none of them can be classified
+	// either way, and no later record can move them.
 	for _, state := range []model.SelfAdmissionState{"true", "false"} {
 		selected := view_(t, p, ViewRequest{View: "history", SelfAdmitted: state}).(*HistoryAnswer)
 		if selected.Watermark != a.Watermark {

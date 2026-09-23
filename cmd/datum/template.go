@@ -23,7 +23,7 @@ import (
 
 type templateNote struct {
 	Path   []string
-	Kind   string // "choose", "optional", "required" or "minted"
+	Kind   string // "choose", "optional" or "minted"
 	Union  templateUnion
 	Detail string
 }
@@ -227,9 +227,7 @@ func (b *templateBuilder) object(t reflect.Type, path []string, union templateUn
 		} else {
 			value = b.walk(f.Type, at, f)
 		}
-		if why, ok := templateRequired[here]; ok {
-			b.notes = append(b.notes, templateNote{Path: at, Kind: "required", Detail: why})
-		} else if strings.Contains(f.Tag.Get("json"), ",omitempty") && !branch[tag[0]] {
+		if strings.Contains(f.Tag.Get("json"), ",omitempty") && !branch[tag[0]] {
 			b.notes = append(b.notes, templateNote{Path: at, Kind: "optional"})
 		}
 		out = append(out, templateMember{tag[0], value})
@@ -290,8 +288,6 @@ func renderTemplateNotes(event model.EventType, notes []templateNote) string {
 			b.WriteByte('\n')
 		case "optional":
 			fmt.Fprintf(&b, "optional %s: delete the key to omit it\n", at)
-		case "required":
-			fmt.Fprintf(&b, "required %s: %s\n", at, n.Detail)
 		case "choose":
 			if at == "" {
 				at = "(the event)"

@@ -1,8 +1,8 @@
 package model
 
-// R14.1 proof verdict decoding: supports and refutes round-trip, an absent
-// verdict is the legacy shape and decodes, and any other spelling, an
-// explicit blank included, is refused.
+// R14.1 proof verdict decoding: supports and refutes round-trip; an absent
+// verdict (R18.2) and any other spelling, an explicit blank included, are
+// refused.
 
 import "testing"
 
@@ -13,17 +13,19 @@ func TestProofVerdictDecoding(t *testing.T) {
 			proof = p
 		}
 	}
-	legacy := requireSchemaGood(t, proof)
+	var good Event
 	for _, verdict := range []string{VerdictSupports, VerdictRefutes} {
 		p := *proof
 		p.Verdict = verdict
-		requireSchemaGood(t, &p)
+		good = requireSchemaGood(t, &p)
 	}
-	decoded, err := DecodeEvent(legacy)
-	if err != nil || decoded.(*ProofAdmit).Verdict != "" || decoded.(*ProofAdmit).Refutes() {
-		t.Fatalf("a legacy proof without a verdict must decode as a supports proof: %v", err)
+	requireSchemaRefusal(t, mutateSchema(t, good, "verdict", nil, true), "invalid-field")
+	for _, bad := range []any{"", " ", "Refutes", "proven", true, nil} {
+		requireSchemaRefusal(t, mutateSchema(t, good, "verdict", bad, false), "invalid-field")
 	}
-	for _, bad := range []any{"", " ", "Refutes", "proven", true} {
-		requireSchemaRefusal(t, mutateSchema(t, legacy, "verdict", bad, false), "invalid-field")
+	p := *proof
+	p.Verdict = ""
+	if _, err := EncodeEvent(&p); err == nil {
+		t.Fatal("encoder accepted a proof without a verdict")
 	}
 }

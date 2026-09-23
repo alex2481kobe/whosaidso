@@ -118,7 +118,7 @@ func proposeAdmission(ctx context.Context, project store.Project, request AdmitR
 // lets the later, independent stages run, and which never preserves a blob.
 func admissionProposal(ctx context.Context, project store.Project, request AdmitRequest, digest model.Digest, snapshot reduce.Snapshot, packets []model.Packet, lockedRefs []model.PacketRef, dry *dryRun) (model.Bundle, error) {
 	proposal := model.Bundle{Admitter: request.Admitter, Packets: lockedRefs, Events: []model.Event{}}
-	var eventPackets []model.ID
+	eventPackets := []model.ID{}
 	if request.Outcome == "accepted" {
 		var err error
 		packets, err = gatePackets(project.ID, snapshot, packets)
@@ -136,9 +136,10 @@ func admissionProposal(ctx context.Context, project store.Project, request Admit
 	for _, packet := range packets {
 		authors[packet.CommandID] = packet.Author
 	}
-	captured := make(map[model.ID]time.Time, len(packets))
+	captured := make(map[model.ID]model.Availability[time.Time], len(packets))
 	for _, packet := range packets {
-		captured[packet.CommandID] = packet.CapturedAt.UTC()
+		at := packet.CapturedAt.UTC()
+		captured[packet.CommandID] = model.Availability[time.Time]{State: model.Known, Value: &at}
 	}
 	invocations, err := reviewedInvocations(request.Outcome, packets)
 	if err != nil {

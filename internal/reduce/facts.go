@@ -209,11 +209,10 @@ type Review struct {
 	Actor   model.Actor     `json:"actor"`
 	Reason  string          `json:"reason"`
 	Origin  Origin          `json:"origin"`
-	// SelfAdmission is computed from Author and Actor (C39), never read from
-	// the review's stored legacy field.
+	// SelfAdmission is computed from Author and Actor (C39); no review stores it.
 	SelfAdmission model.SelfAdmissionState `json:"self_admission"`
-	// Author is the Actor this packet was captured with, or an unknown Actor
-	// when a legacy review did not record it (R10.1 revised).
+	// Author is the Actor the review recorded this packet was captured with,
+	// known or unknown with its reason (R10.1 revised).
 	Author model.Actor `json:"author"`
 	// Invocations are the invocation facts this packet carried when it was not
 	// accepted (R10.3). Empty for accepted packets.

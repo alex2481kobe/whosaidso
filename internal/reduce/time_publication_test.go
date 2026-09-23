@@ -93,13 +93,14 @@ func TestInvocationTimestampIsUTCThroughLedgerPublication(t *testing.T) {
 			// The review attributes every event to the packet. Its capture
 			// time is the fixture's, not this machine's clock, so the start
 			// stays bounded by it whenever the test runs.
+			captured := instant.Add(time.Minute).UTC()
 			carried := make([]model.ID, len(packet.Events))
 			for i := range carried {
 				carried[i] = packetRef.CommandID
 			}
 			review, err := model.EncodeEvent(&model.ReviewAdmit{Packets: []model.PacketRef{packetRef}, Outcome: "accepted",
 				Actor: model.Actor{ID: "reviewer"}, Reason: "zone publication", EventPackets: carried, Authors: map[model.ID]model.Actor{packetRef.CommandID: packet.Author},
-				CapturedAt: map[model.ID]time.Time{packetRef.CommandID: instant.Add(time.Minute).UTC()}})
+				CapturedAt: map[model.ID]model.Availability[time.Time]{packetRef.CommandID: {State: model.Known, Value: &captured}}})
 			if err != nil {
 				return model.Bundle{}, err
 			}

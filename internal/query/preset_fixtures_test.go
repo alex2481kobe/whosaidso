@@ -118,7 +118,7 @@ func presetWorld(t *testing.T, p store.Project) {
 		&model.ProofAdmit{Claim: testRef(22, 1), CriterionRef: criterionRef(22),
 			Evidence: []model.ObservationDisposition{{InvocationRef: model.InvocationRef{Project: projectID, InvocationID: testID(51)},
 				Disposition: "supports", Reason: "all cases pass"}},
-			Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "reviewer"}, Reason: "the criterion holds"}},
+			Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "reviewer"}, Reason: "the criterion holds"}, Verdict: model.VerdictSupports},
 		&model.DecisionDispose{Decision: testRef(31, 1), Disposition: "approved", Quote: "yes, BLOCKED wins",
 			Scope: testScope(), Authority: authority()})...)
 }
@@ -129,7 +129,7 @@ func presetWorld(t *testing.T, p store.Project) {
 // reducer can check authorship and freezing from the ledger.
 func admitted(n int, events ...model.TypedEvent) []model.TypedEvent {
 	review := &model.ReviewAdmit{Outcome: "accepted", Actor: model.Actor{ID: "reviewer"}, Reason: "fixture admission",
-		Authors: map[model.ID]model.Actor{}, CapturedAt: map[model.ID]time.Time{}}
+		Authors: map[model.ID]model.Actor{}, CapturedAt: map[model.ID]model.Availability[time.Time]{}}
 	for i, e := range events {
 		packet := testID(n*100 + i)
 		author := model.Actor{ID: "lane-a"}
@@ -142,7 +142,7 @@ func admitted(n int, events ...model.TypedEvent) []model.TypedEvent {
 		review.Packets = append(review.Packets, model.PacketRef{CommandID: packet, Digest: model.HashBytes([]byte(packet))})
 		review.EventPackets = append(review.EventPackets, packet)
 		review.Authors[packet] = author
-		review.CapturedAt[packet] = presetStart.Add(time.Minute).UTC()
+		review.CapturedAt[packet] = known(presetStart.Add(time.Minute).UTC())
 	}
 	return append(events, review)
 }

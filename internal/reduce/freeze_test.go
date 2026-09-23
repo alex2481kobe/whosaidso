@@ -25,19 +25,18 @@ func freezeLedger(t *testing.T) (*ledgerBuilder, model.RecordRef, time.Time) {
 }
 
 // startReview is admission's review of one packet carrying n events, authored
-// by the criterion's author: it attributes them when attribute is set and
-// records captured when non-nil.
-func startReview(n int, captured *time.Time, attribute bool) *model.ReviewAdmit {
+// by the criterion's author: it attributes them and records captured when
+// non-nil, else records the capture time as unknown.
+func startReview(n int, captured *time.Time) *model.ReviewAdmit {
 	packet := newID("PKTF")
 	review := &model.ReviewAdmit{Packets: []model.PacketRef{{CommandID: packet, Digest: newDigest("freeze")}}, Outcome: "accepted",
-		Actor: model.Actor{ID: "coordinator"}, Reason: "freeze fixture", Authors: map[model.ID]model.Actor{packet: {ID: "lane-a"}}}
-	if attribute {
-		for i := 0; i < n; i++ {
-			review.EventPackets = append(review.EventPackets, packet)
-		}
+		Actor: model.Actor{ID: "coordinator"}, Reason: "freeze fixture", Authors: map[model.ID]model.Actor{packet: {ID: "lane-a"}}, EventPackets: []model.ID{}}
+	for i := 0; i < n; i++ {
+		review.EventPackets = append(review.EventPackets, packet)
 	}
+	review.CapturedAt = map[model.ID]model.Availability[time.Time]{packet: {State: model.Unknown, Reason: "the fixture recorded no capture time"}}
 	if captured != nil {
-		review.CapturedAt = map[model.ID]time.Time{packet: captured.UTC()}
+		review.CapturedAt[packet] = knownAt(captured.UTC())
 	}
 	return review
 }
@@ -62,7 +61,7 @@ func TestStartFrozenBetweenCriterionAndCapture(t *testing.T) {
 			env := proofEnvelope(claim, newID("RNA"))
 			env.StartedAt = tc.start(fixed)
 			captured := tc.captured(env.StartedAt)
-			l.add(t, &model.InvocationStart{Envelope: env}, startReview(1, &captured, true))
+			l.add(t, &model.InvocationStart{Envelope: env}, startReview(1, &captured))
 			wantBoth(t, l, tc.code)
 		})
 	}
@@ -80,22 +79,21 @@ func TestStartWithoutCriterionIsStillBoundedByCapture(t *testing.T) {
 			env.StartedAt = captured.Add(time.Second)
 			code = CodeStartAfterCapture
 		}
-		l.add(t, &model.InvocationStart{Envelope: env}, startReview(1, &captured, true))
+		l.add(t, &model.InvocationStart{Envelope: env}, startReview(1, &captured))
 		wantBoth(t, l, code)
 	}
 }
 
-// Missing capture attribution never becomes a default timestamp: not the
-// bundle's recorded_at, not the start's own claim.
+// A capture time that is unrecorded (no review) or recorded unknown never
+// becomes a default timestamp: not the bundle's recorded_at, not the start's
+// own claim.
 func TestStartWithoutCaptureAttributionIsRefused(t *testing.T) {
-	captured := proofEnvelope(ref(newID("CMA1"), 1), newID("RNA")).StartedAt.Add(time.Minute)
 	for _, tc := range []struct {
 		name   string
 		review *model.ReviewAdmit
 	}{
 		{"no review", nil},
-		{"attributed without a capture time", startReview(1, nil, true)},
-		{"captured without attribution", startReview(1, &captured, false)},
+		{"attributed, capture time recorded unknown", startReview(1, nil)},
 	} {
 		for _, withCriterion := range []bool{true, false} {
 			l, claim, _ := freezeLedger(t)
@@ -125,7 +123,7 @@ func TestCriterionInTheSameBundleIsNotFrozen(t *testing.T) {
 			&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("lane-a"), Spec: claimSpec()})
 		env := proofEnvelope(claim, newID("RNA"))
 		captured := env.StartedAt.Add(time.Minute)
-		b := l.add(t, fixProofCriterion(claim), &model.InvocationStart{Envelope: env}, startReview(2, &captured, true))
+		b := l.add(t, fixProofCriterion(claim), &model.InvocationStart{Envelope: env}, startReview(2, &captured))
 		if !b.RecordedAt.Before(env.StartedAt) {
 			t.Fatal("fixture: the bundle must be recorded before the start, so only the prior-bundle rule refuses it")
 		}

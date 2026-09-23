@@ -7,6 +7,7 @@ package reduce
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"datum/internal/model"
 )
@@ -126,6 +127,7 @@ func TestProofFamilyClosureCoversLaterEventsInTheSameBundle(t *testing.T) {
 	packet := model.PacketRef{CommandID: newID("PKR9"), Digest: model.HashBytes([]byte("late rejected packet"))}
 	judged := attributeFixture(99, []model.TypedEvent{admitProof(claim, newID("RNA1"))})
 	l.add(t, append(judged, &model.ReviewAdmit{Packets: []model.PacketRef{packet}, Outcome: "rejected", Actor: model.Actor{ID: "reviewer"}, Reason: "not canonical",
+		Authors: map[model.ID]model.Actor{packet.CommandID: {ID: "lane-a"}}, CapturedAt: map[model.ID]model.Availability[time.Time]{packet.CommandID: knownAt(baseTime)}, EventPackets: []model.ID{},
 		Invocations: []model.ReviewedInvocation{{Packet: packet.CommandID, Event: "invocation.start", InvocationID: late.InvocationID, CriterionRef: late.CriterionRef, EnvelopeDigest: model.HashBytes([]byte("start"))}}})...)
 	wantBoth(t, l, CodeRejectedFamilyMember)
 }
@@ -159,6 +161,7 @@ func rejectRun(t *testing.T, l *ledgerBuilder, env model.InvocationEnvelope, exi
 	}
 	packet := model.PacketRef{CommandID: newID("PKR1"), Digest: model.HashBytes([]byte("rejected run"))}
 	l.add(t, &model.ReviewAdmit{Packets: []model.PacketRef{packet}, Outcome: "rejected", Actor: model.Actor{ID: "reviewer"}, Reason: "turned away",
+		Authors: map[model.ID]model.Actor{packet.CommandID: {ID: "lane-a"}}, CapturedAt: map[model.ID]model.Availability[time.Time]{packet.CommandID: knownAt(baseTime)}, EventPackets: []model.ID{},
 		Invocations: []model.ReviewedInvocation{
 			{Packet: packet.CommandID, Event: "invocation.start", InvocationID: env.InvocationID, CriterionRef: env.CriterionRef, EnvelopeDigest: startDigest},
 			{Packet: packet.CommandID, Event: "invocation.seal", InvocationID: env.InvocationID, CriterionRef: env.CriterionRef, EnvelopeDigest: sealDigest},

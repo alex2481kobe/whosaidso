@@ -222,7 +222,7 @@ func attributeFixture(seq uint64, events []model.TypedEvent) []model.TypedEvent 
 		return events
 	}
 	review := &model.ReviewAdmit{Outcome: "accepted", Actor: model.Actor{ID: "coordinator"}, Reason: "fixture admission",
-		Authors: map[model.ID]model.Actor{}, CapturedAt: map[model.ID]time.Time{}}
+		Authors: map[model.ID]model.Actor{}, CapturedAt: map[model.ID]model.Availability[time.Time]{}}
 	for i, e := range events {
 		packet := newID(fmt.Sprintf("PKT%dE%d", seq, i))
 		author := model.Actor{ID: "coordinator"}
@@ -235,9 +235,14 @@ func attributeFixture(seq uint64, events []model.TypedEvent) []model.TypedEvent 
 		review.Packets = append(review.Packets, model.PacketRef{CommandID: packet, Digest: newDigest(string(packet))})
 		review.EventPackets = append(review.EventPackets, packet)
 		review.Authors[packet] = author
-		review.CapturedAt[packet] = latest.Add(time.Minute)
+		review.CapturedAt[packet] = knownAt(latest.Add(time.Minute))
 	}
 	return append(append([]model.TypedEvent{}, events...), review)
+}
+
+// knownAt is a recorded capture time.
+func knownAt(at time.Time) model.Availability[time.Time] {
+	return model.Availability[time.Time]{State: model.Known, Value: &at}
 }
 
 // ---- assertions -----------------------------------------------------------

@@ -6,10 +6,14 @@ package write
 // verdict rules are tested in internal/reduce; these reach them through Apply.
 
 import (
+	"context"
+	"encoding/json"
+	"io"
 	"testing"
 
 	"datum/internal/model"
 	"datum/internal/reduce"
+	"datum/internal/store"
 )
 
 func (w *proofWorld) refutation(members map[model.InvocationRef]string) *model.ProofAdmit {
@@ -19,13 +23,45 @@ func (w *proofWorld) refutation(members map[model.InvocationRef]string) *model.P
 	return p
 }
 
+// R18.2: a proof without a verdict is refused by the event schema, whether the
+// key is omitted or blank; it is never read as supports.
 func TestProofVerdictIsRequiredOnANewProof(t *testing.T) {
 	w := newProofWorld(t, true)
 	pass, s, e := w.run(w.criterion, proofPass)
 	w.f.accept(s, e)
-	legacy := w.proof(w.criterion, map[model.InvocationRef]string{pass: "supports"})
-	legacy.Verdict = ""
-	w.f.refuse(w.f.request(w.f.capture(nil, legacy)), "verdict-required")
+	missing := w.proof(w.criterion, map[model.InvocationRef]string{pass: "supports"})
+	missing.Verdict = ""
+	if _, err := model.EncodeEvent(missing); err == nil {
+		t.Fatal("a proof without a verdict encoded")
+	}
+	data, err := json.Marshal(missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		t.Fatal(err)
+	}
+	blank := data
+	delete(fields, "verdict")
+	if data, err = json.Marshal(fields); err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range [][]byte{data, blank} {
+		ref, err := store.WriteIntake(context.Background(), w.f.project, store.IntakeRequest{CommandID: w.f.id(), Author: w.f.author,
+			Events: []model.Event{{Type: "proof.admit", Data: raw}}, Blobs: []io.Reader{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.f.refuse(w.f.request(ref), "invalid-field")
+		// An undecodable pending packet holds every later proof until it is
+		// dispositioned (gatePendingIntake), so turn it away.
+		reject := w.f.request(ref)
+		reject.Outcome = "rejected"
+		if _, err := Admit(context.Background(), w.f.project, reject); err != nil {
+			t.Fatalf("the refused packet must be rejectable: %v", err)
+		}
+	}
 	w.f.accept(w.f.capture(nil, w.proof(w.criterion, map[model.InvocationRef]string{pass: "supports"})))
 	if w.status(t) != reduce.StatusProven {
 		t.Fatal("control: a supports proof with its verdict must prove the claim")

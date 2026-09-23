@@ -73,6 +73,7 @@ func admitProof(claim model.RecordRef, invocation model.ID) *model.ProofAdmit {
 		Claim: claim, CriterionRef: proofCriterion(claim),
 		Evidence: []model.ObservationDisposition{{InvocationRef: model.InvocationRef{Project: testProject, InvocationID: invocation}, Disposition: "supports", Reason: "all cases satisfy the criterion"}},
 		Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "reviewer"}, Reason: "the scoped criterion holds"},
+		Verdict:  model.VerdictSupports,
 	}
 }
 
@@ -416,7 +417,7 @@ func TestU06GoldenNineMeanings(t *testing.T) {
 	l.add(t, &model.InvocationStart{Envelope: env}, sealProof(env, 2))
 	for i, outcome := range []string{"accepted", "rejected", "correction-requested"} {
 		id := []model.ID{newID("PKTA"), newID("PKTB"), newID("PKTC")}[i]
-		l.add(t, &model.ReviewAdmit{Packets: []model.PacketRef{{CommandID: id, Digest: newDigest(outcome)}}, Outcome: outcome, Actor: model.Actor{ID: "reviewer"}, Reason: "explicit review result"})
+		l.add(t, review(outcome, model.Actor{ID: "reviewer"}, "explicit review result", []model.PacketRef{{CommandID: id, Digest: newDigest(outcome)}}, model.Actor{ID: "lane-a"}))
 	}
 	s := mustReplay(t, l.out)
 	got := []string{}

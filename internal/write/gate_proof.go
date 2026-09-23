@@ -53,13 +53,8 @@ func gateProofOperation(event model.TypedEvent, author model.Actor) (*model.Prov
 		// reducer, including criterion freezing, and by artifact resolution.
 		return nil, nil
 	case *model.ProofAdmit:
-		// R14.1: every new proof states its verdict. Replay reads a missing
-		// one as supports, because proofs admitted before R14.1 carry none and
-		// could mean nothing else; this is the entrance that keeps it rare.
-		if e.Verdict == "" {
-			return nil, admissionFault("verdict-required", "verdict", "a proof must state its verdict: supports or refutes")
-		}
-		// The judgment must be the identified packet author: see CriterionFix.
+		// The verdict (R14.1) is required by the event schema. The judgment
+		// must be the identified packet author: see CriterionFix.
 		return nil, nil
 	case *model.CriterionFix:
 		// The criterion author and the proof judgment must be the identified

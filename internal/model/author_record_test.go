@@ -11,7 +11,7 @@ import (
 )
 
 func authoredReview() *ReviewAdmit {
-	e := selfAdmissionReview()
+	e := reviewFixture()
 	e.Authors = map[ID]Actor{
 		schemaID(1): {ID: "reviewer"}, schemaID(2): {ID: "lane-b"}, schemaID(3): {UnknownReason: "captured without identity"},
 	}
@@ -65,9 +65,18 @@ func TestReviewAuthorsInvalidSchema(t *testing.T) {
 			}
 		})
 	}
-	legacy := authoredReview()
-	legacy.Authors, legacy.EventPackets = nil, nil
-	if _, err := EncodeEvent(legacy); err != nil {
-		t.Fatalf("control: a review without authors must still encode (projected unknown): %v", err)
+	if _, err := EncodeEvent(authoredReview()); err != nil {
+		t.Fatalf("control: the unedited review must encode: %v", err)
+	}
+	// R18.2: omission is never read as unknown; an unknown author is explicit.
+	for _, edit := range []func(*ReviewAdmit){
+		func(e *ReviewAdmit) { e.Authors = nil },
+		func(e *ReviewAdmit) { e.EventPackets = nil },
+	} {
+		e := authoredReview()
+		edit(e)
+		if _, err := EncodeEvent(e); err == nil {
+			t.Fatal("encoder accepted a review with authors or event_packets omitted")
+		}
 	}
 }

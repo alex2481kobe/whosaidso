@@ -11,7 +11,7 @@ import (
 	"datum/internal/store"
 )
 
-// Review exposes the projected per-packet fact, including legacy UNKNOWN.
+// Review exposes the projected per-packet fact, UNKNOWN included.
 // The embedded review preserves its identity, disposition, reason and origin.
 // This SelfAdmission shadows the embedded one under the same key, so exactly
 // one self_admission is exported: this rendered state.

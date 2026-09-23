@@ -15,20 +15,21 @@ import (
 )
 
 // authored appends an accepted review attributing each event to the actor
-// named beside it; an empty name records no author map at all (legacy).
+// named beside it; an empty name records that author as unknown.
 func authored(seq uint64, events []model.TypedEvent, authors ...string) []model.TypedEvent {
 	review := &model.ReviewAdmit{Outcome: "accepted", Actor: model.Actor{ID: "coordinator"}, Reason: "fixture admission"}
 	for i := range events {
 		packet := newID(fmt.Sprintf("PKT%dA%d", seq, i))
 		review.Packets = append(review.Packets, model.PacketRef{CommandID: packet, Digest: newDigest(string(packet))})
 		review.EventPackets = append(review.EventPackets, packet)
-		if authors[i] != "" {
-			if review.Authors == nil {
-				review.Authors, review.CapturedAt = map[model.ID]model.Actor{}, map[model.ID]time.Time{}
-			}
-			review.Authors[packet] = model.Actor{ID: authors[i]}
-			review.CapturedAt[packet] = baseTime
+		if review.Authors == nil {
+			review.Authors, review.CapturedAt = map[model.ID]model.Actor{}, map[model.ID]model.Availability[time.Time]{}
 		}
+		review.Authors[packet] = model.Actor{ID: authors[i]}
+		if authors[i] == "" {
+			review.Authors[packet] = model.Actor{UnknownReason: "the fixture recorded no author"}
+		}
+		review.CapturedAt[packet] = knownAt(baseTime)
 	}
 	return append(append([]model.TypedEvent{}, events...), review)
 }

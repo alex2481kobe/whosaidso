@@ -1,7 +1,8 @@
 package evidence
 
 // Run outputs as stored: Datum's own committed runs, recorded before outputs
-// were published only once, still resolve; and admission's held run-output
+// were published only once, resolve from the content store now that their
+// duplicate run-dir copies are deleted (R18.2 migration); and admission's held run-output
 // bytes are verified without a second read. Observation semantics over
 // synthetic runs are in observations_test.go and run_dir_test.go.
 
@@ -19,9 +20,9 @@ import (
 // .datum/artifacts/runs/<invocation>/ and by digest.
 const ownLedgerPrefix = 43
 
-// Every output of every sealed run in that prefix resolves as authored (its
-// committed run-dir copy is read first) AND from the content store alone, so a
-// later migration may delete .datum/artifacts/runs/ without losing a reading.
+// .datum/artifacts/runs/ was deleted by the R18.2 migration, so every output of
+// every sealed run in that prefix resolves as authored from the content store,
+// with the same bytes as a store-only reference.
 func TestOwnLedgerRunOutputsResolveFromTheStoreAlone(t *testing.T) {
 	root, err := filepath.Abs("../..")
 	if err != nil {
@@ -57,9 +58,14 @@ func TestOwnLedgerRunOutputsResolveFromTheStoreAlone(t *testing.T) {
 			seals++
 			for _, ref := range *seal.Envelope.OutputRefs.Value {
 				outputs++
+				for _, at := range ref.Content.Locators {
+					if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(at.Path))); !os.IsNotExist(err) {
+						t.Fatalf("control: bundle %d run-dir copy %s must be deleted: %v", bundle.Sequence, at.Path, err)
+					}
+				}
 				authored, err := r.Resolve(context.Background(), ref)
-				if err != nil || authored.Origin != OriginLocator {
-					t.Fatalf("bundle %d output %v no longer resolves as authored from its committed run-dir copy: origin %q, %v", bundle.Sequence, ref.Content.Locators, authored.Origin, err)
+				if err != nil || authored.Origin != OriginArtifactStore {
+					t.Fatalf("bundle %d output %v does not resolve as authored from the content store: origin %q, %v", bundle.Sequence, ref.Content.Locators, authored.Origin, err)
 				}
 				storeOnly := ref
 				pin := *ref.Content
@@ -70,7 +76,7 @@ func TestOwnLedgerRunOutputsResolveFromTheStoreAlone(t *testing.T) {
 					t.Fatalf("bundle %d output %v must resolve from the content store alone: origin %q, %v", bundle.Sequence, ref.Content.Locators, stored.Origin, err)
 				}
 				if string(stored.Bytes) != string(authored.Bytes) {
-					t.Fatalf("bundle %d output %v: store and run-dir copies differ", bundle.Sequence, ref.Content.Locators)
+					t.Fatalf("bundle %d output %v: authored and store-only readings differ", bundle.Sequence, ref.Content.Locators)
 				}
 			}
 		}
