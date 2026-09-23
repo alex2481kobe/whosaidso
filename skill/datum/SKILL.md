@@ -170,11 +170,14 @@ datum proof check --events proof.json [--packet CAPTURED_ID ...]
 - The family is every run of that criterion, including rejected runs and runs under
   earlier revisions. Each needs a per-member disposition; none can be left out.
 - PROVEN needs a validated instrument (R9). An unvalidated instrument cannot support a proof.
-- A FAILING member can only be `contradicts`. `inapplicable` is refused for it
-  ("counterevidence-unresolved"). A contradicted claim cannot be proven under that
-  criterion revision; only a new criterion or claim revision overcomes it (R10.2).
-- Today a contradicted claim has no admissible proof. Its `current_support` reads FALSE.
-  Record a refused proof by admitting it `--outcome rejected` with the refusal as the reason.
+- Every proof states `verdict: supports | refutes` (R14.1); admission refuses one without it.
+- A FAILING member can only be `contradicts`, or `inapplicable` with a `code_change` git
+  verifies over the claim's scope (R14.2). A contradicted claim cannot be proven under that
+  criterion revision otherwise; a new criterion or claim revision overcomes it (R10.2).
+- Record a failing criterion with a `refutes` proof: it lists the contradicting runs, is
+  admitted, and the claim reads REFUTED.
+- Every proof, either verdict, judges the claim's CURRENT criterion revision. A proof on a
+  revision a later one superseded is refused.
 - "value 0 does not satisfy" means member 0, not a reading of zero.
 
 ## ruling
@@ -219,7 +222,8 @@ artifact.dispose
 - Every `"<kind: hint>"` is a placeholder. An unfilled template does not decode, so it
   cannot be captured by accident.
 - Ids the event creates are minted; every other id is a reference: look it up.
-- stderr lines: `choose` (keep exactly one branch), `optional`, `minted`.
+- stderr lines: `choose` (keep exactly one branch), `only` (a choice with one allowed
+  branch), `optional`, `required` (the model decodes it absent, admission does not), `minted`.
 - Reasons, judgments and dispositions are never filled for you. Write them.
 - A revise event restates the whole spec plus `target` and `expected_revision`.
   Copy the current one from `datum show --json ID` and change only what changed.
@@ -227,17 +231,19 @@ artifact.dispose
 ## rules
 
 1. **Small tasks (R14.3).** One task per piece of work. `success` then honestly means
-   "this piece is done". Never accept or close your own work: closing needs a separate,
-   witnessed acceptance by someone else. Self-admission is recorded and queryable
-   (`datum history --self-admitted`).
+   "this piece is done". Closing needs a separate, witnessed acceptance. A task may name
+   its `accepter` (then only that actor may close it); a closer who also did the work reads
+   `self_accepted: TRUE`, visible, never blocked (R15.1). Self-admission is recorded and
+   queryable (`datum history --self-admitted`).
 2. **Criterion first.** Admit `criterion.fix` in an EARLIER bundle than any run it
    judges. A criterion admitted after launch cannot freeze that run. Freezing is checked
    against Datum's capture stamp, not the `started_at` you write.
 3. **A failing run stays counterevidence.** Do not change the criterion because the code
    changed; revise it only when its target or method changes. Today an old FAILING run
-   can never be set aside under the same criterion revision. PLANNED (R14.2): it may be
-   disposed `inapplicable` only when Datum itself verifies that code under the claim's
-   scope paths changed between that run's commit and the proof's. Not built; do not try.
+   is set aside under the same criterion revision only as `inapplicable` with a
+   `code_change` that Datum verifies with git: code under the claim's scope paths changed
+   between that run's commit and the proof's (R14.2). `datum state --stale` lists claims
+   whose scoped code changed since their last run.
 4. **Never invent a value.** Missing actor, reading, unit or validation stays UNKNOWN,
    with `unknown_reason` saying why. Never round UNKNOWN to a default; two unknowns never match.
 5. **Tests read a fixed ledger prefix** (bundles 1..N), never the live head. An honest new
@@ -261,11 +267,6 @@ artifact.dispose
 
 NOT BUILT. Do not write these fields or expect these commands.
 
-- **R14.1 proof verdict**: `proof.admit` `verdict: supports | refutes`, projecting REFUTED.
-  Today `proof.admit` can only support.
-- **R14.2 code-change rule**: `inapplicable` for an old failing run after verified code change,
-  and a stale-claims report.
-- **Snapshot cache**: replaying only new bundles (open task, bundle 30). Every read replays today.
 - Authoring helpers (`hold clear`, `criterion fix --example`, `instrument revise --impl`),
   `instruments --stale`, and a documented intake override. None exist.
 
