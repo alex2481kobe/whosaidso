@@ -34,6 +34,7 @@ func briefPreset(b *briefWriter, p cur) {
 		{"in_flight", "in flight", briefRecord}, {"blocked", "blocked", briefRecord},
 		{"awaiting_acceptance", "awaiting acceptance", briefRecord}, {"ready", "ready", briefRecord},
 		{"closed", "closed", briefRecord}, {"decisions", "decisions", briefDecision}, {"runs", "runs", briefRun},
+		{"stale", "stale claims", briefStale},
 	}
 	for _, s := range sections {
 		if p.at(s.key).ok() {

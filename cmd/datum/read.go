@@ -11,7 +11,9 @@ import (
 
 	"datum/internal/model"
 	"datum/internal/query"
+	"datum/internal/reduce"
 	"datum/internal/store"
+	"datum/internal/write"
 )
 
 const readUsage = `datum show [--json|--full] [RECORD_ID]
@@ -19,6 +21,7 @@ datum history [--json|--full] [RECORD_ID]
 datum history [--json|--full] --self-admitted[=true|false|unknown]
 datum intake pending [--json|--full]
 datum instruments|state|now [--json|--full]
+datum state --stale [--json|--full]
 datum todo [--json|--full] [--limit N]
 datum context [--json|--full] [--limit N] [RECORD_ID]
 datum continue [--json|--full] [--limit N] TASK_ID
@@ -44,6 +47,10 @@ INSTRUMENTS shows validation first; UNKNOWN validation is listed under attention
 --limit cuts only optional results (READY tasks, context refs), never blockers,
 mandatory constraints, prerequisites, corrections or supersessions.
 continue observes git HEAD, dirty state and the time now, and writes nothing.
+state --stale adds, per observed current claim, whether code under its scope
+changed between the commit its last run recorded and HEAD (TRUE, FALSE, or
+UNKNOWN with the reason), so re-measuring happens when it matters. It runs git,
+so it is off unless asked. It cannot see uncommitted changes.
 disposal-loss prints the support_loss targets an artifact.dispose of exactly that
 identity must record at this watermark (give --git when the disposal names a git
 pin), and the admitted events citing it. Reasons are yours to write; admission
@@ -109,6 +116,10 @@ func readCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.W
 	if command == "history" {
 		flags.Var(&selfAdmitted, "self-admitted", "select per-packet reviews by true, false, or unknown (bare flag: true)")
 	}
+	stale := false
+	if command == "state" {
+		flags.BoolVar(&stale, "stale", false, "add the claims whose scoped code changed since their last run (runs git)")
+	}
 	var digest, git string
 	if command == "disposal-loss" {
 		flags.StringVar(&digest, "digest", "", "sha-256 of the artifact a disposal would name (required)")
@@ -153,6 +164,15 @@ func readCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.W
 	if command == "continue" {
 		observed := observe(ctx, project.Root)
 		request.Observed = &observed
+	}
+	if stale {
+		request.Stale = func(s reduce.Snapshot) []query.StaleClaim {
+			out := []query.StaleClaim{}
+			for _, c := range write.StaleClaims(ctx, project, s) {
+				out = append(out, query.StaleClaim(c))
+			}
+			return out
+		}
 	}
 	answer, err := query.Read(project, request)
 	if err != nil {
