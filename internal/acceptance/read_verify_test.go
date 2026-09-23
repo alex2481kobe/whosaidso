@@ -261,8 +261,27 @@ func TestReadVerifyAuthoredValuesSurviveTextFromTheAdmittedLedger(t *testing.T) 
 		spec.NextActor = model.Actor{UnknownReason: "author, reviewer and holder cannot assign the next actor"}
 		readVerifyAppend(t, p, 101+i, []model.PacketRef{}, laneEReduceCreate(2+i, spec))
 	}
-	for _, command := range []string{"show", "history", "task todo"} {
-		a := readVerifyAnswer(t, p, command, "")
+	// "open tasks" is `datum show` kept to TASK records not CLOSED: the
+	// selection `datum task todo` made before its R12 removal.
+	answer := func(command string) query.Answer {
+		if command != "open tasks" {
+			return readVerifyAnswer(t, p, command, "")
+		}
+		a := readVerifyAnswer(t, p, "show", "")
+		open := []query.Record{}
+		for _, r := range a.Records {
+			if r.Fact.Kind == model.Task && r.Task != nil && r.Task.Status != reduce.StatusClosed {
+				open = append(open, r)
+			}
+		}
+		if len(open) != len(values)+1 {
+			t.Fatalf("control: show must hold %d open tasks at watermark %d, got %d", len(values)+1, a.Watermark.Sequence, len(open))
+		}
+		a.Records = open
+		return a
+	}
+	for _, command := range []string{"show", "history", "open tasks"} {
+		a := answer(command)
 		var exported, rendered bytes.Buffer
 		if err := query.RenderJSON(&exported, a); err != nil {
 			t.Fatal(err)
@@ -284,7 +303,7 @@ func TestReadVerifyAuthoredValuesSurviveTextFromTheAdmittedLedger(t *testing.T) 
 		}
 		for repetition := 0; repetition < 5; repetition++ {
 			var again bytes.Buffer
-			if err := query.RenderText(&again, readVerifyAnswer(t, p, command, "")); err != nil || !bytes.Equal(again.Bytes(), rendered.Bytes()) {
+			if err := query.RenderText(&again, answer(command)); err != nil || !bytes.Equal(again.Bytes(), rendered.Bytes()) {
 				t.Fatalf("%s changed across reads of one unchanged ledger: %v", command, err)
 			}
 		}

@@ -205,6 +205,21 @@ func (w *flowWorld) readJSON(args ...string) map[string]any {
 	return flowDecode(w.t, out)
 }
 
+// openTasks reads `datum show` on both surfaces (same facts, same watermark,
+// via read) and keeps the TASK records whose status is not CLOSED, IN FLIGHT
+// included. That is exactly what `datum task todo` selected before the owner
+// removed the verb as redundant (R12); the todo preset's sections differ.
+func (w *flowWorld) openTasks() []any {
+	w.t.Helper()
+	var open []any
+	for _, rec := range flowList(w.read("show"), "records") {
+		if flowStr(rec, "fact", "Kind") == string(model.Task) && flowGet(rec, "task") != nil && flowStr(rec, "task", "status") != "CLOSED" {
+			open = append(open, rec)
+		}
+	}
+	return open
+}
+
 func flowDecode(t *testing.T, data []byte) map[string]any {
 	t.Helper()
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -648,11 +663,11 @@ func TestFlowHonestStopping(t *testing.T) {
 		}
 		// Open work stays on the todo surfaces.
 		open := false
-		for _, rec := range flowList(w.read("task", "todo"), "records") {
+		for _, rec := range w.openTasks() {
 			open = open || flowStr(rec, "fact", "Key", "ID") == string(task.ref.RecordID)
 		}
 		if !open {
-			t.Errorf("%s: the task left `task todo`; a non-success receipt must leave it open", c.outcome)
+			t.Errorf("%s: the task left the open (not CLOSED) tasks in `show`; a non-success receipt must leave it open", c.outcome)
 		}
 		section := map[string]string{"READY": "ready", "BLOCKED": "blocked"}[c.want.status]
 		listed := false
@@ -917,7 +932,7 @@ func TestFlowAcceptance(t *testing.T) {
 	if flowStr(r, "task", "status") != "CLOSED" || flowStr(r, "task", "outcome") != "success" {
 		t.Errorf("expected CLOSED success, got %s %s", flowStr(r, "task", "status"), flowStr(r, "task", "outcome"))
 	}
-	for _, rec := range flowList(w.read("task", "todo"), "records") {
+	for _, rec := range w.openTasks() {
 		if flowStr(rec, "fact", "Key", "ID") == string(task.ref.RecordID) {
 			t.Error("a closed task is still listed as owed")
 		}
@@ -1007,11 +1022,12 @@ func TestFlowRecovery(t *testing.T) {
 	// Delete everything that is not the ledger, the config or intake: every
 	// read must answer exactly as before.
 	reads := [][]string{{"show"}, {"show", string(w.claim.RecordID)}, {"history"}, {"history", string(w.claim.RecordID)},
-		{"now"}, {"state"}, {"todo"}, {"instruments"}, {"task", "todo"}, {"intake", "pending"}, {"context"}}
+		{"now"}, {"state"}, {"todo"}, {"instruments"}, {"intake", "pending"}, {"context"}}
 	before := map[string]map[string]any{}
 	for _, args := range reads {
 		before[strings.Join(args, " ")] = w.read(args...)
 	}
+	openBefore := w.openTasks()
 	ledger := w.ledger()
 	entries, err := os.ReadDir(w.root)
 	if err != nil {
@@ -1045,6 +1061,9 @@ func TestFlowRecovery(t *testing.T) {
 		if after := w.read(args...); !reflect.DeepEqual(before[strings.Join(args, " ")], after) {
 			t.Errorf("datum %s answers differently after generated output was deleted", strings.Join(args, " "))
 		}
+	}
+	if !reflect.DeepEqual(openBefore, w.openTasks()) {
+		t.Error("the open (not CLOSED) tasks in `datum show` differ after generated output was deleted")
 	}
 }
 
