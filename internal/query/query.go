@@ -3,8 +3,6 @@ package query
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"time"
 
@@ -230,15 +228,20 @@ func answer(project store.Project, request Request, source Source) (Answer, erro
 	return a, err
 }
 
+// pending projects the visible intake against this answer's reviews. Every
+// packet the answer presents (pending, or reviewed but not accepted) is fully
+// verified, blobs included. A packet the ledger accepted is dropped from the
+// answer; a read only checks that its packet.json still hashes to the digest
+// its review recorded (store.ReviewedPacketDigest) and leaves its blobs to
+// admission, which verified them before the review existed.
 func pending(project store.Project, s reduce.Snapshot) ([]Packet, error) {
-	packets, err := store.ReadIntake(project, nil)
+	ids, err := store.IntakeIDs(project)
 	if err != nil {
 		return nil, err
 	}
 	byID := map[model.ID]Packet{}
-	for i := range packets {
-		p := &packets[i]
-		byID[p.CommandID] = Packet{CommandID: p.CommandID, Packet: p, Disposition: "pending"}
+	for _, id := range ids {
+		byID[id] = Packet{CommandID: id, Disposition: "pending"}
 	}
 	// Review events are the admitted facts, even without envelope packet refs
 	// or a local copy of the intake bytes. They are met in ledger order, so the
@@ -246,14 +249,13 @@ func pending(project store.Project, s reduce.Snapshot) ([]Packet, error) {
 	for _, review := range s.ReviewsInLedgerOrder() {
 		ref := review.Packet
 		p, present := byID[ref.CommandID]
-		if present && p.Packet != nil {
-			dir, err := store.IntakeDir(project)
+		if present && p.Unavailable == nil {
+			digest, err := store.ReviewedPacketDigest(project, ref.CommandID)
 			if err != nil {
 				return nil, err
 			}
-			data, err := os.ReadFile(filepath.Join(dir, string(ref.CommandID), "packet.json"))
-			if err != nil || model.HashBytes(data) != review.Packet.Digest {
-				return nil, fmt.Errorf("intake %s no longer matches its reviewed bytes: %v", ref.CommandID, err)
+			if digest != review.Packet.Digest {
+				return nil, fmt.Errorf("intake %s no longer matches its reviewed bytes", ref.CommandID)
 			}
 		}
 		if review.Outcome == "accepted" {
@@ -272,5 +274,26 @@ func pending(project store.Project, s reduce.Snapshot) ([]Packet, error) {
 		out = append(out, packet)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CommandID < out[j].CommandID })
+	presented := []model.ID{}
+	for _, packet := range out {
+		if packet.Unavailable == nil {
+			presented = append(presented, packet.CommandID)
+		}
+	}
+	if len(presented) == 0 {
+		return out, nil
+	}
+	verified, err := store.ReadVerifiedIntake(project, presented)
+	if err != nil {
+		return nil, err
+	}
+	next := 0
+	for i := range out {
+		if out[i].Unavailable != nil {
+			continue
+		}
+		out[i].Packet = &verified[next].Packet
+		next++
+	}
 	return out, nil
 }

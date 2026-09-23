@@ -58,6 +58,7 @@ func goldenAnswers(t *testing.T, f *fixture) map[string][]byte {
 		{"now", query.Request{Command: "now"}},
 		{"context", query.Request{Command: "context"}},
 		{"continue", query.Request{Command: "continue", ID: f.Task.RecordID, Observed: &observed}},
+		{"intake-pending", query.Request{Command: "intake pending"}},
 	}
 	project, err := store.Discover(f.Project.Root)
 	must(t, err)
@@ -132,7 +133,7 @@ func TestAnswersMatchMainGolden(t *testing.T) {
 	got := answerDigests(t, f)
 	if os.Getenv("DATUM_WRITE_GOLDEN") == "1" {
 		var buf bytes.Buffer
-		for _, name := range []string{"continue", "context", "now", "show", "show-one", "todo"} {
+		for _, name := range []string{"continue", "context", "intake-pending", "now", "show", "show-one", "todo"} {
 			fmt.Fprintf(&buf, "%s %s\n", name, got[name])
 		}
 		put(t, answersGolden, buf.Bytes())

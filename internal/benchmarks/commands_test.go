@@ -33,6 +33,7 @@ func readCases(f *fixture) []readCase {
 		{"ShowOne", query.Request{Command: "show", ID: f.Task.RecordID}},
 		{"HistoryOne", query.Request{Command: "history", ID: f.Task.RecordID}},
 		{"Todo", query.Request{Command: "todo"}},
+		{"IntakePending", query.Request{Command: "intake pending"}},
 		{"Now", query.Request{Command: "now"}},
 		{"Context", query.Request{Command: "context"}},
 		{"ContextOne", query.Request{Command: "context", ID: f.Task.RecordID}},
