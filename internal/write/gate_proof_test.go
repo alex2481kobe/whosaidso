@@ -103,7 +103,7 @@ func (w *proofWorld) fix(claim model.RecordRef) model.CriterionRef {
 
 func (w *proofWorld) envelope(criterion model.CriterionRef) model.InvocationEnvelope {
 	return model.InvocationEnvelope{InvocationID: w.f.id(), AttemptID: w.attempt, InstrumentRef: w.instrument, CriterionRef: proofKnown(criterion),
-		ExecutionSourceIdentity: model.ExecutionIdentity{Project: w.f.project.ID, MachineID: proofKnown(proofMachine), SourceRefs: []model.ArtifactRef{}, Head: proofUnknown[model.GitHead]("fixture"), Dirty: proofUnknown[bool]("fixture")},
+		ExecutionSourceIdentity: model.ExecutionIdentity{Project: w.f.project.ID, MachineID: proofKnown(proofMachine), SourceRefs: []model.ArtifactRef{}, Head: proofKnown(model.GitHead{ObjectFormat: "sha1", Commit: "0123456789abcdef0123456789abcdef01234567"}), Dirty: proofKnown(false)}, // source established equal (coordinator decision 2026-09-23)
 		Argv:                    []string{"fixture-measurement"}, InputRefs: []model.ArtifactRef{}, ConfigRequested: map[string]model.Scalar{}, ConditionsDeclared: map[string]model.Scalar{},
 		ConfigEffective: proofUnknown[map[string]model.Availability[model.Scalar]]("not launched"), ConditionsObserved: proofUnknown[map[string]model.Availability[model.Scalar]]("not launched"),
 		Isolation: proofUnknown[model.Isolation]("not enforced"), StartedAt: time.Now().UTC(), ObservedAt: proofUnknown[time.Time]("not launched"),

@@ -21,11 +21,13 @@ import (
 // asked for is not what ran.
 //
 // Conditions compared: the project, the exact instrument revision, the machine
-// (contract:513, a different machine is a different condition), the declared
-// source pins, effective configuration, observed conditions, and the visual
-// trust envelope whenever either run observed one or produced a picture.
-// BLIND TO: git HEAD and dirty state, which are recorded but not compared, and
-// visual limits, which say what a frame cannot show rather than how it was taken.
+// (contract:513, a different machine is a different condition), the executed
+// source (equal non-empty source pins, or a known equal git HEAD with both
+// checkouts known clean), effective configuration, observed conditions, and the
+// visual trust envelope whenever either run observed one or produced a picture.
+// BLIND TO: source read from outside the project root when only git state
+// establishes the source, and visual limits, which say what a frame cannot show
+// rather than how it was taken.
 func comparable(members []Observation) string {
 	for i := 1; i < len(members); i++ {
 		a, b := members[0], members[i]
@@ -65,6 +67,29 @@ func executionDifference(a, b Observation) string {
 	}
 	if !reflect.DeepEqual(pinKeys(a.Execution.SourceRefs), pinKeys(b.Execution.SourceRefs)) {
 		return "they declare different source pins"
+	}
+	return sourceDifference(a.Execution, b.Execution)
+}
+
+// sourceDifference requires the executed source to be ESTABLISHED equal
+// (coordinator decision, OWNER-RULINGS-DATUM 2026-09-23): equal source pins, or a
+// known equal git HEAD with both checkouts known clean. Two empty pin lists pin
+// nothing, an unknown HEAD or dirty state is not evidence of sameness, and a
+// dirty checkout differs from HEAD by bytes the ledger never saw.
+func sourceDifference(a, b model.ExecutionIdentity) string {
+	if len(a.SourceRefs) > 0 {
+		return "" // executionDifference already found the pins equal by identity
+	}
+	ha, hb := a.Head, b.Head
+	switch {
+	case ha.State != model.Known || hb.State != model.Known || ha.Value == nil || hb.Value == nil:
+		return "their source is not established equal: a git HEAD was not recorded and no source pins were declared"
+	case *ha.Value != *hb.Value:
+		return "they executed different source (git HEAD " + ha.Value.Commit + " and " + hb.Value.Commit + ")"
+	}
+	clean := func(d model.Availability[bool]) bool { return d.State == model.Known && d.Value != nil && !*d.Value }
+	if !clean(a.Dirty) || !clean(b.Dirty) {
+		return "their source is not established equal: a checkout was dirty or its state unknown, and no source pins were declared"
 	}
 	return ""
 }
