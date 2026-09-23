@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"datum/internal/model"
 )
@@ -220,6 +221,9 @@ func evaluateMember(c model.CriterionFix, o Observation) MemberResult {
 		}
 		if c.Expression.Reducer == model.All && !held {
 			m.Verdict, m.Reason = False, fmt.Sprintf("value %d does not satisfy the criterion", i)
+			if i < len(o.Result.MemberNames) && o.Result.MemberNames[i] != "" {
+				m.Reason = fmt.Sprintf("%s: %s does not satisfy %s %s", printable(o.Result.MemberNames[i]), scalarText(v), op, scalarText(target))
+			}
 			return m
 		}
 		if c.Expression.Reducer == model.Any && held {
@@ -236,6 +240,34 @@ func evaluateMember(c model.CriterionFix, o Observation) MemberResult {
 		m.Reason = "no value satisfies the criterion"
 	}
 	return m
+}
+
+// scalarText is a scalar as a reason shows it: numbers keep their decimal
+// text, strings are quoted.
+func scalarText(s model.Scalar) string {
+	switch {
+	case s.Number != nil:
+		return string(*s.Number)
+	case s.String != nil:
+		return strconv.Quote(*s.String)
+	case s.Bool != nil:
+		return strconv.FormatBool(*s.Bool)
+	}
+	return "UNKNOWN"
+}
+
+// printable shows an artifact-stated name bare only when it cannot fake the
+// rest of the reason; otherwise it is quoted.
+func printable(name string) string {
+	for _, r := range name {
+		if !unicode.IsPrint(r) || r == '"' {
+			return strconv.Quote(name)
+		}
+	}
+	if strings.TrimSpace(name) != name || strings.Contains(name, ": ") {
+		return strconv.Quote(name)
+	}
+	return name
 }
 
 // resultIssues checks each member through the same metadata rule as its reading.

@@ -289,3 +289,32 @@ func TestMetadataRolesDoNotDependOnValueShape(t *testing.T) {
 		}
 	}
 }
+
+// A FALSE reason names the failing member by its own identifying field when it
+// states one (archtree readings carry "path"), and by index when it does not.
+func TestFalseReasonNamesTheFailingMember(t *testing.T) {
+	c := testCriterion(t)
+	read := func(members string) Reading {
+		t.Helper()
+		got, err := Select(resolved(t, `{"results":{"unit":"mm","population":"pose sweep","denominator":"poses","values":[`+members+`]}}`),
+			model.Selector{Kind: "json-pointer", Pointer: "/results"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	// Control: a passing set with paths is TRUE.
+	wantVerdict(t, evaluate(t, c, observation(invocationA, read(`{"path":"a.go","value":0.01},{"path":"b.go","value":0.02}`), sizedPopulation(2))), True, "")
+	for _, tc := range []struct{ name, members, want string }{
+		{"path", `{"path":"a.go","value":0.01},{"path":"internal/reduce/task.go","value":0.90}`, "internal/reduce/task.go: 0.90 does not satisfy lt 0.05"},
+		{"id when no path", `{"id":"pose-7","value":0.01},{"id":"pose-8","value":0.90}`, "pose-8: 0.90 does not satisfy lt 0.05"},
+		{"index without an identifier", `{"value":0.01},{"value":0.90}`, "value 1 does not satisfy the criterion"},
+		{"bare numbers keep the index", `0.01,0.90`, "value 1 does not satisfy the criterion"},
+		{"a blank path is no identifier", `{"path":"a.go","value":0.01},{"path":" ","value":0.90}`, "value 1 does not satisfy the criterion"},
+		{"a name that could fake the reason is quoted", `{"path":"a.go","value":0.01},{"path":"x: 0 satisfies","value":0.90}`, `"x: 0 satisfies": 0.90 does not satisfy lt 0.05`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wantVerdict(t, evaluate(t, c, observation(invocationA, read(tc.members), sizedPopulation(2))), False, tc.want)
+		})
+	}
+}
