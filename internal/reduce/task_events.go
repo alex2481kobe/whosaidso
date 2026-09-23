@@ -2,7 +2,7 @@ package reduce
 
 // Task prerequisites, attempts, closures, and blocker transitions live here.
 // Derived task status and acceptance answers remain in task.go.
-// This complete lifecycle group is slightly below 200 lines without unrelated handlers.
+// This complete lifecycle group is kept together, a little over 200 lines.
 
 import (
 	"fmt"
@@ -73,12 +73,8 @@ func (s *state) start(b model.Bundle, idx int, o Origin, e *model.TaskStart) err
 				fmt.Sprintf("attempt %s is still live; use takeover", a.Key.Attempt))
 		}
 	}
-	// An attempt starts only on a READY task. BLOCKED wins over READY, so an
-	// owed prerequisite, hold, acceptance or reconciliation refuses the start
-	// here, where replay enforces it too, not only at one admission entrance.
-	if p, _ := s.taskRevision(recordKey(e.Task)); p.Status != StatusReady {
-		return faultAt(CodeInvalidTransition, b.Sequence, idx, "task",
-			fmt.Sprintf("task is %s and cannot start until it is READY", p.Status))
+	if err := s.requireReady(b, idx, e.Task); err != nil {
+		return err
 	}
 	s.attempts[key] = Attempt{
 		Key:          key,
@@ -103,6 +99,15 @@ func (s *state) takeover(b model.Bundle, idx int, o Origin, e *model.TaskTakeove
 	if _, ok := s.attemptOwner[Ident{Project: b.Project, ID: e.AttemptID}]; ok {
 		return faultAt(CodeDuplicateRecord, b.Sequence, idx, "attempt_id", "attempt already admitted")
 	}
+	// Taking over a live attempt displaces its writer while the task is IN
+	// FLIGHT, where READY and BLOCKED do not apply. Once the prior attempt is
+	// terminal nobody is displaced: the takeover dispatches new work and meets
+	// the same READY rule as start, so nothing owed can be skipped by the verb.
+	if !s.attempts[prior].Live() {
+		if err := s.requireReady(b, idx, e.Task); err != nil {
+			return err
+		}
+	}
 	// The prior attempt is left exactly as it was. A takeover does not write a
 	// terminal receipt on someone else's behalf, so an abandoned attempt stays
 	// visibly live and the task stays IN FLIGHT until its own holder answers.
@@ -115,6 +120,18 @@ func (s *state) takeover(b model.Bundle, idx int, o Origin, e *model.TaskTakeove
 		Started:      o,
 	}
 	s.attemptOwner[Ident{Project: b.Project, ID: e.AttemptID}] = key
+	return nil
+}
+
+// requireReady is the dispatch rule: new work starts only on a READY task.
+// BLOCKED wins over READY, so an owed prerequisite, hold, acceptance or
+// reconciliation refuses here, where replay enforces it too, not only at one
+// admission entrance.
+func (s *state) requireReady(b model.Bundle, idx int, task model.RecordRef) error {
+	if p, _ := s.taskRevision(recordKey(task)); p.Status != StatusReady {
+		return faultAt(CodeInvalidTransition, b.Sequence, idx, "task",
+			fmt.Sprintf("task is %s and cannot start until it is READY", p.Status))
+	}
 	return nil
 }
 
