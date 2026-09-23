@@ -307,7 +307,11 @@ func (s *state) prerequisites(rec Record) []PrerequisiteResult {
 func (s *state) owed(id Ident, rec Record, closure Closure, closed bool, prereqs []PrerequisiteResult, attempts []Attempt) []BlockedReason {
 	reasons := []BlockedReason{}
 
-	for _, r := range prereqs {
+	// Prerequisite reasons are listed in prerequisite index order (numeric),
+	// never by their detail text, where prerequisite 10 would sort before 2.
+	ordered := append([]PrerequisiteResult{}, prereqs...)
+	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Index < ordered[j].Index })
+	for _, r := range ordered {
 		if r.Satisfied() {
 			continue
 		}
@@ -401,6 +405,9 @@ func (s *state) owed(id Ident, rec Record, closure Closure, closed bool, prereqs
 		}
 		if reasons[i].Origin != reasons[j].Origin {
 			return reasons[i].Origin.before(reasons[j].Origin)
+		}
+		if reasons[i].Kind == ReasonPrerequisite {
+			return false // stable: keep prerequisite index order from above
 		}
 		return reasons[i].Detail < reasons[j].Detail
 	})

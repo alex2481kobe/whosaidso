@@ -182,12 +182,26 @@ func briefContinue(b *briefWriter, a cur) {
 	}
 	if o := a.at("owed"); o.ok() {
 		b.line(0, append([]any{"owed: status", o.at("status"), "next"}, who(o.at("next_actor"))...)...)
+		listed := rootReasons(a.at("records", root.at("record_id").text()+"@"+root.at("revision").string()))
 		for _, r := range o.at("reasons").items() {
+			if listed[reasonKey(r.at("kind").text(), r.at("detail").text())] {
+				continue // already printed as a blocked: line under record
+			}
 			b.line(1, append(append([]any{"waits:", r.at("kind"), "on"}, who(r.at("waiting_actor"))...), "-", prefix(r.at("detail")))...)
 		}
 		for _, item := range o.at("items").items() {
-			b.line(1, append([]any{"item", item.at("target", "record_id"), "rev", item.at("target", "revision"), item.at("kind"),
-				"satisfied", item.at("satisfied"), "status"}, either(item.at("status"))...)...)
+			target := a.at("records", item.at("target", "record_id").text()+"@"+item.at("target", "revision").string())
+			pieces := append([]any{"item", item.at("target", "record_id"), "rev", item.at("target", "revision"), item.at("kind"),
+				"satisfied", item.at("satisfied"), "status"}, either(item.at("status"))...)
+			if item.at("status").text() == "READY" {
+				if last := lastAttemptOutcome(target); last.ok() && last.text() != "success" {
+					pieces = append(pieces, "- last attempt", last)
+				}
+			}
+			b.line(1, pieces...)
+			if target.at("label").ok() {
+				b.line(2, prefix(target.at("label")))
+			}
 		}
 	}
 	if r := a.at("runs"); r.ok() {
@@ -224,7 +238,9 @@ func briefShow(b *briefWriter, a cur) {
 				keys = append(keys, k)
 			}
 			sort.Strings(keys)
-			if s.at(kind).ok() {
+			if s.at(kind).ok() && len(keys) == 0 {
+				b.line(1, kind+": none")
+			} else if s.at(kind).ok() {
 				pieces := []any{kind + ":"}
 				for _, k := range keys {
 					pieces = append(pieces, k, s.at(kind, k))
@@ -276,4 +292,26 @@ func briefShow(b *briefWriter, a cur) {
 		b.line(0, "stale blind spot:", prefix(st.at("blind_spot")))
 		briefList(b, 0, "stale claims", st.at("claims"), briefStale)
 	}
+}
+
+func reasonKey(kind, detail string) string { return kind + "\x00" + detail }
+
+// rootReasons are the reasons the continued record's own detail already
+// prints, so the owed section does not print them a second time.
+func rootReasons(root cur) map[string]bool {
+	seen := map[string]bool{}
+	for _, r := range root.at("task", "reasons").items() {
+		seen[reasonKey(r.at("kind").text(), r.at("detail").text())] = true
+	}
+	return seen
+}
+
+// lastAttemptOutcome is the terminal outcome of a task detail's latest
+// attempt, or nothing when it has no attempt or the latest is still open.
+func lastAttemptOutcome(task cur) cur {
+	attempts := task.at("task", "attempts").items()
+	if len(attempts) == 0 {
+		return cur{}
+	}
+	return attempts[len(attempts)-1].at("terminal", "outcome")
 }
