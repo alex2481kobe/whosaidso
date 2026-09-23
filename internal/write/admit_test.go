@@ -440,6 +440,24 @@ func TestAdmissionMissingAndCorruptSupport(t *testing.T) {
 				source.Length++
 				source.SourceRef.Content.Length++
 			}
+			// Capture itself now refuses a source.intake whose exact bytes are not
+			// among its blobs, so these two never reach admission. They once did
+			// only because capture through the store skipped the rule.
+			if mutation == "missing" || mutation == "wrong-length" {
+				raw := admissionTestEvent(t, source)
+				readers := []io.Reader{}
+				for _, blob := range blobs {
+					readers = append(readers, bytes.NewReader(blob))
+				}
+				_, err := store.WriteIntake(context.Background(), f.project, store.IntakeRequest{CommandID: f.id(), Author: f.author, Events: []model.Event{raw}, Blobs: readers})
+				if admissionErrorCode(err) != "source-not-captured" {
+					t.Fatalf("wanted capture to refuse with source-not-captured, got %v", err)
+				}
+				if pending, err := store.ReadIntake(f.project, nil); err != nil || len(pending) != 1 {
+					t.Fatalf("refused capture left intake: %d, %v", len(pending), err)
+				}
+				return
+			}
 			packet := f.capture(blobs, source)
 			code := "unavailable"
 			if mutation == "corrupt-intake" {
@@ -479,7 +497,8 @@ func TestAdmissionLocatorMaterializedWithoutPayloadRewrite(t *testing.T) {
 	}
 	source := &model.SourceIntake{SourceID: f.id(), OriginalDigest: model.HashBytes(body), Length: uint64(len(body)), SourceRef: admissionContent(body), Speaker: f.author, Referents: []model.RecordRef{}}
 	source.SourceRef.Content.Locators = []model.Locator{{Path: "producer.txt"}}
-	packet := f.capture(nil, source)
+	// Capture must now carry the source's bytes; the locator stays authored.
+	packet := f.capture([][]byte{body}, source)
 	f.accept(packet)
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)

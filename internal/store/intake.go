@@ -121,6 +121,11 @@ func writeIntake(ctx context.Context, project Project, request IntakeRequest, di
 			return zero, err
 		}
 	}
+	// Every capture reaches publication through here, whichever way its events
+	// were supplied, so the source-durability rule lives here and nowhere else.
+	if err := requireSourceBytes(events, captured); err != nil {
+		return zero, err
+	}
 	p := model.Packet{Version: model.WireVersion, Project: project.ID, CommandID: id, Author: request.Author, CapturedAt: at, Events: events}
 	p.RequestDigest, err = intakeRequestDigest(p, captured)
 	if err != nil {

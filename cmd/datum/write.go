@@ -227,10 +227,8 @@ func captureCLI(ctx context.Context, project store.Project, id model.ID, author 
 		return model.PacketRef{}, err
 	}
 	readers = append(readers, sources...)
-	return store.WriteIntake(ctx, project, store.IntakeRequest{CommandID: id, Author: author, Blobs: readers,
-		BuildEvents: func(captured []store.CapturedBlob) ([]model.Event, error) {
-			return events, requireSourceBytes(events, captured)
-		}})
+	// The store refuses a source.intake whose bytes are not among the blobs.
+	return store.WriteIntake(ctx, project, store.IntakeRequest{CommandID: id, Author: author, Blobs: readers, Events: events})
 }
 
 // sourceBlobs implements capture durability (contract: intake durably saves
@@ -238,7 +236,7 @@ func captureCLI(ctx context.Context, project store.Project, id model.ID, author 
 // is resolved inside the datum root, and bytes that verify against the
 // original's digest and length are captured into the packet with it, so the
 // source survives its original being deleted before admission. A reference that
-// does not resolve is left to --blob; requireSourceBytes refuses what neither
+// does not resolve is left to --blob; store.WriteIntake refuses what neither
 // supplied.
 func sourceBlobs(ctx context.Context, project store.Project, events []model.Event) ([]io.Reader, error) {
 	resolver := evidence.NewResolver(project.Root)
@@ -258,24 +256,4 @@ func sourceBlobs(ctx context.Context, project store.Project, events []model.Even
 		}
 	}
 	return readers, nil
-}
-
-// requireSourceBytes is the rule itself: capture is acknowledged only when the
-// packet's own blob inventory holds every source.intake's exact original bytes.
-func requireSourceBytes(events []model.Event, captured []store.CapturedBlob) error {
-	have := make(map[store.CapturedBlob]bool, len(captured))
-	for _, blob := range captured {
-		have[blob] = true
-	}
-	for i, raw := range events {
-		event, err := model.DecodeEvent(raw)
-		if err != nil {
-			return err
-		}
-		if source, ok := event.(*model.SourceIntake); ok && !have[store.CapturedBlob{SHA256: source.OriginalDigest, Length: source.Length}] {
-			return &model.Fault{Code: "source-not-captured", EventIndex: i, Path: "source_ref",
-				Detail: "the original source bytes do not resolve inside the datum root and were not passed with --blob, so capture cannot save them durably"}
-		}
-	}
-	return nil
 }

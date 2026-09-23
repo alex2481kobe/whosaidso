@@ -29,14 +29,28 @@ func intakeProject(t *testing.T) Project {
 
 func commandID(n int) model.ID { return model.ID(fmt.Sprintf("%026d", n)) }
 
+// sourceIntakeEvent is a real source.intake naming blob as its original. The
+// store decodes source.intake to hold capture to its bytes, so fixtures no
+// longer pass arbitrary JSON under that type.
+func sourceIntakeEvent(blob CapturedBlob, sourceID model.ID) (model.Event, error) {
+	return model.EncodeEvent(&model.SourceIntake{SourceID: sourceID, OriginalDigest: blob.SHA256, Length: blob.Length,
+		Speaker: model.Actor{ID: "owner"}, Referents: []model.RecordRef{},
+		SourceRef: model.ArtifactRef{Kind: "content", Content: &model.ContentPin{SHA256: blob.SHA256, Length: blob.Length,
+			MediaType: "text/plain", Locators: []model.Locator{}}, Selector: model.Selector{Kind: "whole"}}})
+}
+
+func blobOf(source string) CapturedBlob {
+	return CapturedBlob{SHA256: model.HashBytes([]byte(source)), Length: uint64(len(source))}
+}
+
 func requestFor(id model.ID, source string) IntakeRequest {
 	return IntakeRequest{
 		CommandID: id,
 		Author:    model.Actor{ID: "lane-b"},
 		Blobs:     []io.Reader{strings.NewReader(source)},
 		BuildEvents: func(blobs []CapturedBlob) ([]model.Event, error) {
-			data, err := json.Marshal(blobs[0])
-			return []model.Event{{Type: "source.intake", Data: data}}, err
+			event, err := sourceIntakeEvent(blobs[0], commandID(900))
+			return []model.Event{event}, err
 		},
 	}
 }
@@ -237,8 +251,10 @@ func TestRetryAndChangedRequestRefusals(t *testing.T) {
 		"bytes":  func(r *IntakeRequest) { r.Blobs = []io.Reader{strings.NewReader("changed bytes")} },
 		"author": func(r *IntakeRequest) { r.Author.ID = "another-lane" },
 		"events": func(r *IntakeRequest) {
-			r.BuildEvents = nil
-			r.Events = []model.Event{{Type: "source.intake", Data: json.RawMessage(`{"changed":true}`)}}
+			r.BuildEvents = func(blobs []CapturedBlob) ([]model.Event, error) {
+				event, err := sourceIntakeEvent(blobs[0], commandID(901))
+				return []model.Event{event}, err
+			}
 		},
 		"extra blob": func(r *IntakeRequest) { r.Blobs = append(r.Blobs, strings.NewReader("extra")) },
 	}
@@ -268,7 +284,11 @@ func TestRetryAndChangedRequestRefusals(t *testing.T) {
 
 func TestBlobInventoryIsAnIdentitySet(t *testing.T) {
 	p := intakeProject(t)
-	req := IntakeRequest{CommandID: commandID(1), Author: model.Actor{UnknownReason: "not supplied"}, Events: []model.Event{{Type: "source.intake", Data: json.RawMessage(`{"source":"known"}`)}}}
+	source, err := sourceIntakeEvent(blobOf("a"), commandID(900))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := IntakeRequest{CommandID: commandID(1), Author: model.Actor{UnknownReason: "not supplied"}, Events: []model.Event{source}}
 	req.Blobs = []io.Reader{strings.NewReader("a"), strings.NewReader("b"), strings.NewReader("a")}
 	ref, err := WriteIntake(context.Background(), p, req)
 	if err != nil {
@@ -643,9 +663,38 @@ func TestWriteRefusalsLeaveNoPublishedPacket(t *testing.T) {
 			r.Events = []model.Event{{Type: "source.intake", Data: json.RawMessage(`{}`)}}
 		}},
 		{"no events", "invalid-field", func(r *IntakeRequest, _ *intakeIO) { r.BuildEvents = nil }},
+		// Events other than source.intake stay opaque to storage; its packet
+		// encoding still refuses malformed JSON.
 		{"malformed event JSON", "invalid-field", func(r *IntakeRequest, _ *intakeIO) {
 			r.BuildEvents = nil
+			r.Events = []model.Event{{Type: "task.create", Data: json.RawMessage(`{`)}}
+		}},
+		// A source.intake is decoded to find its original; one that cannot be
+		// decoded cannot be shown to be saved.
+		{"malformed source.intake", "invalid-json", func(r *IntakeRequest, _ *intakeIO) {
+			r.BuildEvents = nil
 			r.Events = []model.Event{{Type: "source.intake", Data: json.RawMessage(`{`)}}
+		}},
+		{"source.intake without its bytes", "source-not-captured", func(r *IntakeRequest, _ *intakeIO) {
+			r.Blobs = nil
+			r.BuildEvents = func([]CapturedBlob) ([]model.Event, error) {
+				event, err := sourceIntakeEvent(blobOf("source"), commandID(900))
+				return []model.Event{event}, err
+			}
+		}},
+		{"source.intake beside other bytes", "source-not-captured", func(r *IntakeRequest, _ *intakeIO) {
+			r.BuildEvents = func([]CapturedBlob) ([]model.Event, error) {
+				event, err := sourceIntakeEvent(blobOf("bytes nobody passed"), commandID(900))
+				return []model.Event{event}, err
+			}
+		}},
+		{"source.intake same digest other length", "source-not-captured", func(r *IntakeRequest, _ *intakeIO) {
+			r.BuildEvents = func(blobs []CapturedBlob) ([]model.Event, error) {
+				wrong := blobs[0]
+				wrong.Length++
+				event, err := sourceIntakeEvent(wrong, commandID(900))
+				return []model.Event{event}, err
+			}
 		}},
 		{"rename failure", "io", func(_ *IntakeRequest, d *intakeIO) {
 			d.rename = func(string, string) error { return errors.New("injected rename failure") }

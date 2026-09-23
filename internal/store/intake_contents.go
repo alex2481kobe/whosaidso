@@ -1,6 +1,7 @@
 package store
 
-// Intake locations, blob capture, request digests, and packet-content verification live here.
+// Intake locations, blob capture, request digests, the source-durability rule,
+// and packet-content verification live here.
 // Publication sequencing, retry acknowledgement, and filesystem flush operations do not.
 
 import (
@@ -112,6 +113,33 @@ func intakeRequestDigest(p model.Packet, blobs []CapturedBlob) (model.Digest, er
 		return "", err
 	}
 	return model.HashBytes(data), nil
+}
+
+// requireSourceBytes is the capture-durability rule: a packet is acknowledged
+// only when its own blob inventory holds every source.intake's exact original
+// bytes. Events are otherwise opaque to storage; a source.intake is decoded
+// just far enough to read that reference, and one that cannot be decoded is
+// refused, because an unreadable reference cannot be shown to be saved.
+func requireSourceBytes(events []model.Event, captured []CapturedBlob) error {
+	have := make(map[CapturedBlob]bool, len(captured))
+	for _, blob := range captured {
+		have[blob] = true
+	}
+	for i, raw := range events {
+		if raw.Type != "source.intake" {
+			continue
+		}
+		event, err := model.DecodeEvent(raw)
+		if err != nil {
+			return err
+		}
+		source, ok := event.(*model.SourceIntake)
+		if !ok || !have[CapturedBlob{SHA256: source.OriginalDigest, Length: source.Length}] {
+			return storeFault("source-not-captured", fmt.Sprintf("request.events[%d].source_ref", i),
+				"the packet's blobs do not hold the original source bytes, so capture cannot save them durably")
+		}
+	}
+	return nil
 }
 
 // VerifiedPacket is one intake packet as a single read verified it: the decoded
