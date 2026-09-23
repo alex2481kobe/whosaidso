@@ -154,18 +154,26 @@ func Read(project store.Project, request Request) (Answer, error) {
 		a.Watermark.Head = Head{CommandID: w.CommandID, RecordedAt: w.RecordedAt}
 	}
 	id := reduce.Ident{Project: project.ID, ID: request.ID}
+	var current reduce.Record
 	if request.ID != "" {
-		if _, ok := snapshot.Current(id); !ok {
+		var ok bool
+		if current, ok = snapshot.Current(id); !ok {
 			a.Result, a.Reason = "UNKNOWN", fmt.Sprintf("no admitted record %s in this project at this watermark", request.ID)
 			return a, nil
 		}
 	}
 	switch request.Command {
 	case "show":
+		// One record is its current revision, read directly; copying and
+		// sorting every record to keep one would answer the same, slower.
+		if request.ID != "" {
+			a.Records = append(a.Records, describe(snapshot, current))
+			break
+		}
 		for _, fact := range snapshot.Records() {
 			who := reduce.Ident{Project: fact.Key.Project, ID: fact.Key.ID}
 			revision, _ := snapshot.CurrentRevision(who)
-			if fact.Key.Revision != revision || request.ID != "" && who != id {
+			if fact.Key.Revision != revision {
 				continue
 			}
 			r := describe(snapshot, fact)
