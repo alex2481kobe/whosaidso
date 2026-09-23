@@ -117,8 +117,9 @@ assertions, falsifiers, blind spots, reasons, dispositions, verdicts,
 acceptance and validation stay placeholders; fill them with --set PATH=VALUE
 (paths as the notes print them, e.g. evidence[0].disposition) or by editing.
 --capture captures the result through capture's own path, refused while any
-placeholder remains; an optional key nobody filled is omitted. --admit then
-admits it, as capture --admit does. Notes go to stderr. Event types:
+placeholder remains; an optional key nobody filled is omitted, and the ids
+it minted are named on stderr. --admit then admits it, as capture --admit
+does. Notes go to stderr. Event types:
 ` + templateEventList() + "\n", define: templateVerb},
 		{name: "home", args: "[PATH]", summary: "show or set where this project's live ledger is", detail: `Bare, shows this project's binding on this machine: its home, or unbound,
 and whether the home is available. With PATH, binds the project to the

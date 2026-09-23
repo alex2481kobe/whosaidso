@@ -8,6 +8,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -242,8 +243,12 @@ func TestTemplateCaptureRefusesAnyPlaceholder(t *testing.T) {
 	if err != nil || len(after) != len(before) {
 		t.Fatalf("a refused capture wrote intake: %d -> %d, %v", len(before), len(after), err)
 	}
-	if _, _, code := cliRun(t, f.root, nil, "lane", append(args, "--set", "criterion=the fixture output exists", "--capture")...); code != 0 {
-		t.Fatal("control: the filled template must capture")
+	if _, errs, code := cliRun(t, f.root, nil, "lane", append(args, "--set", "criterion=the fixture output exists", "--capture")...); code != 0 || !regexp.MustCompile(`minted   blocker_id = `+ulid).MatchString(errs) {
+		t.Fatalf("control: the filled template must capture and name the id it minted: %d %s", code, errs)
+	}
+	// An id a bind flag supplied was not minted, so it is not named as minted.
+	if _, errs, _ := cliRun(t, f.root, nil, "lane", "template", "criterion.fix", "--criterion", string(f.criterion), "--set", "source_refs=[]", "--capture"); strings.Contains(errs, "minted") {
+		t.Fatalf("a bound criterion id is not a minted one: %s", errs)
 	}
 }
 

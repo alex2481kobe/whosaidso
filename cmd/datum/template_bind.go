@@ -28,14 +28,15 @@ type templateBinds struct {
 
 // boundTemplate is one event's tree being filled, and what was filled.
 type boundTemplate struct {
-	c      *call
-	event  model.EventType
-	body   any
-	notes  []templateNote
-	filled []string // "PATH: from WHAT", printed on stderr
-	blobs  []string // files whose bytes a capture must carry
-	author model.Actor
-	bound  bool // a bind flag, --set or --pin was given: list what is left
+	c        *call
+	event    model.EventType
+	body     any
+	notes    []templateNote
+	filled   []string        // "PATH: from WHAT", printed on stderr
+	putPaths map[string]bool // the paths put filled
+	blobs    []string        // files whose bytes a capture must carry
+	author   model.Actor
+	bound    bool // a bind flag, --set or --pin was given: list what is left
 	// examples maps an output name to the local file holding its example bytes
 	examples map[string]string
 	project  *store.Project
@@ -199,6 +200,10 @@ func (t *boundTemplate) put(path string, v any, from string) error {
 		return usageError("datum template %s: %v", t.event, err)
 	}
 	t.filled = append(t.filled, path+": "+from)
+	if t.putPaths == nil {
+		t.putPaths = map[string]bool{}
+	}
+	t.putPaths[path] = true
 	return nil
 }
 
@@ -305,6 +310,22 @@ func (t *boundTemplate) capture(admit bool, reason string) error {
 	ref, count, err := captureCLI(t.c.ctx, project, "", t.author, "-", t.blobs, bytes.NewReader(data))
 	if err != nil {
 		return err
+	}
+	// The ids this event created, so the next command can name them.
+	for _, n := range t.notes {
+		if n.Kind != "minted" || t.putPaths[templatePath(n.Path)] {
+			continue // a bind flag or --set replaced the minted id
+		}
+		steps := make([]templateStep, len(n.Path))
+		for i, part := range n.Path {
+			steps[i] = templateStep{key: part, index: -1}
+			if part == "0" {
+				steps[i] = templateStep{index: 0}
+			}
+		}
+		if id, ok := templateGet(t.body, steps); ok {
+			fmt.Fprintf(t.c.stderr, "minted   %s = %v\n", templatePath(n.Path), id)
+		}
 	}
 	if admit {
 		return captureAndAdmit(t.c.ctx, project, t.c.stdout, false, ref, count, "", t.author, reason)
