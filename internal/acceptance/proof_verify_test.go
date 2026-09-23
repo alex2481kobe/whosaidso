@@ -761,6 +761,7 @@ func (w *pvWorld) cli(stdin []byte, args ...string) ([]byte, error) {
 	cmd := exec.Command(pvDatum(w.t), args...)
 	cmd.Dir, cmd.Stdin = w.p.Root, bytes.NewReader(stdin)
 	cmd.Env = append(os.Environ(), "HOME="+os.Getenv("HOME"), "DATUM_ACTOR=lane")
+	bindProjectHome(cmd)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {

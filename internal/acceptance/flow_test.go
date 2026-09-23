@@ -84,6 +84,7 @@ func (w *flowWorld) cli(stdin []byte, args ...string) ([]byte, error) {
 		}
 	}
 	cmd.Env = append(env, "HOME="+w.home)
+	bindProjectHome(cmd)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
@@ -953,6 +954,7 @@ func TestFlowRecovery(t *testing.T) {
 		"--", "/bin/sh", "tools/run.sh")
 	cmd.Dir = w.root
 	cmd.Env = append(os.Environ(), "HOME="+w.home)
+	bindProjectHome(cmd)
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	if err := cmd.Start(); err != nil {
