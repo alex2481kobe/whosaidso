@@ -1,17 +1,16 @@
 package write
 
-// Accepted-artifact resolution, byte verification, and durable preservation live here.
-// Admission policy and transaction ownership do not.
-// This file stays below 200 lines because artifact preservation is one complete responsibility.
+// Accepted-artifact resolution and byte verification, and handing verified
+// bytes to publication, live here. Durable publication itself (store),
+// admission policy and transaction ownership do not.
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
+	"reflect"
 
 	"datum/internal/evidence"
 	"datum/internal/model"
@@ -32,14 +31,45 @@ func materializeAdmission(ctx context.Context, project store.Project, packets []
 			if err != nil {
 				return err
 			}
+			var published []model.ArtifactRef
 			if seal, ok := event.(*model.InvocationSeal); ok {
-				if err := runAdmitOutputs(project.Root, project.ArtifactDir(), inbox, packet, seal.Envelope); err != nil {
+				own, err := runAdmitOutputs(project.Root, project.ArtifactDir(), inbox, packet, seal.Envelope)
+				if err != nil {
 					return err
+				}
+				for _, out := range own {
+					if err := ctx.Err(); err != nil {
+						return err
+					}
+					if out.ref.Git != nil {
+						// Publish the proven bytes; the generic path below
+						// still corroborates the git pin.
+						if err := preserve(project.Root, project.ArtifactDir(), out.bytes); err != nil {
+							return err
+						}
+						continue
+					}
+					resolved, err := resolver.RunOutput(out.ref, out.bytes)
+					if err != nil {
+						return fmt.Errorf("accepted support is unavailable or invalid: %w", err)
+					}
+					if err := admissionReadable(resolved, out.ref.Selector); err != nil {
+						return err
+					}
+					// The proven bytes themselves are published, never a copy
+					// found again by digest.
+					if err := preserve(project.Root, project.ArtifactDir(), out.bytes); err != nil {
+						return err
+					}
+					published = append(published, out.ref)
 				}
 			}
 			for _, ref := range admissionArtifacts(event) {
 				if err := ctx.Err(); err != nil {
 					return err
+				}
+				if admissionPublished(published, ref) {
+					continue
 				}
 				if ref.Content != nil {
 					for _, candidate := range packets {
@@ -71,12 +101,8 @@ func materializeAdmission(ctx context.Context, project store.Project, packets []
 						return err
 					}
 				}
-				reading, err := evidence.Select(resolved, ref.Selector)
-				if err != nil {
+				if err := admissionReadable(resolved, ref.Selector); err != nil {
 					return err
-				}
-				if reading.Kind == evidence.ReadingAbsent {
-					return admissionFault("unavailable", "artifact.selector", reading.Reason)
 				}
 				if source, ok := event.(*model.SourceIntake); ok && (resolved.SHA256 != source.OriginalDigest || resolved.Length != source.Length) {
 					return admissionFault("conflict", "source_ref", "resolved source differs from the captured original")
@@ -113,79 +139,31 @@ func admissionBlob(path string) ([]byte, error) {
 	return data, nil
 }
 
-func preserveAdmissionBlob(root, artifactDir string, data []byte) error {
-	if !filepath.IsAbs(root) {
-		return admissionFault("invalid-field", "project.root", "artifact publication needs an absolute project root")
-	}
-	dir := root
-	for _, part := range strings.Split(artifactDir, "/") {
-		parent := dir
-		dir = filepath.Join(dir, part)
-		if err := os.Mkdir(dir, 0755); err != nil && !os.IsExist(err) {
-			return err
-		}
-		info, err := os.Lstat(dir)
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() {
-			return admissionFault("invalid-field", dir, "artifact directories cannot be symlinks")
-		}
-		if err := syncAdmissionPath(parent); err != nil {
-			return err
-		}
-	}
-	final := filepath.Join(dir, string(model.HashBytes(data)))
-	if prior, err := admissionBlob(final); err == nil {
-		if !bytes.Equal(prior, data) {
-			return admissionFault("conflict", final, "existing artifact bytes do not match their name")
-		}
-		if err := syncAdmissionPath(final); err != nil {
-			return err
-		}
-		return syncAdmissionPath(dir)
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-	f, err := os.CreateTemp(dir, ".admit-*.tmp")
+// admissionReadable refuses accepted support its own selector cannot read.
+func admissionReadable(resolved evidence.ResolvedArtifact, selector model.Selector) error {
+	reading, err := evidence.Select(resolved, selector)
 	if err != nil {
 		return err
 	}
-	defer os.Remove(f.Name())
-	_, writeErr := f.Write(data)
-	if writeErr == nil {
-		writeErr = f.Sync()
+	if reading.Kind == evidence.ReadingAbsent {
+		return admissionFault("unavailable", "artifact.selector", reading.Reason)
 	}
-	closeErr := f.Close()
-	if writeErr != nil {
-		return writeErr
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	// Link publishes without overwriting an immutable artifact created elsewhere.
-	if err := os.Link(f.Name(), final); err != nil {
-		return err
-	}
-	verified, err := admissionBlob(final)
-	if err != nil {
-		return err
-	}
-	if !bytes.Equal(data, verified) {
-		return admissionFault("conflict", final, "published artifact failed byte verification")
-	}
-	return syncAdmissionPath(dir)
+	return nil
 }
 
-func syncAdmissionPath(path string) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
+// admissionPublished reports whether ref is exactly a run output whose proven
+// bytes were already verified and published for this event.
+func admissionPublished(published []model.ArtifactRef, ref model.ArtifactRef) bool {
+	for _, p := range published {
+		if reflect.DeepEqual(p, ref) {
+			return true
+		}
 	}
-	syncErr := f.Sync()
-	closeErr := f.Close()
-	if syncErr != nil {
-		return syncErr
-	}
-	return closeErr
+	return false
+}
+
+// preserveAdmissionBlob is admission's preserver: the store's durable,
+// content-addressed publication (a dry run records instead).
+func preserveAdmissionBlob(root, artifactDir string, data []byte) error {
+	return store.PublishArtifact(root, artifactDir, data)
 }

@@ -1,7 +1,7 @@
 package write
 
 // Seal admission of a run's own outputs (R9's single run-directory form, bytes
-// proven from the run directory or the seal's own blobs). Proof families and generic artifact gates are tested in
+// proven from the seal's own blobs or a file hand-placed in the run directory). Proof families and generic artifact gates are tested in
 // the gate_*_test.go files.
 
 import (
@@ -90,6 +90,10 @@ func TestSealAdmissionProvesEachOutputIsThisRuns(t *testing.T) {
 		{"same digest captured by a different packet of the set", "unavailable", func(w *proofWorld, env model.InvocationEnvelope) []model.PacketRef {
 			other := w.f.capture([][]byte{[]byte(proofPass)}, w.f.task())
 			return []model.PacketRef{other, w.f.capture(nil, runSealWith(env, proofPin(proofPass, runOwnPath(env))))}
+		}},
+		{"same bytes only in write.Run's staging, outside the project", "unavailable", func(w *proofWorld, env model.InvocationEnvelope) []model.PacketRef {
+			proofPut(w.f.t, runTestStaging(w.f.t, w.f.project, env.InvocationID), proofPath, proofPass)
+			return []model.PacketRef{w.f.capture(nil, runSealWith(env, proofPin(proofPass, runOwnPath(env))))}
 		}},
 		{"run directory reached through a symlink", "unavailable", func(w *proofWorld, env model.InvocationEnvelope) []model.PacketRef {
 			root := w.f.project.Root

@@ -267,8 +267,8 @@ func TestCLIRunKeepsArtifactsBesideAConfiguredLedger(t *testing.T) {
 	if err := json.Unmarshal(out, &result); err != nil || result.SealPacket.CommandID == "" {
 		t.Fatalf("run printed no packets: %s, %v", out, err)
 	}
-	if _, err := os.Stat(filepath.Join(moved, "artifacts", "runs", string(result.Envelope.InvocationID), "out", "result.json")); err != nil {
-		t.Fatalf("the run directory must sit beside the configured ledger: %v", err)
+	if _, err := os.Stat(filepath.Join(moved, "artifacts", "runs")); !os.IsNotExist(err) {
+		t.Fatalf("a run stages outside the committed store; no run directory may appear in it: %v", err)
 	}
 	if _, err := e2eInvoke(t, root, nil, "admit", "--command-id", string(cliID(900)), "--actor", "coordinator", "--outcome", "accepted", "--reason", "admit the run", string(result.StartPacket.CommandID), string(result.SealPacket.CommandID)); err != nil {
 		t.Fatal(err)

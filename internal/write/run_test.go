@@ -586,6 +586,16 @@ func TestRunKilledObserverLeavesDurableUnknown(t *testing.T) {
 	if !found {
 		t.Fatalf("missing orphan invocation, observer stderr: %s", diagnostic.String())
 	}
+	// Capture never happened, so the killed run's staging and its streams stay.
+	for _, packet := range after {
+		payload, _ := model.DecodeEvent(packet.Events[0])
+		if start, ok := payload.(*model.InvocationStart); ok && start.Envelope.Argv[3] == "block" {
+			staging := runTestStaging(t, project, start.Envelope.InvocationID)
+			if _, err := os.Stat(filepath.Join(staging, "stdout")); err != nil {
+				t.Fatalf("a crash before capture must keep the run's staging: %v", err)
+			}
+		}
+	}
 }
 
 func TestRunBoundedDrainAndNoAdmissionLock(t *testing.T) {
@@ -718,6 +728,20 @@ func TestRunChildProcess(t *testing.T) {
 			os.Exit(96)
 		}
 		if err := os.Symlink(os.Getenv("DATUM_RUN_REPORT"), filepath.Join(os.Getenv("DATUM_RUN_DIR"), "link")); err != nil {
+			os.Exit(96)
+		}
+	case "output":
+		// args: the output's path in DATUM_RUN_DIR, its body, the report, and
+		// optionally a directory to make unwritable first, so the seal's
+		// capture fails after the output exists.
+		if args[4] != "" && os.Chmod(args[4], 0500) != nil {
+			os.Exit(96)
+		}
+		// Distinct stream bytes keep every output countable on its own.
+		fmt.Fprint(os.Stdout, "output-stdout")
+		fmt.Fprint(os.Stderr, "output-stderr")
+		out := filepath.Join(os.Getenv("DATUM_RUN_DIR"), filepath.FromSlash(args[1]))
+		if os.MkdirAll(filepath.Dir(out), 0700) != nil || os.WriteFile(out, []byte(args[2]), 0600) != nil || os.WriteFile(os.Getenv("DATUM_RUN_REPORT"), []byte(args[3]), 0600) != nil {
 			os.Exit(96)
 		}
 	case "report-hex":
