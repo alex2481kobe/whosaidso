@@ -70,6 +70,22 @@ var templateEnumFields = map[templateField][]string{
 	{reflect.TypeOf(model.Prerequisite{}), "Kind"}:                  {"task-success", "claim-proof", "decision-approved"},
 	{reflect.TypeOf(model.GitPin{}), "ObjectFormat"}:                {"sha1", "sha256"},
 	{reflect.TypeOf(model.GitHead{}), "ObjectFormat"}:               {"sha1", "sha256"},
+	{reflect.TypeOf(model.ProofAdmit{}), "Verdict"}:                 {"supports", "refutes"},
+}
+
+// templateRequired are keys the model decodes when absent, so bundles written
+// before the key existed still replay, but admission requires on every new
+// event. Reflection would call them optional; the note says why they are not.
+var templateRequired = map[templateField]string{
+	{reflect.TypeOf(model.ProofAdmit{}), "Verdict"}: "required at admission; only a proof admitted before R14.1 has none",
+}
+
+// templateFieldUnions narrow a union at one field to the members the model
+// accepts there. The skeleton holds only the kept members' keys.
+var templateFieldUnions = map[templateField]templateUnion{
+	{reflect.TypeOf(model.TaskSpec{}), "Accepter"}: {members: []string{"id"},
+		branches: map[string][]string{"id": {"id"}},
+		note:     "a known actor id; an unknown accepter could never close, so unknown_reason is refused; delete the whole key to let anyone accept"},
 }
 
 // templateUnion is a tagged choice: the tag's member decides which of the
