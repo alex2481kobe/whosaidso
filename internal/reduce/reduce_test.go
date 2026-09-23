@@ -150,7 +150,7 @@ type ledgerBuilder struct {
 	seq     uint64
 	prev    model.ID
 	out     []model.Bundle
-	// bare skips captureStarts, for fixtures that test missing attribution.
+	// bare skips attributeFixture, for fixtures that test missing attribution.
 	bare bool
 }
 
@@ -161,7 +161,7 @@ func (l *ledgerBuilder) add(t *testing.T, events ...model.TypedEvent) model.Bund
 	l.seq++
 	packet := model.PacketRef{CommandID: newID(fmt.Sprintf("PKT%d", l.seq)), Digest: newDigest(fmt.Sprintf("packet-%d", l.seq))}
 	if !l.bare {
-		events = captureStarts(packet, events)
+		events = attributeFixture(l.seq, events)
 	}
 	raw := make([]model.Event, 0, len(events))
 	for _, e := range events {
@@ -190,32 +190,48 @@ func (l *ledgerBuilder) add(t *testing.T, events ...model.TypedEvent) model.Bund
 
 func (l *ledgerBuilder) bundles() []model.Bundle { return l.out }
 
-// captureStarts gives a bundle that carries an invocation.start and no review
-// the attribution admission writes: an accepted review naming its one packet
-// for every event, captured a minute after the latest start. Tests of the
-// freezing rule itself build their own reviews and so bypass this default.
-func captureStarts(packet model.PacketRef, events []model.TypedEvent) []model.TypedEvent {
+// attributeFixture gives a bundle that carries a start, criterion fix or
+// proof and no review the attribution admission writes: an accepted review
+// with one packet per event, authored by the actor that event names (the
+// criterion author, the proof judgment, otherwise "coordinator"), each
+// captured a minute after the latest start. Tests of the attribution rules
+// themselves build their own reviews and so bypass this default.
+func attributeFixture(seq uint64, events []model.TypedEvent) []model.TypedEvent {
 	var latest time.Time
+	needed := false
 	for _, e := range events {
 		switch e := e.(type) {
 		case *model.ReviewAdmit:
 			return events
 		case *model.InvocationStart:
+			needed = true
 			if e.Envelope.StartedAt.After(latest) {
 				latest = e.Envelope.StartedAt
 			}
+		case *model.CriterionFix, *model.ProofAdmit:
+			needed = true
 		}
 	}
-	if latest.IsZero() {
+	if !needed {
 		return events
 	}
-	carried := make([]model.ID, len(events))
-	for i := range carried {
-		carried[i] = packet.CommandID
+	review := &model.ReviewAdmit{Outcome: "accepted", Actor: model.Actor{ID: "coordinator"}, Reason: "fixture admission",
+		Authors: map[model.ID]model.Actor{}, CapturedAt: map[model.ID]time.Time{}}
+	for i, e := range events {
+		packet := newID(fmt.Sprintf("PKT%dE%d", seq, i))
+		author := model.Actor{ID: "coordinator"}
+		switch e := e.(type) {
+		case *model.CriterionFix:
+			author = e.Author
+		case *model.ProofAdmit:
+			author = e.Judgment.Actor
+		}
+		review.Packets = append(review.Packets, model.PacketRef{CommandID: packet, Digest: newDigest(string(packet))})
+		review.EventPackets = append(review.EventPackets, packet)
+		review.Authors[packet] = author
+		review.CapturedAt[packet] = latest.Add(time.Minute)
 	}
-	return append(append([]model.TypedEvent{}, events...), &model.ReviewAdmit{Packets: []model.PacketRef{packet}, Outcome: "accepted",
-		Actor: model.Actor{ID: "coordinator"}, Reason: "fixture capture", EventPackets: carried,
-		CapturedAt: map[model.ID]time.Time{packet.CommandID: latest.Add(time.Minute)}})
+	return append(append([]model.TypedEvent{}, events...), review)
 }
 
 // ---- assertions -----------------------------------------------------------

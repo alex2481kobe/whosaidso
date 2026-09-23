@@ -37,7 +37,11 @@ func TestInvocationTimestampIsUTCThroughLedgerPublication(t *testing.T) {
 	// Reuse only the prerequisite events, never the in-memory snapshot.
 	events := []model.Event{}
 	for _, b := range l.out[:3] {
-		events = append(events, b.Events...)
+		for _, e := range b.Events {
+			if e.Type != "review.admit" { // this bundle's own review attributes them
+				events = append(events, e)
+			}
+		}
 	}
 	for _, event := range []model.TypedEvent{&model.InvocationStart{Envelope: env}, sealProof(env, 0)} {
 		raw, err := model.EncodeEvent(event)
@@ -52,7 +56,7 @@ func TestInvocationTimestampIsUTCThroughLedgerPublication(t *testing.T) {
 	// Exercise packet encoding/decoding as well as bundle encoding/decoding.
 	packetBytes, err := model.Encode(model.Packet{
 		Version: model.WireVersion, Project: project.ID, CommandID: newID("PKT1"),
-		RequestDigest: newDigest("zone packet"), Author: model.Actor{ID: "runner"},
+		RequestDigest: newDigest("zone packet"), Author: model.Actor{ID: "lane-a"}, // it carries lane-a's criterion
 		CapturedAt: env.StartedAt, Events: events,
 	})
 	if err != nil {
@@ -92,7 +96,7 @@ func TestInvocationTimestampIsUTCThroughLedgerPublication(t *testing.T) {
 				carried[i] = packetRef.CommandID
 			}
 			review, err := model.EncodeEvent(&model.ReviewAdmit{Packets: []model.PacketRef{packetRef}, Outcome: "accepted",
-				Actor: model.Actor{ID: "reviewer"}, Reason: "zone publication", EventPackets: carried,
+				Actor: model.Actor{ID: "reviewer"}, Reason: "zone publication", EventPackets: carried, Authors: map[model.ID]model.Actor{packetRef.CommandID: packet.Author},
 				CapturedAt: map[model.ID]time.Time{packetRef.CommandID: instant.Add(time.Minute).UTC()}})
 			if err != nil {
 				return model.Bundle{}, err

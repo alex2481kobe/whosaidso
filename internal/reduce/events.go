@@ -226,6 +226,9 @@ func (s *state) criterionFix(b model.Bundle, idx int, o Origin, e *model.Criteri
 	if _, ok := s.criteria[key]; ok {
 		return faultAt(CodeDuplicateRecord, b.Sequence, idx, "revision", "criterion revision already fixed")
 	}
+	if err := s.checkPacketAuthor(b, idx, e.Author, "author"); err != nil {
+		return err
+	}
 	s.criteria[key] = Criterion{Key: key, Fix: *e, Origin: o, RecordedAt: b.RecordedAt.UTC()}
 	return nil
 }

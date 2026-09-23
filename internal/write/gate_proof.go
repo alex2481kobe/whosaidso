@@ -50,17 +50,10 @@ func gateProofOperation(event model.TypedEvent, author model.Actor) (*model.Prov
 		// packet author in the review. Invocation facts are checked by the
 		// reducer, including criterion freezing, and by artifact resolution.
 		return nil, nil
-	case *model.CriterionFix:
-		if e.Author != author {
-			return nil, admissionFault("attribution-mismatch", "author", "criterion author must match the immutable packet author")
-		}
-		return nil, nil
-	case *model.ProofAdmit:
-		// A named judgment is the packet's own identified author, never a name
-		// the author writes in for someone else, and never unknown attribution.
-		if !model.SameActor(e.Judgment.Actor, author) {
-			return nil, admissionFault("attribution-mismatch", "judgment.actor", "proof judgment must be the identified packet author")
-		}
+	case *model.CriterionFix, *model.ProofAdmit:
+		// The criterion author and the proof judgment must be the identified
+		// packet author. The reducer checks that from the review's recorded
+		// authors, on admission and replay alike (reduce/packet_author.go).
 		return nil, nil
 	}
 	return nil, admissionFault("unavailable-until-integrated", "event.type", string(event.EventType())+" is not enabled by the admission gate")

@@ -24,12 +24,13 @@ func freezeLedger(t *testing.T) (*ledgerBuilder, model.RecordRef, time.Time) {
 	return l, claim, fixed.RecordedAt
 }
 
-// startReview is admission's review of one packet carrying n events: it
-// attributes them when attribute is set and records captured when non-nil.
+// startReview is admission's review of one packet carrying n events, authored
+// by the criterion's author: it attributes them when attribute is set and
+// records captured when non-nil.
 func startReview(n int, captured *time.Time, attribute bool) *model.ReviewAdmit {
 	packet := newID("PKTF")
 	review := &model.ReviewAdmit{Packets: []model.PacketRef{{CommandID: packet, Digest: newDigest("freeze")}}, Outcome: "accepted",
-		Actor: model.Actor{ID: "coordinator"}, Reason: "freeze fixture"}
+		Actor: model.Actor{ID: "coordinator"}, Reason: "freeze fixture", Authors: map[model.ID]model.Actor{packet: {ID: "lane-a"}}}
 	if attribute {
 		for i := 0; i < n; i++ {
 			review.EventPackets = append(review.EventPackets, packet)

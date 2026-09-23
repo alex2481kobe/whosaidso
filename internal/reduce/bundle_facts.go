@@ -20,10 +20,11 @@ import (
 // that bundle is applied; a snapshot never carries it.
 type bundleFacts struct {
 	events   []model.TypedEvent
-	packetOf map[int]model.ID       // event index -> the packet that carried it
-	captured map[model.ID]time.Time // packet -> the time intake captured it
-	starts   map[InvocationKey]int  // candidate invocation.start -> event index
-	seals    map[InvocationKey]int  // candidate invocation.seal -> event index
+	packetOf map[int]model.ID         // event index -> the packet that carried it
+	captured map[model.ID]time.Time   // packet -> the time intake captured it
+	authors  map[model.ID]model.Actor // packet -> the author it was captured with
+	starts   map[InvocationKey]int    // candidate invocation.start -> event index
+	seals    map[InvocationKey]int    // candidate invocation.seal -> event index
 	rejected []RejectedFact
 }
 
@@ -43,6 +44,7 @@ func indexBundle(b model.Bundle) (*bundleFacts, error) {
 		events:   make([]model.TypedEvent, 0, len(b.Events)),
 		packetOf: map[int]model.ID{},
 		captured: map[model.ID]time.Time{},
+		authors:  map[model.ID]model.Actor{},
 		starts:   map[InvocationKey]int{},
 		seals:    map[InvocationKey]int{},
 	}
@@ -77,7 +79,7 @@ func first(m map[InvocationKey]int, k InvocationKey, i int) {
 	}
 }
 
-// indexReview records one review's attribution, capture stamps and rejected
+// indexReview records one review's attribution, authors, capture stamps and rejected
 // facts. An event_packets list must cover exactly the events before the
 // review, because a shorter or longer one would attribute an event to the
 // wrong author.
@@ -94,6 +96,11 @@ func (f *bundleFacts) indexReview(b model.Bundle, idx int, e *model.ReviewAdmit)
 	for packet, at := range e.CapturedAt {
 		if _, ok := f.captured[packet]; !ok {
 			f.captured[packet] = at.UTC()
+		}
+	}
+	for packet, author := range e.Authors {
+		if _, ok := f.authors[packet]; !ok {
+			f.authors[packet] = author
 		}
 	}
 	if e.Outcome == "accepted" {
