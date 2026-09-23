@@ -68,7 +68,7 @@ func TestEveryJSONAnswerKeyIsSnakeCase(t *testing.T) {
 	p := testProject(t)
 	richWorld(t, p)
 	requests := append(richRequests(), ViewRequest{View: "show", Kind: "decision"}, ViewRequest{View: "show", Kind: "task"},
-		ViewRequest{View: "show", Stale: richStale}, ViewRequest{View: "continue", ID: testID(10)})
+		ViewRequest{View: "show", Stale: richStale()}, ViewRequest{View: "continue", ID: testID(10)})
 	// Control: the fixture really carries the facts whose keys were Go-cased.
 	show, history := view_(t, p, ViewRequest{View: "show"}).(*ShowAnswer), historyOf(t, p, "")
 	if len(show.Records) < 10 || len(history.Reviews) == 0 || len(todoOf(t, p).IntakePending) != 2 {

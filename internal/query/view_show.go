@@ -62,7 +62,7 @@ type OwedCounts struct {
 var kindOrder = map[model.Kind]int{model.Task: 0, model.Claim: 1, model.Decision: 2, model.Instrument: 3}
 
 // showOne describes the one current record, and the runs its claim observes.
-func showOne(s reduce.Snapshot, h ViewHeader, root reduce.Record, stale StaleCheck) *ShowAnswer {
+func showOne(s reduce.Snapshot, h ViewHeader, root reduce.Record, stale *StaleGit) *ShowAnswer {
 	v, notes := newDetailer(s).detail(root)
 	a := &ShowAnswer{ViewHeader: h, Records: []Detail{v}, Attention: append([]Attention{}, notes...)}
 	if v.Task != nil && v.Task.Status == reduce.StatusBlocked {
@@ -83,9 +83,9 @@ func showOne(s reduce.Snapshot, h ViewHeader, root reduce.Record, stale StaleChe
 	return a
 }
 
-func staleOf(s reduce.Snapshot, check StaleCheck, only map[model.ID]bool) *StaleSection {
+func staleOf(s reduce.Snapshot, git *StaleGit, only map[model.ID]bool) *StaleSection {
 	out := &StaleSection{BlindSpot: staleBlindSpot, Claims: []StaleClaim{}}
-	for _, c := range check(s) {
+	for _, c := range staleClaims(s, git) {
 		if only == nil || only[c.Claim.RecordID] {
 			out.Claims = append(out.Claims, c)
 		}
@@ -94,7 +94,7 @@ func staleOf(s reduce.Snapshot, check StaleCheck, only map[model.ID]bool) *Stale
 }
 
 // showAll is bare show, or bare show restricted to kind when kind is set.
-func showAll(s reduce.Snapshot, h ViewHeader, kind model.Kind, stale StaleCheck) *ShowAnswer {
+func showAll(s reduce.Snapshot, h ViewHeader, kind model.Kind, stale *StaleGit) *ShowAnswer {
 	d := newDetailer(s)
 	a := &ShowAnswer{ViewHeader: h, Records: []Detail{}, Attention: []Attention{}}
 	sum := &Summary{Kind: "all"}

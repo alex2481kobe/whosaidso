@@ -20,7 +20,7 @@ type ViewRequest struct {
 	Kind         string                   // show without ID only: task, claim, decision or instrument
 	Limit        int                      // todo and continue: the optional-result cap; 0 means none
 	Observed     *Observation             // continue only: the caller's fresh workspace observation
-	Stale        StaleCheck               // show only, on request: runs git, so never by default
+	Stale        *StaleGit                // show only, on request: the caller runs git, so never by default
 	SelfAdmitted model.SelfAdmissionState // history without ID only
 }
 
