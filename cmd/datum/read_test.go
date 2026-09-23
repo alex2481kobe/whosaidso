@@ -200,15 +200,20 @@ func TestReadCLISelfAdmissionAudit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// C39: the filter answers from the recorded author against the admitter
+	// "reviewer" (same, distinct, unknown). The legacy stored field is rotated
+	// to contradict each answer, so reading it would select the wrong packet.
 	refs := []model.PacketRef{}
-	states := map[model.ID]model.SelfAdmissionState{}
-	for i, state := range []model.SelfAdmissionState{"true", "false", "unknown"} {
+	authors := map[model.ID]model.Actor{}
+	stored := map[model.ID]model.SelfAdmissionState{}
+	for i, author := range []model.Actor{{ID: "reviewer"}, {ID: "other"}, {UnknownReason: "author not recorded"}} {
 		id := cliID(50 + i)
 		refs = append(refs, model.PacketRef{CommandID: id, Digest: model.HashBytes([]byte(id))})
-		states[id] = state
+		authors[id] = author
+		stored[id] = []model.SelfAdmissionState{"false", "unknown", "true"}[i]
 	}
 	event, err := model.EncodeEvent(&model.ReviewAdmit{Packets: refs, Outcome: "rejected", Actor: model.Actor{ID: "reviewer"},
-		Reason: "per-packet audit control", SelfAdmission: states})
+		Reason: "per-packet audit control", SelfAdmission: stored, Authors: authors})
 	if err != nil {
 		t.Fatal(err)
 	}

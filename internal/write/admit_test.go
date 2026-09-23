@@ -179,12 +179,16 @@ func TestAdmissionCaptureForwardReferenceReplayAndRetry(t *testing.T) {
 		t.Fatal("admission changed authored event data or packet event order")
 	}
 	review, err := model.DecodeEvent(bundle.Events[3])
-	if err != nil || !strings.Contains(review.(*model.ReviewAdmit).Reason, "Self-admitted: true") {
-		t.Fatalf("self admission is not visible: %v, %v", review, err)
+	if err != nil || review.(*model.ReviewAdmit).Reason != request.Reason || review.(*model.ReviewAdmit).SelfAdmission != nil {
+		t.Fatalf("C39: self-admission is computed, never stored or written as prose: %v, %v", review, err)
 	}
 	for _, ref := range []model.PacketRef{first, second} {
-		if got := review.(*model.ReviewAdmit).SelfAdmission[ref.CommandID]; got != model.SelfAdmissionTrue {
-			t.Fatalf("self admission was not recorded for %s: %q", ref.CommandID, got)
+		if got := review.(*model.ReviewAdmit).Authors[ref.CommandID]; got != f.author {
+			t.Fatalf("packet author was not recorded for %s: %+v", ref.CommandID, got)
+		}
+		projected, ok := f.snapshot().Review(reduce.ReviewKey{Project: f.project.ID, CommandID: ref.CommandID})
+		if !ok || projected.SelfAdmission != model.SelfAdmissionTrue {
+			t.Fatalf("self admission is not visible for %s: %+v", ref.CommandID, projected)
 		}
 	}
 	if len(f.snapshot().Records()) != 2 || len(f.snapshot().Sources()) != 1 {
@@ -235,26 +239,21 @@ func TestAdmissionStructuredSelfAdmission(t *testing.T) {
 					t.Fatal(err)
 				}
 				review := raw.(*model.ReviewAdmit)
-				if len(review.SelfAdmission) != len(refs) {
-					t.Fatalf("not every packet has a structured comparison: %+v", review)
+				// C39: no stored comparison; the recorded author is the fact.
+				if review.SelfAdmission != nil || len(review.Authors) != len(refs) {
+					t.Fatalf("admission must record every author and store no comparison: %+v", review)
 				}
-				expectedReason := request.Reason
 				for i, ref := range refs {
-					author := authors[i].ID
-					if author == "" {
-						author = "unknown: " + authors[i].UnknownReason
-					}
-					expectedReason += fmt.Sprintf("\nPacket %s author %q. Self-admitted: %s.", ref.CommandID, author, want[i])
-					if got := review.SelfAdmission[ref.CommandID]; got != want[i] {
-						t.Errorf("packet %s state = %q, want %q", ref.CommandID, got, want[i])
+					if got := review.Authors[ref.CommandID]; got != authors[i] {
+						t.Errorf("packet %s author = %+v, want %+v", ref.CommandID, got, authors[i])
 					}
 					projected, ok := f.snapshot().Review(reduce.ReviewKey{Project: f.project.ID, CommandID: ref.CommandID})
 					if !ok || projected.Packet != ref || projected.SelfAdmission != want[i] || projected.Outcome != outcome {
 						t.Errorf("wrong admitted fact for packet %s: %+v", ref.CommandID, projected)
 					}
 				}
-				if review.Reason != expectedReason {
-					t.Fatalf("admitter words or readable suffix changed:\ngot  %q\nwant %q", review.Reason, expectedReason)
+				if review.Reason != request.Reason {
+					t.Fatalf("admitter words changed or a suffix was appended:\ngot  %q\nwant %q", review.Reason, request.Reason)
 				}
 				if got := len(f.snapshot().Records()); (outcome == "accepted" && got != len(refs)) || (outcome != "accepted" && got != 0) {
 					t.Fatalf("wrong publication for %s: %d records", outcome, got)

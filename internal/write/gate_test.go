@@ -356,7 +356,7 @@ func TestAdmissionClaimRemainsUnmeasured(t *testing.T) {
 				t.Fatalf("assertion acquired measurement or support: %+v", got)
 			}
 			review, ok := snapshot.Review(reduce.ReviewKey{Project: f.project.ID, CommandID: packet.CommandID})
-			if !ok || !strings.Contains(review.Reason, "Self-admitted: true") {
+			if !ok || review.SelfAdmission != model.SelfAdmissionTrue {
 				t.Fatalf("self-admission must be admitted and queryable: %+v", review)
 			}
 		})
@@ -471,7 +471,7 @@ func TestAdmissionClaimForwardProviderAndUnknownAuthor(t *testing.T) {
 		t.Fatalf("explicit unknown provenance was lost: %+v", record)
 	}
 	review, ok := f.snapshot().Review(reduce.ReviewKey{Project: f.project.ID, CommandID: second.CommandID})
-	if !ok || !strings.Contains(review.Reason, "Self-admitted: unknown") {
+	if !ok || review.SelfAdmission != model.SelfAdmissionUnknown {
 		t.Fatalf("unknown attribution invented self-admission: %+v", review)
 	}
 	// The same reference also resolves from an admitted snapshot.
@@ -541,8 +541,12 @@ func TestAdmissionUnknownIdentityIsNotSelfAdmission(t *testing.T) {
 		t.Fatal(err)
 	}
 	event, err := model.DecodeEvent(bundle.Events[len(bundle.Events)-1])
-	if err != nil || !strings.Contains(event.(*model.ReviewAdmit).Reason, "Self-admitted: unknown") {
-		t.Fatalf("matching unknown reasons were mistaken for an identity: %v, %v", event, err)
+	if err != nil || event.(*model.ReviewAdmit).Authors[packet.CommandID] != f.author {
+		t.Fatalf("unknown author was not recorded: %v, %v", event, err)
+	}
+	review, ok := f.snapshot().Review(reduce.ReviewKey{Project: bundle.Project, CommandID: packet.CommandID})
+	if !ok || review.SelfAdmission != model.SelfAdmissionUnknown {
+		t.Fatalf("matching unknown reasons were mistaken for an identity: %+v", review)
 	}
 }
 

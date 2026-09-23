@@ -3,8 +3,9 @@ package reduce
 // Packet authorship (R10.1 revised): who wrote the packet that carried an
 // admitted event, read from the review.admit that admitted it. Accountability
 // is visibility, so the author is a ledger fact next to authority and quote.
-// This file records and answers authorship only; it never compares the author
-// with an authority or an admitter, and never gates anything on it.
+// This file records and answers authorship, and computes self-admission from
+// it; it never compares the author with an authority and never gates anything
+// on authorship.
 
 import (
 	"datum/internal/model"
@@ -54,3 +55,19 @@ func (s *state) eventAuthor(o Origin) PacketAuthor {
 func (s Snapshot) EventAuthor(o Origin) PacketAuthor {
 	return s.inner().eventAuthor(o)
 }
+
+// selfAdmission compares a packet's recorded author with the actor that
+// admitted it: TRUE only for the same known actor, FALSE for two distinct
+// known actors, UNKNOWN otherwise. Two unknown actors never match, and a
+// legacy stored comparison is never consulted.
+func selfAdmission(author, admitter model.Actor) model.SelfAdmissionState {
+	switch {
+	case model.SameActor(author, admitter):
+		return model.SelfAdmissionTrue
+	case knownActor(author) && knownActor(admitter):
+		return model.SelfAdmissionFalse
+	}
+	return model.SelfAdmissionUnknown
+}
+
+func knownActor(a model.Actor) bool { return !model.Blank(a.ID) && model.Blank(a.UnknownReason) }

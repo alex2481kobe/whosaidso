@@ -14,19 +14,25 @@ import (
 func TestSelfAdmissionAuditThreeStatesAndLegacy(t *testing.T) {
 	p := testProject(t)
 	states := []model.SelfAdmissionState{model.SelfAdmissionTrue, model.SelfAdmissionFalse, model.SelfAdmissionUnknown}
+	// C39: the answer is computed from each packet's recorded author and the
+	// admitter. The legacy stored field is rotated so it contradicts every
+	// computed answer; a filter that read it would select the wrong packets.
+	authors := []model.Actor{{ID: "reviewer"}, {ID: "other"}, {UnknownReason: "author not recorded"}}
 	expected := map[model.ID]string{}
 	// Different facts in one review must not borrow a sibling's comparison.
 	for i, outcome := range []string{"accepted", "rejected", "correction-requested"} {
 		refs := []model.PacketRef{}
-		facts := map[model.ID]model.SelfAdmissionState{}
+		stored := map[model.ID]model.SelfAdmissionState{}
+		recorded := map[model.ID]model.Actor{}
 		for j := 2; j >= 0; j-- {
 			id := testID(10*i + j + 1)
 			refs = append(refs, model.PacketRef{CommandID: id, Digest: model.HashBytes([]byte(id))})
-			facts[id] = states[j]
+			stored[id] = states[(j+1)%3]
+			recorded[id] = authors[j]
 			expected[id] = []string{"true", "false", "UNKNOWN"}[j]
 		}
 		appendEvents(t, p, 100+i, &model.ReviewAdmit{Packets: refs, Outcome: outcome,
-			Actor: model.Actor{ID: "reviewer"}, Reason: "Self-admitted: true.", SelfAdmission: facts})
+			Actor: model.Actor{ID: "reviewer"}, Reason: "Self-admitted: true.", SelfAdmission: stored, Authors: recorded})
 	}
 	legacy := model.PacketRef{CommandID: testID(31), Digest: model.HashBytes([]byte("legacy"))}
 	appendEvents(t, p, 103, &model.ReviewAdmit{Packets: []model.PacketRef{legacy}, Outcome: "rejected",
@@ -35,7 +41,9 @@ func TestSelfAdmissionAuditThreeStatesAndLegacy(t *testing.T) {
 	expected[legacy.CommandID], expected[unknown.CommandID] = "UNKNOWN", "UNKNOWN"
 	appendEvents(t, p, 104, &model.ReviewAdmit{Packets: []model.PacketRef{unknown}, Outcome: "accepted",
 		Actor: model.Actor{UnknownReason: "identity not supplied"}, Reason: "Self-admitted: false.",
-		SelfAdmission: map[model.ID]model.SelfAdmissionState{unknown.CommandID: model.SelfAdmissionUnknown}})
+		SelfAdmission: map[model.ID]model.SelfAdmissionState{unknown.CommandID: model.SelfAdmissionUnknown},
+		// Two unknowns with the same reason never match.
+		Authors: map[model.ID]model.Actor{unknown.CommandID: {UnknownReason: "identity not supplied"}}})
 	before := treeBytes(t, p.Root)
 	for _, tc := range []struct {
 		filter model.SelfAdmissionState
@@ -160,7 +168,7 @@ func TestSelfAdmissionRealLedgerRemainsUnknown(t *testing.T) {
 	if len(a.Reviews) == 0 {
 		t.Fatalf("the live ledger must still contain legacy reviews: %+v", a)
 	}
-	found := false
+	found, early := false, 0
 	for _, r := range a.Reviews {
 		if r.SelfAdmission != "UNKNOWN" {
 			t.Fatalf("legacy fact inferred: %+v", r)
@@ -168,27 +176,31 @@ func TestSelfAdmissionRealLedgerRemainsUnknown(t *testing.T) {
 		if r.Origin.Sequence == 1 {
 			found = strings.Contains(r.Reason, "Self-admitted: true.")
 		}
+		if r.Origin.Sequence <= 4 {
+			early++
+		}
 	}
 	if !found {
 		t.Fatal("lost original first-bundle self-admission prose")
 	}
-	// The same inventory-versus-invariant correction as above. This asserted
-	// that NO review is classified true or false, which held only while the
-	// ledger contained nothing written after the field existed. Two
-	// instruments were then declared and admitted by their own author, which
-	// is genuinely self-admitted and correctly recorded as true.
-	//
-	// The invariant is narrower and survives growth: a review from BEFORE the
-	// field existed is never classified either way. Sequences 1 and 2 are
-	// those records, and no later record can move them.
+	// Sequences 1-4 each dispositioned one packet and are fixed history.
+	if early != 4 {
+		t.Fatalf("the four committed reviews without recorded authors must all select as unknown, got %d", early)
+	}
+	// The same inventory-versus-invariant correction as above, and it
+	// survives growth: a later review that records its packet authors may
+	// genuinely read true or false. Sequences 1-4 recorded no packet authors
+	// (3 and 4 store a legacy "true"), so under C39 (self-admission is
+	// computed from the recorded author and the admitter, step 7) none of
+	// them can be classified either way, and no later record can move them.
 	for _, state := range []model.SelfAdmissionState{"true", "false"} {
 		selected, err := Read(p, Request{Command: "history", SelfAdmitted: state})
 		if err != nil || selected.Watermark != a.Watermark {
 			t.Fatalf("classified read failed for %s: %+v %v", state, selected, err)
 		}
 		for _, r := range selected.Reviews {
-			if r.Origin.Sequence <= 2 {
-				t.Fatalf("a review predating the field was classified as %s, which can only have come from reading its prose: %+v", state, r)
+			if r.Origin.Sequence <= 4 {
+				t.Fatalf("a review without a recorded author was classified as %s, which can only have come from its prose or its stored field: %+v", state, r)
 			}
 		}
 	}
