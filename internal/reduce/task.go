@@ -269,7 +269,7 @@ func (s *state) closedSuccess(target model.RecordRef) (Truth, string) {
 		}
 		return TruthFalse, "closure carries no delivery witness"
 	}
-	return TruthTrue, ""
+	return TruthTrue, fmt.Sprintf("task %s revision %d closed as success with its acceptance and delivery witnessed", target.RecordID, target.Revision)
 }
 
 func (s *state) prerequisites(rec Record) []PrerequisiteResult {

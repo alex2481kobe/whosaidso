@@ -79,7 +79,7 @@ func (s *state) claimProof(target model.RecordRef) (Truth, string) {
 	if truth != TruthTrue {
 		return truth, fmt.Sprintf("claim %s revision %d is PROVEN but not currently supported: %s", target.RecordID, target.Revision, detail)
 	}
-	return TruthTrue, ""
+	return TruthTrue, fmt.Sprintf("claim %s revision %d is PROVEN and currently supported", target.RecordID, target.Revision)
 }
 
 // decisionApproved is TRUE only when the disposition in force on the exact
@@ -103,5 +103,5 @@ func (s *state) decisionApproved(target model.RecordRef) (Truth, string) {
 	if truth != TruthTrue {
 		return truth, fmt.Sprintf("decision %s revision %d is approved but not in force: %s", target.RecordID, target.Revision, detail)
 	}
-	return TruthTrue, ""
+	return TruthTrue, fmt.Sprintf("decision %s revision %d is approved and in force", target.RecordID, target.Revision)
 }
