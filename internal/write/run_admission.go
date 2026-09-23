@@ -2,8 +2,7 @@ package write
 
 // Admission-time checks of a run's own envelope live here: that each declared
 // output is this run's (read from its run directory or its own captured blobs,
-// verified, materialized), and that its configuration names are the ones the
-// exact instrument revision declares. Generic artifact resolution, proof
+// verified, materialized). Generic artifact resolution, proof
 // families and the admission transaction do not.
 
 import (
@@ -15,7 +14,6 @@ import (
 
 	"datum/internal/evidence"
 	"datum/internal/model"
-	"datum/internal/reduce"
 )
 
 // runAdmitOutputs proves each output a seal declares existed as THIS run's
@@ -89,28 +87,4 @@ func runReadOwnFile(root, rel string) ([]byte, error) {
 		err = fmt.Errorf("exceeds the resolver byte limit")
 	}
 	return b, err
-}
-
-// runAdmissionConfig applies model.ValidateInvocationConfig to a start or seal
-// whenever the exact instrument revision it names is resolvable in the snapshot,
-// so a hand-captured envelope cannot use knob names `datum run` would refuse.
-// An unresolvable revision is left to the reference gates, which refuse it.
-func runAdmissionConfig(snapshot reduce.Snapshot, event model.TypedEvent) error {
-	var env model.InvocationEnvelope
-	switch e := event.(type) {
-	case *model.InvocationStart:
-		env = e.Envelope
-	case *model.InvocationSeal:
-		env = e.Envelope
-	default:
-		return nil
-	}
-	record, ok := snapshot.Record(env.InstrumentRef)
-	if !ok || record.Instrument == nil {
-		return nil
-	}
-	if err := model.ValidateInvocationConfig(env, *record.Instrument); err != nil {
-		return admissionFault("invalid-field", "envelope", "configuration names differ from the instrument's declared config surface: "+err.Error())
-	}
-	return nil
 }

@@ -313,8 +313,10 @@ func TestProofVerifyContractPathNamingAnotherRunNeverMatches(t *testing.T) {
 }
 
 // Guard: declaring both the run-dir form and the bare contract path is
-// ambiguous and the proof is refused, even though both hold passing bytes.
+// ambiguous, so a seal carrying the bare form is refused at admission and the
+// run never proves, even though both paths hold passing bytes.
 func TestProofVerifyRunDirAndBareFormTogetherAreAmbiguous(t *testing.T) {
+	// R9 migration: the bare form is no longer expressible; assert its refusal at admission.
 	pvOwnRunDirControl(t, []byte(pvPass))
 	w := pvNew(t)
 	pvPut(t, w.p.Root, "out/result.json", []byte(pvPass))
@@ -323,12 +325,11 @@ func TestProofVerifyRunDirAndBareFormTogetherAreAmbiguous(t *testing.T) {
 		pvPut(t, w.p.Root, pvRunPath(id, "out/result.json"), []byte(pvPass))
 		return []model.ArtifactRef{pvPin([]byte(pvPass), pvRunPath(id, "out/result.json")), pvPin([]byte(pvPass), "out/result.json")}
 	})
-	if err != nil {
-		t.Fatalf("control: the two outputs themselves must admit: %v", err)
+	if recCode(err) != "invalid-field" {
+		t.Errorf("expected a seal declaring the bare contract path to be refused at admission with invalid-field, got %v; a bare-form locator can borrow the criterion's example bytes", err)
 	}
-	err = w.prove(map[model.ID]string{id: "supports"})
-	if recCode(err) != "criterion-unsatisfied" || !strings.Contains(err.Error(), "2 outputs declare") {
-		t.Errorf("expected criterion-unsatisfied naming two outputs for the ambiguous run, got %v; position must not choose between the run-dir and bare forms", err)
+	if err == nil {
+		_ = w.prove(map[model.ID]string{id: "supports"})
 	}
 	if w.status() == reduce.StatusProven {
 		t.Error("an ambiguous run reached PROVEN")

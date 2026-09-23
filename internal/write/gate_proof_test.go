@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"datum/internal/evidence"
 	"datum/internal/model"
 	"datum/internal/reduce"
 	"datum/internal/store"
@@ -26,6 +27,9 @@ const (
 	proofPass = `{"results":{"unit":"mm","population":"pose sweep","denominator":"poses","values":[0.0100,0.0200]},"population":{"population":"pose sweep","denominator":"poses","values":["pose-a","pose-b"]}}`
 	proofFail = `{"results":{"unit":"mm","population":"pose sweep","denominator":"poses","values":[0.2000,0.0100]},"population":{"population":"pose sweep","denominator":"poses","values":["pose-a","pose-b"]}}`
 	proofPath = "out/result.json"
+	// proofMachine is a fixed, KNOWN machine id so fixture runs are comparable
+	// (unknown machine ids never match).
+	proofMachine model.ID = "7ZZZZZZZZZZZZZZZZZZZZZZZZZ"
 )
 
 type proofWorld struct {
@@ -99,7 +103,7 @@ func (w *proofWorld) fix(claim model.RecordRef) model.CriterionRef {
 
 func (w *proofWorld) envelope(criterion model.CriterionRef) model.InvocationEnvelope {
 	return model.InvocationEnvelope{InvocationID: w.f.id(), AttemptID: w.attempt, InstrumentRef: w.instrument, CriterionRef: proofKnown(criterion),
-		ExecutionSourceIdentity: model.ExecutionIdentity{Project: w.f.project.ID, MachineID: proofUnknown[model.ID]("fixture"), SourceRefs: []model.ArtifactRef{}, Head: proofUnknown[model.GitHead]("fixture"), Dirty: proofUnknown[bool]("fixture")},
+		ExecutionSourceIdentity: model.ExecutionIdentity{Project: w.f.project.ID, MachineID: proofKnown(proofMachine), SourceRefs: []model.ArtifactRef{}, Head: proofUnknown[model.GitHead]("fixture"), Dirty: proofUnknown[bool]("fixture")},
 		Argv:                    []string{"fixture-measurement"}, InputRefs: []model.ArtifactRef{}, ConfigRequested: map[string]model.Scalar{}, ConditionsDeclared: map[string]model.Scalar{},
 		ConfigEffective: proofUnknown[map[string]model.Availability[model.Scalar]]("not launched"), ConditionsObserved: proofUnknown[map[string]model.Availability[model.Scalar]]("not launched"),
 		Isolation: proofUnknown[model.Isolation]("not enforced"), StartedAt: time.Now().UTC(), ObservedAt: proofUnknown[time.Time]("not launched"),
@@ -114,7 +118,7 @@ func proofSealed(env model.InvocationEnvelope, body string) *model.InvocationSea
 	}
 	env.ObservedAt = proofKnown(env.StartedAt.Add(time.Millisecond))
 	env.Outcome = proofKnown(model.ProcessOutcome{Kind: "exit", ExitCode: &exit})
-	env.OutputRefs = proofKnown([]model.ArtifactRef{proofPin(body, proofPath)})
+	env.OutputRefs = proofKnown([]model.ArtifactRef{proofPin(body, evidence.RunDir(env.InvocationID)+"/"+proofPath)})
 	env.ConfigEffective = proofKnown(map[string]model.Availability[model.Scalar]{})
 	env.ConditionsObserved = proofKnown(map[string]model.Availability[model.Scalar]{})
 	return &model.InvocationSeal{StartRef: model.InvocationRef{Project: env.ExecutionSourceIdentity.Project, InvocationID: env.InvocationID}, Envelope: env}
@@ -284,4 +288,13 @@ func TestAdmissionChecksInvocationConfigNames(t *testing.T) {
 	sealed.Envelope.ConfigEffective = proofKnown(map[string]model.Availability[model.Scalar]{"mode": proofKnown(undeclared["mode"])})
 	w.f.accept(w.f.capture(nil, &model.InvocationStart{Envelope: env}))
 	w.f.refuse(w.f.request(w.f.capture([][]byte{[]byte(proofPass)}, sealed)), "invalid-field")
+
+	// Moved from the removed runAdmissionConfig test: an unresolvable
+	// instrument revision is left to the reference gates.
+	unresolved := w.envelope(w.criterion)
+	unresolved.ConfigRequested = undeclared
+	unresolved.InstrumentRef.Revision = 9
+	if err := gateInvocationConfig(w.f.snapshot(), unresolved); err != nil {
+		t.Fatalf("an unresolvable revision is left to the reference gates: %v", err)
+	}
 }

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"datum/internal/evidence"
 	"datum/internal/model"
 	"datum/internal/reduce"
 )
@@ -59,7 +60,7 @@ func TestReconciliationSealCannotCarryAReading(t *testing.T) {
 			code := "reconciliation-reading"
 			switch field {
 			case "output_refs":
-				seal.Envelope.OutputRefs = proofKnown([]model.ArtifactRef{proofPin(proofPass, proofPath)})
+				seal.Envelope.OutputRefs = proofKnown([]model.ArtifactRef{proofPin(proofPass, evidence.RunDir(env.InvocationID)+"/"+proofPath)})
 			case "observed_at":
 				seal.Envelope.ObservedAt = proofKnown(env.StartedAt)
 			case "config_effective":

@@ -1,8 +1,7 @@
 package write
 
 // Seal admission of a run's own outputs (R9's single run-directory form, bytes
-// proven from the run directory or the seal's own blobs) and the admission-time
-// config-name check. Proof families and generic artifact gates are tested in
+// proven from the run directory or the seal's own blobs). Proof families and generic artifact gates are tested in
 // the gate_*_test.go files.
 
 import (
@@ -119,38 +118,5 @@ func TestSealAdmissionProvesEachOutputIsThisRuns(t *testing.T) {
 			}
 			w.f.refuse(w.f.request(append([]model.PacketRef{start}, tc.build(w, env)...)...), tc.code)
 		})
-	}
-}
-
-func TestAdmissionConfigNamesFollowTheExactInstrumentRevision(t *testing.T) {
-	w := newProofWorld(t, true)
-	snapshot := w.f.snapshot()
-	env := w.envelope(w.criterion)
-	if err := runAdmissionConfig(snapshot, &model.InvocationStart{Envelope: env}); err != nil {
-		t.Fatalf("control: declared (empty) configuration admits: %v", err)
-	}
-	if err := runAdmissionConfig(snapshot, proofSealed(env, proofPass)); err != nil {
-		t.Fatalf("control: a seal with no undeclared knob admits: %v", err)
-	}
-
-	requested := env
-	requested.ConfigRequested = map[string]model.Scalar{"cameraPosition": {Type: "string", String: &[]string{"front"}[0]}}
-	if err := runAdmissionConfig(snapshot, &model.InvocationStart{Envelope: requested}); err == nil || !strings.Contains(err.Error(), "cameraPosition") {
-		t.Fatalf("an undeclared requested knob must be refused at start admission: %v", err)
-	}
-	seal := proofSealed(env, proofPass)
-	value := model.Scalar{Type: "string", String: &[]string{"front"}[0]}
-	seal.Envelope.ConfigEffective = proofKnown(map[string]model.Availability[model.Scalar]{"cam": proofKnown(value)})
-	if err := runAdmissionConfig(snapshot, seal); err == nil || !strings.Contains(err.Error(), "cam") {
-		t.Fatalf("an undeclared effective knob must be refused at seal admission: %v", err)
-	}
-
-	unresolved := requested
-	unresolved.InstrumentRef.Revision = 9
-	if err := runAdmissionConfig(snapshot, &model.InvocationStart{Envelope: unresolved}); err != nil {
-		t.Fatalf("an unresolvable revision is left to the reference gates: %v", err)
-	}
-	if err := runAdmissionConfig(snapshot, w.f.task()); err != nil {
-		t.Fatalf("other events are not invocation envelopes: %v", err)
 	}
 }
