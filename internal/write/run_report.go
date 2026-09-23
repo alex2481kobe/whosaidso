@@ -11,16 +11,20 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
 
+	"datum/internal/evidence"
 	"datum/internal/model"
 	"datum/internal/store"
 )
 
 // ProducerReport is the version 1 JSON artifact written to DATUM_RUN_REPORT.
-// DATUM_RUN_DIR is a fresh directory for this invocation's output files.
+// DATUM_RUN_DIR is a fresh staging directory for this invocation's output
+// files, outside the project; each output is named in the seal by its logical
+// path in the run's own directory, <artifacts>/runs/<invocation-id>/<path>.
 // Example: {"version":1,"config_effective":{"samples":{"type":"number",
 // "number":8}},"conditions_observed":{},"outputs":[{"path":"result.json",
 // "media_type":"application/json"}]}.
@@ -111,13 +115,13 @@ func runSeal(ctx context.Context, project store.Project, request RunRequest, env
 	ref, err := store.WriteIntake(ctx, project, store.IntakeRequest{
 		Author: request.Author, Blobs: readers,
 		BuildEvents: func(blobs []store.CapturedBlob) ([]model.Event, error) {
+			// Each locator is the output's logical name in the run's own
+			// directory (R9), not where staging put it: the bytes travel in
+			// this packet's blobs and are published once, by digest.
+			runDir := evidence.RunDirIn(project.ArtifactDir(), envelope.InvocationID)
 			refs := make([]model.ArtifactRef, len(blobs))
 			for i, blob := range blobs {
-				rel, err := filepath.Rel(project.Root, filepath.Join(dir, filepath.FromSlash(outputs[i].Path)))
-				if err != nil {
-					return nil, err
-				}
-				refs[i] = model.ArtifactRef{Kind: "content", Content: &model.ContentPin{SHA256: blob.SHA256, Length: blob.Length, MediaType: outputs[i].MediaType, Locators: []model.Locator{{Path: filepath.ToSlash(rel)}}}, Selector: model.Selector{Kind: "whole"}}
+				refs[i] = model.ArtifactRef{Kind: "content", Content: &model.ContentPin{SHA256: blob.SHA256, Length: blob.Length, MediaType: outputs[i].MediaType, Locators: []model.Locator{{Path: path.Join(runDir, outputs[i].Path)}}}, Selector: model.Selector{Kind: "whole"}}
 			}
 			envelope.OutputRefs = runKnown(refs)
 			if streamErr != nil {

@@ -110,9 +110,12 @@ func (r *Resolver) readSelector(ctx context.Context, outs []model.ArtifactRef, r
 	ref.Selector = want.Selector
 	if ref.Content != nil {
 		// Only the matched run-dir path, then the store. Seal admission proved
-		// these bytes existed as this run's output (its own directory or its
-		// captured blobs) and materialized them, so the store holds THIS run's
-		// admitted bytes under their digest once the run directory is gone.
+		// these bytes were this run's output (its captured blobs or its run
+		// directory) and published them, so the store holds THIS run's admitted
+		// bytes under their digest. The run-dir path is the output's logical
+		// name: datum run stages outside the project and never writes there, so
+		// the store copy is the only one. Older runs and hand-placed outputs
+		// may still have bytes at the path, and they are read there first.
 		pin := *ref.Content
 		pin.Locators, ref.Content = []model.Locator{{Path: at}}, &pin
 	}
@@ -130,16 +133,57 @@ func (r *Resolver) readSelector(ctx context.Context, outs []model.ArtifactRef, r
 	return reading, "", nil
 }
 
-// RunDir is the project-relative directory write.Run gives one invocation in
-// the default artifact store. Production names the project's store: RunDirIn.
+// RunDir is the project-relative run directory that names one invocation's
+// outputs in the default artifact store. Production names the project's store: RunDirIn.
 func RunDir(invocation model.ID) string {
 	return RunDirIn(DefaultArtifactDir, invocation)
 }
 
-// RunDirIn is the project-relative directory write.Run gives one invocation,
-// inside the project-relative artifact store artifactDir.
+// RunDirIn is the project-relative run directory that names one invocation's
+// outputs, inside the project-relative artifact store artifactDir. It is a
+// logical name that binds an output to its invocation (R9), independent of
+// where the bytes physically are: write.Run stages outside the project and
+// admission publishes by digest.
 func RunDirIn(artifactDir string, invocation model.ID) string {
 	return path.Join(artifactDir, "runs", string(invocation))
+}
+
+// OriginRunOutput marks bytes admission already holds as one invocation's own
+// output (its captured blob or its run directory) and verified in memory.
+const OriginRunOutput Origin = "run-output"
+
+// RunOutput verifies bytes admission proved to be this invocation's own output
+// against that output's reference, applying the checks readContent applies to
+// bytes it reads: declared path syntax, the byte limit, the pin's digest and
+// length, the LFS-pointer refusal and the media-type check. It reads nothing,
+// so the bytes cannot be swapped for a same-digest copy found elsewhere, and
+// admission publishes exactly what it proved. A run output is content-pinned
+// only; one that also carries a git pin must go through Resolve to corroborate it.
+func (r *Resolver) RunOutput(ref model.ArtifactRef, b []byte) (ResolvedArtifact, error) {
+	if err := model.ValidateArtifactRef(ref, "artifact"); err != nil {
+		return ResolvedArtifact{}, err
+	}
+	if err := r.checkPaths(ref); err != nil {
+		return ResolvedArtifact{}, err
+	}
+	if ref.Content == nil || ref.Git != nil || len(ref.Content.Locators) == 0 {
+		return ResolvedArtifact{}, fault("invalid-field", "artifact", "a run output is a content pin with a locator and no git pin")
+	}
+	if int64(len(b)) > r.maxBytes() {
+		return ResolvedArtifact{}, fault("unavailable", "artifact.content", "the run output exceeds the resolver byte limit")
+	}
+	if err := agree(model.HashBytes(b), uint64(len(b)), *ref.Content); err != nil {
+		return ResolvedArtifact{}, err
+	}
+	if ptr, ok := parseLFSPointer(b); ok {
+		return ResolvedArtifact{}, fault("unavailable", "artifact.content",
+			"the content pin names an LFS pointer, not its payload. The payload needs a content pin naming oid "+ptr.oid)
+	}
+	if err := checkMediaType(b, ref.Content.MediaType); err != nil {
+		return ResolvedArtifact{}, err
+	}
+	return ResolvedArtifact{Ref: ref, Bytes: b, SHA256: ref.Content.SHA256, Length: ref.Content.Length,
+		MediaType: ref.Content.MediaType, Origin: OriginRunOutput, DeclaredPath: ref.Content.Locators[0].Path}, nil
 }
 
 // matchOutput pairs a criterion selector with an output by the path each

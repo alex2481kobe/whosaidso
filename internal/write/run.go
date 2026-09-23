@@ -1,12 +1,11 @@
 package write
 
-// Invocation lifecycle, process streams, and output-directory creation live here.
-// Intent copying and producer-report interpretation do not.
+// Invocation lifecycle, process streams, and when output staging is retired live here.
+// Intent copying, producer-report interpretation and where staging lives do not.
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -15,7 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	"datum/internal/evidence"
 	"datum/internal/model"
 	"datum/internal/store"
 )
@@ -49,7 +47,9 @@ type RunRequest struct {
 
 // RunResult retains packet acknowledgements even when the process or seal fails.
 // Tails are diagnostics only and never enter a packet. A zero SealPacket means
-// the durable record has no acknowledged terminal observation.
+// the durable record has no acknowledged terminal observation. ArtifactDir is
+// the run's kept staging directory: empty once the seal captured every output
+// and the staging was retired, and set whenever capture did not secure them.
 type RunResult struct {
 	Envelope    model.InvocationEnvelope
 	StartPacket model.PacketRef
@@ -78,11 +78,14 @@ func Run(ctx context.Context, project store.Project, request RunRequest) (RunRes
 		ctx, cancel = context.WithTimeout(ctx, request.Timeout)
 		defer cancel()
 	}
-	dir := filepath.Join(project.Root, filepath.FromSlash(evidence.RunDirIn(project.ArtifactDir(), envelope.InvocationID)))
-	result.ArtifactDir = dir
-	if err := runMakeDir(project.Root, dir); err != nil {
+	// Outputs are staged outside the committed store; their logical names stay
+	// in the run's own directory there (runSeal), and admission publishes the
+	// captured bytes once, by digest.
+	dir, err := store.MakeRunStaging(project, envelope.InvocationID)
+	if err != nil {
 		return result, err
 	}
+	result.ArtifactDir = dir
 	stdout, err := runOpenStream(filepath.Join(dir, "stdout"))
 	if err != nil {
 		return result, err
@@ -166,6 +169,14 @@ func Run(ctx context.Context, project store.Project, request RunRequest) (RunRes
 	defer cancel()
 	seal, sealedEnvelope, captureErr := runSeal(sealCtx, project, request, envelope, dir, stdout.file, stderr.file, streamErr)
 	result.SealPacket, result.Envelope = seal, sealedEnvelope
+	// Retire staging only once an acknowledged seal holds every output's bytes
+	// in its own durable blobs. An incomplete stream, a refused report or a
+	// failed capture leaves outputs the seal does not hold, so they stay.
+	if captureErr == nil && streamErr == nil && seal.CommandID != "" {
+		if os.RemoveAll(dir) == nil {
+			result.ArtifactDir = ""
+		}
+	}
 	return result, errors.Join(processErr, streamErr, captureErr)
 }
 
@@ -229,28 +240,4 @@ func runDrain(done <-chan error, stdout, stderr runPipe) error {
 		}
 	}
 	return result
-}
-
-// Every ancestor is checked because a symlink in a generated output path would
-// turn a local capture into a write outside the project.
-func runMakeDir(root, dir string) error {
-	rel, err := filepath.Rel(root, dir)
-	if err != nil {
-		return err
-	}
-	current := root
-	for _, part := range append([]string{""}, strings.Split(rel, string(filepath.Separator))...) {
-		current = filepath.Join(current, part)
-		if err := os.Mkdir(current, 0700); err != nil && !os.IsExist(err) {
-			return err
-		}
-		info, err := os.Lstat(current)
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("run: output ancestor is not a real directory")
-		}
-	}
-	return nil
 }
