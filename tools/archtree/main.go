@@ -2,6 +2,24 @@
 // fit together. It emits JSON for a criterion to select from, and it does not
 // decide whether the shape it finds is good.
 //
+// SELECT FROM /readings, and only from there. Each reading there states its
+// own unit, population and denominator on the object holding its value or
+// values, which is where Datum's evaluator looks, and is reached by name:
+// /readings/file_lines (every production file, module-wide),
+// /readings/by_package/<path with / as ~1>/file_lines, .../largest_file_lines,
+// /readings/by_file/<path>, /readings/import_cycles. For a set, the population
+// selector is the same pointer plus /values. /packages and /cycles are kept for
+// people and the tree; they state no unit, and /packages/N is a position that a
+// new package silently re-aims.
+//
+// VALIDATED, by known-answer tests in known_answer_test.go (each mutation-
+// checked): per-file line counts including a final line with no newline;
+// package line and test-line totals; the largest production file, which never
+// counts a test file and on a tie names the first file by name; testdata/ and
+// dot-directories skipped; a test-only package having no largest file. NOT
+// validated by any known answer: imports, import cycles, purpose.
+// criterion_test.go puts the readings through Datum's own Observe and Evaluate.
+//
 // BLIND TO, and this matters more than the numbers it prints:
 //
 //   - USE. It reads import statements. A package that imports another may call
@@ -13,16 +31,25 @@
 //   - build tags. Every file is parsed regardless of GOOS, so the four
 //     OS-specific files in internal/store all appear at once even though no
 //     single build ever compiles more than two of them.
-//   - complexity. A tight 400 line file can be easier to hold in your head
-//     than a sprawling 200 line one. Lines are a proxy for the property, not
-//     the property.
+//   - complexity. A line is a newline, or a final line without one. Blank
+//     lines and comments count like code. A tight 400 line file can be easier
+//     to hold in your head than a sprawling 200 line one. Lines are a proxy for
+//     the property, not the property.
 //   - generated code, which it counts exactly like authored code.
-//   - test files, per file. file_lines lists production files only, so a 3000
-//     line test file is visible only inside its package's test_lines total and
-//     this instrument will never name it.
+//   - test files, per file. Every per-file reading covers production files
+//     only, so a 3000 line test file is visible only inside its package's
+//     test_lines total and this instrument will never name it.
+//   - Go files under testdata/ or any dot-directory. They are skipped as
+//     fixtures, so a real package placed there is not in any reading.
 //   - whether a long file is long for a STATED REASON. The house rule permits
 //     that, and this instrument cannot read a reason. The threshold lives in a
 //     criterion, frozen before the run, never here.
+//   - identity across a move. Readings are keyed by path and populations name
+//     the module, so a renamed file, package or module is a new key: a frozen
+//     criterion then reads nothing (UNKNOWN), never the thing's new self.
+//   - which member failed, in Datum's words. Set members carry their path, but
+//     the evaluator's FALSE reason names a member by index ("value 18"); the
+//     index is into /readings/.../values of that run's own output.
 //   - test-only packages have no imports reported, because their imports are
 //     in _test.go files this does not read. internal/acceptance therefore shows
 //     as depending on nothing while in fact it exercises everything.
@@ -45,10 +72,11 @@ import (
 	"os"
 )
 
-// This command is four files. main.go is the command surface, scan.go reads
-// the module, render.go draws the tree, readme.go splices it into README.md. Types live with the code that fills
-// them, in scan.go, because a type here is a description of what the scanner
-// found rather than a shape the renderer needs to know about.
+// This command is five files. main.go is the command surface, scan.go reads
+// the module, readings.go restates its numbers in the shape a criterion
+// selects, render.go draws the tree, readme.go splices it into README.md. Types
+// live with the code that fills them, because a type here is a description of
+// what was found rather than a shape the renderer needs to know about.
 
 func main() {
 	tree := flag.Bool("tree", false, "render the text tree instead of JSON")
@@ -57,15 +85,10 @@ func main() {
 	root := flag.String("root", ".", "module root")
 	flag.Parse()
 
-	mod, err := moduleName(*root)
+	r, err := measure(*root)
 	if err != nil {
 		fail(err)
 	}
-	pkgs, err := scan(*root, mod)
-	if err != nil {
-		fail(err)
-	}
-	r := report{Module: mod, Unit: "lines", Packages: pkgs, Cycles: cycles(pkgs)}
 	if *readme || *check {
 		os.Exit(syncReadme(*root, render(r), *check))
 	}
@@ -78,6 +101,21 @@ func main() {
 		fail(err)
 	}
 	fmt.Println(string(out))
+}
+
+// measure is the whole instrument short of printing: what -tree, -readme and
+// the JSON all report, and what the known-answer tests run.
+func measure(root string) (report, error) {
+	mod, err := moduleName(root)
+	if err != nil {
+		return report{}, err
+	}
+	pkgs, err := scan(root, mod)
+	if err != nil {
+		return report{}, err
+	}
+	cyc := cycles(pkgs)
+	return report{Module: mod, Packages: pkgs, Cycles: cyc, Readings: buildReadings(mod, pkgs, cyc)}, nil
 }
 
 func fail(err error) {
