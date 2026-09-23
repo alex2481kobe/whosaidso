@@ -189,6 +189,16 @@ type ReviewedInvocation struct {
 	EnvelopeDigest Digest                     `json:"envelope_digest"`
 }
 
+// EnvelopeDigest is a ReviewedInvocation's identity: the digest of the
+// canonical envelope encoding. Admission records it and replay compares it.
+func EnvelopeDigest(env InvocationEnvelope) (Digest, error) {
+	data, err := Encode(env)
+	if err != nil {
+		return "", err
+	}
+	return HashBytes(data), nil
+}
+
 // SelfAdmissionState records identity equality, not permission to admit.
 // Unknown means at least one actor was unknown, or a legacy review omitted it.
 type SelfAdmissionState string

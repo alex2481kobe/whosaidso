@@ -70,9 +70,6 @@ func gatePackets(project model.ProjectID, snapshot reduce.Snapshot, packets []mo
 			if err := gateSupersedeCanonical(snapshot, event); err != nil {
 				return nil, err
 			}
-			if err := gateRejectedMembers(snapshot, event, providers); err != nil {
-				return nil, err
-			}
 			refs, err := model.SameProjectReferences(event, project)
 			if err != nil {
 				return nil, err
@@ -229,8 +226,8 @@ func gateReference(snapshot reduce.Snapshot, ref model.Reference) (gateKey, bool
 		_, exists := snapshot.Invocation(reduce.InvocationKey{Project: ref.Invocation.Project, InvocationID: ref.Invocation.InvocationID})
 		if !exists && strings.HasPrefix(ref.Path, "evidence[") {
 			// R10.3: a proof may name a run the ledger recorded as rejected;
-			// gateRejectedFamily and the reducer decide its disposition.
-			exists = gateRejectedRecorded(snapshot, *ref.Invocation)
+			// the reducer's proof family checker decides its disposition.
+			exists = snapshot.RejectedRecorded(*ref.Invocation)
 		}
 		return gateKey{Invocation: *ref.Invocation}, exists
 	}

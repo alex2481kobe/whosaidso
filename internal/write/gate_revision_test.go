@@ -33,7 +33,11 @@ func TestProofUnderANewCriterionRevisionAccountsForEarlierRuns(t *testing.T) {
 		if disposition == "omitted" {
 			delete(members, failed)
 		}
-		w.f.refuse(w.f.request(w.f.capture(nil, w.proof(rev2, members))), "invalid-transition")
+		code := "invalid-transition"
+		if disposition == "omitted" {
+			code = "incomplete-family"
+		}
+		w.f.refuse(w.f.request(w.f.capture(nil, w.proof(rev2, members))), code)
 	}
 	if w.status(t) != reduce.StatusMeasured {
 		t.Fatal("re-fixing the criterion erased the failing run")

@@ -105,3 +105,39 @@ func (f *bundleFacts) indexReview(b model.Bundle, idx int, e *model.ReviewAdmit)
 	}
 	return nil
 }
+
+// laterSeal is the candidate seal of k after event idx, if this bundle has one.
+func (f *bundleFacts) laterSeal(k InvocationKey, idx int) *model.InvocationEnvelope {
+	if f == nil {
+		return nil
+	}
+	if at, ok := f.seals[k]; ok && at > idx {
+		return &f.events[at].(*model.InvocationSeal).Envelope
+	}
+	return nil
+}
+
+// laterStart is the candidate start of k after event idx, if this bundle has one.
+func (f *bundleFacts) laterStart(k InvocationKey, idx int) *model.InvocationEnvelope {
+	if f == nil {
+		return nil
+	}
+	if at, ok := f.starts[k]; ok && at > idx {
+		return &f.events[at].(*model.InvocationStart).Envelope
+	}
+	return nil
+}
+
+// laterStarts are the candidate starts after event idx, in bundle order.
+func (f *bundleFacts) laterStarts(idx int) []*model.InvocationStart {
+	var out []*model.InvocationStart
+	if f == nil {
+		return out
+	}
+	for _, e := range f.events[idx+1:] {
+		if start, ok := e.(*model.InvocationStart); ok {
+			out = append(out, start)
+		}
+	}
+	return out
+}

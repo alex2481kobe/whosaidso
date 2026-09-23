@@ -5,6 +5,7 @@ package reduce
 // This file stays below 200 lines because these transition checks form a complete responsibility.
 
 import (
+	"fmt"
 	"reflect"
 
 	"datum/internal/model"
@@ -38,27 +39,32 @@ func (s *state) requireKind(b model.Bundle, idx int, ref model.RecordRef, kind m
 	return nil
 }
 
-// proofAdmit checks applicability recoverable from admitted facts, including
-// closure over the admitted family. Evaluation of artifact bytes, pending intake
-// and the judgment's attribution remain admission gate work.
+// proofAdmit checks applicability recoverable from the ledger: each listed
+// member by its family class, support, and closure over the whole family
+// (proof_family.go). Evaluation of artifact bytes, pending intake and the
+// judgment's attribution remain admission gate work.
 func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 	if err := s.requireKind(b, idx, e.Claim, model.Claim, "claim"); err != nil {
 		return err
 	}
 	supported := false
 	criterion := s.criteria[criterionKey(e.CriterionRef)]
-	rejected := s.rejectedMembers(e.CriterionRef)
-	for _, member := range e.Evidence {
-		inv, ok := s.invocations[invocationKey(member.InvocationRef)]
-		if !ok && rejected[invocationKey(member.InvocationRef)] && rejectedMemberDisposition(member.Disposition) {
+	listed := map[InvocationKey]string{}
+	for i, member := range e.Evidence {
+		key := invocationKey(member.InvocationRef)
+		listed[key] = member.Disposition
+		inv, class := s.memberClass(e.CriterionRef, key)
+		switch {
+		case class == MemberRejected:
+			if !setAside(member.Disposition) {
+				return faultAt(CodeRejectedFamilyMember, b.Sequence, idx, fmt.Sprintf("evidence[%d].disposition", i),
+					"a rejected run can only be dispositioned inapplicable or inconclusive, never "+member.Disposition)
+			}
 			continue // R10.3: accounted for, never support
-		}
-		inFamily, earlier := CriterionFamily(inv.Start.CriterionRef, e.CriterionRef)
-		if !ok || inv.Key.Project != b.Project || inv.Seal == nil || !inFamily {
+		case class == MemberOutside || inv.Seal == nil:
 			return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "proof requires local sealed observations of the exact criterion")
-		}
-		if earlier {
-			if !rejectedMemberDisposition(member.Disposition) {
+		case class == MemberEarlier:
+			if !setAside(member.Disposition) {
 				return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "a run under an earlier criterion revision can only be dispositioned inapplicable or inconclusive")
 			}
 			continue
@@ -84,28 +90,11 @@ func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 	if !supported {
 		return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "proof has no supporting local observation")
 	}
-	// The family is every admitted invocation carrying this criterion, not the
-	// members a proposer chose to list. An unsealed member has no result yet, so
-	// proof waits for its reconciliation rather than treating it as absent.
-	listed := map[InvocationKey]bool{}
-	for _, member := range e.Evidence {
-		listed[invocationKey(member.InvocationRef)] = true
+	if err := s.checkFamilyClosure(b, idx, e, listed); err != nil {
+		return err
 	}
-	for _, inv := range s.invocationsSorted() {
-		if inFamily, _ := CriterionFamily(inv.Start.CriterionRef, e.CriterionRef); !inFamily {
-			continue
-		}
-		if inv.Seal == nil {
-			return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "a family member has no admitted seal; proof waits for reconciliation")
-		}
-		if !listed[inv.Key] {
-			return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "proof omits a sealed member of the criterion family")
-		}
-	}
-	for key := range rejected {
-		if !listed[key] {
-			return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "proof omits a rejected member of the criterion family")
-		}
+	if err := s.checkRejectedFamily(b, idx, e, listed); err != nil {
+		return err
 	}
 	if len(s.supportLosses(recordNode(e.Claim))) != 0 {
 		return faultAt(CodeInvalidTransition, b.Sequence, idx, "claim", "claim has unresolved support loss")
