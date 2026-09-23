@@ -191,3 +191,35 @@ func TestBenchLogBlockIsBounded(t *testing.T) {
 		}
 	}
 }
+
+// Odd counts past three, given unsorted: the median is the middle of the
+// sorted values and names that run, not a neighbour of it. Three runs cannot
+// tell index n/2 from rules that agree with it only at n=3.
+func TestOddCountMedianPastThreeIsSortedMiddle(t *testing.T) {
+	for _, c := range []struct {
+		vals      []string
+		value     string
+		fromRuns  string
+		ruleCount string
+	}{
+		// Sorted 10(r2) 20(r4) 30(r5) 40(r3) 50(r1).
+		{[]string{"50", "10", "40", "20", "30"}, "30", "[5]", "5"},
+		// Sorted 10(r3) 20(r6) 30(r2) 40(r5) 50(r7) 60(r4) 70(r1).
+		{[]string{"70", "30", "10", "60", "40", "20", "50"}, "40", "[5]", "7"},
+	} {
+		input := "pkg: p\n"
+		for _, v := range c.vals {
+			input += "BenchmarkX \t 10\t " + v + " ns/op\n"
+		}
+		med := bench(t, run(t, input), "BenchmarkX")["ns_per_op"].(map[string]any)
+		if got := text(med["value"]); got != c.value {
+			t.Errorf("%d runs: median = %s, want %s", len(c.vals), got, c.value)
+		}
+		if got := text(med["median_of_runs"]); got != c.fromRuns {
+			t.Errorf("%d runs: median_of_runs = %s, want %s", len(c.vals), got, c.fromRuns)
+		}
+		if got := med["rule"]; got != "middle value of "+c.ruleCount+" runs sorted by value" {
+			t.Errorf("%d runs: rule = %v", len(c.vals), got)
+		}
+	}
+}
