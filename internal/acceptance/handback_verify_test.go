@@ -281,6 +281,14 @@ func TestHandbackVerifyAtomicHoldsAcrossPacketsAndRetries(t *testing.T) {
 		for _, holdFirst := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/hold-first=%v", outcome, holdFirst), func(t *testing.T) {
 				ref, r := hbVerifyStart(t, f, model.Actor{ID: "holder"})
+				// Takeover after a terminal attempt must meet READY (BLOCKED wins),
+				// so the second attempt takes over the first while it is still live.
+				body := []byte(`{"prior_writer":"stopped"}`)
+				gateVerifyPut(t, filepath.Join(f.p.Root, "prior.json"), body)
+				next := &model.TaskTakeover{Task: ref, Actor: r.Author, AttemptID: f.id(), PriorAttemptID: r.AttemptID, StoppedConfirmationRef: gateVerifyContent(body, "prior.json")}
+				if _, err := f.admit(r.Author, r.Author, next); err != nil {
+					t.Fatalf("control: takeover of a live attempt must admit without READY: %v", err)
+				}
 				r.Outcome = outcome
 				// Neither denial of commits nor an explicit reconciliation debt
 				// gives a receipt permission to omit its bundled hold.
@@ -329,18 +337,14 @@ func TestHandbackVerifyAtomicHoldsAcrossPacketsAndRetries(t *testing.T) {
 				if err != nil || firstErr != nil || retryErr != nil || !bytes.Equal(bundleBytes, againBytes) {
 					t.Fatalf("identical admission retry must return the same bundle: %v", err)
 				}
+				// The takeover's attempt is still live, so the task reads IN FLIGHT
+				// here; BLOCKED is asserted once that attempt ends below.
 				p := hbVerifyTask(t, f, ref)
-				if p.Closure != nil || p.Status != reduce.StatusBlocked || len(p.Blockers) != 1 || !p.Blockers[0].Open() || p.Blockers[0].Held.Sequence != bundle.Sequence || !p.CommitsDenied || !p.Attempts[0].Terminal.ReconciliationOwed {
+				if p.Closure != nil || p.Status != reduce.StatusInFlight || len(p.Blockers) != 1 || !p.Blockers[0].Open() || p.Blockers[0].Held.Sequence != bundle.Sequence || !p.CommitsDenied || !p.Attempts[0].Terminal.ReconciliationOwed {
 					t.Fatalf("receipt escaped its atomic hold or lost authored flags: %+v", p)
 				}
 				// An older, still-open hold cannot serve the next attempt's
-				// terminal receipt merely because the same task is blocked.
-				body := []byte(`{"prior_writer":"stopped"}`)
-				gateVerifyPut(t, filepath.Join(f.p.Root, "prior.json"), body)
-				next := &model.TaskTakeover{Task: ref, Actor: r.Author, AttemptID: f.id(), PriorAttemptID: r.AttemptID, StoppedConfirmationRef: gateVerifyContent(body, "prior.json")}
-				if _, err := f.admit(r.Author, r.Author, next); err != nil {
-					t.Fatal(err)
-				}
+				// terminal receipt merely because it is open on the same task.
 				r.CommandID, r.AttemptID = f.id(), next.AttemptID
 				second, err := hbVerifyAPI(f, r)
 				if err != nil {
@@ -357,6 +361,14 @@ func TestHandbackVerifyAtomicHoldsAcrossPacketsAndRetries(t *testing.T) {
 				freshHold := f.capture(r.Author, recEncode(t, hold))
 				if _, err := hbVerifyAdmit(f, freshHold, second, clearPacket); recCode(err) != "missing-hold" {
 					t.Errorf("expected missing-hold when its bundled hold is cleared in another packet; got %v", err)
+				}
+				// Control: with its own open hold and no clear, the second receipt
+				// admits, so the refusals above were about the hold alone.
+				if _, err := hbVerifyAdmit(f, second, freshHold); err != nil {
+					t.Fatalf("control: second receipt plus its own open hold must admit: %v", err)
+				}
+				if p := hbVerifyTask(t, f, ref); p.Closure != nil || p.Status != reduce.StatusBlocked || len(p.Blockers) != 2 || !p.Blockers[0].Open() || !p.Blockers[1].Open() {
+					t.Fatalf("both receipts' holds must stay open and block the task: %+v", p)
 				}
 			})
 		}
