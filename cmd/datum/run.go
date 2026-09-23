@@ -20,12 +20,10 @@ import (
 // runOutput is what `datum run` prints: snake_case keys, and each tail as
 // readable text when its bytes are valid UTF-8, otherwise as base64 under a
 // _base64 key, so exactly one of the pair is present and a reader can tell.
-// StartPacket and SealPacket keep their Go-cased keys for now: an acceptance
-// test this lane does not own decodes them by field name.
 type runOutput struct {
 	Envelope         model.InvocationEnvelope `json:"envelope"`
-	StartPacket      model.PacketRef          `json:"StartPacket"`
-	SealPacket       model.PacketRef          `json:"SealPacket"`
+	StartPacket      model.PacketRef          `json:"start_packet"`
+	SealPacket       model.PacketRef          `json:"seal_packet"`
 	ArtifactDir      string                   `json:"artifact_dir"`
 	StdoutTail       *string                  `json:"stdout_tail,omitempty"`
 	StdoutTailBase64 *string                  `json:"stdout_tail_base64,omitempty"`

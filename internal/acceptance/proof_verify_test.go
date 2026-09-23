@@ -784,9 +784,10 @@ func (w *pvWorld) cliRun(script string) (model.InvocationEnvelope, []model.ID, e
 	out, err := w.cli(nil, "run", "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),
 		"--claim", string(w.claim.RecordID), "--claim-revision", "1", "--criterion-id", string(w.criterion.CriterionID), "--criterion-revision", "1", "--", "/bin/sh", "tools/run.sh")
 	var result struct {
-		Envelope    model.InvocationEnvelope
-		StartPacket model.PacketRef
-		SealPacket  model.PacketRef
+		// datum run prints snake_case keys (coordinator change, in the open).
+		Envelope    model.InvocationEnvelope `json:"envelope"`
+		StartPacket model.PacketRef          `json:"start_packet"`
+		SealPacket  model.PacketRef          `json:"seal_packet"`
 	}
 	if len(out) > 0 {
 		if jsonErr := json.Unmarshal(out, &result); jsonErr != nil {

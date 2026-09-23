@@ -32,8 +32,7 @@ func TestRunPrintsSnakeCaseKeysAndReadableTails(t *testing.T) {
 		return out
 	}
 	text := run("printf 'measured \\316\\273\\n'; printf 'warned\\n' >&2\n")
-	// StartPacket and SealPacket stay Go-cased until the acceptance test that decodes them moves.
-	if want := []string{"SealPacket", "StartPacket", "artifact_dir", "envelope", "stderr_tail", "stdout_tail"}; !reflect.DeepEqual(keys(text), want) {
+	if want := []string{"artifact_dir", "envelope", "seal_packet", "start_packet", "stderr_tail", "stdout_tail"}; !reflect.DeepEqual(keys(text), want) {
 		t.Fatalf("run must print %v, got %v", want, keys(text))
 	}
 	if text["stdout_tail"] != "measured λ\n" || text["stderr_tail"] != "warned\n" {

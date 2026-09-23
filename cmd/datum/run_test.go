@@ -158,8 +158,8 @@ func TestCLIFreshProcessesRunToProven(t *testing.T) {
 	}
 	var result struct {
 		Envelope    model.InvocationEnvelope `json:"envelope"`
-		StartPacket model.PacketRef          `json:"StartPacket"`
-		SealPacket  model.PacketRef          `json:"SealPacket"`
+		StartPacket model.PacketRef          `json:"start_packet"`
+		SealPacket  model.PacketRef          `json:"seal_packet"`
 	}
 	if err := json.Unmarshal(out, &result); err != nil || result.SealPacket.CommandID == "" {
 		t.Fatalf("run printed no packets: %s, %v", out, err)
@@ -261,8 +261,8 @@ func TestCLIRunKeepsArtifactsBesideAConfiguredLedger(t *testing.T) {
 	}
 	var result struct {
 		Envelope    model.InvocationEnvelope `json:"envelope"`
-		StartPacket model.PacketRef          `json:"StartPacket"`
-		SealPacket  model.PacketRef          `json:"SealPacket"`
+		StartPacket model.PacketRef          `json:"start_packet"`
+		SealPacket  model.PacketRef          `json:"seal_packet"`
 	}
 	if err := json.Unmarshal(out, &result); err != nil || result.SealPacket.CommandID == "" {
 		t.Fatalf("run printed no packets: %s, %v", out, err)

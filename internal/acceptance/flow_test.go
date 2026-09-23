@@ -589,8 +589,10 @@ func (w *flowWorld) run(script string) (model.ID, []model.ID, error) {
 		"--claim", string(w.claim.RecordID), "--claim-revision", "1", "--criterion-id", string(w.criterion.CriterionID),
 		"--criterion-revision", strconv.FormatUint(uint64(w.criterion.Revision), 10), "--", "/bin/sh", "tools/run.sh")
 	var result struct {
-		Envelope                model.InvocationEnvelope
-		StartPacket, SealPacket model.PacketRef
+		// datum run prints snake_case keys (coordinator change, in the open).
+		Envelope    model.InvocationEnvelope `json:"envelope"`
+		StartPacket model.PacketRef          `json:"start_packet"`
+		SealPacket  model.PacketRef          `json:"seal_packet"`
 	}
 	if len(out) > 0 {
 		if jsonErr := json.Unmarshal(out, &result); jsonErr != nil {
