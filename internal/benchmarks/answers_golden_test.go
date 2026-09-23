@@ -21,8 +21,9 @@ import (
 	"datum/internal/store"
 )
 
-// The golden holds one sha-256 per answer, generated from main before the
-// sort-once/describe-once/copy-on-write changes. The fixture stamps wall-clock
+// The golden holds one sha-256 per view answer (todo, continue, bare show,
+// show ID, show --kind instrument, history), regenerated when the benchmarks
+// moved from the removed read presets to the four views. The fixture stamps wall-clock
 // times into packets, bundles and envelopes, and places its project under a
 // temporary path, so the answer bytes differ between builds only in those
 // spellings and in digests computed over them. normalizeAnswer replaces exactly
@@ -50,24 +51,23 @@ func goldenAnswers(t *testing.T, f *fixture) map[string][]byte {
 	observed := query.Observation{ObservedAt: known(observedAt), Head: unknown[model.GitHead](), Dirty: unknown[bool]()}
 	requests := []struct {
 		name    string
-		request query.Request
+		request query.ViewRequest
 	}{
-		{"show", query.Request{Command: "show"}},
-		{"show-one", query.Request{Command: "show", ID: f.Task.RecordID}},
-		{"todo", query.Request{Command: "todo"}},
-		{"now", query.Request{Command: "now"}},
-		{"context", query.Request{Command: "context"}},
-		{"continue", query.Request{Command: "continue", ID: f.Task.RecordID, Observed: &observed}},
-		{"intake-pending", query.Request{Command: "intake pending"}},
+		{"todo", query.ViewRequest{View: "todo"}},
+		{"continue", query.ViewRequest{View: "continue", ID: f.Task.RecordID, Observed: &observed}},
+		{"show", query.ViewRequest{View: "show"}},
+		{"show-one", query.ViewRequest{View: "show", ID: f.Task.RecordID}},
+		{"show-instrument", query.ViewRequest{View: "show", Kind: "instrument"}},
+		{"history", query.ViewRequest{View: "history"}},
 	}
 	project, err := store.Discover(f.Project.Root)
 	must(t, err)
 	out := map[string][]byte{}
 	for _, r := range requests {
-		answer, err := query.Read(project, r.request)
+		answer, err := query.ReadView(project, r.request)
 		must(t, err)
 		var buf bytes.Buffer
-		must(t, query.RenderJSON(&buf, answer))
+		must(t, query.RenderViewJSON(&buf, answer))
 		out[r.name] = buf.Bytes()
 	}
 	return out
@@ -133,7 +133,7 @@ func TestAnswersMatchMainGolden(t *testing.T) {
 	got := answerDigests(t, f)
 	if os.Getenv("DATUM_WRITE_GOLDEN") == "1" {
 		var buf bytes.Buffer
-		for _, name := range []string{"continue", "context", "intake-pending", "now", "show", "show-one", "todo"} {
+		for _, name := range []string{"continue", "history", "show", "show-instrument", "show-one", "todo"} {
 			fmt.Fprintf(&buf, "%s %s\n", name, got[name])
 		}
 		put(t, answersGolden, buf.Bytes())
