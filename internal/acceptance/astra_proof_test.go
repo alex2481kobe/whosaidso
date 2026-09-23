@@ -86,6 +86,8 @@ func TestAstraProofDifferentMachinesAreNotComparable(t *testing.T) {
 					machine = recID(901)
 				}
 				env.ExecutionSourceIdentity.MachineID = recKnown(machine)
+				// Coordinator decision 2026-09-23: only a known equal HEAD with clean checkouts (or equal pins) establishes equal source.
+				env.ExecutionSourceIdentity.Head, env.ExecutionSourceIdentity.Dirty = recKnown(model.GitHead{ObjectFormat: "sha1", Commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}), recKnown(false)
 				rel := pvRunPath(id, "out/result.json")
 				pvPut(t, w.p.Root, rel, []byte(pvPass))
 				w.mustAdmit(w.lane, &model.InvocationStart{Envelope: env}, w.seal(env, pvPin([]byte(pvPass), rel)))

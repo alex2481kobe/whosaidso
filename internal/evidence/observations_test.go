@@ -94,13 +94,17 @@ func testEnvelope(t *testing.T, id model.ID) model.InvocationEnvelope {
 // compare unless a test says otherwise.
 const testMachine model.ID = "01ARZ3NDEKTSV4RRFFQ69G5FZZ"
 
+// testExecution runs from a known clean checkout of one commit, so fixture runs
+// establish equal source (coordinator decision 2026-09-23) unless a test says otherwise.
 func testExecution() model.ExecutionIdentity {
 	machine := testMachine
 	return model.ExecutionIdentity{Project: projectID, SourceRefs: []model.ArtifactRef{},
 		MachineID: model.Availability[model.ID]{State: model.Known, Value: &machine},
-		Head:      model.Availability[model.GitHead]{State: model.Unknown, Reason: "fixture"},
-		Dirty:     model.Availability[bool]{State: model.Unknown, Reason: "fixture"}}
+		Head:      knownOf(testHead),
+		Dirty:     knownOf(false)}
 }
+
+var testHead = model.GitHead{ObjectFormat: "sha1", Commit: "1111111111111111111111111111111111111111"}
 
 func config(pairs ...string) model.Availability[map[string]model.Availability[model.Scalar]] {
 	m := map[string]model.Availability[model.Scalar]{}

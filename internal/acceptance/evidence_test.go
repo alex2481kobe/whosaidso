@@ -617,7 +617,8 @@ func laneEEvidenceEnvelope(c model.CriterionFix, body string, id int) model.Invo
 		CriterionRef:  laneEEvidenceKnown(model.CriterionRef{Claim: c.Claim, CriterionID: c.CriterionID, Revision: c.Revision}),
 		ExecutionSourceIdentity: model.ExecutionIdentity{
 			Project: c.Claim.Project, MachineID: laneEEvidenceKnown(laneEEvidenceMachine),
-			SourceRefs: []model.ArtifactRef{}, Head: laneEEvidenceUnknown[model.GitHead]("not captured"), Dirty: laneEEvidenceUnknown[bool]("not captured"),
+			// Coordinator decision 2026-09-23: only a known equal HEAD with clean checkouts (or equal pins) establishes equal source.
+			SourceRefs: []model.ArtifactRef{}, Head: laneEEvidenceKnown(model.GitHead{ObjectFormat: "sha1", Commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}), Dirty: laneEEvidenceKnown(false),
 		},
 		Argv: []string{"fixture-measurement"}, InputRefs: []model.ArtifactRef{}, ConfigRequested: map[string]model.Scalar{},
 		ConfigEffective: laneEEvidenceConfig("sample_count", "12"), ConditionsDeclared: map[string]model.Scalar{},

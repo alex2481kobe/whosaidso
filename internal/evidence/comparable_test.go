@@ -66,11 +66,58 @@ func TestExecutionIdentityDecidesComparability(t *testing.T) {
 		wantBothOrders(t, c, a, b, True, "")
 	})
 
-	t.Run("control: git head and dirty state are recorded, not compared", func(t *testing.T) {
+}
+
+// Source must be ESTABLISHED equal (coordinator decision 2026-09-23): equal
+// source pins, or a known equal HEAD with both checkouts known clean.
+func TestExecutedSourceMustBeEstablishedEqual(t *testing.T) {
+	c := testCriterion(t)
+	otherHead := model.GitHead{ObjectFormat: "sha1", Commit: "2222222222222222222222222222222222222222"}
+	pin := func(id model.ID) []model.ArtifactRef {
+		return []model.ArtifactRef{contentRef("source", "text/plain", []string{RunDir(id) + "/src.go"}, "whole", "")}
+	}
+	t.Run("control: equal known HEADs, both clean, compare", func(t *testing.T) {
+		wantBothOrders(t, c, passing(invocationA), passing(invocationB), True, "")
+	})
+	t.Run("control: equal pins with unknown HEAD and dirty state compare", func(t *testing.T) {
 		a, b := passing(invocationA), passing(invocationB)
-		a.Execution.Dirty = knownOf(false)
+		for _, o := range []*Observation{&a, &b} {
+			o.Execution.Head, o.Execution.Dirty = unknownOf[model.GitHead]("no git"), unknownOf[bool]("no git")
+		}
+		a.Execution.SourceRefs, b.Execution.SourceRefs = pin(invocationA), pin(invocationB)
 		wantBothOrders(t, c, a, b, True, "")
 	})
+	t.Run("control: equal pins establish a dirty checkout", func(t *testing.T) {
+		a, b := passing(invocationA), passing(invocationB)
+		a.Execution.Dirty, b.Execution.Dirty = knownOf(true), knownOf(true)
+		a.Execution.SourceRefs, b.Execution.SourceRefs = pin(invocationA), pin(invocationB)
+		wantBothOrders(t, c, a, b, True, "")
+	})
+
+	for _, tc := range []struct {
+		name     string
+		alter    func(a, b *Observation)
+		contains string
+	}{
+		{"different HEADs", func(a, b *Observation) { b.Execution.Head = knownOf(otherHead) }, "different source"},
+		{"one HEAD unknown", func(a, b *Observation) { b.Execution.Head = unknownOf[model.GitHead]("no git") }, "HEAD was not recorded"},
+		{"both HEADs unknown, same reason", func(a, b *Observation) {
+			a.Execution.Head, b.Execution.Head = unknownOf[model.GitHead]("no git"), unknownOf[model.GitHead]("no git")
+			a.Execution.Dirty, b.Execution.Dirty = unknownOf[bool]("no git"), unknownOf[bool]("no git")
+		}, "HEAD was not recorded"},
+		{"one checkout dirty", func(a, b *Observation) { b.Execution.Dirty = knownOf(true) }, "dirty"},
+		{"both checkouts dirty", func(a, b *Observation) { a.Execution.Dirty, b.Execution.Dirty = knownOf(true), knownOf(true) }, "dirty"},
+		{"one dirty state unknown", func(a, b *Observation) { b.Execution.Dirty = unknownOf[bool]("status failed") }, "dirty"},
+		{"both dirty states unknown", func(a, b *Observation) {
+			a.Execution.Dirty, b.Execution.Dirty = unknownOf[bool]("status failed"), unknownOf[bool]("status failed")
+		}, "dirty"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, b := passing(invocationA), passing(invocationB)
+			tc.alter(&a, &b)
+			wantBothOrders(t, c, a, b, Unknown, tc.contains)
+		})
+	}
 }
 
 func testVisual() model.VisualObservation {
