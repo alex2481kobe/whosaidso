@@ -60,6 +60,9 @@ func TestInstrumentValidationRealSequenceThreeReplay(t *testing.T) {
 	if err != nil || len(paths) < 3 {
 		t.Fatalf("need the committed bundles through sequence 3: %v, %v", paths, err)
 	}
+	// The subject is sequence 3's declarations, so read the prefix through 3.
+	// Later bundles (Datum recording its own work) may revise these instruments.
+	paths = paths[:3]
 	var bundles []model.Bundle
 	var incremental Snapshot
 	var declared []*model.InstrumentDeclare

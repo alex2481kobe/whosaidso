@@ -26,6 +26,9 @@ needs that a human contributor would pick up from review.
   file you do not own, stop that item, finish the rest, and report what you
   needed and why.
 - Commit on your branch with a plain message. Do not push.
+- Datum records its own work in `.datum/`, so its ledger grows. A test that reads the committed
+  ledger reads the fixed prefix it is about (bundles 1..N), never the live head. Committing a new
+  ledger bundle needs the same full test run as committing code.
 - Parallel lanes may share a scratch directory: prefix every scratch file with
   your lane name.
 

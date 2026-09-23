@@ -175,11 +175,18 @@ func TestReviewSelfAdmissionCommittedHistoryIsUnknown(t *testing.T) {
 	if storedTrue < 2 {
 		t.Fatalf("control: committed bundles 3 and 4 should still store true, found %d", storedTrue)
 	}
-	all := mustReplay(t, bundles).Reviews()
-	if len(all) < 4 {
-		t.Fatalf("committed reviews missing: %+v", all)
+	// The subject is bundles 1-4, admitted before packet authors were recorded.
+	// Later bundles record authors, so their reviews may read true or false.
+	var legacy []Review
+	for _, review := range mustReplay(t, bundles).Reviews() {
+		if review.Origin.Sequence <= 4 {
+			legacy = append(legacy, review)
+		}
 	}
-	for _, review := range all {
+	if len(legacy) != 4 {
+		t.Fatalf("committed reviews in bundles 1-4 missing: %+v", legacy)
+	}
+	for _, review := range legacy {
 		if review.SelfAdmission != model.SelfAdmissionUnknown {
 			t.Fatalf("committed review without a recorded author must read unknown: %+v", review)
 		}
