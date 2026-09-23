@@ -7,8 +7,6 @@ package write
 
 import (
 	"context"
-	"strconv"
-	"strings"
 	"testing"
 
 	"datum/internal/model"
@@ -94,8 +92,9 @@ func TestSupersedeOfAnOwnerRulingNeedsItsAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reason := review.(*model.ReviewAdmit).Reason; !strings.Contains(reason, "author "+strconv.Quote("lane-c2")) {
-		t.Fatalf("packet author not recorded: %q", reason)
+	r := review.(*model.ReviewAdmit)
+	if len(r.Packets) != 1 || r.Authors[r.Packets[0].CommandID].ID != "lane-c2" {
+		t.Fatalf("packet author not recorded: %+v", r.Authors)
 	}
 	if d := w.decision(t, 1); len(d.Dispositions) != 1 {
 		t.Fatalf("superseding the ruling hid it: %+v", d)

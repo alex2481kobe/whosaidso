@@ -194,12 +194,14 @@ type Invocation struct {
 
 // Review is one admitted disposition of one intake packet.
 type Review struct {
-	Key           ReviewKey
-	Packet        model.PacketRef
-	Outcome       string
-	Actor         model.Actor
-	Reason        string
-	Origin        Origin
+	Key     ReviewKey
+	Packet  model.PacketRef
+	Outcome string
+	Actor   model.Actor
+	Reason  string
+	Origin  Origin
+	// SelfAdmission is computed from Author and Actor (C39), never read from
+	// the review's stored legacy field.
 	SelfAdmission model.SelfAdmissionState
 	// Author is the Actor this packet was captured with, or an unknown Actor
 	// when a legacy review did not record it (R10.1 revised).

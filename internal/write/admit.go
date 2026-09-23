@@ -9,8 +9,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strconv"
-	"strings"
 	"time"
 
 	"datum/internal/model"
@@ -131,7 +129,10 @@ func admissionProposal(ctx context.Context, project store.Project, request Admit
 			}
 		}
 	}
-	selfAdmission, authors, reason := admissionDetails(request, packets)
+	authors := make(map[model.ID]model.Actor, len(packets))
+	for _, packet := range packets {
+		authors[packet.CommandID] = packet.Author
+	}
 	captured := make(map[model.ID]time.Time, len(packets))
 	for _, packet := range packets {
 		captured[packet.CommandID] = packet.CapturedAt.UTC()
@@ -140,8 +141,8 @@ func admissionProposal(ctx context.Context, project store.Project, request Admit
 	if err != nil {
 		return model.Bundle{}, err
 	}
-	review, err := model.EncodeEvent(&model.ReviewAdmit{Packets: lockedRefs, Outcome: request.Outcome, Actor: request.Admitter, Reason: reason,
-		SelfAdmission: selfAdmission, Invocations: invocations, Authors: authors, CapturedAt: captured, EventPackets: eventPackets})
+	review, err := model.EncodeEvent(&model.ReviewAdmit{Packets: lockedRefs, Outcome: request.Outcome, Actor: request.Admitter, Reason: request.Reason,
+		Invocations: invocations, Authors: authors, CapturedAt: captured, EventPackets: eventPackets})
 	if err != nil {
 		return model.Bundle{}, err
 	}
@@ -195,29 +196,6 @@ func admissionIDs(r AdmitRequest) ([]model.ID, error) {
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	return ids, nil
-}
-
-// admissionDetails renders the readable suffix from the same facts we persist.
-func admissionDetails(r AdmitRequest, packets []model.Packet) (map[model.ID]model.SelfAdmissionState, map[model.ID]model.Actor, string) {
-	states := make(map[model.ID]model.SelfAdmissionState, len(packets))
-	authors := make(map[model.ID]model.Actor, len(packets))
-	var reason strings.Builder
-	reason.WriteString(r.Reason)
-	for _, p := range packets {
-		self := model.SelfAdmissionUnknown
-		if model.SameActor(p.Author, r.Admitter) {
-			self = model.SelfAdmissionTrue
-		} else if !model.Blank(p.Author.ID) && !model.Blank(r.Admitter.ID) {
-			self = model.SelfAdmissionFalse
-		}
-		states[p.CommandID], authors[p.CommandID] = self, p.Author
-		author := "unknown: " + p.Author.UnknownReason
-		if !model.Blank(p.Author.ID) {
-			author = p.Author.ID
-		}
-		fmt.Fprintf(&reason, "\nPacket %s author %s. Self-admitted: %s.", p.CommandID, strconv.Quote(author), self)
-	}
-	return states, authors, reason.String()
 }
 
 func admissionFault(code, path, detail string) error {

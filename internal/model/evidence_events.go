@@ -154,9 +154,11 @@ type ReviewAdmit struct {
 	Outcome string      `json:"outcome"`
 	Actor   Actor       `json:"actor"`
 	Reason  string      `json:"reason" semantic:"text"`
-	// SelfAdmission binds each packet command ID to the author/admitter comparison.
-	// Omission is reserved for legacy reviews and projects as unknown, never false.
-	// When present, every reviewed packet must have exactly one explicit state.
+	// SelfAdmission is a legacy stored author/admitter comparison. Admission no
+	// longer writes it and replay never consults it: the answer is computed from
+	// Authors and Actor (C39). It is still decoded and validated so committed
+	// history replays byte for byte: when present, every reviewed packet must
+	// have exactly one explicit state.
 	SelfAdmission map[ID]SelfAdmissionState `json:"self_admission,omitempty"`
 	// Invocations (R10.3) records, on a rejected or correction-requested review,
 	// each invocation.start/seal its packets carried: extracted facts, never the

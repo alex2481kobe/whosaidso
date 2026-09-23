@@ -10,7 +10,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -74,12 +73,17 @@ func TestDecisionDisposeRecordsTheRulingAndItsRealAuthor(t *testing.T) {
 				t.Fatal(err)
 			}
 			r := review.(*model.ReviewAdmit)
-			if !strings.Contains(r.Reason, "author "+strconv.Quote("lane-c2")) || strings.Contains(r.Reason, "author "+strconv.Quote("owner")) {
-				t.Fatalf("packet author rewritten or missing: %q", r.Reason)
+			if len(r.Authors) != len(r.Packets) {
+				t.Fatalf("packet author missing: %+v", r.Authors)
 			}
-			for _, state := range r.SelfAdmission {
-				if state != model.SelfAdmissionFalse {
-					t.Fatalf("author/admitter comparison changed: %s", state)
+			for _, p := range r.Packets {
+				if author := r.Authors[p.CommandID]; author.ID != "lane-c2" {
+					t.Fatalf("packet author rewritten or missing: %+v", author)
+				}
+				// C39: the comparison is computed from the recorded author.
+				projected, ok := w.f.snapshot().Review(reduce.ReviewKey{Project: w.f.project.ID, CommandID: p.CommandID})
+				if !ok || projected.SelfAdmission != model.SelfAdmissionFalse {
+					t.Fatalf("author/admitter comparison changed: %+v", projected)
 				}
 			}
 		})

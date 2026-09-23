@@ -240,18 +240,17 @@ func (s *state) reviewAdmit(b model.Bundle, idx int, o Origin, e *model.ReviewAd
 			return faultAt(CodeInvalidTransition, b.Sequence, idx, fmt.Sprintf("packets[%d]", i),
 				fmt.Sprintf("packet already dispositioned %q at sequence %d", prior.Outcome, prior.Origin.Sequence))
 		}
-		selfAdmission := model.SelfAdmissionUnknown
-		if e.SelfAdmission != nil {
-			selfAdmission = e.SelfAdmission[p.CommandID]
-		}
 		var invocations []model.ReviewedInvocation
 		for _, inv := range e.Invocations {
 			if inv.Packet == p.CommandID {
 				invocations = append(invocations, inv)
 			}
 		}
-		s.reviews[key] = Review{Key: key, Packet: p, Outcome: e.Outcome, Actor: e.Actor, Reason: e.Reason, Origin: o, SelfAdmission: selfAdmission, Invocations: invocations,
-			Author: reviewAuthor(e, p.CommandID)}
+		// A stored self_admission (legacy) is decoded but never consulted:
+		// the answer is computed from the recorded author and the admitter.
+		author := reviewAuthor(e, p.CommandID)
+		s.reviews[key] = Review{Key: key, Packet: p, Outcome: e.Outcome, Actor: e.Actor, Reason: e.Reason, Origin: o,
+			SelfAdmission: selfAdmission(author, e.Actor), Invocations: invocations, Author: author}
 	}
 	s.attributeEvents(b, e)
 	return nil

@@ -137,13 +137,21 @@ func TestGateVerifyClaimAttributionAndUnmeasuredStatus(t *testing.T) {
 		if recCode(err) != "invalid-transition" {
 			t.Errorf("expected refusal of task.start while its claim is unmeasured, got %v; assertion prose must not grant proof or waive the prerequisite", err)
 		}
+		// Consolidation step 7 (C39): self-admission is computed, not written into the reason, so it is read through the query audit.
 		review := recMustDecodeReview(t, b.Events[len(b.Events)-1])
-		want := "Self-admitted: true"
+		want := model.SelfAdmissionTrue
 		if author.ID == "" {
-			want = "Self-admitted: unknown"
+			want = model.SelfAdmissionUnknown
 		}
-		if !strings.Contains(review.Reason, want) {
-			t.Errorf("expected recorded %q, got %q; two unknown identities must not become a known match", want, review.Reason)
+		audit, err := query.Read(f.p, query.Request{Command: "history", SelfAdmitted: want})
+		for _, packet := range review.Packets {
+			found := false
+			for _, r := range audit.Reviews {
+				found = found || r.Key.CommandID == packet.CommandID
+			}
+			if err != nil || !found {
+				t.Errorf("expected packet %s selected as self-admitted %q, got %+v, error=%v; two unknown identities must not become a known match", packet.CommandID, want, audit.Reviews, err)
+			}
 		}
 		for _, forged := range []model.Actor{{ID: "somebody-else"}, {UnknownReason: "different missing attribution"}} {
 			bad := f.claim(forged)
