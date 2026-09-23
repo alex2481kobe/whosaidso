@@ -58,7 +58,7 @@ datum
 |   |-- reduce         folds admitted bundles into the state every Datum answer is read from
 |   |      25 files, tested -- uses model
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
-|   |      14 files, tested -- uses model, reduce
+|   |      16 files, tested -- uses model, reduce
 |   `-- write          joins immutable capture to canonical state through one admission gate
 |          19 files, tested -- uses evidence, model, reduce, store
 `-- tools/
