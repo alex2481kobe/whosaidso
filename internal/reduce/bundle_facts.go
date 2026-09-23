@@ -31,10 +31,10 @@ type bundleFacts struct {
 // RejectedFact is one invocation start or seal that a rejected or
 // correction-requested review recorded (R10.3), with the review that recorded it.
 type RejectedFact struct {
-	Review  ReviewKey
-	Outcome string
-	Origin  Origin
-	Fact    model.ReviewedInvocation
+	Review  ReviewKey                `json:"review"`
+	Outcome string                   `json:"outcome"`
+	Origin  Origin                   `json:"origin"`
+	Fact    model.ReviewedInvocation `json:"fact"`
 }
 
 // indexBundle decodes every event once and indexes what the whole bundle says.

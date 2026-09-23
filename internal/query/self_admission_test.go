@@ -96,7 +96,7 @@ func TestSelfAdmissionAuditThreeStatesAndLegacy(t *testing.T) {
 			if !reflect.DeepEqual(jsonLeaves(t, jsonOut.Bytes()), textLeaves(t, textOut.String())) {
 				t.Fatal("audit renderers disagree")
 			}
-			if tc.filter == model.SelfAdmissionUnknown && !strings.Contains(textOut.String(), `"SelfAdmission": "UNKNOWN"`) {
+			if tc.filter == model.SelfAdmissionUnknown && !strings.Contains(textOut.String(), `"self_admission": "UNKNOWN"`) {
 				t.Fatalf("unknown must render explicitly: %s", textOut.String())
 			}
 			again, err := Read(p, Request{Command: "history", SelfAdmitted: tc.filter})

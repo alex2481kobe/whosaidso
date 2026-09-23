@@ -157,7 +157,7 @@ func TestCLIFreshProcessesRunToProven(t *testing.T) {
 		t.Fatal(err)
 	}
 	var result struct {
-		Envelope    model.InvocationEnvelope `json:"Envelope"`
+		Envelope    model.InvocationEnvelope `json:"envelope"`
 		StartPacket model.PacketRef          `json:"StartPacket"`
 		SealPacket  model.PacketRef          `json:"SealPacket"`
 	}
@@ -260,7 +260,7 @@ func TestCLIRunKeepsArtifactsBesideAConfiguredLedger(t *testing.T) {
 		t.Fatal(err)
 	}
 	var result struct {
-		Envelope    model.InvocationEnvelope `json:"Envelope"`
+		Envelope    model.InvocationEnvelope `json:"envelope"`
 		StartPacket model.PacketRef          `json:"StartPacket"`
 		SealPacket  model.PacketRef          `json:"SealPacket"`
 	}

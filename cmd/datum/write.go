@@ -32,8 +32,17 @@ A source.intake is captured with its original bytes, read from its reference
 or from --blob; capture refuses a source whose bytes it cannot save.
 Admission reviews a packet set and is the only command that publishes a bundle.
 Handback captures a receipt for an admitted attempt; admit its returned packet ID.
-OUTCOME: success, stopped, refused, no-reading, measurement-impossible,
-runner-died, harness-broken, out-of-scope, blocked-mid-task. No meaning is defaulted.
+OUTCOME is one of nine; no meaning is defaulted. Only success says the work got done,
+and it closes the attempt, not the task. Every other outcome leaves the task open.
+  success                 the work is done; with no witness the task awaits acceptance
+  stopped                 interrupted before finishing; say why and the unfinished step
+  refused                 the instrument or tool declined to measure; not a pass
+  no-reading              no reading was obtained; say what would get one, never a zero
+  measurement-impossible  cannot be measured here; name the missing capability
+  runner-died             the process died; observer died too: --reconciliation-owed
+  harness-broken          the producer or setup failed, not the work under test
+  out-of-scope            needs work outside the task; kept owed, reassignment proposed
+  blocked-mid-task        cannot go on until something happens; admitted with its hold
 Delivery refs are a JSON array of artifact references. A hold is captured with the receipt.
 Blocked-mid-task admission needs an open hold in the same bundle; out-of-scope
 needs a resume hold with an authored reassignment criterion and actor.

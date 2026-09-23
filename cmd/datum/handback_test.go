@@ -172,3 +172,32 @@ func TestCLIHandbackRefusesInvalidFlags(t *testing.T) {
 		}
 	}
 }
+
+// The usage names every outcome on a line of its own, in the order README's
+// "Using it" defines them, so the help an agent reads matches the manual.
+func TestHandbackUsageDefinesEveryOutcomeLikeTheReadme(t *testing.T) {
+	outcomes := []model.AttemptOutcome{model.AttemptSuccess, model.AttemptStopped, model.AttemptRefused, model.AttemptNoReading,
+		model.AttemptMeasurementImpossible, model.AttemptRunnerDied, model.AttemptHarnessBroken, model.AttemptOutOfScope, model.AttemptBlockedMidTask}
+	readme, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var usageOrder, readmeOrder []string
+	for _, line := range strings.Split(strings.SplitN(writeUsage, "OUTCOME is one of nine", 2)[1], "\n") {
+		if fields := strings.Fields(line); strings.HasPrefix(line, "  ") && len(fields) > 1 {
+			usageOrder = append(usageOrder, fields[0])
+		}
+	}
+	for _, line := range strings.Split(string(readme), "\n") {
+		if strings.HasPrefix(line, "- `") && strings.Contains(line, "`:") {
+			readmeOrder = append(readmeOrder, strings.SplitN(strings.TrimPrefix(line, "- `"), "`", 2)[0])
+		}
+	}
+	want := make([]string, len(outcomes))
+	for i, o := range outcomes {
+		want[i] = string(o)
+	}
+	if !reflect.DeepEqual(usageOrder, want) || !reflect.DeepEqual(readmeOrder, want) {
+		t.Fatalf("usage lines %v and README bullets %v must each define the nine outcomes %v, one per line", usageOrder, readmeOrder, want)
+	}
+}

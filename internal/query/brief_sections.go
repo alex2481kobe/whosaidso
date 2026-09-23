@@ -86,21 +86,21 @@ func who(c cur) []any {
 	return []any{c.at("state"), prefix(c.at("reason"))}
 }
 
-var briefLabels = map[string]string{"TASK": "Task", "CLAIM": "Claim", "DECISION": "Decision", "INSTRUMENT": "Instrument"}
+var briefLabels = map[string]string{"TASK": "task", "CLAIM": "claim", "DECISION": "decision", "INSTRUMENT": "instrument"}
 
 // briefRecord is one Record: kind, id, revision, status, next actor, label,
 // then why it is where it is (blocked reasons, live holders).
 func briefRecord(b *briefWriter, indent int, r cur) {
 	f := r.at("fact")
-	kind := f.at("Kind").text()
-	head := []any{f.at("Kind"), f.at("Key", "ID"), "rev", f.at("Key", "Revision")}
+	kind := f.at("kind").text()
+	head := []any{f.at("kind"), f.at("key", "id"), "rev", f.at("key", "revision")}
 	switch kind {
 	case "TASK":
 		head = append(append(head, r.at("task", "status"), "next"), who(r.at("task", "expected_next_actor"))...)
 	case "CLAIM":
-		head = append(head, r.at("claim", "Status"), "support", r.at("current_support"))
+		head = append(head, r.at("claim", "status"), "support", r.at("current_support"))
 	case "DECISION":
-		head = append(append(head, r.at("decision", "Status"), "waiting on"), who(r.at("decision", "Spec", "waiting_actor"))...)
+		head = append(append(head, r.at("decision", "status"), "waiting on"), who(r.at("decision", "spec", "waiting_actor"))...)
 	case "INSTRUMENT":
 		head = append(head, "support", r.at("current_support"))
 	}
@@ -109,15 +109,15 @@ func briefRecord(b *briefWriter, indent int, r cur) {
 		b.line(indent+1, prefix(f.at(briefLabels[kind], field)))
 	}
 	for _, reason := range r.at("task", "reasons").items() {
-		pieces := append([]any{"blocked:", reason.at("Kind")}, "waits on")
-		pieces = append(pieces, who(reason.at("Actor"))...)
-		if reason.at("BlockerID").text() != "" {
-			pieces = append(pieces, "hold", reason.at("BlockerID"))
+		pieces := append([]any{"blocked:", reason.at("kind")}, "waits on")
+		pieces = append(pieces, who(reason.at("actor"))...)
+		if reason.at("blocker_id").text() != "" {
+			pieces = append(pieces, "hold", reason.at("blocker_id"))
 		}
-		b.line(indent+1, append(pieces, "-", prefix(reason.at("Detail")))...)
+		b.line(indent+1, append(pieces, "-", prefix(reason.at("detail")))...)
 	}
 	for _, h := range r.at("task", "attempt_holders").items() {
-		b.line(indent+1, append([]any{"attempt", h.at("attempt", "Attempt"), "held by"}, who(h.at("actor"))...)...)
+		b.line(indent+1, append([]any{"attempt", h.at("attempt", "attempt"), "held by"}, who(h.at("actor"))...)...)
 	}
 }
 
@@ -152,15 +152,15 @@ func briefRun(b *briefWriter, indent int, v cur) {
 }
 
 func briefEvent(b *briefWriter, indent int, e cur) {
-	pieces := []any{"sequence", e.at("origin", "Sequence"), "event", e.at("origin", "EventIndex"), e.at("event", "type"), "command", e.at("command_id")}
+	pieces := []any{"sequence", e.at("origin", "sequence"), "event", e.at("origin", "event_index"), e.at("event", "type"), "command", e.at("command_id")}
 	pieces = append(append(pieces, "admitted by"), who(e.at("admitter"))...)
-	b.line(indent, append(append(pieces, "author"), who(e.at("author", "Author"))...)...)
+	b.line(indent, append(append(pieces, "author"), who(e.at("author", "actor"))...)...)
 }
 
 func briefReview(b *briefWriter, indent int, r cur) {
-	b.line(indent, append(append([]any{"review", r.at("Key", "CommandID"), r.at("Outcome"), "by"}, who(r.at("Actor"))...),
-		append(append([]any{"author"}, who(r.at("Author"))...), "self-admitted", r.at("SelfAdmission"))...)...)
-	b.line(indent+1, prefix(r.at("Reason")))
+	b.line(indent, append(append([]any{"review", r.at("key", "command_id"), r.at("outcome"), "by"}, who(r.at("actor"))...),
+		append(append([]any{"author"}, who(r.at("author"))...), "self-admitted", r.at("self_admission"))...)...)
+	b.line(indent+1, prefix(r.at("reason")))
 }
 
 // briefPacket shows a pending packet's disposition first: a reviewed packet
@@ -178,7 +178,7 @@ func briefPacket(b *briefWriter, indent int, p cur) {
 		b.line(indent+1, types...)
 	}
 	if r := p.at("review"); r.ok() {
-		b.line(indent+1, append([]any{"reviewed", r.at("Outcome"), "by"}, who(r.at("Actor"))...)...)
-		b.line(indent+2, prefix(r.at("Reason")))
+		b.line(indent+1, append([]any{"reviewed", r.at("outcome"), "by"}, who(r.at("actor"))...)...)
+		b.line(indent+2, prefix(r.at("reason")))
 	}
 }

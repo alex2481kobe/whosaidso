@@ -14,10 +14,12 @@ import (
 // PacketAuthor is the packet an admitted event came from and the Actor that
 // packet was captured with. When the ledger does not say, Packet is omitted or
 // Author is an unknown Actor with its reason: never a guess from nearby facts.
-// The tag keeps an unattributed event from rendering a blank packet id.
+// The omitempty keeps an unattributed event from rendering a blank packet id.
+// Author is exported as "actor", so a record's author reads author.actor, not
+// author.author.
 type PacketAuthor struct {
-	Packet model.ID `json:"Packet,omitempty"`
-	Author model.Actor
+	Packet model.ID    `json:"packet,omitempty"`
+	Author model.Actor `json:"actor"`
 }
 
 const (

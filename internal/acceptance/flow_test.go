@@ -3,15 +3,20 @@ package acceptance_test
 // U14 independent end-to-end flows. Every step runs the built `datum` binary
 // in a fresh process, inside a temp project with its own datum.toml and its
 // own HOME (so its own intake), and every fact is read back through the read
-// surface. Every read is taken twice, as text and as --json, and the two are
-// compared field by field; every answer must carry the watermark of the
-// ledger it was read from. Refusals must leave .datum/events byte-identical.
+// surface. Every read is taken three times, as the default (brief) text, as
+// --full and as --json. --full is compared with --json field by field; every
+// value the brief prints must equal the JSON leaf at its recorded path or be a
+// marked prefix of it, and every count must equal that array's length. Every
+// answer must carry the watermark of the ledger it was read from. Refusals must
+// leave .datum/events byte-identical.
 //
 // Event payloads are built with the model types only to produce the JSON a
 // lane would pipe to `datum capture`; nothing here calls the write, store or
 // reduce packages directly.
 //
 // Supersede and artifact.dispose are left to a later lane on purpose.
+//
+// Changed when the reducer types gained json tags: every JSON path here is snake_case.
 
 import (
 	"bytes"
@@ -30,6 +35,7 @@ import (
 	"time"
 
 	"datum/internal/model"
+	"datum/internal/query"
 )
 
 type flowWorld struct {
@@ -167,42 +173,138 @@ func (w *flowWorld) refused(what string, step func() error) {
 
 var flowBundleName = regexp.MustCompile(`^([0-9]{8})-([0-9A-Z]{26})\.json$`)
 
-// read runs the command as text and as --json, requires them to carry the same
-// facts, requires the watermark to name the ledger's actual head, and returns
-// the decoded JSON answer.
+// read runs the command as brief text, as --full and as --json. --full must
+// carry the same facts as --json; the brief must agree with --json under the
+// brief's rule (flowBriefAgrees). It requires the watermark to name the
+// ledger's actual head, and returns the decoded JSON answer.
+// Changed with the brief becoming the default text: the lossless comparison
+// moved to --full and the default text is checked by the brief's rule.
 func (w *flowWorld) read(args ...string) map[string]any {
 	w.t.Helper()
-	answer := w.readJSON(args...)
-	text, err := w.cli(nil, args...)
+	exported := w.readFlag("--json", args...)
+	answer := flowDecode(w.t, exported)
+	full := w.readFlag("--full", args...)
+	fromText, err := flowOutline(string(full))
 	if err != nil {
-		w.t.Fatalf("text read: %v", err)
-	}
-	fromText, err := flowOutline(string(text))
-	if err != nil {
-		w.t.Fatalf("datum %s: text answer is not a readable outline: %v\n%s", strings.Join(args, " "), err, text)
+		w.t.Fatalf("datum %s --full: text answer is not a readable outline: %v\n%s", strings.Join(args, " "), err, full)
 	}
 	fromJSON := map[string]string{}
 	flowFlatten("answer", answer, fromJSON)
 	if !reflect.DeepEqual(fromText, fromJSON) {
-		w.t.Errorf("datum %s: text and --json disagree: %s", strings.Join(args, " "), flowDiff(fromText, fromJSON))
+		w.t.Errorf("datum %s: --full text and --json disagree: %s", strings.Join(args, " "), flowDiff(fromText, fromJSON))
 	}
+	text, err := w.cli(nil, args...)
+	if err != nil {
+		w.t.Fatalf("text read: %v", err)
+	}
+	flowBriefAgrees(w.t, "datum "+strings.Join(args, " "), exported, answer, string(text))
 	w.watermark(args, answer)
 	return answer
 }
 
+// flowBriefAgrees checks brief text against the JSON export it claims to
+// read: the text is exactly the brief of that export, it prints no absent
+// path, every fact it records is printed, in order, and equals the JSON leaf
+// at its path (a string cut short is a strict prefix marked with …), and every
+// count is the length of the array at its path.
+func flowBriefAgrees(t testing.TB, what string, exported []byte, answer map[string]any, text string) {
+	t.Helper()
+	want, facts, err := query.BriefOf(exported)
+	if err != nil {
+		t.Fatalf("%s: the brief of the JSON export fails: %v", what, err)
+	}
+	if text != want {
+		t.Errorf("%s: the text is not the brief of the same answer's --json:\n%s\nwant\n%s", what, text, want)
+		return
+	}
+	if len(facts) == 0 || strings.Contains(text, "UNKNOWN(absent)") {
+		t.Errorf("%s: the brief shows no facts, or a path the JSON lacks:\n%s", what, text)
+		return
+	}
+	rest := text
+	for _, f := range facts {
+		where := strings.Join(f.Path, "/")
+		v, ok := flowAt(answer, f.Path)
+		if !ok {
+			t.Errorf("%s: the brief shows %s from %s, which the JSON does not have", what, f.Display, where)
+			continue
+		}
+		at := strings.Index(rest, f.Display)
+		if at < 0 {
+			t.Errorf("%s: the brief recorded %q from %s but did not print it there", what, f.Display, where)
+			continue
+		}
+		rest = rest[at+len(f.Display):]
+		if f.Count {
+			if xs, isList := v.([]any); !isList || strconv.Itoa(len(xs)) != f.Display {
+				t.Errorf("%s: the brief counts %s at %s, the JSON has %v", what, f.Display, where, v)
+			}
+			continue
+		}
+		leaf, _ := json.Marshal(v)
+		s, isString := v.(string)
+		shown := strings.TrimSuffix(f.Display, "…")
+		if isString && strings.HasPrefix(shown, `"`) {
+			if err := json.Unmarshal([]byte(shown), &shown); err != nil {
+				t.Errorf("%s: the brief quoted %q at %s undecodably", what, f.Display, where)
+				continue
+			}
+		}
+		switch {
+		case f.Prefix && (!isString || !strings.HasSuffix(f.Display, "…") || !strings.HasPrefix(s, shown) || s == shown):
+			t.Errorf("%s: the brief shows %q at %s as a cut of %s, but it is not a marked strict prefix", what, f.Display, where, leaf)
+		case !f.Prefix && isString && (f.Display != shown && !strings.HasPrefix(f.Display, `"`) || shown != s):
+			t.Errorf("%s: the brief shows %q at %s, the JSON has %s", what, f.Display, where, leaf)
+		case !f.Prefix && !isString && f.Display != string(leaf):
+			t.Errorf("%s: the brief shows %q at %s, the JSON has %s", what, f.Display, where, leaf)
+		}
+	}
+}
+
+// flowAt walks decoded JSON by a brief path: JSON-quoted keys and [i] indexes.
+func flowAt(root any, path []string) (any, bool) {
+	v := root
+	for _, step := range path {
+		if strings.HasPrefix(step, "[") {
+			i, err := strconv.Atoi(strings.Trim(step, "[]"))
+			xs, ok := v.([]any)
+			if err != nil || !ok || i < 0 || i >= len(xs) {
+				return nil, false
+			}
+			v = xs[i]
+			continue
+		}
+		var key string
+		m, ok := v.(map[string]any)
+		if json.Unmarshal([]byte(step), &key) != nil || !ok {
+			return nil, false
+		}
+		if v, ok = m[key]; !ok {
+			return nil, false
+		}
+	}
+	return v, true
+}
+
 func (w *flowWorld) readJSON(args ...string) map[string]any {
+	w.t.Helper()
+	return flowDecode(w.t, w.readFlag("--json", args...))
+}
+
+// readFlag runs a read with one rendering flag and returns its stdout.
+func (w *flowWorld) readFlag(flag string, args ...string) []byte {
 	w.t.Helper()
 	// Flags follow the (sub)command and precede the optional record ID.
 	at := 1
 	if args[0] == "task" || args[0] == "intake" {
 		at = 2
 	}
-	withJSON := append(append(append([]string{}, args[:at]...), "--json"), args[at:]...)
-	out, err := w.cli(nil, withJSON...)
+	withFlag := append(append(append([]string{}, args[:at]...), flag), args[at:]...)
+	out, err := w.cli(nil, withFlag...)
 	if err != nil {
-		w.t.Fatalf("json read: %v", err)
+		w.t.Fatalf("%s read: %v", flag, err)
 	}
-	return flowDecode(w.t, out)
+	return out
 }
 
 // openTasks reads `datum show` on both surfaces (same facts, same watermark,
@@ -213,7 +315,7 @@ func (w *flowWorld) openTasks() []any {
 	w.t.Helper()
 	var open []any
 	for _, rec := range flowList(w.read("show"), "records") {
-		if flowStr(rec, "fact", "Kind") == string(model.Task) && flowGet(rec, "task") != nil && flowStr(rec, "task", "status") != "CLOSED" {
+		if flowStr(rec, "fact", "kind") == string(model.Task) && flowGet(rec, "task") != nil && flowStr(rec, "task", "status") != "CLOSED" {
 			open = append(open, rec)
 		}
 	}
@@ -539,7 +641,7 @@ func (w *flowWorld) prove(members map[model.ID]string) error {
 
 func (w *flowWorld) claimStatus() string {
 	w.t.Helper()
-	return flowStr(w.record(w.claim.RecordID), "claim", "Status")
+	return flowStr(w.record(w.claim.RecordID), "claim", "status")
 }
 
 // handEnvelope is a lane's hand-captured start envelope under the current
@@ -640,14 +742,14 @@ func TestFlowHonestStopping(t *testing.T) {
 		if got := flowStr(r, "task", "outcome"); got != "UNKNOWN" {
 			t.Errorf("%s: an open task reports closure outcome %s", c.outcome, got)
 		}
-		terminal := flowGet(r, "task", "attempts", 0, "Terminal")
-		if flowStr(terminal, "Outcome") != c.outcome || flowStr(terminal, "NextAction") != "next: "+c.outcome {
+		terminal := flowGet(r, "task", "attempts", 0, "terminal")
+		if flowStr(terminal, "outcome") != c.outcome || flowStr(terminal, "next_action") != "next: "+c.outcome {
 			t.Errorf("%s: the receipt is not readable as authored: %v", c.outcome, terminal)
 		}
 		if c.want.reason != "" {
 			found := false
 			for _, reason := range flowList(r, "task", "reasons") {
-				if flowStr(reason, "Kind") == c.want.reason && flowStr(reason, "Actor", "id") == c.want.reasonActor {
+				if flowStr(reason, "kind") == c.want.reason && flowStr(reason, "actor", "id") == c.want.reasonActor {
 					found = true
 				}
 			}
@@ -664,7 +766,7 @@ func TestFlowHonestStopping(t *testing.T) {
 		// Open work stays on the todo surfaces.
 		open := false
 		for _, rec := range w.openTasks() {
-			open = open || flowStr(rec, "fact", "Key", "ID") == string(task.ref.RecordID)
+			open = open || flowStr(rec, "fact", "key", "id") == string(task.ref.RecordID)
 		}
 		if !open {
 			t.Errorf("%s: the task left the open (not CLOSED) tasks in `show`; a non-success receipt must leave it open", c.outcome)
@@ -672,7 +774,7 @@ func TestFlowHonestStopping(t *testing.T) {
 		section := map[string]string{"READY": "ready", "BLOCKED": "blocked"}[c.want.status]
 		listed := false
 		for _, rec := range flowList(w.read("todo"), "preset", section) {
-			listed = listed || flowStr(rec, "fact", "Key", "ID") == string(task.ref.RecordID)
+			listed = listed || flowStr(rec, "fact", "key", "id") == string(task.ref.RecordID)
 		}
 		if !listed {
 			t.Errorf("%s: the task is not in the todo %s section", c.outcome, section)
@@ -690,7 +792,7 @@ func TestFlowHonestStopping(t *testing.T) {
 		t.Fatalf("control: runner-died with reconciliation owed admits: %v", err)
 	}
 	r := w.record(task.ref.RecordID)
-	if flowStr(r, "task", "status") != "BLOCKED" || flowStr(r, "task", "reasons", 0, "Kind") != "reconciliation" {
+	if flowStr(r, "task", "status") != "BLOCKED" || flowStr(r, "task", "reasons", 0, "kind") != "reconciliation" {
 		t.Errorf("runner-died with reconciliation owed must be BLOCKED on reconciliation, got %s %v", flowStr(r, "task", "status"), flowGet(r, "task", "reasons"))
 	}
 }
@@ -741,8 +843,8 @@ func TestFlowProof(t *testing.T) {
 		t.Fatalf("control: the real run's proof must admit: %v", err)
 	}
 	claim := w.record(w.claim.RecordID)
-	if flowStr(claim, "claim", "Status") != "PROVEN" || len(flowList(claim, "claim", "Proofs")) != 1 {
-		t.Fatalf("control: the claim must read PROVEN with one proof, got %s", flowStr(claim, "claim", "Status"))
+	if flowStr(claim, "claim", "status") != "PROVEN" || len(flowList(claim, "claim", "proofs")) != 1 {
+		t.Fatalf("control: the claim must read PROVEN with one proof, got %s", flowStr(claim, "claim", "status"))
 	}
 	w.read("history", string(w.claim.RecordID))
 	w.read("state")
@@ -888,12 +990,12 @@ func TestFlowAcceptance(t *testing.T) {
 		t.Fatalf("control: a success receipt admits: %v", err)
 	}
 	r := w.record(task.ref.RecordID)
-	if flowStr(r, "task", "status") != "BLOCKED" || flowStr(r, "task", "reasons", 0, "Kind") != "awaiting-acceptance" {
+	if flowStr(r, "task", "status") != "BLOCKED" || flowStr(r, "task", "reasons", 0, "kind") != "awaiting-acceptance" {
 		t.Fatalf("success must land awaiting acceptance, got %s %v", flowStr(r, "task", "status"), flowGet(r, "task", "reasons"))
 	}
 	awaiting := false
 	for _, rec := range flowList(w.read("todo"), "preset", "awaiting_acceptance") {
-		awaiting = awaiting || flowStr(rec, "fact", "Key", "ID") == string(task.ref.RecordID)
+		awaiting = awaiting || flowStr(rec, "fact", "key", "id") == string(task.ref.RecordID)
 	}
 	if !awaiting {
 		t.Error("the succeeded task is not in the awaiting-acceptance queue")
@@ -933,7 +1035,7 @@ func TestFlowAcceptance(t *testing.T) {
 		t.Errorf("expected CLOSED success, got %s %s", flowStr(r, "task", "status"), flowStr(r, "task", "outcome"))
 	}
 	for _, rec := range w.openTasks() {
-		if flowStr(rec, "fact", "Key", "ID") == string(task.ref.RecordID) {
+		if flowStr(rec, "fact", "key", "id") == string(task.ref.RecordID) {
 			t.Error("a closed task is still listed as owed")
 		}
 	}
@@ -1089,8 +1191,8 @@ func TestFlowDecisionAndCorrection(t *testing.T) {
 	w := flowNew(t)
 	decision, source := w.decision()
 	d := w.record(decision.RecordID)
-	if flowStr(d, "decision", "Status") != "OPEN" || flowStr(d, "author", "Author", "id") != flowLane {
-		t.Fatalf("control: an opened decision reads OPEN, authored by the lane, got %s by %v", flowStr(d, "decision", "Status"), flowGet(d, "author"))
+	if flowStr(d, "decision", "status") != "OPEN" || flowStr(d, "author", "actor", "id") != flowLane {
+		t.Fatalf("control: an opened decision reads OPEN, authored by the lane, got %s by %v", flowStr(d, "decision", "status"), flowGet(d, "author"))
 	}
 	unnamed := w.dispose(decision, source, "ship revision one", "")
 	unnamed.Authority.Actor = model.Actor{UnknownReason: "the scribe did not record who ruled"}
@@ -1104,14 +1206,14 @@ func TestFlowDecisionAndCorrection(t *testing.T) {
 		t.Fatalf("decision.dispose with a quote and a named authority must admit: %v", err)
 	}
 	d = w.record(decision.RecordID)
-	ruling := flowGet(d, "decision", "Dispositions", 0)
-	if flowStr(d, "decision", "Status") != "DECIDED" || flowStr(ruling, "Author", "Author", "id") != "scribe" ||
-		flowStr(ruling, "Disposition", "authority", "actor", "id") != "owner" || flowStr(ruling, "Disposition", "quote") != "ship revision one" {
-		t.Errorf("show must read DECIDED with author scribe, authority owner and the quote, got %s %v", flowStr(d, "decision", "Status"), ruling)
+	ruling := flowGet(d, "decision", "dispositions", 0)
+	if flowStr(d, "decision", "status") != "DECIDED" || flowStr(ruling, "author", "actor", "id") != "scribe" ||
+		flowStr(ruling, "disposition", "authority", "actor", "id") != "owner" || flowStr(ruling, "disposition", "quote") != "ship revision one" {
+		t.Errorf("show must read DECIDED with author scribe, authority owner and the quote, got %s %v", flowStr(d, "decision", "status"), ruling)
 	}
 	found := false
 	for _, e := range flowList(w.read("history", string(decision.RecordID)), "history") {
-		found = found || flowStr(e, "event", "type") == "decision.dispose" && flowStr(e, "author", "Author", "id") == "scribe"
+		found = found || flowStr(e, "event", "type") == "decision.dispose" && flowStr(e, "author", "actor", "id") == "scribe"
 	}
 	if !found {
 		t.Error("history of the decision does not show the disposition's author")
@@ -1124,8 +1226,8 @@ func TestFlowDecisionAndCorrection(t *testing.T) {
 		t.Fatalf("control: fixture reaches PROVEN: %v", err)
 	}
 	c := p.record(p.claim.RecordID)
-	if flowStr(c, "claim", "Status") != "PROVEN" || flowStr(c, "claim", "Support", "CorrectionFree") != "TRUE" || flowStr(c, "current_support") == "FALSE" {
-		t.Fatalf("control: PROVEN with no correction, got %v", flowGet(c, "claim", "Support"))
+	if flowStr(c, "claim", "status") != "PROVEN" || flowStr(c, "claim", "support", "correction_free") != "TRUE" || flowStr(c, "current_support") == "FALSE" {
+		t.Fatalf("control: PROVEN with no correction, got %v", flowGet(c, "claim", "support"))
 	}
 	body := []byte(`{"missed":"pose-c"}`)
 	p.put("corrections/missed.json", body)
@@ -1133,11 +1235,11 @@ func TestFlowDecisionAndCorrection(t *testing.T) {
 	p.mustAdmit(flowLane, &model.Correction{Target: model.CorrectionTarget{Kind: "support", Support: &model.SupportLink{Dependent: p.claim, Evidence: corrective}},
 		AffectedRevisions: []model.RecordRef{p.claim}, Reason: "the sweep missed a pose", CorrectiveRef: corrective})
 	c = p.record(p.claim.RecordID)
-	if flowStr(c, "claim", "Status") != "PROVEN" || len(flowList(c, "claim", "Proofs")) != 1 {
-		t.Errorf("a correction erased PROVEN history: %s", flowStr(c, "claim", "Status"))
+	if flowStr(c, "claim", "status") != "PROVEN" || len(flowList(c, "claim", "proofs")) != 1 {
+		t.Errorf("a correction erased PROVEN history: %s", flowStr(c, "claim", "status"))
 	}
-	if flowStr(c, "claim", "Support", "CorrectionFree") != "FALSE" || flowStr(c, "current_support") != "FALSE" {
-		t.Errorf("a correction must remove current support, got %v, current %s", flowGet(c, "claim", "Support"), flowStr(c, "current_support"))
+	if flowStr(c, "claim", "support", "correction_free") != "FALSE" || flowStr(c, "current_support") != "FALSE" {
+		t.Errorf("a correction must remove current support, got %v, current %s", flowGet(c, "claim", "support"), flowStr(c, "current_support"))
 	}
 	stated := false
 	for _, v := range flowList(p.read("state"), "preset", "claims") {
@@ -1174,8 +1276,8 @@ func TestFlowDecisionQuoteIsTheAuthoritysWords(t *testing.T) {
 	if t.Failed() {
 		d := w.record(decision.RecordID)
 		t.Logf("show now reads %s with quote %q attributed to authority %s, citing a source whose /ruling is %q",
-			flowStr(d, "decision", "Status"), flowStr(d, "decision", "Dispositions", 0, "Disposition", "quote"),
-			flowStr(d, "decision", "Dispositions", 0, "Disposition", "authority", "actor", "id"), "do not ship revision one")
+			flowStr(d, "decision", "status"), flowStr(d, "decision", "dispositions", 0, "disposition", "quote"),
+			flowStr(d, "decision", "dispositions", 0, "disposition", "authority", "actor", "id"), "do not ship revision one")
 	}
 }
 
@@ -1190,7 +1292,7 @@ func TestFlowRemainingEvents(t *testing.T) {
 	w.mustAdmit(flowLane, &model.TaskAmend{Provenance: model.Provenance{Author: model.Actor{ID: flowLane}, SourceRefs: []model.ArtifactRef{}},
 		Target: task.ref, ExpectedRevision: 1, Replacement: amended})
 	r := w.record(task.ref.RecordID)
-	if flowStr(r, "task", "revision") != "2" || flowStr(r, "fact", "Task", "intent") != amended.Intent || flowStr(r, "task", "status") != "IN FLIGHT" {
+	if flowStr(r, "task", "revision") != "2" || flowStr(r, "fact", "task", "intent") != amended.Intent || flowStr(r, "task", "status") != "IN FLIGHT" {
 		t.Fatalf("task.amend must read revision 2 with the new intent and leave the attempt live, got %s %s", flowStr(r, "task", "revision"), flowStr(r, "task", "status"))
 	}
 	current := w.ref(task.ref.RecordID, 2)
@@ -1233,8 +1335,8 @@ func TestFlowRemainingEvents(t *testing.T) {
 	w.mustAdmit(flowLane, &model.DecisionRevise{Provenance: model.Provenance{Author: model.Actor{ID: flowLane}, SourceRefs: []model.ArtifactRef{}},
 		Target: decision, ExpectedRevision: 1, Replacement: model.DecisionSpec{Question: "ship revision two?", Options: []string{"ship", "hold"}, WaitingActor: model.Actor{ID: "owner"}, Scope: w.scope}})
 	d := w.record(decision.RecordID)
-	if flowStr(d, "fact", "Key", "Revision") != "2" || flowStr(d, "decision", "Status") != "OPEN" || flowStr(d, "fact", "Decision", "question") != "ship revision two?" {
-		t.Errorf("decision.revise must read revision 2, OPEN, with the new question; got %v", flowGet(d, "fact", "Key"))
+	if flowStr(d, "fact", "key", "revision") != "2" || flowStr(d, "decision", "status") != "OPEN" || flowStr(d, "fact", "decision", "question") != "ship revision two?" {
+		t.Errorf("decision.revise must read revision 2, OPEN, with the new question; got %v", flowGet(d, "fact", "key"))
 	}
 
 	// Trust withdrawal, then claim and instrument revision, on a PROVEN claim.
@@ -1245,18 +1347,18 @@ func TestFlowRemainingEvents(t *testing.T) {
 	}
 	p.mustAdmit(flowLane, &model.TrustWithdraw{Instrument: p.instrument, Scope: p.scope, RevalidationCondition: "re-run against a known sweep"})
 	c := p.record(p.claim.RecordID)
-	if flowStr(c, "claim", "Status") != "PROVEN" || flowStr(c, "claim", "Support", "ActiveTrust") != "FALSE" || flowStr(c, "current_support") != "FALSE" {
-		t.Errorf("trust.withdraw must keep PROVEN history and remove current support, got %s %v", flowStr(c, "claim", "Status"), flowGet(c, "claim", "Support"))
+	if flowStr(c, "claim", "status") != "PROVEN" || flowStr(c, "claim", "support", "active_trust") != "FALSE" || flowStr(c, "current_support") != "FALSE" {
+		t.Errorf("trust.withdraw must keep PROVEN history and remove current support, got %s %v", flowStr(c, "claim", "status"), flowGet(c, "claim", "support"))
 	}
 	spec := model.ClaimSpec{Assertion: "every pose is below 0.04 mm", Falsifier: "a pose reaches 0.04 mm", Scope: p.scope, ExternalRefs: []model.ExternalReference{}}
 	p.mustAdmit(flowLane, &model.ClaimRevise{Provenance: model.Provenance{Author: model.Actor{ID: flowLane}, SourceRefs: []model.ArtifactRef{}}, Target: p.claim, ExpectedRevision: 1, Replacement: spec})
 	c = p.record(p.claim.RecordID)
-	if flowStr(c, "fact", "Key", "Revision") != "2" || flowStr(c, "claim", "Status") != "UNMEASURED" {
-		t.Errorf("a revised claim must not borrow revision 1's proof: got revision %s %s", flowStr(c, "fact", "Key", "Revision"), flowStr(c, "claim", "Status"))
+	if flowStr(c, "fact", "key", "revision") != "2" || flowStr(c, "claim", "status") != "UNMEASURED" {
+		t.Errorf("a revised claim must not borrow revision 1's proof: got revision %s %s", flowStr(c, "fact", "key", "revision"), flowStr(c, "claim", "status"))
 	}
 	record, _ := p.record(p.instrument.RecordID)["fact"].(map[string]any)
 	instrument := model.InstrumentSpec{}
-	raw, _ := json.Marshal(record["Instrument"])
+	raw, _ := json.Marshal(record["instrument"])
 	if err := json.Unmarshal(raw, &instrument); err != nil {
 		t.Fatal(err)
 	}

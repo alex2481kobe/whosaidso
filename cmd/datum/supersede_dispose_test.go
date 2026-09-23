@@ -85,7 +85,7 @@ func TestCLIDisposedArtifactLeavesItsProofUnverifiable(t *testing.T) {
 		t.Fatal(err)
 	}
 	var run struct {
-		Envelope    model.InvocationEnvelope `json:"Envelope"`
+		Envelope    model.InvocationEnvelope `json:"envelope"`
 		StartPacket model.PacketRef          `json:"StartPacket"`
 		SealPacket  model.PacketRef          `json:"SealPacket"`
 	}

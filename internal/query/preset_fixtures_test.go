@@ -187,9 +187,9 @@ func assertHonestRendering(t *testing.T, a Answer) {
 	}
 	for path, value := range leaves {
 		// Two reused reducer identifiers are blank when not applicable, not
-		// unknown: PriorAttempt without a takeover, BlockerID on a reason that
-		// is not a hold. Their siblings (Takeover, Kind) say which applies.
-		notApplicable := strings.HasSuffix(path, "\"PriorAttempt\"") || strings.HasSuffix(path, "\"BlockerID\"")
+		// unknown: prior_attempt without a takeover, blocker_id on a reason that
+		// is not a hold. Their siblings (takeover, kind) say which applies.
+		notApplicable := strings.HasSuffix(path, "\"prior_attempt\"") || strings.HasSuffix(path, "\"blocker_id\"")
 		if strings.Contains(path, "\"preset\"") && value == `""` && !notApplicable {
 			t.Fatalf("%s renders a blank string at %q; UNKNOWN must say UNKNOWN and why", a.Command, path)
 		}

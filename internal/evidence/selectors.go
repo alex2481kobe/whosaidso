@@ -54,7 +54,15 @@ type Reading struct {
 	// MemberReasons parallels Values. A nonblank entry marks an unreadable slot;
 	// its zero Scalar is never a measurement. Positions and coverage are retained.
 	MemberReasons []string
+	// MemberNames parallels Values: the member's own identifying string field
+	// (memberNameKeys), or blank when it states none. It only names a member
+	// in a reason; it is the artifact's claim and is never compared.
+	MemberNames []string
 }
+
+// memberNameKeys are the fields that identify a set member, in preference
+// order: archtree readings carry "path".
+var memberNameKeys = []string{"path", "id", "name"}
 
 // Scalars returns a complete readable selection, never unreadable placeholders.
 func (r Reading) Scalars() ([]model.Scalar, bool) {
@@ -152,8 +160,14 @@ func finish(out Reading, v any) (Reading, error) {
 		out.MemberReasons = make([]string, len(t))
 		readable := 0
 		out.MemberMetadata = make([]map[string]model.Availability[string], len(t))
+		out.MemberNames = make([]string, len(t))
 		for i, e := range t {
 			if obj, ok := e.(map[string]any); ok {
+				for _, key := range memberNameKeys {
+					if name, isString := obj[key].(string); isString && strings.TrimSpace(name) != "" && out.MemberNames[i] == "" {
+						out.MemberNames[i] = name
+					}
+				}
 				unit, population, denominator := metaFrom(obj, nil)
 				declared := map[string]model.Availability[string]{"unit": unit, "population": population, "denominator": denominator}
 				for key := range declared {

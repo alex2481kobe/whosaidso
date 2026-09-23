@@ -43,26 +43,26 @@ const (
 // be the unknown branch: an unstated waiting actor is recorded as unknown, never
 // guessed from whoever happens to be nearby.
 type BlockedReason struct {
-	Kind      string
-	Detail    string
-	Actor     model.Actor
-	BlockerID model.ID
-	Target    *model.RecordRef
-	Truth     Truth
-	Origin    Origin
+	Kind      string           `json:"kind"`
+	Detail    string           `json:"detail"`
+	Actor     model.Actor      `json:"actor"`
+	BlockerID model.ID         `json:"blocker_id"`
+	Target    *model.RecordRef `json:"target"`
+	Truth     Truth            `json:"truth"`
+	Origin    Origin           `json:"origin"`
 }
 
 // PrerequisiteResult is one typed prerequisite evaluated at the queried task
 // revision. Waived records that a declared waiver carried the requirement, so a
 // reader can tell "satisfied" from "excused" without reading the spec again.
 type PrerequisiteResult struct {
-	Index  int
-	Kind   string
-	Target model.RecordRef
-	Truth  Truth
-	Waived bool
-	Detail string
-	Waiver *model.Authority
+	Index  int              `json:"index"`
+	Kind   string           `json:"kind"`
+	Target model.RecordRef  `json:"target"`
+	Truth  Truth            `json:"truth"`
+	Waived bool             `json:"waived"`
+	Detail string           `json:"detail"`
+	Waiver *model.Authority `json:"waiver"`
 }
 
 // Satisfied reports whether this prerequisite stops blocking the task.
@@ -73,19 +73,19 @@ func (p PrerequisiteResult) Satisfied() bool { return p.Truth == TruthTrue || p.
 // not take effect, because hiding an ineffective closure hides who tried to
 // close the task and why it did not stick.
 type TaskProjection struct {
-	Task          RecordKey
-	Spec          *model.TaskSpec
-	Status        TaskStatus
-	Outcome       model.ClosureOutcome
-	Closure       *Closure
-	Attempts      []Attempt
-	LiveAttempts  []AttemptKey
-	Blockers      []Blocker
-	Prerequisites []PrerequisiteResult
-	Reasons       []BlockedReason
-	WaitingActors []model.Actor
-	NextActor     model.Actor
-	CommitsDenied bool
+	Task          RecordKey            `json:"task"`
+	Spec          *model.TaskSpec      `json:"spec"`
+	Status        TaskStatus           `json:"status"`
+	Outcome       model.ClosureOutcome `json:"outcome"`
+	Closure       *Closure             `json:"closure"`
+	Attempts      []Attempt            `json:"attempts"`
+	LiveAttempts  []AttemptKey         `json:"live_attempts"`
+	Blockers      []Blocker            `json:"blockers"`
+	Prerequisites []PrerequisiteResult `json:"prerequisites"`
+	Reasons       []BlockedReason      `json:"reasons"`
+	WaitingActors []model.Actor        `json:"waiting_actors"`
+	NextActor     model.Actor          `json:"next_actor"`
+	CommitsDenied bool                 `json:"commits_denied"`
 }
 
 // Task projects one task at its current revision. The second result is false

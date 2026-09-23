@@ -38,12 +38,12 @@ const (
 // exactly where. Which one loses is decided by ledger sequence, never by the
 // order a directory happened to enumerate.
 type Conflict struct {
-	Target     model.RecordRef
-	Expected   model.Revision
-	Actual     model.Revision
-	Sequence   uint64
-	EventIndex int
-	Path       string
+	Target     model.RecordRef `json:"target"`
+	Expected   model.Revision  `json:"expected"`
+	Actual     model.Revision  `json:"actual"`
+	Sequence   uint64          `json:"sequence"`
+	EventIndex int             `json:"event_index"`
+	Path       string          `json:"path"`
 }
 
 // Code lets a caller branch on the same vocabulary model.Fault uses.
