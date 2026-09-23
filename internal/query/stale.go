@@ -1,6 +1,6 @@
 package query
 
-// The stale-claims section of `datum state --stale` (R14.2) lives here: its
+// The stale-claims section of `datum show --stale` (R14.2) lives here: its
 // answer shape, the seam the caller fills, and its brief lines. Deciding
 // staleness needs git, so it lives in internal/write (stale_claims.go) and is
 // reached only when the caller asks; this package never runs git.

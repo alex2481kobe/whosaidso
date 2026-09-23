@@ -8,7 +8,6 @@ import (
 	"datum/internal/store"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,11 +42,43 @@ func cliFixture(t *testing.T) (string, []byte) {
 
 func cliID(n int) model.ID { return model.ID(fmt.Sprintf("%026d", n)) }
 
+// callWriteCLI runs a write in process and asks for its full result
+// (--json), which these tests decode; the default acknowledgement is tested
+// in acks_test.go.
 func callWriteCLI(t *testing.T, root string, input []byte, args ...string) ([]byte, error) {
 	t.Helper()
+	return callCLI(root, input, func(string) string { return "" }, withJSON(args)...)
+}
+
+// callCLI runs one command in process; a nonzero exit is an error carrying
+// the status and stderr.
+func callCLI(root string, input []byte, getenv func(string) string, args ...string) ([]byte, error) {
 	var output, diagnostic bytes.Buffer
-	err := writeCLI(context.Background(), args, root, bytes.NewReader(input), &output, &diagnostic, func(string) string { return "" })
-	return output.Bytes(), err
+	if code := datum(context.Background(), args, root, bytes.NewReader(input), &output, &diagnostic, getenv); code != 0 {
+		return output.Bytes(), fmt.Errorf("exit status %d: %s", code, diagnostic.String())
+	}
+	if diagnostic.Len() != 0 {
+		return output.Bytes(), fmt.Errorf("stderr: %s", diagnostic.String())
+	}
+	return output.Bytes(), nil
+}
+
+// acknowledged reports whether a failed write printed anything but the JSON
+// error object --json prints for a failure.
+func acknowledged(out []byte) bool {
+	var e struct {
+		Error *struct{ Code, Message string } `json:"error"`
+	}
+	return len(out) != 0 && (json.Unmarshal(out, &e) != nil || e.Error == nil)
+}
+
+// withJSON adds --json after a write verb, so the test reads the full result.
+func withJSON(args []string) []string {
+	switch args[0] {
+	case "capture", "admit", "handback", "run", "reconcile":
+		return append([]string{args[0], "--json"}, args[1:]...)
+	}
+	return args
 }
 
 func cliControl(t *testing.T, root string, data []byte) {
@@ -81,9 +112,8 @@ func TestCLICaptureAdmissionAndExplicitUnavailable(t *testing.T) {
 	cliControl(t, root, data)
 	// run is enabled by U12; TestCLIRunRefusesBeforeLaunch covers its refusals.
 	for _, command := range []string{"publish", "append", "decision", "claim"} {
-		_, err := callWriteCLI(t, root, nil, command)
-		if err == nil || !strings.Contains(err.Error(), "unavailable-until-integrated") {
-			t.Fatalf("unchecked command %s was not refused: %v", command, err)
+		if out, errs, code := cliRun(t, root, nil, "", command); code != 2 || out != "" || !strings.Contains(errs, "unknown command") {
+			t.Fatalf("unknown command %s must be a usage error: %d %q %q", command, code, out, errs)
 		}
 	}
 	_, err := callWriteCLI(t, root, nil, "admit", "--command-id", string(cliID(4)), "--actor", "reviewer", "--outcome", "rejected", "--reason", "changed judgment", string(cliID(3)))
@@ -132,17 +162,17 @@ func TestCLIActorFallbackUnknownAndBlobCapture(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i, expected := range []model.Actor{{ID: "from-environment"}, {UnknownReason: "no actor supplied by --actor or DATUM_ACTOR"}} {
-		var out bytes.Buffer
 		env := func(string) string { return "from-environment" }
 		args := []string{"capture", "--command-id", string(cliID(21 + i)), "--blob", blob}
 		if i == 1 {
 			args = append(args, "--actor", "")
 		}
-		if err := writeCLI(context.Background(), args, root, bytes.NewReader(data), &out, io.Discard, env); err != nil {
+		out, err := callCLI(root, data, env, withJSON(args)...)
+		if err != nil {
 			t.Fatal(err)
 		}
 		var packet model.PacketRef
-		if err := json.Unmarshal(out.Bytes(), &packet); err != nil {
+		if err := json.Unmarshal(out, &packet); err != nil {
 			t.Fatal(err)
 		}
 		project, err := store.Discover(root)

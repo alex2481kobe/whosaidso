@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"reflect"
@@ -19,17 +20,6 @@ import (
 
 	"datum/internal/model"
 )
-
-const templateUsage = `datum template EVENT-TYPE
-
-Prints a capture-ready JSON array holding one EVENT-TYPE event with every
-field present. Every "<kind: hint>" string is a placeholder for the author to
-fill; an unfilled template does not decode, so it cannot be captured by
-accident. Ids the event creates are freshly minted; every other id is a
-reference to look up. Reasons, dispositions and judgments stay placeholders:
-the template never supplies authored meaning. Choices (unions) and optional
-keys are listed on stderr. Event types:
-`
 
 type templateNote struct {
 	Path   []string
@@ -49,32 +39,35 @@ type templateBuilder struct {
 	notes []templateNote
 }
 
-func templateCLI(args []string, stdout, stderr io.Writer) error {
-	if len(args) != 1 || args[0] == "--help" || args[0] == "-h" {
-		var b strings.Builder
-		b.WriteString(templateUsage)
-		for _, event := range templateEvents {
-			fmt.Fprintf(&b, "  %s\n", event.EventType())
+// templateVerb prints one event type's skeleton on stdout and its notes
+// (choices, optional and minted keys) on stderr.
+func templateVerb(fs *flag.FlagSet) func(*call) error {
+	return func(c *call) error {
+		if len(c.args) != 1 || c.argv != nil {
+			return usageError("datum template takes exactly one EVENT-TYPE:\n%s", templateEventList())
 		}
-		if len(args) != 1 {
-			_, err := io.WriteString(stderr, b.String())
-			if err == nil {
-				err = fmt.Errorf("template takes exactly one event type")
-			}
+		data, notes, err := buildTemplate(model.EventType(c.args[0]))
+		if err != nil {
 			return err
 		}
-		_, err := io.WriteString(stdout, b.String())
+		if _, err := c.stdout.Write(data); err != nil {
+			return err
+		}
+		_, err = io.WriteString(c.stderr, renderTemplateNotes(model.EventType(c.args[0]), notes))
 		return err
 	}
-	data, notes, err := buildTemplate(model.EventType(args[0]))
-	if err != nil {
-		return err
+}
+
+// templateEventList is every event type a template can be printed for.
+func templateEventList() string {
+	var b strings.Builder
+	for i, event := range templateEvents {
+		if i > 0 {
+			b.WriteString(" ")
+		}
+		b.WriteString(string(event.EventType()))
 	}
-	if _, err := stdout.Write(data); err != nil {
-		return err
-	}
-	_, err = io.WriteString(stderr, renderTemplateNotes(model.EventType(args[0]), notes))
-	return err
+	return b.String()
 }
 
 // buildTemplate renders one event type's skeleton and the notes that say which
@@ -87,7 +80,7 @@ func buildTemplate(eventType model.EventType) ([]byte, []templateNote, error) {
 		}
 	}
 	if payload == nil {
-		return nil, nil, fmt.Errorf("unknown event type %q; run datum template --help for the list", eventType)
+		return nil, nil, usageError("unknown event type %q; run datum help template for the list", eventType)
 	}
 	b := &templateBuilder{event: eventType}
 	body := b.walk(payload, nil, reflect.StructField{})

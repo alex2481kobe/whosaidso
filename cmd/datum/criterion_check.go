@@ -1,16 +1,16 @@
 package main
 
-// This file holds `datum criterion check`: one hypothetical completed run whose
+// This file holds `datum check criterion`: one hypothetical completed run whose
 // output is the candidate bytes, evaluated by evidence.Observe and
 // evidence.Evaluate, the calls admission makes for each exact proof member.
 // The candidate is read from a temporary directory outside the project, so
-// nothing is written. Flag parsing lives in check.go; no rule lives here.
+// nothing is written. Flags, the scope statement and printing live in
+// check.go; no rule lives here.
 
 import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -22,43 +22,55 @@ import (
 	"datum/internal/store"
 )
 
+// criterionEvaluation is what the criterion preview found.
+type criterionEvaluation struct {
+	Criterion         model.CriterionRef `json:"criterion"`
+	Over              string             `json:"over"` // the candidate: --output, or the pinned example
+	Verdict           evidence.Verdict   `json:"verdict"`
+	Reason            string             `json:"reason,omitempty"`
+	ResultReading     string             `json:"result_reading"`
+	PopulationReading string             `json:"population_reading"`
+}
+
 // criterionCheck builds one hypothetical completed run whose output is the
 // candidate, then asks evidence.Observe and evidence.Evaluate, the calls
-// admission makes for each exact proof member.
-func criterionCheck(ctx context.Context, project store.Project, events []model.Event, blob, output string, stdout io.Writer) error {
+// admission makes for each exact proof member. It returns the evaluation and
+// the two selectors it read.
+func criterionCheck(ctx context.Context, project store.Project, events []model.Event, blob, output string) (criterionEvaluation, []model.ArtifactRef, error) {
+	var none criterionEvaluation
 	var fix *model.CriterionFix
 	for _, raw := range events {
 		event, err := model.DecodeEvent(raw)
 		if err != nil {
-			return err
+			return none, nil, err
 		}
 		if f, ok := event.(*model.CriterionFix); ok {
 			if fix != nil {
-				return fmt.Errorf("criterion check takes one criterion.fix; the events hold more")
+				return none, nil, fmt.Errorf("check criterion takes one criterion.fix; the events hold more")
 			}
 			fix = f
 		}
 	}
 	if fix == nil {
-		return fmt.Errorf("the events hold no criterion.fix")
+		return none, nil, fmt.Errorf("the events hold no criterion.fix")
 	}
 	selectors := []model.ArtifactRef{fix.Expression.ResultSelector, fix.Expression.Population.Selector}
 	var candidate []byte
 	if output != "" {
 		data, err := os.ReadFile(output)
 		if err != nil {
-			return err
+			return none, nil, err
 		}
 		candidate = data
 	}
 	scratch, err := os.MkdirTemp("", "datum-criterion-check-")
 	if err != nil {
-		return err
+		return none, nil, err
 	}
 	defer os.RemoveAll(scratch)
 	invocation, err := model.NewID(time.Now(), rand.Reader)
 	if err != nil {
-		return err
+		return none, nil, err
 	}
 	runDir := evidence.RunDirIn(project.ArtifactDir(), invocation)
 	placed := map[string][]byte{}
@@ -67,7 +79,7 @@ func criterionCheck(ctx context.Context, project store.Project, events []model.E
 		bytes := candidate
 		if bytes == nil {
 			if bytes, err = criterionExample(ctx, project, selector, blob, scratch); err != nil {
-				return fmt.Errorf("the criterion's %s example does not resolve, so admission would refuse the criterion: %w", []string{"result", "population"}[i], err)
+				return none, nil, fmt.Errorf("the criterion's %s example does not resolve, so admission would refuse the criterion: %w", []string{"result", "population"}[i], err)
 			}
 		}
 		media := "application/octet-stream"
@@ -81,12 +93,12 @@ func criterionCheck(ctx context.Context, project store.Project, events []model.E
 			}
 			if prior, ok := placed[at]; ok {
 				if string(prior) != string(bytes) {
-					return fmt.Errorf("the result and population examples are different bytes at the same path %s", declared)
+					return none, nil, fmt.Errorf("the result and population examples are different bytes at the same path %s", declared)
 				}
 				continue
 			}
 			if err := writeScratch(scratch, at, bytes); err != nil {
-				return err
+				return none, nil, err
 			}
 			placed[at] = bytes
 			outputs = append(outputs, model.ArtifactRef{Kind: "content", Selector: model.Selector{Kind: "whole"},
@@ -94,7 +106,7 @@ func criterionCheck(ctx context.Context, project store.Project, events []model.E
 		}
 	}
 	if output != "" && len(placed) > 1 {
-		return fmt.Errorf("the criterion reads two different outputs; --output supplies one")
+		return none, nil, fmt.Errorf("the criterion reads two different outputs; --output supplies one")
 	}
 	exit := 0
 	now := time.Now().UTC()
@@ -108,25 +120,20 @@ func criterionCheck(ctx context.Context, project store.Project, events []model.E
 	resolver := evidence.NewResolverAt(scratch, project.ArtifactDir())
 	observation, err := resolver.Observe(ctx, *fix, env)
 	if err != nil {
-		return err
+		return none, nil, err
 	}
 	result, err := evidence.Evaluate(*fix, []evidence.Observation{observation})
 	if err != nil {
-		return err
+		return none, nil, err
 	}
-	source := "the criterion's pinned example"
+	e := criterionEvaluation{Criterion: ref, Over: "the criterion's pinned example", Verdict: result.Verdict,
+		Reason:            strings.TrimPrefix(result.Reason, string(invocation)+": "),
+		ResultReading:     describeReading(observation.Result, observation.Unavailable),
+		PopulationReading: describeReading(observation.Population, observation.Unavailable)}
 	if output != "" {
-		source = output
+		e.Over = output
 	}
-	fmt.Fprintf(stdout, "criterion %s revision %d on claim %s, over %s (dry run; nothing was written)\n", fix.CriterionID, fix.Revision, fix.Claim.RecordID, source)
-	fmt.Fprintf(stdout, "verdict: %s\n", result.Verdict)
-	if result.Reason != "" {
-		fmt.Fprintf(stdout, "why: %s\n", strings.TrimPrefix(result.Reason, string(invocation)+": "))
-	}
-	fmt.Fprintf(stdout, "result reading: %s\n", describeReading(observation.Result, observation.Unavailable))
-	fmt.Fprintf(stdout, "population reading: %s\n", describeReading(observation.Population, observation.Unavailable))
-	io.WriteString(stdout, "as one completed run; instrument validation, the family and comparability are for datum proof check\n")
-	return nil
+	return e, selectors, nil
 }
 
 // criterionExample resolves a selector's pinned example as admission would,

@@ -1,17 +1,16 @@
 package query
 
-// Rendering of the four views: JSON (the complete answer), the lossless text
-// outline, and the concise brief. The brief is built from the view's own JSON
-// export through briefWriter, so every value it prints carries the path it was
-// read from, exactly as for the older answers (brief.go). Selection rules live
-// in the view_*.go files; nothing here decides what a view holds.
+// Rendering of the four views: JSON (the complete answer) and the concise
+// brief. The brief is built from the view's own JSON export through
+// briefWriter (brief.go), so every value it prints carries the path it was
+// read from. Selection rules live in the view_*.go files; nothing here
+// decides what a view holds.
 
 import (
 	"bytes"
 	"encoding/json"
 	"io"
 	"sort"
-	"strings"
 )
 
 // RenderViewJSON exports exactly the answer.
@@ -19,24 +18,6 @@ func RenderViewJSON(w io.Writer, answer ViewAnswer) error {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(answer)
-}
-
-// RenderViewText is the lossless field outline of the JSON answer.
-func RenderViewText(w io.Writer, answer ViewAnswer) error {
-	var encoded bytes.Buffer
-	if err := RenderViewJSON(&encoded, answer); err != nil {
-		return err
-	}
-	decoder := json.NewDecoder(&encoded)
-	decoder.UseNumber()
-	var value any
-	if err := decoder.Decode(&value); err != nil {
-		return err
-	}
-	var output strings.Builder
-	outline(&output, "answer", value, 0)
-	_, err := io.WriteString(w, output.String())
-	return err
 }
 
 // RenderViewBrief writes the concise reading. --json keeps full detail.

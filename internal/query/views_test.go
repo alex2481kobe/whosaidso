@@ -79,23 +79,16 @@ func view_(t *testing.T, p store.Project, r ViewRequest) ViewAnswer {
 }
 
 // assertViewHonest checks the rendering rules every view answer keeps: the
-// brief shows only JSON leaves at their paths (brief_test.go's rule), the
-// outline carries exactly the JSON's leaves, both render deterministically,
-// and the watermark heads the JSON and the brief.
+// brief shows only JSON leaves at their paths (brief_test.go's rule), it
+// renders deterministically, and the watermark heads the JSON and the brief.
 func assertViewHonest(t *testing.T, a ViewAnswer) string {
 	t.Helper()
-	var exported, outline, again bytes.Buffer
+	var exported, again bytes.Buffer
 	if err := RenderViewJSON(&exported, a); err != nil {
-		t.Fatal(err)
-	}
-	if err := RenderViewText(&outline, a); err != nil {
 		t.Fatal(err)
 	}
 	name := a.Header().View
 	leaves := jsonLeaves(t, exported.Bytes())
-	if !reflect.DeepEqual(leaves, textLeaves(t, outline.String())) {
-		t.Fatalf("%s outline and JSON disagree", name)
-	}
 	for _, key := range []string{"sequence", "bundles", "events", "head"} {
 		found := false
 		for path := range leaves {

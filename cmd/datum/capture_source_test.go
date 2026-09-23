@@ -6,9 +6,9 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"datum/internal/model"
@@ -85,8 +85,7 @@ func TestCaptureRefusesSourceBytesItCannotSave(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := callWriteCLI(t, root, sourceEvents(t, body, prepare()), "capture", "--actor", "lane")
-			var fault *model.Fault
-			if !errors.As(err, &fault) || fault.Code != "source-not-captured" {
+			if err == nil || !strings.Contains(err.Error(), "source-not-captured") {
 				t.Fatalf("expected source-not-captured, got %v", err)
 			}
 		})

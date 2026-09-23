@@ -1,64 +1,10 @@
 package query
 
-// Section layout of the brief: which blocks each part of an Answer becomes.
-// Every value goes through briefWriter.line, which records its JSON path. A
-// section the answer does not carry is not printed; a carried empty list
-// prints "none". Deep structures (closure, continue, disposal) print their
-// counts and point at --json. Selection rules stay in the preset files.
-
-// briefBody prints records, history and reviews, the preset sections with
-// attention first, then intake.
-func briefBody(b *briefWriter, a cur, command string) {
-	primary := map[string]string{"show": "records", "history": "history", "intake pending": "intake"}[command]
-	top := func(name string, each func(*briefWriter, int, cur)) {
-		if list := a.at(name); len(list.items()) > 0 || name == primary {
-			briefList(b, 0, name, list, each)
-		}
-	}
-	top("records", briefRecord)
-	top("history", briefEvent)
-	top("reviews", briefReview)
-	if p := a.at("preset"); p.ok() {
-		briefPreset(b, p)
-	}
-	top("intake", briefPacket) // after attention and the queues it would push down
-}
-
-func briefPreset(b *briefWriter, p cur) {
-	briefList(b, 0, "attention", p.at("attention"), briefAttention)
-	sections := []struct {
-		key, title string
-		each       func(*briefWriter, int, cur)
-	}{
-		{"instruments", "instruments", briefInstrument}, {"claims", "claims", briefClaim},
-		{"in_flight", "in flight", briefRecord}, {"blocked", "blocked", briefRecord},
-		{"awaiting_acceptance", "awaiting acceptance", briefRecord}, {"ready", "ready", briefRecord},
-		{"closed", "closed", briefRecord}, {"decisions", "decisions", briefDecision}, {"runs", "runs", briefRun},
-		{"stale", "stale claims", briefStale},
-	}
-	for _, s := range sections {
-		if p.at(s.key).ok() {
-			briefList(b, 0, s.title, p.at(s.key), s.each)
-		}
-	}
-	if l := p.at("limit"); l.ok() {
-		b.line(0, "limit: requested", l.at("requested"), "offered", l.at("offered"), "omitted", l.at("omitted"))
-	}
-	if c := p.at("closure"); c.ok() {
-		briefClosure(b, c)
-	}
-	if c := p.at("continue"); c.ok() {
-		b.line(0, "continue: task", c.at("task", "record_id"), "rev", c.at("task", "revision"), "attempts", count(c.at("attempts")), "runs", count(c.at("runs")))
-		b.line(1, prefix(c.at("handoff")))
-		briefClosure(b, c.at("closure"))
-	}
-	if d := p.at("disposal"); d.ok() {
-		b.line(0, "disposal: digest", d.at("target", "digest"), "support_loss", count(d.at("support_loss")), "cited_by", count(d.at("cited_by")))
-		for _, ref := range d.at("support_loss").items() {
-			b.line(1, ref.at("record_id"), "rev", ref.at("revision"))
-		}
-	}
-}
+// Blocks of the brief the views share: lists, actors, records, attention,
+// runs, events, reviews and packets. Every value goes through
+// briefWriter.line, which records its JSON path; a carried empty list prints
+// "none". Each view's layout lives in view_render.go; selection rules stay in
+// the view files.
 
 func briefList(b *briefWriter, indent int, title string, list cur, each func(*briefWriter, int, cur)) {
 	items := list.items()
@@ -70,10 +16,6 @@ func briefList(b *briefWriter, indent int, title string, list cur, each func(*br
 	for _, item := range items {
 		each(b, indent+1, item)
 	}
-}
-
-func briefClosure(b *briefWriter, c cur) {
-	b.line(0, "closure: mandatory", count(c.at("mandatory")), "optional", count(c.at("optional")), "cycles", count(c.at("cycles")))
 }
 
 // who is an actor or its UNKNOWN branch, never a blank.
@@ -135,22 +77,6 @@ func briefAttention(b *briefWriter, indent int, n cur) {
 	b.line(indent, pieces...)
 	b.line(indent+1, prefix(n.at("label")))
 	b.line(indent+1, prefix(n.at("reason")))
-}
-
-func briefInstrument(b *briefWriter, indent int, v cur) {
-	b.line(indent, "INSTRUMENT", v.at("ref", "record_id"), "rev", v.at("ref", "revision"), "validation", v.at("validation", "state"), "trust", v.at("trust"))
-	b.line(indent+1, prefix(v.at("label")))
-}
-
-func briefClaim(b *briefWriter, indent int, v cur) {
-	b.line(indent, "CLAIM", v.at("ref", "record_id"), "rev", v.at("ref", "revision"), v.at("status"), "support", v.at("current_support"))
-	b.line(indent+1, prefix(v.at("label")))
-	b.line(indent+1, prefix(v.at("standing")))
-}
-
-func briefDecision(b *briefWriter, indent int, v cur) {
-	b.line(indent, append([]any{"DECISION", v.at("ref", "record_id"), "rev", v.at("ref", "revision"), v.at("status"), "waiting on"}, who(v.at("waiting_actor"))...)...)
-	b.line(indent+1, prefix(v.at("label")))
 }
 
 func briefRun(b *briefWriter, indent int, v cur) {

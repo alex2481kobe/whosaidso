@@ -6,7 +6,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"datum/internal/model"
 	"datum/internal/store"
 	"encoding/json"
@@ -76,17 +75,17 @@ func TestCLIHandbackOutcomesAndAttribution(t *testing.T) {
 				}
 				args[len(args)-3] = path
 			}
-			var out, diagnostic bytes.Buffer
-			if err := writeCLI(context.Background(), args, root, bytes.NewReader(refs), &out, &diagnostic, func(string) string { return env }); err != nil || diagnostic.Len() != 0 {
-				t.Fatalf("handback failed: %v; stderr=%s", err, &diagnostic)
+			getenv := func(string) string { return env }
+			out, err := callCLI(root, refs, getenv, withJSON(args)...)
+			if err != nil {
+				t.Fatalf("handback failed: %v", err)
 			}
 			var receipt model.PacketRef
-			if err := json.Unmarshal(out.Bytes(), &receipt); err != nil || receipt.CommandID != cliID(8) || receipt.Digest == "" {
-				t.Fatalf("expected packet JSON: %s, %v", &out, err)
+			if err := json.Unmarshal(out, &receipt); err != nil || receipt.CommandID != cliID(8) || receipt.Digest == "" {
+				t.Fatalf("expected packet JSON: %s, %v", out, err)
 			}
-			var retry bytes.Buffer
-			if err := writeCLI(context.Background(), args, root, bytes.NewReader(refs), &retry, &diagnostic, func(string) string { return env }); err != nil || !bytes.Equal(out.Bytes(), retry.Bytes()) {
-				t.Fatalf("identical handback retry changed receipt: %s, %v", &retry, err)
+			if retry, err := callCLI(root, refs, getenv, withJSON(args)...); err != nil || !bytes.Equal(out, retry) {
+				t.Fatalf("identical handback retry changed receipt: %s, %v", retry, err)
 			}
 			packets, err := store.ReadIntake(p, []model.ID{receipt.CommandID})
 			if err != nil || len(packets) != 1 || packets[0].Author != author {
@@ -135,7 +134,7 @@ func TestCLIHandbackRefusesMissingMeaning(t *testing.T) {
 					args = append(args[:i], args[i+2:]...)
 				}
 				out, err := callWriteCLI(t, root, nil, args...)
-				if err == nil || len(out) != 0 {
+				if err == nil || acknowledged(out) {
 					t.Fatalf("missing authored %s was acknowledged: %s, %v", flag, out, err)
 				}
 				field := map[string]string{"--reason": "reason", "--next-action": "next_action", "--actor": "author.id"}[flag]
@@ -156,7 +155,7 @@ func TestCLIHandbackRefusesInvalidFlags(t *testing.T) {
 	for _, extra := range [][]string{{"--outcome", "invented"}, {"--outcome", " success "}, {"--hold-id", string(cliID(9))}, {"--delivery-refs", "-"}, {"--typo"}, {"unexpected-positional"}} {
 		args := append(append([]string(nil), control...), extra...)
 		out, err := callWriteCLI(t, root, []byte(`[] {}`), args...)
-		if err == nil || len(out) != 0 {
+		if err == nil || acknowledged(out) {
 			t.Fatalf("invalid flags acknowledged: %v, %s, %v", extra, out, err)
 		}
 	}
@@ -173,31 +172,27 @@ func TestCLIHandbackRefusesInvalidFlags(t *testing.T) {
 	}
 }
 
-// The usage names every outcome on a line of its own, in the order README's
-// "Using it" defines them, so the help an agent reads matches the manual.
-func TestHandbackUsageDefinesEveryOutcomeLikeTheReadme(t *testing.T) {
+// The outcomes topic of datum help names every outcome on a line of its own,
+// in the model's order. R19: the README's "Using it" moved into datum help,
+// so help is the one manual this is checked against.
+func TestHelpDefinesEveryOutcomeOncePerLine(t *testing.T) {
 	outcomes := []model.AttemptOutcome{model.AttemptSuccess, model.AttemptStopped, model.AttemptRefused, model.AttemptNoReading,
 		model.AttemptMeasurementImpossible, model.AttemptRunnerDied, model.AttemptHarnessBroken, model.AttemptOutOfScope, model.AttemptBlockedMidTask}
-	readme, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
-	if err != nil {
-		t.Fatal(err)
+	text, ok := helpFor("outcomes")
+	if !ok {
+		t.Fatal("datum help outcomes must exist")
 	}
-	var usageOrder, readmeOrder []string
-	for _, line := range strings.Split(strings.SplitN(writeUsage, "OUTCOME is one of nine", 2)[1], "\n") {
-		if fields := strings.Fields(line); strings.HasPrefix(line, "  ") && len(fields) > 1 {
-			usageOrder = append(usageOrder, fields[0])
-		}
-	}
-	for _, line := range strings.Split(string(readme), "\n") {
-		if strings.HasPrefix(line, "- `") && strings.Contains(line, "`:") {
-			readmeOrder = append(readmeOrder, strings.SplitN(strings.TrimPrefix(line, "- `"), "`", 2)[0])
+	var order []string
+	for _, line := range strings.Split(strings.SplitN(text, "No outcome is defaulted.", 2)[1], "\n") {
+		if fields := strings.Fields(line); strings.HasPrefix(line, "  ") && len(fields) > 1 && !strings.HasPrefix(fields[0], "-") {
+			order = append(order, fields[0])
 		}
 	}
 	want := make([]string, len(outcomes))
 	for i, o := range outcomes {
 		want[i] = string(o)
 	}
-	if !reflect.DeepEqual(usageOrder, want) || !reflect.DeepEqual(readmeOrder, want) {
-		t.Fatalf("usage lines %v and README bullets %v must each define the nine outcomes %v, one per line", usageOrder, readmeOrder, want)
+	if !reflect.DeepEqual(order, want) {
+		t.Fatalf("datum help outcomes lines %v must define the nine outcomes %v, one per line", order, want)
 	}
 }

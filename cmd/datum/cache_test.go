@@ -15,22 +15,24 @@ import (
 	"testing"
 
 	"datum/internal/model"
+	"datum/internal/query"
 	"datum/internal/store"
 )
 
 func cacheReads(output model.ArtifactRef, records []model.RecordRef) [][]string {
-	reads := [][]string{{"show"}, {"history"}, {"now"}, {"todo"}, {"state"}, {"instruments"}, {"context"}, {"intake", "pending"},
-		{"disposal-loss", "--digest", string(output.Content.SHA256)}}
+	// R19: the four views and the disposal check replace the old reads.
+	reads := [][]string{{"show"}, {"history"}, {"todo"}, {"show", "--kind", "instrument"}, {"show", "--kind", "claim"},
+		{"check", "disposal", "--digest", string(output.Content.SHA256)}}
 	for _, r := range records {
-		reads = append(reads, []string{"show", string(r.RecordID)}, []string{"history", string(r.RecordID)}, []string{"context", string(r.RecordID)})
+		reads = append(reads, []string{"show", string(r.RecordID)}, []string{"history", string(r.RecordID)})
 	}
 	var all [][]string
 	for _, args := range reads {
-		json := append([]string{args[0], "--json"}, args[1:]...)
-		if args[0] == "intake" {
-			json = []string{"intake", "pending", "--json"}
+		at := 1
+		if args[0] == "check" {
+			at = 2
 		}
-		all = append(all, args, json)
+		all = append(all, args, append(append(append([]string{}, args[:at]...), "--json"), args[at:]...))
 	}
 	return all
 }
@@ -222,19 +224,19 @@ func TestCLIConcurrentProcessesNeverAnswerStale(t *testing.T) {
 					errs <- err
 					return
 				}
-				answer := readJSON(t, out)
+				answer := readJSON[query.HistoryAnswer](t, out)
 				tasks := strings.Count(string(out), `"type": "task.create"`)
 				show, err := e2eInvoke(t, root, nil, "show", "--json")
 				if err != nil {
 					errs <- err
 					return
 				}
-				later := readJSON(t, show)
+				later := readJSON[query.ShowAnswer](t, show)
 				if later.Watermark.Sequence < answer.Watermark.Sequence {
 					errs <- fmt.Errorf("a later read answered at %d after %d", later.Watermark.Sequence, answer.Watermark.Sequence)
 				}
-				if int(answer.Watermark.Events) != len(answer.History) || tasks == 0 {
-					errs <- fmt.Errorf("history at %d names %d events of %d", answer.Watermark.Sequence, len(answer.History), answer.Watermark.Events)
+				if int(answer.Watermark.Events) != len(answer.Events) || tasks == 0 {
+					errs <- fmt.Errorf("history at %d names %d events of %d", answer.Watermark.Sequence, len(answer.Events), answer.Watermark.Events)
 				}
 			}
 		}()

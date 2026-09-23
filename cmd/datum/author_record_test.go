@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"datum/internal/model"
+	"datum/internal/query"
 )
 
 func TestCLIShowAndHistoryNameTheRulingsPacketAuthor(t *testing.T) {
@@ -35,7 +36,7 @@ func TestCLIShowAndHistoryNameTheRulingsPacketAuthor(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	show := string(readProcess(t, root, nil, "show", "--full", string(decision)))
+	show := string(readProcess(t, root, nil, "show", "--json", string(decision))) // R19: --full is removed; --json is complete
 	// The record's own fact (decision.open, by lane) and its disposition (by
 	// agent-sol, recording the owner's words) each name their packet.
 	for _, want := range []string{`"packet": "` + string(cliID(20)) + `"`, `"id": "agent-sol"`, `"packet": "` + string(cliID(22)) + `"`, `"quote": "ship revision one"`} {
@@ -43,9 +44,9 @@ func TestCLIShowAndHistoryNameTheRulingsPacketAuthor(t *testing.T) {
 			t.Fatalf("datum show lacks %s beside the authority and quote:\n%s", want, show)
 		}
 	}
-	history := readJSON(t, readProcess(t, root, nil, "history", "--json", string(decision)))
+	history := readJSON[query.HistoryAnswer](t, readProcess(t, root, nil, "history", "--json", string(decision)))
 	var disposeAuthor, openAuthor string
-	for _, e := range history.History {
+	for _, e := range history.Events {
 		switch e.Event.Type {
 		case "decision.dispose":
 			disposeAuthor = e.Author.Author.ID

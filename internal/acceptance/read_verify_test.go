@@ -57,19 +57,25 @@ func readVerifyAppend(t *testing.T, p store.Project, n int, packets []model.Pack
 	return s
 }
 
-func readVerifyAnswer(t *testing.T, p store.Project, command string, id model.ID) query.Answer {
+// R19: reads go through the four views; intake pending is todo's section.
+func readVerifyAnswer(t *testing.T, p store.Project, view string, id model.ID) query.ViewAnswer {
 	t.Helper()
-	a, err := query.Read(p, query.Request{Command: command, ID: id})
+	a, err := query.ReadView(p, query.ViewRequest{View: view, ID: id})
 	if err != nil {
-		t.Fatalf("%s %s must return an answer for the accepted fixture: %v", command, id, err)
+		t.Fatalf("%s %s must return an answer for the accepted fixture: %v", view, id, err)
 	}
 	return a
+}
+
+func readVerifyPending(t *testing.T, p store.Project) *query.TodoAnswer {
+	t.Helper()
+	return readVerifyAnswer(t, p, "todo", "").(*query.TodoAnswer)
 }
 
 func readVerifyReady(t *testing.T, p store.Project) {
 	t.Helper()
 	readVerifyAppend(t, p, 100, []model.PacketRef{}, laneEReduceCreate(1, laneEReduceSpec(1)))
-	a := readVerifyAnswer(t, p, "show", laneEReduceID(1))
+	a := readVerifyAnswer(t, p, "show", laneEReduceID(1)).(*query.ShowAnswer)
 	if a.Result != "KNOWN" || a.Watermark.Sequence != 1 || len(a.Records) != 1 || a.Records[0].Task.Status != reduce.StatusReady {
 		t.Fatalf("control must read one admitted READY task at watermark 1, got %+v", a)
 	}
@@ -117,9 +123,10 @@ func readVerifyAfter(t time.Time) time.Time {
 	return now
 }
 
-func readVerifyTypes(a query.Answer) []model.EventType {
-	types := make([]model.EventType, 0, len(a.History))
-	for _, event := range a.History {
+func readVerifyTypes(v query.ViewAnswer) []model.EventType {
+	a := v.(*query.HistoryAnswer)
+	types := make([]model.EventType, 0, len(a.Events))
+	for _, event := range a.Events {
 		types = append(types, event.Event.Type)
 	}
 	return types
@@ -156,8 +163,8 @@ func TestReadVerifyClaimHistoryIncludesReceiptsExplicitlyNamingItsCriterion(t *t
 	// task or the explicitly named instrument. No artifact resolution is needed.
 	for _, id := range []model.ID{laneEReduceID(1), env.InstrumentRef.RecordID} {
 		a := readVerifyAnswer(t, p, "history", id)
-		if !strings.Contains(fmt.Sprint(readVerifyTypes(a)), "invocation.start invocation.seal") || a.Watermark.Sequence != s.Watermark().Sequence {
-			t.Fatalf("control task/instrument history must include both admitted receipts at the ledger head %d, got %v at %d", s.Watermark().Sequence, readVerifyTypes(a), a.Watermark.Sequence)
+		if !strings.Contains(fmt.Sprint(readVerifyTypes(a)), "invocation.start invocation.seal") || a.Header().Watermark.Sequence != s.Watermark().Sequence {
+			t.Fatalf("control task/instrument history must include both admitted receipts at the ledger head %d, got %v at %d", s.Watermark().Sequence, readVerifyTypes(a), a.Header().Watermark.Sequence)
 		}
 	}
 	refs := s.CriterionReferrers(*env.CriterionRef.Value)
@@ -167,7 +174,7 @@ func TestReadVerifyClaimHistoryIncludesReceiptsExplicitlyNamingItsCriterion(t *t
 	a := readVerifyAnswer(t, p, "history", proof.Claim.RecordID)
 	want := []model.EventType{"claim.assert", "criterion.fix", "invocation.start", "invocation.seal", "proof.admit"}
 	if got := readVerifyTypes(a); !reflect.DeepEqual(got, want) {
-		t.Fatalf("claim history at watermark %d returned %v, want %v. Both receipts explicitly name this exact claim revision in envelope.criterion_ref.value.claim, and Replay indexes them. historyOrigins consults only RecordReferrers, so it hides the measurement receipts while retaining the proof that cites them; following this explicit nested reference requires no recursive traversal", a.Watermark.Sequence, got, want)
+		t.Fatalf("claim history at watermark %d returned %v, want %v. Both receipts explicitly name this exact claim revision in envelope.criterion_ref.value.claim, and Replay indexes them. historyOrigins consults only RecordReferrers, so it hides the measurement receipts while retaining the proof that cites them; following this explicit nested reference requires no recursive traversal", a.Header().Watermark.Sequence, got, want)
 	}
 }
 
@@ -195,13 +202,13 @@ func TestReadVerifyPendingCannotIgnoreAReplayedReviewMissingFromEnvelopePackets(
 			}
 			control := capture(2)
 			readVerifyAppend(t, p, 101, []model.PacketRef{control}, review(control))
-			a := readVerifyAnswer(t, p, "intake pending", "")
+			a := readVerifyPending(t, p)
 			if outcome == "accepted" {
-				if len(a.Intake) != 0 {
-					t.Fatalf("control accepted packet must leave pending, got %+v", a.Intake)
+				if len(a.IntakePending) != 0 {
+					t.Fatalf("control accepted packet must leave pending, got %+v", a.IntakePending)
 				}
-			} else if len(a.Intake) != 1 || a.Intake[0].Disposition != outcome {
-				t.Fatalf("control matching envelope and event must show %s, got %+v", outcome, a.Intake)
+			} else if len(a.IntakePending) != 1 || a.IntakePending[0].Disposition != outcome {
+				t.Fatalf("control matching envelope and event must show %s, got %+v", outcome, a.IntakePending)
 			}
 
 			target := capture(3)
@@ -212,11 +219,12 @@ func TestReadVerifyPendingCannotIgnoreAReplayedReviewMissingFromEnvelopePackets(
 			}
 			// A read may refuse inconsistent storage. It must not return KNOWN
 			// while silently discarding an event its own snapshot admitted.
-			a, err := query.Read(p, query.Request{Command: "intake pending"})
+			v, err := query.ReadView(p, query.ViewRequest{View: "todo"})
 			if err != nil {
 				return
 			}
-			for _, packet := range a.Intake {
+			a = v.(*query.TodoAnswer)
+			for _, packet := range a.IntakePending {
 				if packet.CommandID == target.CommandID && (outcome == "accepted" || packet.Disposition != outcome || packet.Review == nil) {
 					t.Errorf("pending at watermark %d reports packet %s as %s with review %+v, but the same prefix replays review.admit=%s. Want that disposition (or exclusion for accepted), or an explicit inconsistent-ledger error. A canonical review cannot depend on its packet ID also appearing in bundle.Packets", a.Watermark.Sequence, target.CommandID, packet.Disposition, packet.Review, outcome)
 				}
@@ -231,11 +239,12 @@ func TestReadVerifyPendingCannotIgnoreAReplayedReviewMissingFromEnvelopePackets(
 			if err := os.RemoveAll(filepath.Join(dir, string(target.CommandID))); err != nil {
 				t.Fatal(err)
 			}
-			a, err = query.Read(p, query.Request{Command: "intake pending"})
+			v, err = query.ReadView(p, query.ViewRequest{View: "todo"})
 			if err != nil {
 				return
 			}
-			for _, packet := range a.Intake {
+			a = v.(*query.TodoAnswer)
+			for _, packet := range a.IntakePending {
 				if packet.CommandID == target.CommandID && packet.Disposition == outcome && packet.Unavailable != nil && packet.Unavailable.State == "UNKNOWN" {
 					return
 				}
@@ -261,36 +270,16 @@ func TestReadVerifyAuthoredValuesSurviveTextFromTheAdmittedLedger(t *testing.T) 
 		spec.NextActor = model.Actor{UnknownReason: "author, reviewer and holder cannot assign the next actor"}
 		readVerifyAppend(t, p, 101+i, []model.PacketRef{}, laneEReduceCreate(2+i, spec))
 	}
-	// "open tasks" is `datum show` kept to TASK records not CLOSED: the
-	// selection `datum task todo` made before its R12 removal.
-	answer := func(command string) query.Answer {
-		if command != "open tasks" {
-			return readVerifyAnswer(t, p, command, "")
-		}
-		a := readVerifyAnswer(t, p, "show", "")
-		open := []query.Record{}
-		for _, r := range a.Records {
-			if r.Fact.Kind == model.Task && r.Task != nil && r.Task.Status != reduce.StatusClosed {
-				open = append(open, r)
-			}
-		}
-		if len(open) != len(values)+1 {
-			t.Fatalf("control: show must hold %d open tasks at watermark %d, got %d", len(values)+1, a.Watermark.Sequence, len(open))
-		}
-		a.Records = open
-		return a
-	}
-	// Changed with the brief becoming the default text: complete strings are asserted in --json and --full; the brief is held to the brief's agreement rule.
-	for _, command := range []string{"show", "history", "open tasks"} {
-		a := answer(command)
-		var exported, rendered, brief bytes.Buffer
-		if err := query.RenderJSON(&exported, a); err != nil {
+	// R19: the views replace the old reads; todo holds the open tasks the
+	// removed `task todo` selected. --full is removed: complete strings are
+	// asserted in --json, and the brief is held to the brief's agreement rule.
+	for _, view := range []string{"show", "history", "todo"} {
+		a := readVerifyAnswer(t, p, view, "")
+		var exported, brief bytes.Buffer
+		if err := query.RenderViewJSON(&exported, a); err != nil {
 			t.Fatal(err)
 		}
-		if err := query.RenderText(&rendered, a); err != nil {
-			t.Fatal(err)
-		}
-		if err := query.RenderBrief(&brief, a); err != nil {
+		if err := query.RenderViewBrief(&brief, a); err != nil {
 			t.Fatal(err)
 		}
 		for _, value := range values {
@@ -298,14 +287,14 @@ func TestReadVerifyAuthoredValuesSurviveTextFromTheAdmittedLedger(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !bytes.Contains(exported.Bytes(), literal) || !bytes.Contains(rendered.Bytes(), literal) {
-				t.Errorf("%s must retain the complete authored JSON string in --json and --full at watermark %d; missing literal of %d bytes (truncation or escape changes would change the answer)", command, a.Watermark.Sequence, len(literal))
+			if !bytes.Contains(exported.Bytes(), literal) {
+				t.Errorf("%s must retain the complete authored JSON string in --json at watermark %d; missing literal of %d bytes (truncation or escape changes would change the answer)", view, a.Header().Watermark.Sequence, len(literal))
 			}
 		}
-		flowBriefAgrees(t, command, exported.Bytes(), flowDecode(t, exported.Bytes()), brief.String())
-		if command != "history" {
+		flowBriefAgrees(t, view, exported.Bytes(), flowDecode(t, exported.Bytes()), brief.String())
+		if view != "history" {
 			// The brief shows each authored intent, whole or as a marked prefix of that same value.
-			_, facts, err := query.BriefOf(exported.Bytes())
+			_, facts, err := query.ViewBriefOf(exported.Bytes())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -316,20 +305,20 @@ func TestReadVerifyAuthoredValuesSurviveTextFromTheAdmittedLedger(t *testing.T) 
 					shown = shown || f.Value == string(literal)
 				}
 				if !shown {
-					t.Errorf("%s brief must show every authored intent from its JSON leaf; missing one of %d bytes", command, len(literal))
+					t.Errorf("%s brief must show every authored intent from its JSON leaf; missing one of %d bytes", view, len(literal))
 				}
 			}
 		}
-		if a.Watermark.Sequence != 4 || !strings.Contains(rendered.String(), `"sequence": 4`) || !strings.Contains(brief.String(), "watermark sequence 4 ") {
-			t.Fatalf("%s must retain watermark 4 in every format, got %+v", command, a.Watermark)
+		if a.Header().Watermark.Sequence != 4 || !strings.Contains(exported.String(), `"sequence": 4`) || !strings.Contains(brief.String(), "watermark sequence 4 ") {
+			t.Fatalf("%s must retain watermark 4 in every format, got %+v", view, a.Header().Watermark)
 		}
 		for repetition := 0; repetition < 5; repetition++ {
 			var again, againBrief bytes.Buffer
-			if err := query.RenderText(&again, answer(command)); err != nil || !bytes.Equal(again.Bytes(), rendered.Bytes()) {
-				t.Fatalf("%s changed across reads of one unchanged ledger: %v", command, err)
+			if err := query.RenderViewJSON(&again, readVerifyAnswer(t, p, view, "")); err != nil || !bytes.Equal(again.Bytes(), exported.Bytes()) {
+				t.Fatalf("%s changed across reads of one unchanged ledger: %v", view, err)
 			}
-			if err := query.RenderBrief(&againBrief, answer(command)); err != nil || !bytes.Equal(againBrief.Bytes(), brief.Bytes()) {
-				t.Fatalf("%s brief changed across reads of one unchanged ledger: %v", command, err)
+			if err := query.RenderViewBrief(&againBrief, readVerifyAnswer(t, p, view, "")); err != nil || !bytes.Equal(againBrief.Bytes(), brief.Bytes()) {
+				t.Fatalf("%s brief changed across reads of one unchanged ledger: %v", view, err)
 			}
 		}
 	}
@@ -349,8 +338,8 @@ func TestReadVerifyLaterAdmissionDoesNotDispositionAnEarlierPrefix(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	control := readVerifyAnswer(t, p, "intake pending", "")
-	if control.Watermark.Sequence != 1 || len(control.Intake) != 1 || control.Intake[0].Disposition != "pending" {
+	control := readVerifyPending(t, p)
+	if control.Watermark.Sequence != 1 || len(control.IntakePending) != 1 || control.IntakePending[0].Disposition != "pending" {
 		t.Fatalf("control packet must be pending before admission at watermark 1, got %+v", control)
 	}
 	// Freeze only the ledger. Both projects retain the same logical identity
@@ -379,11 +368,11 @@ func TestReadVerifyLaterAdmissionDoesNotDispositionAnEarlierPrefix(t *testing.T)
 	if err != nil {
 		t.Fatalf("control packet must pass the real admission gate: %v", err)
 	}
-	later := readVerifyAnswer(t, p, "intake pending", "")
-	if later.Watermark.Sequence != 2 || len(later.Intake) != 0 {
+	later := readVerifyPending(t, p)
+	if later.Watermark.Sequence != 2 || len(later.IntakePending) != 0 {
 		t.Fatalf("later prefix must exclude the accepted packet at watermark 2, got %+v", later)
 	}
-	earlier := readVerifyAnswer(t, frozen, "intake pending", "")
+	earlier := readVerifyPending(t, frozen)
 	if !reflect.DeepEqual(earlier, control) {
 		t.Fatalf("later admission changed the old prefix's answer: before %+v, after %+v. Intake dispositions must come from the selected watermark", control, earlier)
 	}

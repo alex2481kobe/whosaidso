@@ -253,7 +253,8 @@ func TestWriteVerifyCLIJSONAliasesCannotChooseAuthoredMeaning(t *testing.T) {
 			claim := f.claim(author)
 			raw := recEncode(t, claim)
 			input := "[{" + keys + ",\"data\":" + string(raw.Data) + "}]"
-			packet, err := writeVerifyCLIPacket(binary, f, input, "capture", "--actor", author.ID, "--events", "-")
+			// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+			packet, err := writeVerifyCLIPacket(binary, f, input, "capture", "--json", "--actor", author.ID, "--events", "-")
 			return packet, claim.ID, err
 		}
 		packet, id, err := capture(`"type":"claim.assert"`)
@@ -286,7 +287,8 @@ func TestWriteVerifyCLIJSONAliasesCannotChooseAuthoredMeaning(t *testing.T) {
 		}
 		capture := func(input string) (model.PacketRef, error) {
 			_, r := hbVerifyStart(t, f, author)
-			return writeVerifyCLIPacket(binary, f, input, "handback", "--actor", author.ID, "--attempt-id", string(r.AttemptID),
+			// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+			return writeVerifyCLIPacket(binary, f, input, "handback", "--json", "--actor", author.ID, "--attempt-id", string(r.AttemptID),
 				"--outcome", "stopped", "--reason", "stopped", "--next-action", "owner reviews", "--delivery-refs", "-")
 		}
 		packet, err := capture(string(data))

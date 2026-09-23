@@ -1,16 +1,16 @@
 package query
 
-// The brief: a concise text reading of one Answer, one short block per record.
-// It is built from the answer's own JSON export, never from the Go values, so
-// it cannot show a fact the JSON lacks. Every value it prints is a BriefFact
-// carrying the JSON path it was read from; agreement with --json is defined
-// and tested on those facts (brief_test.go). Section layout lives in
-// brief_sections.go; this file holds the path cursor and the line writer.
+// The brief: a concise text reading of one view answer, one short block per
+// record. It is built from the answer's own JSON export, never from the Go
+// values, so it cannot show a fact the JSON lacks. Every value it prints is a
+// BriefFact carrying the JSON path it was read from; agreement with --json is
+// defined and tested on those facts (brief_test.go). Shared blocks live in
+// brief_sections.go and each view's layout in view_render.go; this file holds
+// the path cursor and the line writer.
 
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"strconv"
 	"strings"
 	"unicode"
@@ -144,50 +144,6 @@ func safe(s string) string {
 	encoder.SetEscapeHTML(false)
 	_ = encoder.Encode(s)
 	return strings.TrimSuffix(buf.String(), "\n")
-}
-
-// RenderBrief writes the concise reading. --json keeps full detail.
-func RenderBrief(w io.Writer, answer Answer) error {
-	b, err := brief(answer)
-	if err != nil {
-		return err
-	}
-	_, err = io.WriteString(w, b.out.String())
-	return err
-}
-
-func brief(answer Answer) (*briefWriter, error) {
-	var encoded bytes.Buffer
-	if err := RenderJSON(&encoded, answer); err != nil {
-		return nil, err
-	}
-	return briefOf(encoded.Bytes())
-}
-
-// BriefOf renders the brief of an answer's JSON export and returns the facts
-// it shows, each with the path it was read from, so a caller holding only the
-// export can check the text against it.
-func BriefOf(exported []byte) (string, []BriefFact, error) {
-	b, err := briefOf(exported)
-	if err != nil {
-		return "", nil, err
-	}
-	return b.out.String(), b.facts, nil
-}
-
-func briefOf(exported []byte) (*briefWriter, error) {
-	decoder := json.NewDecoder(bytes.NewReader(exported))
-	decoder.UseNumber()
-	var value any
-	if err := decoder.Decode(&value); err != nil {
-		return nil, err
-	}
-	b := &briefWriter{}
-	root := cur{v: value}
-	briefHeader(b, root, root.at("command"))
-	briefBody(b, root, root.at("command").text())
-	b.line(0, "full detail: add --json")
-	return b, nil
 }
 
 // briefHeader opens a brief with its name (the command or view) and watermark.

@@ -1,8 +1,9 @@
 package main
 
-// Fresh-process tests for `datum criterion check` and `datum proof check`: each
-// verdict is compared with what admission then does with the same inputs, and
-// each check is shown to leave the project and intake untouched.
+// Fresh-process tests for `datum check criterion` and `datum check admission`
+// (R19: formerly criterion check and proof check): each verdict is compared
+// with what admission then does with the same inputs, each check opens with
+// its scope, exits by its result, and leaves the project and intake untouched.
 
 import (
 	"os"
@@ -91,6 +92,11 @@ func checkProofFile(t *testing.T, criterion model.CriterionRef, member model.Inv
 	return path, proof
 }
 
+// specCriterionScope is COMMAND-SPEC §4's wording, written out rather than
+// read from the constant, so a scope that stops naming what was NOT checked
+// fails here.
+const specCriterionScope = "criterion preview only: instrument validation, proof-family completeness, comparability and admission were NOT checked"
+
 // The criterion check's verdict is the one admission then acts on: TRUE is
 // admitted as support, FALSE is refused as a counterexample, UNKNOWN is refused
 // as an unsatisfied family.
@@ -98,11 +104,11 @@ func TestCriterionCheckVerdictIsWhatAdmissionDoes(t *testing.T) {
 	noUnit := strings.Replace(e2ePass, `"unit":"mm",`, "", 1)
 	fail := strings.Replace(e2ePass, "0.0100", "0.2000", 1)
 	for _, tc := range []struct {
-		name, body, verdict, refusal string
+		name, body, verdict, exit, refusal string
 	}{
-		{"pass", e2ePass, "verdict: TRUE", ""},
-		{"fail", fail, "verdict: FALSE", "counterevidence-unresolved"},
-		{"no unit", noUnit, "verdict: UNKNOWN", "criterion-unsatisfied"},
+		{"pass", e2ePass, "result: TRUE", "", ""},
+		{"fail", fail, "result: FALSE", "exit status 1", "counterevidence-unresolved"},
+		{"no unit", noUnit, "result: UNKNOWN", "exit status 3", "criterion-unsatisfied"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, criterion, instrument, attempt := e2eWorld(t)
@@ -112,9 +118,9 @@ func TestCriterionCheckVerdictIsWhatAdmissionDoes(t *testing.T) {
 				t.Fatal(err)
 			}
 			before := cliTree(t, root)
-			out, err := e2eInvoke(t, root, nil, "criterion", "check", "--events", events, "--output", candidate)
-			if err != nil || !strings.Contains(string(out), tc.verdict+"\n") {
-				t.Fatalf("criterion check: %v\n%s", err, out)
+			out, err := e2eInvoke(t, root, nil, "check", "criterion", "--events", events, "--output", candidate)
+			if (tc.exit == "") != (err == nil) || err != nil && !strings.Contains(err.Error(), tc.exit) || !strings.HasPrefix(string(out), specCriterionScope+"\n"+tc.verdict+"\n") {
+				t.Fatalf("check criterion must open with its scope and exit by its verdict (%s): %v\n%s", tc.exit, err, out)
 			}
 			if after := cliTree(t, root); after != before {
 				t.Fatalf("criterion check wrote:\n%s\n%s", before, after)
@@ -137,21 +143,21 @@ func TestCriterionCheckVerdictIsWhatAdmissionDoes(t *testing.T) {
 func TestCriterionCheckReadsTheExampleOrTheBlob(t *testing.T) {
 	root, _, _, _ := e2eWorld(t)
 	events := checkCriterionEvents(t, root)
-	if out, err := e2eInvoke(t, root, nil, "criterion", "check", "--events", events); err != nil || !strings.Contains(string(out), "verdict: TRUE") {
+	if out, err := e2eInvoke(t, root, nil, "check", "criterion", "--events", events); err != nil || !strings.Contains(string(out), "result: TRUE") {
 		t.Fatalf("example: %v\n%s", err, out)
 	}
 	// Remove every copy of the example; only --blob can supply it now.
 	os.Remove(filepath.Join(root, "out", "result.json"))
 	os.Remove(filepath.Join(root, ".datum", "artifacts", string(model.HashBytes([]byte(e2ePass)))))
-	if _, err := e2eInvoke(t, root, nil, "criterion", "check", "--events", events); err == nil || !strings.Contains(err.Error(), "does not resolve") {
+	if _, err := e2eInvoke(t, root, nil, "check", "criterion", "--events", events); err == nil || !strings.Contains(err.Error(), "does not resolve") {
 		t.Fatalf("an unresolvable example must be named, got %v", err)
 	}
 	blob := filepath.Join(t.TempDir(), "example.json")
 	os.WriteFile(blob, []byte(e2ePass), 0600)
-	if out, err := e2eInvoke(t, root, nil, "criterion", "check", "--events", events, "--blob", blob); err != nil || !strings.Contains(string(out), "verdict: TRUE") {
+	if out, err := e2eInvoke(t, root, nil, "check", "criterion", "--events", events, "--blob", blob); err != nil || !strings.Contains(string(out), "result: TRUE") {
 		t.Fatalf("blob: %v\n%s", err, out)
 	}
-	if out, err := e2eInvoke(t, root, nil, "criterion", "--help"); err != nil || !strings.Contains(string(out), "--output") {
+	if out, err := e2eInvoke(t, root, nil, "check", "--help"); err != nil || !strings.Contains(string(out), "--output") {
 		t.Fatalf("usage: %v\n%s", err, out)
 	}
 }
@@ -163,9 +169,10 @@ func TestProofCheckAgreesWithAdmissionAndWritesNothing(t *testing.T) {
 	member := checkSealedRun(t, root, criterion, instrument, attempt, e2ePass, 700)
 	path, proof := checkProofFile(t, criterion, member, "inconclusive")
 	before := cliTree(t, root)
-	out, err := e2eInvoke(t, root, nil, "proof", "check", "--events", path)
-	if err == nil || !strings.Contains(err.Error(), "admission would refuse") {
-		t.Fatalf("proof check must exit nonzero on a refusal: %v\n%s", err, out)
+	out, err := e2eInvoke(t, root, nil, "check", "admission", "--events", path)
+	if err == nil || !strings.Contains(err.Error(), "exit status 1") || !strings.HasPrefix(string(out), "admission dry run at watermark ") ||
+		!strings.Contains(string(out), ": full gate, evidence and authority checks; result may change if the ledger moves\nresult: would-refuse\n") {
+		t.Fatalf("check admission must open with its scope and exit 1 on a refusal: %v\n%s", err, out)
 	}
 	if after := cliTree(t, root); after != before {
 		t.Fatalf("proof check wrote:\n%s\n%s", before, after)
@@ -188,7 +195,7 @@ func TestProofCheckAgreesWithAdmissionAndWritesNothing(t *testing.T) {
 		t.Fatalf("admission refused %v; the check's first refusal was %q", err, first)
 	}
 	path, proof = checkProofFile(t, criterion, member, "supports")
-	if out, err := e2eInvoke(t, root, nil, "proof", "check", "--events", path); err != nil || !strings.Contains(string(out), "admission would accept") {
+	if out, err := e2eInvoke(t, root, nil, "check", "admission", "--events", path); err != nil || !strings.Contains(string(out), "\nresult: would-admit\n") {
 		t.Fatalf("a passing proof: %v\n%s", err, out)
 	}
 	if _, err := e2eInvoke(t, root, []model.TypedEvent{proof}, "capture", "--command-id", string(cliID(712))); err != nil {
@@ -198,7 +205,7 @@ func TestProofCheckAgreesWithAdmissionAndWritesNothing(t *testing.T) {
 		t.Fatalf("the check accepted what admission refuses: %v", err)
 	}
 	var usage []byte
-	if usage, err = e2eInvoke(t, root, nil, "proof", "--help"); err != nil || !strings.Contains(string(usage), "--packet") {
+	if usage, err = e2eInvoke(t, root, nil, "check", "--help"); err != nil || !strings.Contains(string(usage), "--packet") {
 		t.Fatalf("usage: %v\n%s", err, usage)
 	}
 }

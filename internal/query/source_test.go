@@ -46,8 +46,7 @@ func richRequests() []Request {
 	return []Request{{Command: "show"}, {Command: "show", ID: testID(1)}, {Command: "show", ID: testID(999)}, {Command: "history"},
 		{Command: "history", ID: testID(31)}, {Command: "history", SelfAdmitted: model.SelfAdmissionUnknown}, {Command: "intake pending"},
 		{Command: "instruments"}, {Command: "state"}, {Command: "now"}, {Command: "todo"}, {Command: "todo", Limit: 1},
-		{Command: "context"}, {Command: "context", ID: testID(1)}, {Command: "continue", ID: testID(1), Observed: observed},
-		{Command: "disposal-loss", Disposal: &DisposalTarget{Digest: testArtifact().Content.SHA256}}}
+		{Command: "context"}, {Command: "context", ID: testID(1)}, {Command: "continue", ID: testID(1), Observed: observed}}
 }
 
 func rendered(t *testing.T, a Answer) string {

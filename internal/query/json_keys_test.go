@@ -67,8 +67,7 @@ func TestEveryJSONAnswerKeyIsSnakeCase(t *testing.T) {
 		{Command: "history", ID: testID(31)}, {Command: "history", SelfAdmitted: model.SelfAdmissionUnknown}, {Command: "intake pending"},
 		{Command: "instruments"}, {Command: "state"}, {Command: "now"}, {Command: "todo"}, {Command: "context"}, {Command: "context", ID: testID(1)},
 		{Command: "continue", ID: testID(1), Observed: &Observation{ObservedAt: model.Availability[time.Time]{State: model.Known, Value: &at},
-			Head: notKnown[model.GitHead]("not a git checkout"), Dirty: notKnown[bool]("not a git checkout")}},
-		{Command: "disposal-loss", Disposal: &DisposalTarget{Digest: testArtifact().Content.SHA256}}}
+			Head: notKnown[model.GitHead]("not a git checkout"), Dirty: notKnown[bool]("not a git checkout")}}}
 	// Control: the fixture really carries the facts whose keys were Go-cased.
 	show, history := readAnswer(t, p, "show", ""), readAnswer(t, p, "history", "")
 	if len(show.Records) < 10 || len(history.Reviews) == 0 || len(readAnswer(t, p, "intake pending", "").Intake) != 2 {

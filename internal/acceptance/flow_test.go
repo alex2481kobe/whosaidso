@@ -102,7 +102,8 @@ func (w *flowWorld) capture(author string, events ...model.TypedEvent) model.ID 
 	if err != nil {
 		w.t.Fatal(err)
 	}
-	out, err := w.cli(body, "capture", "--actor", author, "--command-id", string(w.id()), "--events", "-")
+	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	out, err := w.cli(body, "capture", "--json", "--actor", author, "--command-id", string(w.id()), "--events", "-")
 	if err != nil {
 		w.t.Fatalf("control: capture must durably write intake: %v", err)
 	}
@@ -120,7 +121,8 @@ func flowPacket(t *testing.T, out []byte) model.ID {
 
 func (w *flowWorld) review(outcome string, packets ...model.ID) error {
 	w.t.Helper()
-	args := []string{"admit", "--command-id", string(w.id()), "--actor", "coordinator", "--outcome", outcome, "--reason", "U14 flow review"}
+	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	args := []string{"admit", "--json", "--command-id", string(w.id()), "--actor", "coordinator", "--outcome", outcome, "--reason", "U14 flow review"}
 	for _, p := range packets {
 		args = append(args, string(p))
 	}
@@ -173,26 +175,15 @@ func (w *flowWorld) refused(what string, step func() error) {
 
 var flowBundleName = regexp.MustCompile(`^([0-9]{8})-([0-9A-Z]{26})\.json$`)
 
-// read runs the command as brief text, as --full and as --json. --full must
-// carry the same facts as --json; the brief must agree with --json under the
-// brief's rule (flowBriefAgrees). It requires the watermark to name the
-// ledger's actual head, and returns the decoded JSON answer.
-// Changed with the brief becoming the default text: the lossless comparison
-// moved to --full and the default text is checked by the brief's rule.
+// read runs the view as brief text and as --json. The brief must agree with
+// --json under the brief's rule (flowBriefAgrees). It requires the watermark
+// to name the ledger's actual head, and returns the decoded JSON answer.
+// R19: --full is removed; --json is the complete answer and the default text
+// is checked by the brief's rule.
 func (w *flowWorld) read(args ...string) map[string]any {
 	w.t.Helper()
 	exported := w.readFlag("--json", args...)
 	answer := flowDecode(w.t, exported)
-	full := w.readFlag("--full", args...)
-	fromText, err := flowOutline(string(full))
-	if err != nil {
-		w.t.Fatalf("datum %s --full: text answer is not a readable outline: %v\n%s", strings.Join(args, " "), err, full)
-	}
-	fromJSON := map[string]string{}
-	flowFlatten("answer", answer, fromJSON)
-	if !reflect.DeepEqual(fromText, fromJSON) {
-		w.t.Errorf("datum %s: --full text and --json disagree: %s", strings.Join(args, " "), flowDiff(fromText, fromJSON))
-	}
 	text, err := w.cli(nil, args...)
 	if err != nil {
 		w.t.Fatalf("text read: %v", err)
@@ -209,7 +200,7 @@ func (w *flowWorld) read(args ...string) map[string]any {
 // count is the length of the array at its path.
 func flowBriefAgrees(t testing.TB, what string, exported []byte, answer map[string]any, text string) {
 	t.Helper()
-	want, facts, err := query.BriefOf(exported)
+	want, facts, err := query.ViewBriefOf(exported) // R19: the views' brief
 	if err != nil {
 		t.Fatalf("%s: the brief of the JSON export fails: %v", what, err)
 	}
@@ -294,11 +285,8 @@ func (w *flowWorld) readJSON(args ...string) map[string]any {
 // readFlag runs a read with one rendering flag and returns its stdout.
 func (w *flowWorld) readFlag(flag string, args ...string) []byte {
 	w.t.Helper()
-	// Flags follow the (sub)command and precede the optional record ID.
+	// Flags follow the view and precede the optional record ID.
 	at := 1
-	if args[0] == "task" || args[0] == "intake" {
-		at = 2
-	}
 	withFlag := append(append(append([]string{}, args[:at]...), flag), args[at:]...)
 	out, err := w.cli(nil, withFlag...)
 	if err != nil {
@@ -356,103 +344,6 @@ func (w *flowWorld) watermark(args []string, answer map[string]any) {
 	if flowStr(mark, "sequence") != strconv.FormatUint(want, 10) || flowStr(mark, "head", "command_id") != head {
 		w.t.Errorf("datum %s: watermark %v does not name the ledger head %s-%s", strings.Join(args, " "), mark, seq, head)
 	}
-}
-
-// flowOutline parses the text surface back into path -> value, independently
-// of the renderer: two-space indentation, a label, then a JSON literal or nothing.
-func flowOutline(text string) (map[string]string, error) {
-	out := map[string]string{}
-	var stack []string
-	for n, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
-		trimmed := strings.TrimLeft(line, " ")
-		indent := len(line) - len(trimmed)
-		if indent%2 != 0 || indent/2 > len(stack) {
-			return nil, fmt.Errorf("line %d: bad indentation", n+1)
-		}
-		stack = stack[:indent/2]
-		label, rest, err := flowLabel(trimmed)
-		if err != nil {
-			return nil, fmt.Errorf("line %d: %v", n+1, err)
-		}
-		if rest == "" {
-			stack = append(stack, label)
-			continue
-		}
-		decoder := json.NewDecoder(strings.NewReader(rest))
-		decoder.UseNumber()
-		var v any
-		if err := decoder.Decode(&v); err != nil {
-			return nil, fmt.Errorf("line %d: value %q is not a JSON literal", n+1, rest)
-		}
-		flowFlatten(strings.Join(append(append([]string{}, stack...), label), "\x00"), v, out)
-	}
-	return out, nil
-}
-
-func flowLabel(s string) (label, rest string, err error) {
-	end := strings.Index(s, ":")
-	if strings.HasPrefix(s, `"`) {
-		end = -1
-		for i := 1; i < len(s); i++ {
-			if s[i] == '\\' {
-				i++
-				continue
-			}
-			if s[i] == '"' {
-				end = i + 1
-				break
-			}
-		}
-		if end < 0 || end >= len(s) || s[end] != ':' {
-			return "", "", fmt.Errorf("unterminated key in %q", s)
-		}
-	}
-	if end < 0 {
-		return "", "", fmt.Errorf("no label in %q", s)
-	}
-	return s[:end], strings.TrimPrefix(s[end+1:], " "), nil
-}
-
-func flowFlatten(path string, v any, out map[string]string) {
-	switch x := v.(type) {
-	case map[string]any:
-		if len(x) == 0 {
-			out[path] = "{}"
-		}
-		for k, val := range x {
-			key, _ := json.Marshal(k)
-			flowFlatten(path+"\x00"+string(key), val, out)
-		}
-	case []any:
-		if len(x) == 0 {
-			out[path] = "[]"
-		}
-		for i, val := range x {
-			flowFlatten(fmt.Sprintf("%s\x00[%d]", path, i), val, out)
-		}
-	default:
-		b, _ := json.Marshal(x)
-		out[path] = string(b)
-	}
-}
-
-func flowDiff(a, b map[string]string) string {
-	var diffs []string
-	for k, v := range a {
-		if b[k] != v {
-			diffs = append(diffs, fmt.Sprintf("%q text=%s json=%s", strings.ReplaceAll(k, "\x00", "/"), v, b[k]))
-		}
-	}
-	for k, v := range b {
-		if _, ok := a[k]; !ok {
-			diffs = append(diffs, fmt.Sprintf("%q missing from text, json=%s", strings.ReplaceAll(k, "\x00", "/"), v))
-		}
-	}
-	sort.Strings(diffs)
-	if len(diffs) > 5 {
-		diffs = append(diffs[:5], fmt.Sprintf("... %d more", len(diffs)-5))
-	}
-	return strings.Join(diffs, "; ")
 }
 
 // flowGet walks decoded JSON by map key or slice index.
@@ -531,7 +422,8 @@ func (w *flowWorld) task(intent string) flowTask {
 // handback captures a receipt through the CLI and returns its packet.
 func (w *flowWorld) handback(attempt model.ID, outcome string, extra ...string) (model.ID, error) {
 	w.t.Helper()
-	args := append([]string{"handback", "--command-id", string(w.id()), "--actor", flowLane, "--attempt-id", string(attempt),
+	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	args := append([]string{"handback", "--json", "--command-id", string(w.id()), "--actor", flowLane, "--attempt-id", string(attempt),
 		"--outcome", outcome, "--reason", "the flow ends this attempt " + outcome, "--next-action", "next: " + outcome}, extra...)
 	out, err := w.cli(nil, args...)
 	if err != nil {
@@ -585,7 +477,8 @@ func (w *flowWorld) fix(id model.ID, revision model.Revision) {
 func (w *flowWorld) run(script string) (model.ID, []model.ID, error) {
 	w.t.Helper()
 	w.put("tools/run.sh", []byte(script))
-	out, err := w.cli(nil, "run", "--actor", flowLane, "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),
+	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	out, err := w.cli(nil, "run", "--json", "--actor", flowLane, "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),
 		"--claim", string(w.claim.RecordID), "--claim-revision", "1", "--criterion-id", string(w.criterion.CriterionID),
 		"--criterion-revision", strconv.FormatUint(uint64(w.criterion.Revision), 10), "--", "/bin/sh", "tools/run.sh")
 	var result struct {
@@ -762,7 +655,7 @@ func TestFlowHonestStopping(t *testing.T) {
 		}
 		// The next action is readable from the continuation brief.
 		brief := w.readJSON("continue", string(task.ref.RecordID))
-		attempt := flowGet(brief, "preset", "continue", "attempts", 0)
+		attempt := flowGet(brief, "attempts", 0) // R19: continue's own attempts section
 		if flowStr(attempt, "outcome") != c.outcome || flowStr(attempt, "next_action") != "next: "+c.outcome || flowStr(attempt, "live") != "false" {
 			t.Errorf("%s: continue does not carry the receipt's outcome and next action: %v", c.outcome, attempt)
 		}
@@ -776,7 +669,7 @@ func TestFlowHonestStopping(t *testing.T) {
 		}
 		section := map[string]string{"READY": "ready", "BLOCKED": "blocked"}[c.want.status]
 		listed := false
-		for _, rec := range flowList(w.read("todo"), "preset", section) {
+		for _, rec := range flowList(w.read("todo"), section) { // R19: todo's own sections
 			listed = listed || flowStr(rec, "fact", "key", "id") == string(task.ref.RecordID)
 		}
 		if !listed {
@@ -850,7 +743,7 @@ func TestFlowProof(t *testing.T) {
 		t.Fatalf("control: the claim must read PROVEN with one proof, got %s", flowStr(claim, "claim", "status"))
 	}
 	w.read("history", string(w.claim.RecordID))
-	w.read("state")
+	w.read("show") // R19: state is bare show
 
 	notProven := func(w *flowWorld, what string) {
 		t.Helper()
@@ -959,7 +852,7 @@ func TestFlowCriterionFrozenIsCheckedAgainstTheCaptureNotTheAuthoredStart(t *tes
 		t.Fatal(err)
 	}
 	var captured string
-	for _, p := range flowList(w.read("intake", "pending"), "intake") {
+	for _, p := range flowList(w.read("todo"), "intake_pending") { // R19: intake pending is a todo section
 		if flowStr(p, "command_id") == string(datedPacket) {
 			captured = flowStr(p, "packet", "captured_at")
 		}
@@ -997,7 +890,7 @@ func TestFlowAcceptance(t *testing.T) {
 		t.Fatalf("success must land awaiting acceptance, got %s %v", flowStr(r, "task", "status"), flowGet(r, "task", "reasons"))
 	}
 	awaiting := false
-	for _, rec := range flowList(w.read("todo"), "preset", "awaiting_acceptance") {
+	for _, rec := range flowList(w.read("todo"), "awaiting_acceptance") { // R19: todo's own section
 		awaiting = awaiting || flowStr(rec, "fact", "key", "id") == string(task.ref.RecordID)
 	}
 	if !awaiting {
@@ -1054,7 +947,8 @@ func TestFlowRecovery(t *testing.T) {
 
 	// Kill a real `datum run` after its producer is running.
 	w.put("tools/run.sh", []byte("touch flow-lane-started\nwhile kill -0 $PPID 2>/dev/null; do sleep 0.05; done\n"))
-	cmd := exec.Command(pvDatum(t), "run", "--actor", flowLane, "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),
+	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	cmd := exec.Command(pvDatum(t), "run", "--json", "--actor", flowLane, "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),
 		"--claim", string(w.claim.RecordID), "--claim-revision", "1", "--criterion-id", string(w.criterion.CriterionID), "--criterion-revision", "1",
 		"--", "/bin/sh", "tools/run.sh")
 	cmd.Dir = w.root
@@ -1084,7 +978,7 @@ func TestFlowRecovery(t *testing.T) {
 	}
 	// Its intent was persisted before launch and is pending in intake.
 	var deadStart, dead model.ID
-	for _, p := range flowList(w.read("intake", "pending"), "intake") {
+	for _, p := range flowList(w.read("todo"), "intake_pending") { // R19: intake pending is a todo section
 		for _, e := range flowList(p, "packet", "events") {
 			if flowStr(e, "type") == "invocation.start" && flowStr(p, "disposition") == "pending" {
 				deadStart, dead = model.ID(flowStr(p, "command_id")), model.ID(flowStr(e, "data", "envelope", "invocation_id"))
@@ -1103,14 +997,15 @@ func TestFlowRecovery(t *testing.T) {
 	w.refused("proof listing an unsealed family member as inconclusive", func() error {
 		return w.prove(map[model.ID]string{pass: "supports", dead: "inconclusive"})
 	})
-	out, err := w.cli(nil, "reconcile", "--actor", flowLane, "--invocation-id", string(dead), "--reason", "the observer was killed mid-run")
+	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	out, err := w.cli(nil, "reconcile", "--json", "--actor", flowLane, "--invocation-id", string(dead), "--reason", "the observer was killed mid-run")
 	if err != nil {
 		t.Fatalf("control: the dead run reconciles: %v", err)
 	}
 	if err := w.review("accepted", flowPacket(t, out)); err != nil {
 		t.Fatalf("control: the reconciliation seal admits: %v", err)
 	}
-	for _, run := range flowList(w.read("state"), "preset", "runs") {
+	for _, run := range flowList(w.read("show"), "runs") { // R19: bare show carries every run
 		if flowStr(run, "invocation") == string(dead) {
 			if flowStr(run, "sealed") != "true" || flowStr(run, "outcome", "state") != "UNKNOWN" || flowStr(run, "observed_at", "state") != "UNKNOWN" {
 				t.Errorf("the reconciled run must read sealed with an UNKNOWN outcome and observation, got %v", run)
@@ -1126,8 +1021,9 @@ func TestFlowRecovery(t *testing.T) {
 
 	// Delete everything that is not the ledger, the config or intake: every
 	// read must answer exactly as before.
+	// R19: the four views replace now, state, instruments, intake pending and context.
 	reads := [][]string{{"show"}, {"show", string(w.claim.RecordID)}, {"history"}, {"history", string(w.claim.RecordID)},
-		{"now"}, {"state"}, {"todo"}, {"instruments"}, {"intake", "pending"}, {"context"}}
+		{"todo"}, {"show", "--kind", "instrument"}, {"show", "--kind", "claim"}}
 	before := map[string]map[string]any{}
 	for _, args := range reads {
 		before[strings.Join(args, " ")] = w.read(args...)
@@ -1209,13 +1105,13 @@ func TestFlowDecisionAndCorrection(t *testing.T) {
 		t.Fatalf("decision.dispose with a quote and a named authority must admit: %v", err)
 	}
 	d = w.record(decision.RecordID)
-	ruling := flowGet(d, "decision", "dispositions", 0)
+	ruling := flowGet(d, "decision", "rulings", 0) // R19: the record detail names a decision's dispositions its rulings
 	if flowStr(d, "decision", "status") != "DECIDED" || flowStr(ruling, "author", "actor", "id") != "scribe" ||
 		flowStr(ruling, "disposition", "authority", "actor", "id") != "owner" || flowStr(ruling, "disposition", "quote") != "ship revision one" {
 		t.Errorf("show must read DECIDED with author scribe, authority owner and the quote, got %s %v", flowStr(d, "decision", "status"), ruling)
 	}
 	found := false
-	for _, e := range flowList(w.read("history", string(decision.RecordID)), "history") {
+	for _, e := range flowList(w.read("history", string(decision.RecordID)), "events") { // R19: the history view's events
 		found = found || flowStr(e, "event", "type") == "decision.dispose" && flowStr(e, "author", "actor", "id") == "scribe"
 	}
 	if !found {
@@ -1245,7 +1141,7 @@ func TestFlowDecisionAndCorrection(t *testing.T) {
 		t.Errorf("a correction must remove current support, got %v, current %s", flowGet(c, "claim", "support"), flowStr(c, "current_support"))
 	}
 	stated := false
-	for _, v := range flowList(p.read("state"), "preset", "claims") {
+	for _, v := range flowList(p.read("show", "--kind", "claim"), "records") { // R19: state's claims are show --kind claim
 		if flowStr(v, "ref", "record_id") == string(p.claim.RecordID) {
 			stated = flowStr(v, "current_support") == "FALSE" && len(flowList(v, "corrections")) == 1
 		}
@@ -1315,7 +1211,8 @@ func TestFlowRemainingEvents(t *testing.T) {
 	if err != nil || w.review("accepted", stop) != nil {
 		t.Fatalf("control: the prior holder's receipt admits: %v", err)
 	}
-	out, err := w.cli(nil, "handback", "--command-id", string(w.id()), "--actor", "lane2", "--attempt-id", string(second), "--outcome", "runner-died",
+	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	out, err := w.cli(nil, "handback", "--json", "--command-id", string(w.id()), "--actor", "lane2", "--attempt-id", string(second), "--outcome", "runner-died",
 		"--reason", "the runner host rebooted", "--next-action", "reconcile the lost run", "--reconciliation-owed")
 	if err != nil || w.review("accepted", flowPacket(t, out)) != nil {
 		t.Fatalf("control: the new holder's runner-died receipt admits: %v", err)
@@ -1368,8 +1265,8 @@ func TestFlowRemainingEvents(t *testing.T) {
 	instrument.BlindTo = "unmeasured poses and any pose outside the fixture sweep"
 	p.mustAdmit(flowLane, &model.InstrumentRevise{Provenance: model.Provenance{Author: model.Actor{ID: flowLane}, SourceRefs: []model.ArtifactRef{}}, Target: p.instrument, ExpectedRevision: 1, Replacement: instrument})
 	listed := false
-	for _, v := range flowList(p.read("instruments"), "preset", "instruments") {
-		listed = listed || flowStr(v, "ref", "record_id") == string(p.instrument.RecordID) && flowStr(v, "ref", "revision") == "2" && flowStr(v, "blind_to") == instrument.BlindTo
+	for _, v := range flowList(p.read("show", "--kind", "instrument"), "records") { // R19: instruments is show --kind instrument
+		listed = listed || flowStr(v, "ref", "record_id") == string(p.instrument.RecordID) && flowStr(v, "ref", "revision") == "2" && flowStr(v, "instrument", "blind_to") == instrument.BlindTo
 	}
 	if !listed {
 		t.Error("INSTRUMENTS does not show the revised instrument's new blind spot")

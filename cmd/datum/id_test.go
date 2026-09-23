@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"os"
 	"os/exec"
@@ -16,11 +15,11 @@ func TestIDPrintsRequestedCountOfValidIDs(t *testing.T) {
 		args []string
 		want int
 	}{{nil, 1}, {[]string{"3"}, 3}} {
-		var out, errb bytes.Buffer
-		if code := idCLI(tc.args, &out, &errb); code != 0 || errb.Len() != 0 {
-			t.Fatalf("args %v: code %d, stderr %q", tc.args, code, errb.String())
+		out, errs, code := cliRun(t, t.TempDir(), nil, "", append([]string{"id"}, tc.args...)...)
+		if code != 0 || errs != "" {
+			t.Fatalf("args %v: code %d, stderr %q", tc.args, code, errs)
 		}
-		lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+		lines := strings.Split(strings.TrimSpace(out), "\n")
 		if len(lines) != tc.want {
 			t.Fatalf("args %v: got %d ids, want %d", tc.args, len(lines), tc.want)
 		}
@@ -38,13 +37,20 @@ func TestIDPrintsRequestedCountOfValidIDs(t *testing.T) {
 }
 
 func TestIDRefusesBadCount(t *testing.T) {
-	for _, arg := range []string{"0", "-1", "x"} {
-		var out, errb bytes.Buffer
-		if code := idCLI([]string{arg}, &out, &errb); code != 2 {
+	for _, arg := range []string{"0", "-1", "x", "--help"} {
+		out, errs, code := cliRun(t, t.TempDir(), nil, "", "id", arg)
+		if arg == "--help" {
+			// R19: id --help is usage, never read as a count.
+			if code != 0 || !strings.HasPrefix(out, "datum id [N]\n") || errs != "" {
+				t.Errorf("id --help: exit %d, stdout %q stderr %q", code, out, errs)
+			}
+			continue
+		}
+		if code != 2 {
 			t.Errorf("%q: exit %d, want 2", arg, code)
 		}
-		if out.Len() != 0 || !strings.Contains(errb.String(), "is not a count of one or more") {
-			t.Errorf("%q: stdout %q stderr %q", arg, out.String(), errb.String())
+		if out != "" || !strings.Contains(errs, "is not a count of one or more") && !strings.Contains(errs, "flag provided but not defined") {
+			t.Errorf("%q: stdout %q stderr %q", arg, out, errs)
 		}
 	}
 }

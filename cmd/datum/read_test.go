@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,9 +34,10 @@ func readProcess(t *testing.T, root string, input []byte, args ...string) []byte
 	return output
 }
 
-func readJSON(t *testing.T, data []byte) query.Answer {
+// readJSON decodes one view's --json answer.
+func readJSON[T any](t *testing.T, data []byte) T {
 	t.Helper()
-	var answer query.Answer
+	var answer T
 	if err := json.Unmarshal(data, &answer); err != nil {
 		t.Fatalf("expected explicit JSON answer, got %q: %v", data, err)
 	}
@@ -84,13 +84,14 @@ func TestFreshProcessesExplainAdmittedDatumConstructionTaskAndSource(t *testing.
 		t.Fatal(err)
 	}
 	readProcess(t, root, input, "capture", "--command-id", string(cliID(3)), "--actor", "lane", "--blob", path)
-	pending := readJSON(t, readProcess(t, root, nil, "intake", "pending", "--json"))
-	if len(pending.Intake) != 1 || pending.Intake[0].Disposition != "pending" || pending.Watermark.Sequence != 0 {
+	// R19: intake pending is a section of todo.
+	pending := readJSON[query.TodoAnswer](t, readProcess(t, root, nil, "todo", "--json"))
+	if len(pending.IntakePending) != 1 || pending.IntakePending[0].Disposition != "pending" || pending.Watermark.Sequence != 0 {
 		t.Fatalf("control captured U09 must be visible before admission at watermark 0, got %+v", pending)
 	}
 	readProcess(t, root, nil, "admit", "--command-id", string(cliID(4)), "--actor", "reviewer", "--outcome", "accepted", "--reason", "admit U09 construction obligation and source", string(cliID(3)))
 	showBytes := readProcess(t, root, nil, "show", "--json", string(task.ID))
-	show := readJSON(t, showBytes)
+	show := readJSON[query.ShowAnswer](t, showBytes)
 	if len(show.Records) != 1 || show.Records[0].Task.Status != reduce.StatusReady || show.Records[0].Task.Revision != 1 || show.Watermark.Sequence != 1 {
 		t.Fatalf("expected admitted U09 READY revision 1 at watermark 1, got %+v", show)
 	}
@@ -98,19 +99,20 @@ func TestFreshProcessesExplainAdmittedDatumConstructionTaskAndSource(t *testing.
 	if record.Fact.Task.Intent != task.Spec.Intent || record.Fact.Provenance.SourceRefs[0].Content.SHA256 != artifact.Content.SHA256 || len(record.Sources) != 1 || record.Sources[0].Intake.Speaker.ID != "requesting-owner" {
 		t.Fatalf("fresh read must retain U09 intent, source hash and original speaker separately from author/reviewer, got %+v", record)
 	}
-	text := readProcess(t, root, nil, "show", "--full", string(task.ID))
+	// R19: --full is removed; --json is the complete answer.
+	text := readProcess(t, root, nil, "show", "--json", string(task.ID))
 	if !bytes.Contains(text, []byte(task.Spec.Intent)) || !bytes.Contains(text, []byte(artifact.Content.SHA256)) || !bytes.Contains(text, []byte("watermark")) {
 		t.Fatalf("text must explain the same obligation, source and watermark as JSON, got %s", text)
 	}
-	for _, args := range [][]string{{"history", "--json"}, {"intake", "pending", "--json"}} {
-		a := readJSON(t, readProcess(t, root, nil, args...))
+	for _, args := range [][]string{{"history", "--json"}, {"todo", "--json"}, {"show", "--json"}} {
+		a := readJSON[query.ViewHeader](t, readProcess(t, root, nil, args...))
 		if a.Watermark.Sequence != 1 {
 			t.Fatalf("every fresh read command needs watermark 1, got %+v for %v", a.Watermark, args)
 		}
 	}
-	history := readJSON(t, readProcess(t, root, nil, "history", "--json", string(task.ID)))
-	if len(history.History) != 2 || history.History[0].Event.Type != "task.create" || history.History[1].Event.Type != "source.intake" {
-		t.Fatalf("filtered history must include the source and authored task in admitted order, got %+v", history.History)
+	history := readJSON[query.HistoryAnswer](t, readProcess(t, root, nil, "history", "--json", string(task.ID)))
+	if len(history.Events) != 2 || history.Events[0].Event.Type != "task.create" || history.Events[1].Event.Type != "source.intake" {
+		t.Fatalf("filtered history must include the source and authored task in admitted order, got %+v", history.Events)
 	}
 	generated := filepath.Join(root, "generated-read.txt")
 	if err := os.WriteFile(generated, text, 0600); err != nil {
@@ -134,14 +136,14 @@ func TestFreshProcessesExplainAdmittedDatumConstructionTaskAndSource(t *testing.
 	}
 	readProcess(t, root, finding, "capture", "--command-id", string(cliID(31)), "--actor", "lane")
 	readProcess(t, root, nil, "admit", "--command-id", string(cliID(32)), "--actor", "reviewer", "--outcome", "accepted", "--reason", "record finding without claiming measurement", string(cliID(31)))
-	found := readJSON(t, readProcess(t, root, nil, "show", "--json", string(cliID(30))))
+	found := readJSON[query.ShowAnswer](t, readProcess(t, root, nil, "show", "--json", string(cliID(30))))
 	if found.Records[0].Claim.Status != reduce.StatusUnmeasured || found.Watermark.Sequence != 2 {
 		t.Fatalf("new finding must enter through capture/admit as UNMEASURED CLAIM at watermark 2, got %+v", found)
 	}
 	readProcess(t, root, finding, "capture", "--command-id", string(cliID(33)), "--actor", "lane")
 	readProcess(t, root, nil, "admit", "--command-id", string(cliID(34)), "--actor", "reviewer", "--outcome", "rejected", "--reason", "duplicate assertion", string(cliID(33)))
-	rejected := readJSON(t, readProcess(t, root, nil, "intake", "pending", "--json"))
-	if len(rejected.Intake) != 1 || rejected.Intake[0].Disposition != "rejected" || rejected.Watermark.Sequence != 3 || !strings.Contains(rejected.Intake[0].Review.Reason, "duplicate assertion") {
+	rejected := readJSON[query.TodoAnswer](t, readProcess(t, root, nil, "todo", "--json"))
+	if len(rejected.IntakePending) != 1 || rejected.IntakePending[0].Disposition != "rejected" || rejected.Watermark.Sequence != 3 || !strings.Contains(rejected.IntakePending[0].Review.Reason, "duplicate assertion") {
 		t.Fatalf("rejected finding must remain explainable at watermark 3, got %+v", rejected)
 	}
 }
@@ -157,40 +159,48 @@ func TestReadCLIConventionsErrorsAndNoCanonicalWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	call := func(args ...string) ([]byte, error) {
-		var output bytes.Buffer
-		err := readCLI(context.Background(), args, root, &output, io.Discard)
-		return output.Bytes(), err
+	if output, _, code := cliRun(t, root, nil, "", "show", "--json", string(cliID(1))); code != 0 || readJSON[query.ShowAnswer](t, []byte(output)).Watermark.Sequence != 1 {
+		t.Fatalf("control admitted record read must succeed at watermark 1: %d", code)
 	}
-	if output, err := call("show", "--json", string(cliID(1))); err != nil || readJSON(t, output).Watermark.Sequence != 1 {
-		t.Fatalf("control admitted record read must succeed at watermark 1: %v", err)
-	}
-	for _, args := range [][]string{{"task"}, {"task", "done"}, {"intake"}, {"intake", "all"}, {"show", "--bogus"},
-		{"show", "bad-id"}, {"show", string(cliID(1)), "--json"}, {"read", "show"}} {
-		if output, err := call(args...); err == nil || len(output) != 0 {
-			t.Fatalf("invalid read %v must fail without an answer, got %s, %v; flag conventions match writes", args, output, err)
+	for _, args := range [][]string{{"show", "--bogus"}, {"show", "bad-id"}, {"show", "--kind", "task", string(cliID(1))}, {"show", "--kind", "bogus"},
+		{"todo", string(cliID(1))}, {"continue"}, {"history", "--limit", "1"}, {"show", string(cliID(1)), string(cliID(2))}} {
+		if output, _, code := cliRun(t, root, nil, "", args...); code != 2 || output != "" {
+			t.Fatalf("invalid read %v must be a usage error without an answer, got %d %s", args, code, output)
 		}
 	}
-	for _, args := range [][]string{{"read", "--help"}, {"show", "--help"}, {"history", "--help"}, {"intake", "pending", "--help"}} {
-		if _, err := call(args...); err != nil {
-			t.Fatalf("read help must succeed for %v: %v", args, err)
+	for _, args := range [][]string{{"show", "--help"}, {"history", "--help"}, {"todo", "--help"}, {"continue", "--help"}} {
+		if _, _, code := cliRun(t, root, nil, "", args...); code != 0 {
+			t.Fatalf("read help must succeed for %v: %d", args, code)
 		}
 	}
-	unknown, err := call("show", "--json", string(cliID(99)))
-	if err != nil || readJSON(t, unknown).Result != "UNKNOWN" {
-		t.Fatalf("absent valid ID must return a watermarked UNKNOWN answer, got %s, %v", unknown, err)
+	unknown, _, code := cliRun(t, root, nil, "", "show", "--json", string(cliID(99)))
+	if code != 0 || readJSON[query.ShowAnswer](t, []byte(unknown)).Result != "UNKNOWN" {
+		t.Fatalf("absent valid ID must return a watermarked UNKNOWN answer, got %s, %d", unknown, code)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := readCLI(ctx, []string{"show"}, root, io.Discard, io.Discard); err != context.Canceled {
-		t.Fatalf("cancelled read must stop, got %v", err)
+	var stdout, stderr bytes.Buffer
+	if code := datum(ctx, []string{"show"}, root, nil, &stdout, &stderr, func(string) string { return "" }); code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), context.Canceled.Error()) {
+		t.Fatalf("cancelled read must stop without an answer, got %d %q %q", code, stdout.String(), stderr.String())
 	}
 	after, err := store.ReadPrefix(project)
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatalf("read commands must leave canonical prefix unchanged: %v", err)
 	}
-	if output := readProcess(t, root, nil, "read", "--help"); !bytes.Contains(output, []byte("datum intake pending")) {
-		t.Fatalf("read commands must be discoverable without changing write help, got %s", output)
+}
+
+// R18.2/R19: the replaced verbs and flags are removed with no alias. Each is
+// an unknown command or flag (exit 2), never a quiet answer.
+func TestRemovedVerbsAndFlagsAreUnreachable(t *testing.T) {
+	root, data := cliFixture(t)
+	cliControl(t, root, data)
+	for _, args := range [][]string{{"now"}, {"state"}, {"instruments"}, {"context"}, {"intake", "pending"}, {"read", "show"},
+		{"criterion", "check", "--events", "-"}, {"proof", "check", "--events", "-"}, {"disposal-loss", "--digest", strings.Repeat("a", 64)},
+		{"task", "todo"}, {"todo", "--full"}, {"todo", "--brief"}, {"show", "--full"}, {"history", "--brief"}} {
+		out, errs, code := cliRun(t, root, nil, "", args...)
+		if code != 2 || out != "" || errs == "" {
+			t.Fatalf("%v must be refused as a usage error with no answer, got %d %q %q", args, code, out, errs)
+		}
 	}
 }
 
@@ -230,30 +240,27 @@ func TestReadCLISelfAdmissionAudit(t *testing.T) {
 		{"--self-admitted", "true", cliID(50)}, {"--self-admitted=true", "true", cliID(50)},
 		{"--self-admitted=false", "false", cliID(51)}, {"--self-admitted=unknown", "UNKNOWN", cliID(52)},
 	} {
-		a := readJSON(t, readProcess(t, root, nil, "history", "--json", tc.flag))
+		exported := readProcess(t, root, nil, "history", "--json", tc.flag)
+		a := readJSON[query.HistoryAnswer](t, exported)
 		if len(a.Reviews) != 1 || a.Reviews[0].Key.CommandID != tc.id || a.Reviews[0].SelfAdmission != tc.state || a.Watermark.Sequence != 1 {
 			t.Fatalf("%s selected wrong audit: %+v", tc.flag, a)
 		}
-		var rendered bytes.Buffer
-		if err := query.RenderText(&rendered, a); err != nil {
+		// R19: --full is removed; the default text is the brief of the same --json.
+		want, _, err := query.ViewBriefOf(exported)
+		if err != nil {
 			t.Fatal(err)
 		}
-		if output := readProcess(t, root, nil, "history", "--full", tc.flag); !bytes.Equal(output, rendered.Bytes()) {
-			t.Fatalf("CLI formats disagree: %s versus %s", output, rendered.Bytes())
+		if output := readProcess(t, root, nil, "history", tc.flag); string(output) != want {
+			t.Fatalf("CLI formats disagree: %s versus %s", output, want)
 		}
 	}
 	for _, args := range [][]string{
 		{"history", "--self-admitted="}, {"history", "--self-admitted=no"}, {"history", "--self-admitted=UNKNOWN"},
-		{"history", "--self-admitted", string(cliID(1))}, {"show", "--self-admitted"},
-		{"intake", "pending", "--self-admitted"},
+		{"history", "--self-admitted", string(cliID(1))}, {"show", "--self-admitted"}, {"todo", "--self-admitted"},
 	} {
-		var out bytes.Buffer
-		if err := readCLI(context.Background(), args, root, &out, io.Discard); err == nil || out.Len() != 0 {
-			t.Fatalf("invalid filter %v returned %q, %v", args, out.String(), err)
+		if out, _, code := cliRun(t, root, nil, "", args...); code != 2 || out != "" {
+			t.Fatalf("invalid filter %v returned %q, %d", args, out, code)
 		}
-	}
-	if help := readProcess(t, root, nil, "read", "--help"); !bytes.Contains(help, []byte("--self-admitted[=true|false|unknown]")) {
-		t.Fatalf("missing audit help: %s", help)
 	}
 }
 
@@ -263,18 +270,20 @@ func TestFreshProcessInstrumentsOnThisRepositoryShowUnknownValidation(t *testing
 		t.Fatal(err)
 	}
 	root := filepath.Join(cwd, "..", "..")
-	answer := readJSON(t, readProcess(t, root, nil, "instruments", "--json"))
-	if answer.Project != "datum/datum" || answer.Watermark.Bundles == 0 || answer.Preset == nil || answer.Preset.Instruments == nil {
-		t.Fatalf("instruments must answer from this repository's own ledger, got %+v", answer)
+	// R19: the instruments preset is show --kind instrument.
+	answer := readJSON[query.ShowAnswer](t, readProcess(t, root, nil, "show", "--kind", "instrument", "--json"))
+	if answer.Project != "datum/datum" || answer.Watermark.Bundles == 0 || len(answer.Records) == 0 {
+		t.Fatalf("instruments must answer from this repository's own ledger, got %+v", answer.ViewHeader)
 	}
 	// Attention listing is asserted in internal/query; this checks dispatch and rendering.
-	for _, v := range *answer.Preset.Instruments {
-		if v.Validation.State != "KNOWN" && (v.Validation.State != "UNKNOWN" || v.Validation.Reason == "") {
-			t.Fatalf("instrument %s validation must be KNOWN, or UNKNOWN with its reason; got %+v", v.Ref.RecordID, v.Validation)
+	for _, r := range answer.Records {
+		v := r.Instrument
+		if v == nil || v.Validation.State != "KNOWN" && (v.Validation.State != "UNKNOWN" || v.Validation.Reason == "") {
+			t.Fatalf("instrument %s validation must be KNOWN, or UNKNOWN with its reason; got %+v", r.Ref.RecordID, v)
 		}
 	}
-	text := readProcess(t, root, nil, "instruments")
-	if !bytes.Contains(text, []byte("\nattention")) || bytes.Index(text, []byte("\nattention")) > bytes.Index(text, []byte("\ninstruments")) {
+	text := readProcess(t, root, nil, "show", "--kind", "instrument")
+	if !bytes.Contains(text, []byte("\nattention")) || bytes.Index(text, []byte("\nattention")) > bytes.Index(text, []byte("\ninstruments:")) {
 		t.Fatalf("text must list attention before the instrument details, got %s", text)
 	}
 }

@@ -1,19 +1,23 @@
 package main
 
-// End-to-end tests for the disposal-loss read through fresh processes: the
+// End-to-end tests for `datum check disposal` through fresh processes: the
 // support_loss list it prints is exactly what admission requires of an
 // artifact.dispose (pasted in whole it is admitted; with any one revision
 // removed it is refused as loss-unaccounted), and printing it writes nothing.
 // Admission rules live in internal/write; the list itself in internal/reduce.
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"datum/internal/model"
+	"datum/internal/reduce"
+	"datum/internal/store"
 )
 
 // disposalWorld admits a proof that cites a run output, then two decisions
@@ -86,25 +90,38 @@ func fileStamps(t *testing.T, root string) map[string]string {
 	return stamps
 }
 
+// disposalJSON decodes `datum check disposal --json`.
+type disposalJSON struct {
+	Mode         string                    `json:"mode"`
+	Scope        string                    `json:"scope"`
+	Watermark    map[string]any            `json:"watermark"`
+	Result       string                    `json:"result"`
+	Git          *model.GitPin             `json:"git"`
+	SupportLoss  []model.RecordRef         `json:"support_loss"`
+	CitingEvents []reduce.ArtifactCitation `json:"citing_events"`
+}
+
+// R19: disposal-loss is `datum check disposal`, whose first line is its scope.
 func TestCLIDisposalLossListIsExactlyWhatAdmissionRequires(t *testing.T) {
 	root, output, dependents := disposalWorld(t)
 	before := fileStamps(t, root)
-	text := readProcess(t, root, nil, "disposal-loss", "--digest", string(output.Content.SHA256))
-	answer := readJSON(t, readProcess(t, root, nil, "disposal-loss", "--json", "--digest", string(output.Content.SHA256)))
-	t.Logf("datum disposal-loss --digest %s:\n%s", output.Content.SHA256, text)
+	text := readProcess(t, root, nil, "check", "disposal", "--digest", string(output.Content.SHA256))
+	answer := readJSON[disposalJSON](t, readProcess(t, root, nil, "check", "disposal", "--json", "--digest", string(output.Content.SHA256)))
+	t.Logf("datum check disposal --digest %s:\n%s", output.Content.SHA256, text)
 	if after := fileStamps(t, root); len(after) != len(before) {
-		t.Fatalf("disposal-loss wrote files: %d before, %d after", len(before), len(after))
+		t.Fatalf("check disposal wrote files: %d before, %d after", len(before), len(after))
 	} else {
 		for path, stamp := range before {
 			if after[path] != stamp {
-				t.Fatalf("disposal-loss changed %s", path)
+				t.Fatalf("check disposal changed %s", path)
 			}
 		}
 	}
-	if !strings.Contains(string(text), "watermark sequence") || answer.Watermark.Sequence == 0 || answer.Preset == nil || answer.Preset.Disposal == nil {
-		t.Fatalf("disposal-loss must answer with a watermark and a disposal section: %+v", answer)
+	scope := "disposal-loss preview at watermark " + fmt.Sprint(answer.Watermark["sequence"]) + ": admission recomputes and stays the authority; reasons are yours to write"
+	if !strings.HasPrefix(string(text), scope+"\n") || answer.Scope != scope || answer.Mode != "disposal" || answer.Watermark["sequence"] == float64(0) {
+		t.Fatalf("check disposal must open with its scope at its watermark: %s\n%+v", text, answer)
 	}
-	listed := answer.Preset.Disposal.SupportLoss
+	listed := answer.SupportLoss
 	for _, want := range dependents {
 		found := false
 		for _, ref := range listed {
@@ -114,7 +131,7 @@ func TestCLIDisposalLossListIsExactlyWhatAdmissionRequires(t *testing.T) {
 			t.Fatalf("support_loss %+v omits %+v, a direct or transitive dependent", listed, want)
 		}
 	}
-	if len(answer.Preset.Disposal.CitedBy) == 0 {
+	if len(answer.CitingEvents) == 0 {
 		t.Fatalf("no admitted event reported as citing the disposed output")
 	}
 	authority := e2eRuling(t, root, "rulings/dispose.json", `{"ruling":"delete that run output"}`)
@@ -125,8 +142,8 @@ func TestCLIDisposalLossListIsExactlyWhatAdmissionRequires(t *testing.T) {
 		}
 		return &model.ArtifactDispose{Artifact: output, Digest: output.Content.SHA256, PreviousLocation: output.Content.Locators[0].Path, SupportLoss: loss, Authority: authority}
 	}
-	// Every single omission is refused, so no entry the verb prints is surplus
-	// the gate would not have asked for.
+	// Every single omission is refused, so no entry the check prints is
+	// surplus the gate would not have asked for.
 	for i := range listed {
 		short := append(append([]model.RecordRef{}, listed[:i]...), listed[i+1:]...)
 		err := e2eAdmitOne(t, root, dispose(short), 920+2*i, 921+2*i, "agent-sol")
@@ -143,25 +160,70 @@ func TestCLIDisposalLossRefusesAMalformedIdentity(t *testing.T) {
 	root, _ := cliFixture(t)
 	digest := strings.Repeat("a", 64)
 	for want, args := range map[string][]string{
-		"digest must be 64":     {"disposal-loss"},
-		"digest must be":        {"disposal-loss", "--digest", "ABC"},
-		"--git must be":         {"disposal-loss", "--digest", digest, "--git", "sha1:deadbeef"},
-		"commit must be":        {"disposal-loss", "--digest", digest, "--git", "sha1:" + strings.Repeat("g", 40) + ":x.json"},
-		"unexpected positional": {"disposal-loss", "--digest", digest, string(cliID(1))},
+		"digest must be 64": {"check", "disposal"},
+		"digest must be":    {"check", "disposal", "--digest", "ABC"},
+		"--git must be":     {"check", "disposal", "--digest", digest, "--git", "sha1:deadbeef"},
+		"commit must be":    {"check", "disposal", "--digest", digest, "--git", "sha1:" + strings.Repeat("g", 40) + ":x.json"},
+		"positional":        {"check", "disposal", "--digest", digest, string(cliID(1))},
+		"not defined":       {"check", "disposal", "--digest", digest, "--events", "-"},
 	} {
-		if out, err := e2eInvoke(t, root, nil, args...); err == nil || !strings.Contains(err.Error(), want) {
-			t.Fatalf("%v must be refused with %q, got %s %v", args, want, out, err)
+		if out, errs, code := cliRun(t, root, nil, "", args...); code != 2 || out != "" || !strings.Contains(errs, want) {
+			t.Fatalf("%v must be a usage error naming %q, got %d %s %s", args, want, code, out, errs)
 		}
 	}
 }
 
-func TestCLIDisposalLossCarriesTheGitPinItWasGiven(t *testing.T) {
-	root, _ := cliFixture(t)
-	commit := strings.Repeat("a", 40)
-	answer := readJSON(t, readProcess(t, root, nil, "disposal-loss", "--json", "--digest", strings.Repeat("b", 64), "--git", "sha1:"+commit+":docs/a.md"))
-	got := answer.Preset.Disposal.Target.Git
-	if got == nil || *got != (model.GitPin{ObjectFormat: "sha1", Commit: commit, Path: "docs/a.md"}) {
-		t.Fatalf("disposal-loss planned for %+v, not the git pin it was given", got)
+// A git-pinned citation is lost only by a disposal naming the same git pin; a
+// content-pinned one by digest. The ledger is written directly: a git pin to
+// a fixture commit could not pass admission, and the check reads the ledger.
+func TestCLIDisposalLossPlansGitPinnedCitationsOnlyForTheSamePin(t *testing.T) {
+	root, data := cliFixture(t)
+	project, err := store.Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pin := &model.GitPin{ObjectFormat: "sha1", Commit: strings.Repeat("a", 40), Path: "docs/source.md"}
+	body := []byte("source bytes")
+	content := model.ArtifactRef{Kind: "content", Content: &model.ContentPin{SHA256: model.HashBytes(body), Length: uint64(len(body)), MediaType: "text/plain", Locators: []model.Locator{}}, Selector: model.Selector{Kind: "whole"}}
+	var events []model.Event
+	if err := json.Unmarshal(data, &events); err != nil {
+		t.Fatal(err)
+	}
+	var tasks []model.Event
+	for i, ref := range []model.ArtifactRef{{Kind: "git", Git: pin, Selector: model.Selector{Kind: "whole"}}, content} {
+		typed, err := model.DecodeEvent(events[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		task := typed.(*model.TaskCreate)
+		task.ID, task.Spec.AcceptanceCriteria[0].ID = cliID(10+i), cliID(20+i)
+		task.Provenance.SourceRefs = []model.ArtifactRef{ref}
+		encoded, err := model.EncodeEvent(task)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tasks = append(tasks, encoded)
+	}
+	if _, err := store.Transact(context.Background(), project, cliID(30), model.HashBytes([]byte("pins")), func([]model.Bundle) (model.Bundle, error) {
+		return model.Bundle{Admitter: model.Actor{ID: "reviewer"}, Packets: []model.PacketRef{}, Events: tasks}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	plan := func(args ...string) disposalJSON {
+		t.Helper()
+		return readJSON[disposalJSON](t, readProcess(t, root, nil, append([]string{"check", "disposal", "--json"}, args...)...))
+	}
+	byDigest := plan("--digest", string(content.Content.SHA256))
+	if len(byDigest.SupportLoss) != 1 || byDigest.SupportLoss[0].RecordID != cliID(11) || len(byDigest.CitingEvents) != 1 {
+		t.Fatalf("a content disposal must lose exactly the content citer: %+v", byDigest)
+	}
+	withPin := plan("--digest", string(content.Content.SHA256), "--git", "sha1:"+pin.Commit+":"+pin.Path)
+	if len(withPin.SupportLoss) != 2 || len(withPin.CitingEvents) != 2 || withPin.Git == nil || *withPin.Git != *pin {
+		t.Fatalf("a disposal naming the git pin must also lose the git citer, and carry the pin it was given: %+v", withPin)
+	}
+	other := plan("--digest", string(model.HashBytes([]byte("unrelated"))), "--git", "sha1:"+pin.Commit+":docs/other.md")
+	if len(other.SupportLoss) != 0 || len(other.CitingEvents) != 0 {
+		t.Fatalf("a different pin and digest must lose nothing: %+v", other)
 	}
 }
 

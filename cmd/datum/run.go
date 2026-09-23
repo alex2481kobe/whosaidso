@@ -1,11 +1,10 @@
 package main
 
 // This file holds the run and reconcile verbs, which resolve admitted
-// instruments and criteria and hand intent to write.Run. Capture, admit and
-// handback stay in write.go.
+// instruments and criteria and hand intent to write.Run, and what run prints.
+// Capture, admit and handback stay in write.go.
 
 import (
-	"context"
 	"datum/internal/model"
 	"datum/internal/reduce"
 	"datum/internal/store"
@@ -47,81 +46,133 @@ func tail(b []byte) (text, encoded *string) {
 	return nil, &s
 }
 
-// runCLI (run and reconcile) resolves the admitted instrument and criterion from a fresh replay,
+// reconcileVerb captures an UNKNOWN-outcome seal, with no reading, for an
+// admitted run whose observer died.
+func reconcileVerb(fs *flag.FlagSet) func(*call) error {
+	actor := actorFlag(fs)
+	jsonOutput := jsonFlag(fs)
+	invocation := fs.String("invocation-id", "", "the admitted unsealed run's invocation `ULID`")
+	reason := fs.String("reason", "", "why the observer did not seal, as `TEXT` (required)")
+	return func(c *call) error {
+		if err := noPositionals(c, "reconcile"); err != nil {
+			return err
+		}
+		project, err := c.project()
+		if err != nil {
+			return err
+		}
+		ref, err := write.Reconcile(c.ctx, project, write.ReconcileRequest{Author: actor(c), InvocationID: model.ID(*invocation), Reason: *reason})
+		if err != nil {
+			return err
+		}
+		return printResult(c.stdout, *jsonOutput, ref, fmt.Sprintf("reconcile captured %s (UNKNOWN seal) for %s; admit it: %s\n",
+			ref.CommandID, *invocation, admitCommand("", model.Actor{}, "", []model.ID{ref.CommandID})))
+	}
+}
+
+// runVerb resolves the admitted instrument and criterion from a fresh replay,
 // then hands intent to write.Run. A failing measurement still prints its
 // packets, because a failed run is family evidence that must be admitted.
-func runCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.Writer, getenv func(string) string) error {
-	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	flags.SetOutput(stderr)
-	actor := flags.String("actor", "", "attributed actor")
-	invocation := flags.String("invocation-id", "", "reconcile: admitted unsealed invocation ULID")
-	reason := flags.String("reason", "", "reconcile: why the observer did not seal")
-	attempt := flags.String("attempt-id", "", "admitted attempt ULID")
-	instrument := flags.String("instrument", "", "admitted instrument id; its current revision is used")
-	claim := flags.String("claim", "", "claim id the criterion tests")
-	claimRevision := flags.Uint64("claim-revision", 0, "exact claim revision")
-	criterion := flags.String("criterion-id", "", "admitted criterion ULID")
-	criterionRevision := flags.Uint64("criterion-revision", 0, "exact criterion revision")
-	timeout := flags.Duration("timeout", 0, "execution deadline; zero leaves it to the caller")
-	if err := flags.Parse(args[1:]); err != nil {
-		if err == flag.ErrHelp {
-			return nil
+func runVerb(fs *flag.FlagSet) func(*call) error {
+	actor := actorFlag(fs)
+	jsonOutput := jsonFlag(fs)
+	attempt := fs.String("attempt-id", "", "the admitted attempt's `ULID`")
+	instrument := fs.String("instrument", "", "the admitted instrument `ID`; its current revision is used")
+	claim := fs.String("claim", "", "the claim `ID` the criterion tests")
+	claimRevision := fs.Uint64("claim-revision", 0, "the exact claim revision `N`")
+	criterion := fs.String("criterion-id", "", "the admitted criterion `ULID`")
+	criterionRevision := fs.Uint64("criterion-revision", 0, "the exact criterion revision `N`")
+	timeout := fs.Duration("timeout", 0, "the execution deadline as a `DURATION`; zero leaves it to the caller")
+	admitAfter := fs.Bool("admit", false, "then admit the start and seal as accepted under the same actor")
+	admitID := fs.String("admit-command-id", "", "--admit: the admission's `ULID`; minted when omitted")
+	reason := fs.String("reason", "", "--admit: the review reason `TEXT` (required with --admit)")
+	return func(c *call) error {
+		if len(c.args) > 0 || len(c.argv) == 0 {
+			return usageError("datum run takes its command after --: datum run [flags] -- ARGV")
 		}
-		return err
-	}
-	actorSet := false
-	flags.Visit(func(f *flag.Flag) { actorSet = actorSet || f.Name == "actor" })
-	if !actorSet {
-		*actor = getenv("DATUM_ACTOR")
-	}
-	author := model.Actor{ID: *actor}
-	if model.Blank(*actor) {
-		author = model.Actor{UnknownReason: "no actor supplied by --actor or DATUM_ACTOR"}
-	}
-	project, err := store.Discover(cwd)
-	if err != nil {
-		return err
-	}
-	if args[0] == "reconcile" {
-		ref, err := write.Reconcile(ctx, project, write.ReconcileRequest{Author: author, InvocationID: model.ID(*invocation), Reason: *reason})
+		if *admitAfter && model.Blank(*reason) {
+			return usageError("datum run --admit needs --reason: the review reason is authored, never defaulted")
+		}
+		if !*admitAfter && (isSet(fs, "reason") || isSet(fs, "admit-command-id")) {
+			return usageError("datum run: --reason and --admit-command-id belong to --admit")
+		}
+		project, err := c.project()
 		if err != nil {
 			return err
 		}
-		encoded, err := model.Encode(ref)
-		if err == nil {
-			_, err = stdout.Write(encoded)
-		}
-		return err
-	}
-	loaded, err := store.Load(project)
-	if err != nil {
-		return err
-	}
-	snapshot := loaded.Snapshot()
-	current, ok := snapshot.Instrument(reduce.Ident{Project: project.ID, ID: model.ID(*instrument)})
-	if !ok {
-		return fmt.Errorf("run: instrument %q is not admitted", *instrument)
-	}
-	request := write.RunRequest{Author: author, AttemptID: model.ID(*attempt), InstrumentRef: model.RecordRef{Project: project.ID, RecordID: current.Instrument.ID, Revision: current.Instrument.Revision},
-		Instrument: *current.Spec, Argv: flags.Args(), Timeout: *timeout,
-		CriterionRef:            model.Availability[model.CriterionRef]{State: model.Unknown, Reason: "no criterion named for this run"},
-		ExecutionSourceIdentity: write.RunExecutionIdentity(ctx, project)}
-	if *criterion != "" || *claim != "" {
-		ref := model.CriterionRef{Claim: model.RecordRef{Project: project.ID, RecordID: model.ID(*claim), Revision: model.Revision(*claimRevision)}, CriterionID: model.ID(*criterion), Revision: model.Revision(*criterionRevision)}
-		if _, ok := snapshot.Criterion(ref); !ok {
-			return fmt.Errorf("run: criterion %s revision %d of claim %s revision %d is not admitted; fix and admit it before launch", *criterion, *criterionRevision, *claim, *claimRevision)
-		}
-		request.CriterionRef = model.Availability[model.CriterionRef]{State: model.Known, Value: &ref}
-	}
-	result, runErr := write.Run(ctx, project, request)
-	if result.StartPacket.CommandID != "" {
-		encoded, err := model.Encode(printedRun(result))
+		author := actor(c)
+		loaded, err := store.Load(project)
 		if err != nil {
 			return err
 		}
-		if _, err := stdout.Write(encoded); err != nil {
+		snapshot := loaded.Snapshot()
+		current, ok := snapshot.Instrument(reduce.Ident{Project: project.ID, ID: model.ID(*instrument)})
+		if !ok {
+			return fmt.Errorf("run: instrument %q is not admitted", *instrument)
+		}
+		request := write.RunRequest{Author: author, AttemptID: model.ID(*attempt), InstrumentRef: model.RecordRef{Project: project.ID, RecordID: current.Instrument.ID, Revision: current.Instrument.Revision},
+			Instrument: *current.Spec, Argv: c.argv, Timeout: *timeout,
+			CriterionRef:            model.Availability[model.CriterionRef]{State: model.Unknown, Reason: "no criterion named for this run"},
+			ExecutionSourceIdentity: write.RunExecutionIdentity(c.ctx, project)}
+		if *criterion != "" || *claim != "" {
+			ref := model.CriterionRef{Claim: model.RecordRef{Project: project.ID, RecordID: model.ID(*claim), Revision: model.Revision(*claimRevision)}, CriterionID: model.ID(*criterion), Revision: model.Revision(*criterionRevision)}
+			if _, ok := snapshot.Criterion(ref); !ok {
+				return fmt.Errorf("run: criterion %s revision %d of claim %s revision %d is not admitted; fix and admit it before launch", *criterion, *criterionRevision, *claim, *claimRevision)
+			}
+			request.CriterionRef = model.Availability[model.CriterionRef]{State: model.Known, Value: &ref}
+		}
+		result, runErr := write.Run(c.ctx, project, request)
+		if result.StartPacket.CommandID == "" {
+			return runErr
+		}
+		printed := printedRun(result)
+		packets := []model.ID{result.StartPacket.CommandID}
+		if result.SealPacket.CommandID != "" {
+			packets = append(packets, result.SealPacket.CommandID)
+		}
+		if !*admitAfter {
+			if err := printResult(c.stdout, *jsonOutput, printed, runAck(result, packets)); err != nil {
+				return err
+			}
+			return runErr
+		}
+		// A failed measurement is still family evidence: its packets are admitted.
+		a, bundle, admitErr := admitCaptured(c.ctx, project, model.ID(*admitID), author, *reason, packets)
+		if *jsonOutput {
+			out := struct {
+				Run runOutput `json:"run"`
+				admission
+			}{printed, a}
+			if err := printResult(c.stdout, true, out, ""); err != nil {
+				return err
+			}
+		} else if admitErr == nil {
+			io.WriteString(c.stdout, runAck(result, packets))
+		}
+		if err := reportAdmission(c.stdout, *jsonOutput, a, bundle, admitErr, packets); err != nil {
 			return err
 		}
+		return runErr
 	}
-	return runErr
+}
+
+// runAck is `run INVOCATION exit CODE; start PACKET seal PACKET; admit: ...`.
+func runAck(r write.RunResult, packets []model.ID) string {
+	exit := "UNKNOWN"
+	if o := r.Envelope.Outcome; o.State == model.Known && o.Value != nil {
+		switch {
+		case o.Value.ExitCode != nil:
+			exit = fmt.Sprint(*o.Value.ExitCode)
+		case o.Value.Signal != nil:
+			exit = "signal " + *o.Value.Signal
+		default:
+			exit = o.Value.Kind
+		}
+	}
+	seal := "none"
+	if r.SealPacket.CommandID != "" {
+		seal = string(r.SealPacket.CommandID)
+	}
+	return fmt.Sprintf("run %s exit %s; start %s seal %s; admit: %s\n", r.Envelope.InvocationID, exit, r.StartPacket.CommandID, seal,
+		admitCommand("", model.Actor{}, "", packets))
 }

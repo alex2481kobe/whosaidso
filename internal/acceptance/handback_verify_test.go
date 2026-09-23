@@ -38,7 +38,7 @@ func hbVerifyStart(t *testing.T, f *gateVerifyFixture, actor model.Actor) (model
 
 func hbVerifyTask(t *testing.T, f *gateVerifyFixture, ref model.RecordRef) *query.Task {
 	t.Helper()
-	a, err := query.Read(f.p, query.Request{Command: "show", ID: ref.RecordID})
+	a, err := gateVerifyShow(f.p, ref.RecordID)
 	if err != nil || len(a.Records) != 1 || a.Records[0].Task == nil {
 		t.Fatalf("expected task from fresh public read, got %+v, error=%v", a, err)
 	}
@@ -88,7 +88,8 @@ func hbVerifyCLI(t *testing.T) hbVerifyCapture {
 	}
 	return func(f *gateVerifyFixture, r write.HandbackRequest) (model.PacketRef, error) {
 		stWriteConfig(t, f.p.Root, string(f.p.ID), ".datum/events")
-		args := []string{"handback", "--command-id", string(r.CommandID), "--actor", r.Author.ID,
+		// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+		args := []string{"handback", "--json", "--command-id", string(r.CommandID), "--actor", r.Author.ID,
 			"--attempt-id", string(r.AttemptID), "--outcome", string(r.Outcome), "--reason", r.Reason, "--next-action", r.NextAction}
 		if r.CommitsDenied {
 			args = append(args, "--commits-denied")

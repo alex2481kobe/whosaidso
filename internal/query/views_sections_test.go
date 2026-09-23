@@ -73,7 +73,7 @@ func checkSectionCoverage(t *testing.T, w coverageWorld) {
 	oldNow := readOld(t, w, Request{Command: "now"})
 	c.nowCovered("now", mustAt(t, oldNow, "preset"), todo)
 
-	oldState := readOld(t, w, Request{Command: "state", Stale: w.stale})
+	oldState := readOld(t, w, Request{Command: "state"})
 	c.stateCovered("state", mustAt(t, oldState, "preset"), show)
 	c.stateCovered("context", mustAt(t, readOld(t, w, Request{Command: "context"}), "preset"), show)
 
