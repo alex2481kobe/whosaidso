@@ -142,3 +142,41 @@ func TestRootIsScannedWhateverItIsCalled(t *testing.T) {
 		t.Fatalf("packages = %+v, want [a]", r.Packages)
 	}
 }
+
+// Purpose is the package doc comment the author supplied, never a file's own
+// comment. p has a file comment attached in its first file, a package doc in
+// a later one and another in doc.go: doc.go wins. q has only a file comment,
+// so no purpose was supplied. m is a main package documented as a command.
+func TestKnownAnswerPurposeIsPackageDocOnly(t *testing.T) {
+	r, err := measure(writeModule(t, map[string]string{
+		"go.mod":        "module m\n",
+		"p/a.go":        "// a.go implements the id command.\npackage p\n",
+		"p/b.go":        "// Package p is from b.\npackage p\n",
+		"p/doc.go":      "// Package p is from doc.\npackage p\n",
+		"q/a.go":        "// a.go implements the id command.\npackage q\n",
+		"q/b.go":        "// Detached file comment.\n\npackage q\n",
+		"cmd/x/main.go": "// Command x does a thing.\npackage main\n",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][2]string{
+		"p":     {"from doc", "doc.go"},
+		"q":     {purposeMissing, ""},
+		"cmd/x": {"does a thing", "main.go"},
+	}
+	for _, p := range r.Packages {
+		w, ok := want[p.Path]
+		if !ok {
+			t.Errorf("unexpected package %s", p.Path)
+			continue
+		}
+		if p.Purpose != w[0] || p.PurposeFrom != w[1] {
+			t.Errorf("%s: purpose %q from %q, want %q from %q", p.Path, p.Purpose, p.PurposeFrom, w[0], w[1])
+		}
+		delete(want, p.Path)
+	}
+	for path := range want {
+		t.Errorf("package %s missing", path)
+	}
+}

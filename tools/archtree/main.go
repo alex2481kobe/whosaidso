@@ -16,8 +16,9 @@
 // checked): per-file line counts including a final line with no newline;
 // package line and test-line totals; the largest production file, which never
 // counts a test file and on a tie names the first file by name; testdata/ and
-// dot-directories skipped; a test-only package having no largest file. NOT
-// validated by any known answer: imports, import cycles, purpose.
+// dot-directories skipped; a test-only package having no largest file; which
+// comment supplies a purpose (a package doc, doc.go first, never a file
+// comment). NOT validated by any known answer: imports, import cycles.
 // criterion_test.go puts the readings through Datum's own Observe and Evaluate.
 //
 // BLIND TO, and this matters more than the numbers it prints:
@@ -53,9 +54,13 @@
 //   - test-only packages have no imports reported, because their imports are
 //     in _test.go files this does not read. internal/acceptance therefore shows
 //     as depending on nothing while in fact it exercises everything.
-//   - purpose. The one-line purpose is the first sentence of the package doc
-//     comment. It reports what the comment SAYS, never whether that is still
-//     true of the code.
+//   - purpose. It is SUPPLIED, not measured: the first sentence of the package
+//     doc comment (attached to the package clause and opening "Package", or
+//     "Command" for main), from doc.go when that has one, else the first file
+//     by name; purpose_from names the file. With none it says no purpose was
+//     supplied, and never borrows a file's own comment, which once made the
+//     README describe the whole CLI as the datum id implementation. It reports
+//     what the comment SAYS, never whether that is still true of the code.
 //
 // Usage:
 //
