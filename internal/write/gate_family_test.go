@@ -217,7 +217,9 @@ func TestNewOperationsCannotEscapeRootThroughSymlink(t *testing.T) {
 			}
 			before := f.snapshot().Watermark()
 			_, err := Admit(context.Background(), f.project, f.request(f.capture([][]byte{[]byte("instrument implementation")}, event)))
-			if admissionErrorCode(err) != "unavailable" || !strings.Contains(err.Error(), "resolved outside the root") {
+			// The invariant is the refusal; run outputs are refused by the run-output
+			// reader ("without symlinks"), every other door by the resolver.
+			if admissionErrorCode(err) != "unavailable" || !(strings.Contains(err.Error(), "resolved outside the root") || strings.Contains(err.Error(), "without symlinks")) {
 				t.Fatalf("%s followed a symlink out of the root: %v", door, err)
 			}
 			if f.snapshot().Watermark() != before {
