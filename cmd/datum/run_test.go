@@ -57,7 +57,7 @@ func e2eInvoke(t *testing.T, root string, events []model.TypedEvent, args ...str
 	if err != nil {
 		t.Fatal(err)
 	}
-	command := exec.Command(binary, append([]string{"-test.run=^TestDatumMainProcess$", "--"}, args...)...)
+	command := exec.Command(binary, append([]string{"-test.run=^TestDatumMainProcess$", "--"}, withJSON(args)...)...)
 	command.Dir, command.Stdin = root, bytes.NewReader(input)
 	command.Env = append(os.Environ(), "DATUM_MAIN_TEST_PROCESS=1", "DATUM_ACTOR=lane")
 	var stdout, stderr bytes.Buffer

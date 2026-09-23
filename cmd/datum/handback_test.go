@@ -77,7 +77,7 @@ func TestCLIHandbackOutcomesAndAttribution(t *testing.T) {
 				args[len(args)-3] = path
 			}
 			var out, diagnostic bytes.Buffer
-			if err := writeCLI(context.Background(), args, root, bytes.NewReader(refs), &out, &diagnostic, func(string) string { return env }); err != nil || diagnostic.Len() != 0 {
+			if err := writeCLI(context.Background(), withJSON(args), root, bytes.NewReader(refs), &out, &diagnostic, func(string) string { return env }); err != nil || diagnostic.Len() != 0 {
 				t.Fatalf("handback failed: %v; stderr=%s", err, &diagnostic)
 			}
 			var receipt model.PacketRef
@@ -85,7 +85,7 @@ func TestCLIHandbackOutcomesAndAttribution(t *testing.T) {
 				t.Fatalf("expected packet JSON: %s, %v", &out, err)
 			}
 			var retry bytes.Buffer
-			if err := writeCLI(context.Background(), args, root, bytes.NewReader(refs), &retry, &diagnostic, func(string) string { return env }); err != nil || !bytes.Equal(out.Bytes(), retry.Bytes()) {
+			if err := writeCLI(context.Background(), withJSON(args), root, bytes.NewReader(refs), &retry, &diagnostic, func(string) string { return env }); err != nil || !bytes.Equal(out.Bytes(), retry.Bytes()) {
 				t.Fatalf("identical handback retry changed receipt: %s, %v", &retry, err)
 			}
 			packets, err := store.ReadIntake(p, []model.ID{receipt.CommandID})

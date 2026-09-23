@@ -102,7 +102,8 @@ func (w *flowWorld) capture(author string, events ...model.TypedEvent) model.ID 
 	if err != nil {
 		w.t.Fatal(err)
 	}
-	out, err := w.cli(body, "capture", "--actor", author, "--command-id", string(w.id()), "--events", "-")
+	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	out, err := w.cli(body, "capture", "--json", "--actor", author, "--command-id", string(w.id()), "--events", "-")
 	if err != nil {
 		w.t.Fatalf("control: capture must durably write intake: %v", err)
 	}
@@ -120,7 +121,8 @@ func flowPacket(t *testing.T, out []byte) model.ID {
 
 func (w *flowWorld) review(outcome string, packets ...model.ID) error {
 	w.t.Helper()
-	args := []string{"admit", "--command-id", string(w.id()), "--actor", "coordinator", "--outcome", outcome, "--reason", "U14 flow review"}
+	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	args := []string{"admit", "--json", "--command-id", string(w.id()), "--actor", "coordinator", "--outcome", outcome, "--reason", "U14 flow review"}
 	for _, p := range packets {
 		args = append(args, string(p))
 	}
@@ -531,7 +533,8 @@ func (w *flowWorld) task(intent string) flowTask {
 // handback captures a receipt through the CLI and returns its packet.
 func (w *flowWorld) handback(attempt model.ID, outcome string, extra ...string) (model.ID, error) {
 	w.t.Helper()
-	args := append([]string{"handback", "--command-id", string(w.id()), "--actor", flowLane, "--attempt-id", string(attempt),
+	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	args := append([]string{"handback", "--json", "--command-id", string(w.id()), "--actor", flowLane, "--attempt-id", string(attempt),
 		"--outcome", outcome, "--reason", "the flow ends this attempt " + outcome, "--next-action", "next: " + outcome}, extra...)
 	out, err := w.cli(nil, args...)
 	if err != nil {
@@ -585,7 +588,8 @@ func (w *flowWorld) fix(id model.ID, revision model.Revision) {
 func (w *flowWorld) run(script string) (model.ID, []model.ID, error) {
 	w.t.Helper()
 	w.put("tools/run.sh", []byte(script))
-	out, err := w.cli(nil, "run", "--actor", flowLane, "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),
+	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	out, err := w.cli(nil, "run", "--json", "--actor", flowLane, "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),
 		"--claim", string(w.claim.RecordID), "--claim-revision", "1", "--criterion-id", string(w.criterion.CriterionID),
 		"--criterion-revision", strconv.FormatUint(uint64(w.criterion.Revision), 10), "--", "/bin/sh", "tools/run.sh")
 	var result struct {
@@ -1054,7 +1058,8 @@ func TestFlowRecovery(t *testing.T) {
 
 	// Kill a real `datum run` after its producer is running.
 	w.put("tools/run.sh", []byte("touch flow-lane-started\nwhile kill -0 $PPID 2>/dev/null; do sleep 0.05; done\n"))
-	cmd := exec.Command(pvDatum(t), "run", "--actor", flowLane, "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),
+	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	cmd := exec.Command(pvDatum(t), "run", "--json", "--actor", flowLane, "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),
 		"--claim", string(w.claim.RecordID), "--claim-revision", "1", "--criterion-id", string(w.criterion.CriterionID), "--criterion-revision", "1",
 		"--", "/bin/sh", "tools/run.sh")
 	cmd.Dir = w.root
@@ -1103,7 +1108,8 @@ func TestFlowRecovery(t *testing.T) {
 	w.refused("proof listing an unsealed family member as inconclusive", func() error {
 		return w.prove(map[model.ID]string{pass: "supports", dead: "inconclusive"})
 	})
-	out, err := w.cli(nil, "reconcile", "--actor", flowLane, "--invocation-id", string(dead), "--reason", "the observer was killed mid-run")
+	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	out, err := w.cli(nil, "reconcile", "--json", "--actor", flowLane, "--invocation-id", string(dead), "--reason", "the observer was killed mid-run")
 	if err != nil {
 		t.Fatalf("control: the dead run reconciles: %v", err)
 	}
@@ -1315,7 +1321,8 @@ func TestFlowRemainingEvents(t *testing.T) {
 	if err != nil || w.review("accepted", stop) != nil {
 		t.Fatalf("control: the prior holder's receipt admits: %v", err)
 	}
-	out, err := w.cli(nil, "handback", "--command-id", string(w.id()), "--actor", "lane2", "--attempt-id", string(second), "--outcome", "runner-died",
+	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	out, err := w.cli(nil, "handback", "--json", "--command-id", string(w.id()), "--actor", "lane2", "--attempt-id", string(second), "--outcome", "runner-died",
 		"--reason", "the runner host rebooted", "--next-action", "reconcile the lost run", "--reconciliation-owed")
 	if err != nil || w.review("accepted", flowPacket(t, out)) != nil {
 		t.Fatalf("control: the new holder's runner-died receipt admits: %v", err)

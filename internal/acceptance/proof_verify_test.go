@@ -771,7 +771,8 @@ func (w *pvWorld) cli(stdin []byte, args ...string) ([]byte, error) {
 
 func (w *pvWorld) cliAdmit(packets ...model.ID) error {
 	w.t.Helper()
-	args := []string{"admit", "--command-id", string(w.id()), "--actor", "coordinator", "--outcome", "accepted", "--reason", "fresh-process review"}
+	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	args := []string{"admit", "--json", "--command-id", string(w.id()), "--actor", "coordinator", "--outcome", "accepted", "--reason", "fresh-process review"}
 	for _, p := range packets {
 		args = append(args, string(p))
 	}
@@ -782,7 +783,8 @@ func (w *pvWorld) cliAdmit(packets ...model.ID) error {
 func (w *pvWorld) cliRun(script string) (model.InvocationEnvelope, []model.ID, error) {
 	w.t.Helper()
 	pvPut(w.t, w.p.Root, "tools/run.sh", []byte(script))
-	out, err := w.cli(nil, "run", "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),
+	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	out, err := w.cli(nil, "run", "--json", "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),
 		"--claim", string(w.claim.RecordID), "--claim-revision", "1", "--criterion-id", string(w.criterion.CriterionID), "--criterion-revision", "1", "--", "/bin/sh", "tools/run.sh")
 	var result struct {
 		// datum run prints snake_case keys (coordinator change, in the open).
@@ -866,7 +868,8 @@ func TestProofVerifyFreshProcessRunReachesProvenOnItsOwnBytes(t *testing.T) {
 	if err := w.prove(map[model.ID]string{pass.InvocationID: "supports"}); !strings.Contains(fmt.Sprint(err), "reconciliation") {
 		t.Errorf("expected proof to wait for the dead run's reconciliation, got %v", err)
 	}
-	out, err := w.cli(nil, "reconcile", "--invocation-id", string(deadID), "--reason", "observer was killed")
+	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	out, err := w.cli(nil, "reconcile", "--json", "--invocation-id", string(deadID), "--reason", "observer was killed")
 	if err != nil {
 		t.Fatalf("control: the dead run reconciles through the CLI: %v", err)
 	}
@@ -917,7 +920,8 @@ func TestProofVerifyFreshProcessRunReachesProvenOnItsOwnBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	captured, err := v.cli(proof, "capture", "--command-id", string(v.id()))
+	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	captured, err := v.cli(proof, "capture", "--json", "--command-id", string(v.id()))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -28,7 +28,8 @@ func astraClaim(w *flowWorld) *model.ClaimAssert {
 }
 
 func astraAdmission(w *flowWorld, packet model.ID) []string {
-	return []string{"admit", "--command-id", string(w.id()), "--actor", "reviewer", "--outcome", "accepted", "--reason", "independent storage review", string(packet)}
+	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	return []string{"admit", "--command-id", string(w.id()), "--actor", "reviewer", "--outcome", "accepted", "--reason", "independent storage review", "--json", string(packet)}
 }
 
 func astraCommand(w *flowWorld, args ...string) *exec.Cmd {
@@ -135,7 +136,8 @@ func TestAstraStoreConcurrentProcesses(t *testing.T) {
 			t.Fatal(err)
 		}
 		packet := w.id()
-		capture := []string{"capture", "--actor", flowLane, "--command-id", string(packet), "--events", "-"}
+		// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+		capture := []string{"capture", "--json", "--actor", flowLane, "--command-id", string(packet), "--events", "-"}
 		admit := astraAdmission(w, packet)
 		go func() {
 			<-gate

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"datum/internal/evidence"
 	"datum/internal/model"
 	"datum/internal/store"
@@ -12,22 +13,30 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 )
 
 const writeUsage = `datum capture [--command-id ULID] [--actor ID] [--events FILE|-] [--blob FILE ...]
-datum admit --command-id ULID [--actor ID] --outcome accepted|rejected|correction-requested --reason TEXT PACKET_ID ...
+              [--admit [--admit-command-id ULID] --reason TEXT] [--json]
+datum admit [--command-id ULID] [--actor ID] --outcome accepted|rejected|correction-requested --reason TEXT [--json] PACKET_ID ...
 datum handback [--command-id ULID] [--actor ID] --attempt-id ULID --outcome OUTCOME --reason TEXT --next-action TEXT
               [--commits-denied] [--reconciliation-owed] [--delivery-refs FILE|-]
               [--hold-id ULID --hold-reason REASON --hold-actor ID --hold-criterion TEXT]
 datum run [--actor ID] --attempt-id ULID --instrument ID [--claim ID --claim-revision N
-          --criterion-id ULID --criterion-revision N] [--timeout DURATION] -- ARGV ...
+          --criterion-id ULID --criterion-revision N] [--timeout DURATION]
+          [--admit [--admit-command-id ULID] --reason TEXT] [--json] -- ARGV ...
 datum reconcile [--actor ID] --invocation-id ULID --reason TEXT
 datum id [N]
 datum template EVENT-TYPE
 datum criterion check --events FILE [--blob FILE] [--output FILE]
 datum proof check [--actor ID] --events FILE [--packet ID ...]
 
+Each write prints one line per durable act; --json prints its full result.
+An omitted command id is minted and printed; give it to make a retry exact.
 Capture reads a JSON array of typed events and writes only immutable intake.
+With --admit it then admits the packet as accepted under the same actor; if
+that admission is refused the capture stands, the packet stays pending, and
+the exit status is 4.
 A source.intake is captured with its original bytes, read from its reference
 or from --blob; capture refuses a source whose bytes it cannot save.
 Admission reviews a packet set and is the only command that publishes a bundle.
@@ -87,9 +96,11 @@ func writeCLI(ctx context.Context, args []string, cwd string, stdin io.Reader, s
 	}
 	flags := flag.NewFlagSet(verb, flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	id := flags.String("command-id", "", "id retained for retries")
+	id := flags.String("command-id", "", "id retained for retries; minted when omitted")
 	actor := flags.String("actor", "", "attributed actor")
-	var eventsPath, outcome, reason string
+	jsonOutput := flags.Bool("json", false, "print the full result as JSON")
+	var eventsPath, outcome, reason, admitID string
+	var admitAfter bool
 	var blobs blobPaths
 	var handback write.HandbackRequest
 	var attemptID, holdID, holdReason, holdActor, deliveryPath string
@@ -97,6 +108,9 @@ func writeCLI(ctx context.Context, args []string, cwd string, stdin io.Reader, s
 	if verb == "capture" {
 		flags.StringVar(&eventsPath, "events", "-", "typed event array file or stdin")
 		flags.Var(&blobs, "blob", "file whose exact bytes are captured")
+		flags.BoolVar(&admitAfter, "admit", false, "then admit the packet as accepted under the same actor")
+		flags.StringVar(&admitID, "admit-command-id", "", "--admit: the admission's id; minted when omitted")
+		flags.StringVar(&reason, "reason", "", "--admit: the review reason (required with --admit)")
 	} else if verb == "admit" {
 		flags.StringVar(&outcome, "outcome", "", "review disposition")
 		flags.StringVar(&reason, "reason", "", "review reason")
@@ -117,9 +131,9 @@ func writeCLI(ctx context.Context, args []string, cwd string, stdin io.Reader, s
 		if err == flag.ErrHelp {
 			return nil
 		}
-		return err
+		return usageError("%v", err)
 	}
-	actorSet, holdSet := false, false
+	actorSet, holdSet, admitOnly := false, false, false
 	flags.Visit(func(f *flag.Flag) {
 		if f.Name == "actor" {
 			actorSet = true
@@ -127,7 +141,16 @@ func writeCLI(ctx context.Context, args []string, cwd string, stdin io.Reader, s
 		if strings.HasPrefix(f.Name, "hold-") {
 			holdSet = true
 		}
+		if verb == "capture" && (f.Name == "reason" || f.Name == "admit-command-id") {
+			admitOnly = true
+		}
 	})
+	if verb == "capture" && admitAfter && model.Blank(reason) {
+		return usageError("capture --admit needs --reason: the review reason is authored, never defaulted")
+	}
+	if admitOnly && !admitAfter {
+		return usageError("capture: --reason and --admit-command-id belong to --admit")
+	}
 	if !actorSet {
 		*actor = getenv("DATUM_ACTOR")
 	}
@@ -140,14 +163,23 @@ func writeCLI(ctx context.Context, args []string, cwd string, stdin io.Reader, s
 		return err
 	}
 	var result any
-	if verb == "capture" {
+	var ack string
+	switch verb {
+	case "capture":
 		if len(flags.Args()) != 0 {
-			return fmt.Errorf("capture takes event and blob flags, not positional arguments")
+			return usageError("capture takes event and blob flags, not positional arguments")
 		}
-		result, err = captureCLI(ctx, project, model.ID(*id), attribution, eventsPath, blobs, stdin)
-	} else if verb == "handback" {
+		ref, count, err := captureCLI(ctx, project, model.ID(*id), attribution, eventsPath, blobs, stdin)
+		if err != nil {
+			return err
+		}
+		if admitAfter {
+			return captureAndAdmit(ctx, project, stdout, *jsonOutput, ref, count, model.ID(admitID), attribution, reason)
+		}
+		result, ack = ref, captureAck(ref, count)
+	case "handback":
 		if len(flags.Args()) != 0 {
-			return fmt.Errorf("handback takes flags, not positional arguments")
+			return usageError("handback takes flags, not positional arguments")
 		}
 		handback.CommandID, handback.Author = model.ID(*id), attribution
 		handback.AttemptID, handback.Outcome, handback.Reason = model.ID(attemptID), model.AttemptOutcome(outcome), reason
@@ -163,17 +195,38 @@ func writeCLI(ctx context.Context, args []string, cwd string, stdin io.Reader, s
 				return err
 			}
 		}
-		result, err = write.Handback(ctx, project, handback)
-	} else {
+		ref, err := write.Handback(ctx, project, handback)
+		if err != nil {
+			return err
+		}
+		result = ref
+		ack = fmt.Sprintf("handback captured %s outcome %s; admit it: %s\n", ref.CommandID, outcome, admitCommand("", model.Actor{}, "", []model.ID{ref.CommandID}))
+	default:
 		ids := make([]model.ID, len(flags.Args()))
 		for i, value := range flags.Args() {
 			ids[i] = model.ID(value)
 		}
-		result, err = write.Admit(ctx, project, write.AdmitRequest{
-			CommandID: model.ID(*id), PacketIDs: ids, Admitter: attribution, Outcome: outcome, Reason: reason,
+		command := model.ID(*id)
+		if command == "" {
+			if command, err = model.NewID(time.Now(), rand.Reader); err != nil {
+				return err
+			}
+		}
+		bundle, err := write.Admit(ctx, project, write.AdmitRequest{
+			CommandID: command, PacketIDs: ids, Admitter: attribution, Outcome: outcome, Reason: reason,
 		})
+		if err != nil {
+			return err
+		}
+		result, ack = bundle, admitAck(bundle, outcome)
 	}
-	if err != nil {
+	return printResult(stdout, *jsonOutput, result, ack)
+}
+
+// printResult writes the full result as JSON, or the one-line acknowledgement.
+func printResult(stdout io.Writer, jsonOutput bool, result any, ack string) error {
+	if !jsonOutput {
+		_, err := io.WriteString(stdout, ack)
 		return err
 	}
 	encoded, err := model.Encode(result)
@@ -182,6 +235,34 @@ func writeCLI(ctx context.Context, args []string, cwd string, stdin io.Reader, s
 	}
 	_, err = stdout.Write(encoded)
 	return err
+}
+
+func captureAck(ref model.PacketRef, events int) string {
+	return fmt.Sprintf("captured %s (%d events) command %s\n", ref.CommandID, events, ref.CommandID)
+}
+
+// captureAndAdmit is capture --admit's second step and its report: the
+// spec's partial-success JSON with --json, else one line per act.
+func captureAndAdmit(ctx context.Context, project store.Project, stdout io.Writer, jsonOutput bool, ref model.PacketRef, count int, admitID model.ID, actor model.Actor, reason string) error {
+	packets := []model.ID{ref.CommandID}
+	a, bundle, err := admitCaptured(ctx, project, admitID, actor, reason, packets)
+	if jsonOutput {
+		type captured struct {
+			Status    string   `json:"status"`
+			CommandID model.ID `json:"command_id"`
+			PacketID  model.ID `json:"packet_id"`
+		}
+		out := struct {
+			Capture captured `json:"capture"`
+			admission
+		}{captured{"captured", ref.CommandID, ref.CommandID}, a}
+		if perr := printResult(stdout, true, out, ""); perr != nil {
+			return perr
+		}
+	} else if err == nil {
+		io.WriteString(stdout, captureAck(ref, count))
+	}
+	return reportAdmission(stdout, jsonOutput, a, bundle, err, packets)
 }
 
 func handbackDeliveryRefs(path string, stdin io.Reader, refs *[]model.ArtifactRef) error {
@@ -208,48 +289,49 @@ func handbackDeliveryRefs(path string, stdin io.Reader, refs *[]model.ArtifactRe
 	return nil
 }
 
-func captureCLI(ctx context.Context, project store.Project, id model.ID, author model.Actor, eventsPath string, blobs []string, stdin io.Reader) (model.PacketRef, error) {
+func captureCLI(ctx context.Context, project store.Project, id model.ID, author model.Actor, eventsPath string, blobs []string, stdin io.Reader) (model.PacketRef, int, error) {
 	reader := stdin
 	if eventsPath != "-" {
 		f, err := os.Open(eventsPath)
 		if err != nil {
-			return model.PacketRef{}, err
+			return model.PacketRef{}, 0, err
 		}
 		defer f.Close()
 		reader = f
 	}
 	data, err := io.ReadAll(reader)
 	if err != nil {
-		return model.PacketRef{}, err
+		return model.PacketRef{}, 0, err
 	}
 	// The model's strict decoder refuses duplicate keys, case aliases such as
 	// "TYPE" beside "type", invalid UTF-8 and trailing values, so the packet
 	// binds the author's words rather than encoding/json's choice among them.
 	events, err := model.DecodeEvents(data)
 	if err != nil {
-		return model.PacketRef{}, err
+		return model.PacketRef{}, 0, err
 	}
 	for _, event := range events {
 		if _, err := model.DecodeEvent(event); err != nil {
-			return model.PacketRef{}, err
+			return model.PacketRef{}, 0, err
 		}
 	}
 	readers := make([]io.Reader, 0, len(blobs))
 	for _, path := range blobs {
 		f, err := os.Open(path)
 		if err != nil {
-			return model.PacketRef{}, err
+			return model.PacketRef{}, 0, err
 		}
 		defer f.Close()
 		readers = append(readers, f)
 	}
 	sources, err := sourceBlobs(ctx, project, events)
 	if err != nil {
-		return model.PacketRef{}, err
+		return model.PacketRef{}, 0, err
 	}
 	readers = append(readers, sources...)
 	// The store refuses a source.intake whose bytes are not among the blobs.
-	return store.WriteIntake(ctx, project, store.IntakeRequest{CommandID: id, Author: author, Blobs: readers, Events: events})
+	ref, err := store.WriteIntake(ctx, project, store.IntakeRequest{CommandID: id, Author: author, Blobs: readers, Events: events})
+	return ref, len(events), err
 }
 
 // sourceBlobs implements capture durability (contract: intake durably saves

@@ -43,11 +43,23 @@ func cliFixture(t *testing.T) (string, []byte) {
 
 func cliID(n int) model.ID { return model.ID(fmt.Sprintf("%026d", n)) }
 
+// callWriteCLI runs a write in process and asks for its full result
+// (--json), which these tests decode; the default acknowledgement is tested
+// in acks_test.go.
 func callWriteCLI(t *testing.T, root string, input []byte, args ...string) ([]byte, error) {
 	t.Helper()
 	var output, diagnostic bytes.Buffer
-	err := writeCLI(context.Background(), args, root, bytes.NewReader(input), &output, &diagnostic, func(string) string { return "" })
+	err := writeCLI(context.Background(), withJSON(args), root, bytes.NewReader(input), &output, &diagnostic, func(string) string { return "" })
 	return output.Bytes(), err
+}
+
+// withJSON adds --json after a write verb, so the test reads the full result.
+func withJSON(args []string) []string {
+	switch args[0] {
+	case "capture", "admit", "handback", "run", "reconcile":
+		return append([]string{args[0], "--json"}, args[1:]...)
+	}
+	return args
 }
 
 func cliControl(t *testing.T, root string, data []byte) {
@@ -138,7 +150,7 @@ func TestCLIActorFallbackUnknownAndBlobCapture(t *testing.T) {
 		if i == 1 {
 			args = append(args, "--actor", "")
 		}
-		if err := writeCLI(context.Background(), args, root, bytes.NewReader(data), &out, io.Discard, env); err != nil {
+		if err := writeCLI(context.Background(), withJSON(args), root, bytes.NewReader(data), &out, io.Discard, env); err != nil {
 			t.Fatal(err)
 		}
 		var packet model.PacketRef
