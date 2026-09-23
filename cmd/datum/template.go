@@ -1,18 +1,17 @@
 package main
 
-// This file holds `datum template EVENT-TYPE`: a JSON skeleton of one event,
-// built by reflection over the model's payload type, so a field added to the
-// schema appears in the template without anyone editing it. It touches no
-// project state. The facts reflection cannot see (enum members, unions, minted
-// ids) live in template_schema.go; capture and admission do not live here.
+// This file holds the skeleton `datum template EVENT-TYPE` starts from: one
+// event built by reflection over the model's payload type, so a field added to
+// the schema appears in the template without anyone editing it. The facts
+// reflection cannot see (enum members, unions, minted ids) live in
+// template_schema.go; the verb, its bind flags and capture live in
+// template_bind.go.
 
 import (
 	"bytes"
 	"crypto/rand"
 	"encoding/json"
-	"flag"
 	"fmt"
-	"io"
 	"reflect"
 	"sort"
 	"strings"
@@ -39,25 +38,6 @@ type templateBuilder struct {
 	notes []templateNote
 }
 
-// templateVerb prints one event type's skeleton on stdout and its notes
-// (choices, optional and minted keys) on stderr.
-func templateVerb(fs *flag.FlagSet) func(*call) error {
-	return func(c *call) error {
-		if len(c.args) != 1 || c.argv != nil {
-			return usageError("datum template takes exactly one EVENT-TYPE:\n%s", templateEventList())
-		}
-		data, notes, err := buildTemplate(model.EventType(c.args[0]))
-		if err != nil {
-			return err
-		}
-		if _, err := c.stdout.Write(data); err != nil {
-			return err
-		}
-		_, err = io.WriteString(c.stderr, renderTemplateNotes(model.EventType(c.args[0]), notes))
-		return err
-	}
-}
-
 // templateEventList is every event type a template can be printed for.
 func templateEventList() string {
 	var b strings.Builder
@@ -73,6 +53,17 @@ func templateEventList() string {
 // buildTemplate renders one event type's skeleton and the notes that say which
 // keys are choices, optional or minted.
 func buildTemplate(eventType model.EventType) ([]byte, []templateNote, error) {
+	body, notes, err := buildTemplateTree(eventType)
+	if err != nil {
+		return nil, nil, err
+	}
+	out, err := renderTemplate(eventType, body)
+	return out, notes, err
+}
+
+// buildTemplateTree is one event type's skeleton as the tree a bound template
+// fills (template_tree.go), with its notes.
+func buildTemplateTree(eventType model.EventType) (any, []templateNote, error) {
 	var payload reflect.Type
 	for _, event := range templateEvents {
 		if event.EventType() == eventType {
@@ -83,15 +74,19 @@ func buildTemplate(eventType model.EventType) ([]byte, []templateNote, error) {
 		return nil, nil, usageError("unknown event type %q; run datum help template for the list", eventType)
 	}
 	b := &templateBuilder{event: eventType}
-	body := b.walk(payload, nil, reflect.StructField{})
+	return b.walk(payload, nil, reflect.StructField{}), b.notes, nil
+}
+
+// renderTemplate writes the one-event array a capture reads, indented.
+func renderTemplate(eventType model.EventType, body any) ([]byte, error) {
 	var buf bytes.Buffer
 	writeTemplateJSON(&buf, []any{templateObject{{"type", string(eventType)}, {"data", body}}})
 	var out bytes.Buffer
 	if err := json.Indent(&out, buf.Bytes(), "", "  "); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	out.WriteByte('\n')
-	return out.Bytes(), b.notes, nil
+	return out.Bytes(), nil
 }
 
 func templatePath(path []string) string {

@@ -33,6 +33,10 @@ Writing is two acts: capture, then admit the packet id it prints.
   datum capture --events task.json            # captured PACKET ...
   datum admit --outcome accepted --reason "why this is right" PACKET
 or both at once: datum capture --events task.json --admit --reason "...".
+A template fills what Datum can compute (datum help template); give the
+rest with --set and capture it in one step:
+  datum template blocker.clear --hold HOLD --set resolving_witness=... \
+      --capture --admit --reason "..."
 Common records: task.create (new work; one task per piece of work),
 task.start (take an attempt; keep its attempt_id for run and handback),
 claim.assert, decision.open, and decision.dispose to record an owner's
@@ -163,8 +167,9 @@ to a scratch directory to rehearse without touching the real ones.
   fact Datum observed. Comparability needs the same clean HEAD or equal pins.
 - Instruments declare what they cannot see (blind_to). KNOWN validation
   cites a resolvable pinned artifact and is judged at admission (R9).
-- Every "<kind: hint>" in a template is a placeholder; revise events restate
-  the whole spec (copy it from datum show --json ID, change what changed).
+- Every "<kind: hint>" in a template is a placeholder. A revise restates the
+  whole spec: datum template claim.revise --from ID copies the current one,
+  so change only what changed. Judgment is never filled for you.
 - Tests read a fixed ledger prefix, never the live head; commit ledger
   bundles only after the full test run.
 - Quote shell variables. An error naming a flag as a value (--claim
