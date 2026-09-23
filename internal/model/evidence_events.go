@@ -146,7 +146,7 @@ func (e ProofAdmit) Refutes() bool { return e.Verdict == VerdictRefutes }
 
 func (e ProofAdmit) validate(p string) error {
 	if e.Verdict != "" {
-		if err := oneOf(e.Verdict, p+".verdict", VerdictSupports, VerdictRefutes); err != nil {
+		if err := oneOf(e.Verdict, p+".verdict", "supports", "refutes"); err != nil {
 			return err
 		}
 	}
