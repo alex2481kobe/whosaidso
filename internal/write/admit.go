@@ -109,18 +109,21 @@ func proposeAdmission(ctx context.Context, project store.Project, request AdmitR
 	if err != nil {
 		return model.Bundle{}, "", err
 	}
-	proposal, err := admissionProposal(ctx, project, request, digest, snapshot, packets, lockedRefs)
+	proposal, err := admissionProposal(ctx, project, request, digest, snapshot, packets, lockedRefs, nil)
 	return proposal, digest, err
 }
 
-func admissionProposal(ctx context.Context, project store.Project, request AdmitRequest, digest model.Digest, snapshot reduce.Snapshot, packets []model.Packet, lockedRefs []model.PacketRef) (model.Bundle, error) {
+// admissionProposal is the whole gate. dry is nil for a real admission; a dry
+// run (admit_check.go) passes its collector, which records each refusal and
+// lets the later, independent stages run, and which never preserves a blob.
+func admissionProposal(ctx context.Context, project store.Project, request AdmitRequest, digest model.Digest, snapshot reduce.Snapshot, packets []model.Packet, lockedRefs []model.PacketRef, dry *dryRun) (model.Bundle, error) {
 	proposal := model.Bundle{Admitter: request.Admitter, Packets: lockedRefs, Events: []model.Event{}}
 	var eventPackets []model.ID
 	if request.Outcome == "accepted" {
 		var err error
 		packets, err = gatePackets(project.ID, snapshot, packets)
 		if err != nil {
-			return model.Bundle{}, err
+			return model.Bundle{}, dry.stop("gate", err)
 		}
 		for _, packet := range packets {
 			proposal.Events = append(proposal.Events, packet.Events...)
@@ -139,29 +142,30 @@ func admissionProposal(ctx context.Context, project store.Project, request Admit
 	}
 	invocations, err := reviewedInvocations(request.Outcome, packets)
 	if err != nil {
-		return model.Bundle{}, err
+		return model.Bundle{}, dry.stop("gate", err)
 	}
 	review, err := model.EncodeEvent(&model.ReviewAdmit{Packets: lockedRefs, Outcome: request.Outcome, Actor: request.Admitter, Reason: request.Reason,
 		Invocations: invocations, Authors: authors, CapturedAt: captured, EventPackets: eventPackets})
 	if err != nil {
-		return model.Bundle{}, err
+		return model.Bundle{}, dry.stop("gate", err)
 	}
 	proposal.Events = append(proposal.Events, review)
-	after, err := gateProposal(snapshot, project.ID, request.CommandID, digest, proposal)
+	after, err := gateProposal(snapshot, project.ID, request.CommandID, digest, proposal, dry)
 	if err != nil {
-		return model.Bundle{}, err
+		return model.Bundle{}, dry.stop("replay", err)
 	}
+	dry.replayed(after)
 	if request.Outcome == "accepted" {
-		if err := gateDisposals(after, packets); err != nil {
+		if err := dry.note("disposals", gateDisposals(after, packets)); err != nil {
 			return model.Bundle{}, err
 		}
-		if err := materializeAdmission(ctx, project, packets); err != nil {
+		if err := dry.note("artifacts", materializeAdmission(ctx, project, packets, dry.preserver())); err != nil {
 			return model.Bundle{}, err
 		}
-		if err := gateProofs(ctx, project, after, packets); err != nil {
+		if err := dry.note("proofs", gateProofs(ctx, project, after, packets, dry)); err != nil {
 			return model.Bundle{}, err
 		}
-		if err := gateQuotes(ctx, project, packets); err != nil {
+		if err := dry.note("quotes", gateQuotes(ctx, project, packets)); err != nil {
 			return model.Bundle{}, err
 		}
 	}

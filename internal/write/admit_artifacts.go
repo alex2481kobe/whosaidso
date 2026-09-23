@@ -18,7 +18,9 @@ import (
 	"datum/internal/store"
 )
 
-func materializeAdmission(ctx context.Context, project store.Project, packets []model.Packet) error {
+// materializeAdmission resolves every accepted artifact and hands verified
+// bytes to preserve: preserveAdmissionBlob on admission, a recorder on a dry run.
+func materializeAdmission(ctx context.Context, project store.Project, packets []model.Packet, preserve func(root, artifactDir string, data []byte) error) error {
 	inbox, err := store.IntakeDir(project)
 	if err != nil {
 		return err
@@ -52,7 +54,7 @@ func materializeAdmission(ctx context.Context, project store.Project, packets []
 						if model.HashBytes(blob) != ref.Content.SHA256 || uint64(len(blob)) != ref.Content.Length {
 							return admissionFault("conflict", path, "intake bytes disagree with the accepted content pin")
 						}
-						if err := preserveAdmissionBlob(project.Root, project.ArtifactDir(), blob); err != nil {
+						if err := preserve(project.Root, project.ArtifactDir(), blob); err != nil {
 							return err
 						}
 						break
@@ -65,7 +67,7 @@ func materializeAdmission(ctx context.Context, project store.Project, packets []
 				// A working locator can disappear with its producer. Keep its verified
 				// bytes without adding our location to the authored event.
 				if resolved.Origin == evidence.OriginLocator {
-					if err := preserveAdmissionBlob(project.Root, project.ArtifactDir(), resolved.Bytes); err != nil {
+					if err := preserve(project.Root, project.ArtifactDir(), resolved.Bytes); err != nil {
 						return err
 					}
 				}

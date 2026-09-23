@@ -53,6 +53,9 @@ type state struct {
 	// bundle is the candidate bundle's inventory while it is applied, nil
 	// otherwise. clone never copies it.
 	bundle *bundleFacts
+	// proofRefusals is set only by ApplyCollectingProofRefusals (a dry run);
+	// clone never copies it, so no fold ever collects instead of refusing.
+	proofRefusals *[]error
 }
 
 func newState() *state {

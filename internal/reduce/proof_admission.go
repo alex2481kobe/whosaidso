@@ -45,11 +45,17 @@ func (s *state) requireKind(b model.Bundle, idx int, ref model.RecordRef, kind m
 // (packet_author.go). Evaluation of artifact bytes and pending intake remain
 // admission gate work.
 func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
+	// Every refusal goes through refuseProof: a fold stops at the first, in
+	// this order; a dry run (proof_check.go) records it and keeps checking.
 	if err := s.requireKind(b, idx, e.Claim, model.Claim, "claim"); err != nil {
-		return err
+		if err = s.refuseProof(err); err != nil {
+			return err
+		}
 	}
 	if err := s.checkPacketAuthor(b, idx, e.Judgment.Actor, "judgment.actor"); err != nil {
-		return err
+		if err = s.refuseProof(err); err != nil {
+			return err
+		}
 	}
 	supported := false
 	listed := map[InvocationKey]string{}
@@ -57,38 +63,43 @@ func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 		key := invocationKey(member.InvocationRef)
 		listed[key] = member.Disposition
 		inv, class := s.memberClass(e.CriterionRef, key)
+		var refusal error
 		switch {
 		case class == MemberRejected:
 			if !setAside(member.Disposition) {
-				return faultAt(CodeRejectedFamilyMember, b.Sequence, idx, fmt.Sprintf("evidence[%d].disposition", i),
+				refusal = faultAt(CodeRejectedFamilyMember, b.Sequence, idx, fmt.Sprintf("evidence[%d].disposition", i),
 					"a rejected run can only be dispositioned inapplicable or inconclusive, never "+member.Disposition)
 			}
-			continue // R10.3: accounted for, never support
+			// R10.3: accounted for, never support
 		case class == MemberOutside || inv.Seal == nil:
-			return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "proof requires local sealed observations of the exact criterion")
+			refusal = faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "proof requires local sealed observations of the exact criterion")
 		case class == MemberEarlier:
 			if !setAside(member.Disposition) {
-				return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "a run under an earlier criterion revision can only be dispositioned inapplicable or inconclusive")
+				refusal = faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "a run under an earlier criterion revision can only be dispositioned inapplicable or inconclusive")
 			}
-			continue
+		case member.Disposition == "contradicts":
+			refusal = faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "contradicting evidence is unresolved")
+		case member.Disposition != "supports":
+		default:
+			instrument, ok := s.records[recordKey(inv.Start.InstrumentRef)]
+			if !completedObservation(inv, e.Claim) || !ok || instrument.Kind != model.Instrument || instrument.Instrument.Validation.State != model.Known {
+				refusal = faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "support requires a completed observation from a validated local instrument")
+			} else if len(s.supportLosses(invocationNode(inv.Key))) != 0 {
+				refusal = faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "observation has unresolved support loss")
+			} else {
+				supported = true
+			}
 		}
-		if member.Disposition == "contradicts" {
-			return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "contradicting evidence is unresolved")
+		if refusal != nil {
+			if err := s.refuseProof(refusal); err != nil {
+				return err
+			}
 		}
-		if member.Disposition != "supports" {
-			continue
-		}
-		instrument, ok := s.records[recordKey(inv.Start.InstrumentRef)]
-		if !completedObservation(inv, e.Claim) || !ok || instrument.Kind != model.Instrument || instrument.Instrument.Validation.State != model.Known {
-			return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "support requires a completed observation from a validated local instrument")
-		}
-		if len(s.supportLosses(invocationNode(inv.Key))) != 0 {
-			return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "observation has unresolved support loss")
-		}
-		supported = true
 	}
 	if !supported {
-		return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "proof has no supporting local observation")
+		if err := s.refuseProof(faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "proof has no supporting local observation")); err != nil {
+			return err
+		}
 	}
 	if err := s.checkFamilyClosure(b, idx, e, listed); err != nil {
 		return err
@@ -97,7 +108,7 @@ func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 		return err
 	}
 	if len(s.supportLosses(recordNode(e.Claim))) != 0 {
-		return faultAt(CodeInvalidTransition, b.Sequence, idx, "claim", "claim has unresolved support loss")
+		return s.refuseProof(faultAt(CodeInvalidTransition, b.Sequence, idx, "claim", "claim has unresolved support loss"))
 	}
 	return nil
 }

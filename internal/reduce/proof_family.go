@@ -162,13 +162,17 @@ func (s *state) checkFamilyClosure(b model.Bundle, idx int, e *model.ProofAdmit,
 		}
 		sealed := inv.Seal != nil || s.bundle.laterSeal(inv.Key, idx) != nil
 		if _, ok := listed[inv.Key]; !sealed || !ok {
-			return refuse(inv.Key, sealed, "")
+			if err := s.refuseProof(refuse(inv.Key, sealed, "")); err != nil {
+				return err
+			}
 		}
 	}
 	for _, start := range s.bundle.laterStarts(idx) {
 		if member, _ := CriterionFamily(start.Envelope.CriterionRef, e.CriterionRef); member {
 			key := InvocationKey{Project: b.Project, InvocationID: start.Envelope.InvocationID}
-			return refuse(key, s.bundle.laterSeal(key, idx) != nil, " (admitted later in this bundle)")
+			if err := s.refuseProof(refuse(key, s.bundle.laterSeal(key, idx) != nil, " (admitted later in this bundle)")); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -188,8 +192,10 @@ func (s *state) checkRejectedFamily(b model.Bundle, idx int, e *model.ProofAdmit
 		env, admitted := s.admittedEnvelope(key, r.Fact.Event, idx)
 		if !admitted {
 			if _, ok := listed[key]; !ok {
-				return faultAt(CodeRejectedFamilyMember, b.Sequence, idx, "evidence",
-					fmt.Sprintf("%s invocation %s carries this criterion and the proof omits it; a rejected run stays in the family", r.Outcome, key.InvocationID))
+				if err := s.refuseProof(faultAt(CodeRejectedFamilyMember, b.Sequence, idx, "evidence",
+					fmt.Sprintf("%s invocation %s carries this criterion and the proof omits it; a rejected run stays in the family", r.Outcome, key.InvocationID))); err != nil {
+					return err
+				}
 			}
 			continue
 		}
@@ -202,8 +208,10 @@ func (s *state) checkRejectedFamily(b model.Bundle, idx int, e *model.ProofAdmit
 			same = digest == r.Fact.EnvelopeDigest
 		}
 		if !same {
-			return faultAt(CodeRejectedFamilyMember, b.Sequence, idx, "evidence",
-				fmt.Sprintf("%s %s of invocation %s differs from the admitted one; a rejected run stays in the family", r.Outcome, r.Fact.Event, key.InvocationID))
+			if err := s.refuseProof(faultAt(CodeRejectedFamilyMember, b.Sequence, idx, "evidence",
+				fmt.Sprintf("%s %s of invocation %s differs from the admitted one; a rejected run stays in the family", r.Outcome, r.Fact.Event, key.InvocationID))); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
