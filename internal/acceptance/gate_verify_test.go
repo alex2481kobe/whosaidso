@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -205,7 +206,19 @@ func TestGateVerifyClosedEventSet(t *testing.T) {
 	}
 	seen := map[model.EventType]bool{}
 	for _, event := range allowed {
-		if _, err := f.admit(a, a, event); err != nil {
+		var err error
+		if _, ok := event.(*model.SourceIntake); ok {
+			// Capture acknowledges a source.intake only if its exact bytes are in the packet's blobs (requireSourceBytes).
+			var packet model.PacketRef
+			packet, err = store.WriteIntake(context.Background(), f.p, store.IntakeRequest{CommandID: f.id(), Author: a, Events: []model.Event{recEncode(t, event)}, Blobs: []io.Reader{bytes.NewReader(body)}})
+			if err != nil {
+				t.Fatalf("control: source.intake carrying its source bytes must capture: %v", err)
+			}
+			_, err = write.Admit(context.Background(), f.p, write.AdmitRequest{CommandID: f.id(), PacketIDs: []model.ID{packet.CommandID}, Admitter: a, Outcome: "accepted", Reason: "independent gate verification"})
+		} else {
+			_, err = f.admit(a, a, event)
+		}
+		if err != nil {
 			t.Fatalf("control: allowed %s must admit with satisfied dependencies: %v", event.EventType(), err)
 		}
 		seen[event.EventType()] = true
