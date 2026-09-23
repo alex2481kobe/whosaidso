@@ -1,6 +1,6 @@
 package query
 
-// Invariants over this repository's real ledger in record/events/. The ledger
+// Invariants over this repository's real ledger in .datum/events/. The ledger
 // is append-only, so these tests never pin its size, head or record count;
 // they check properties that must hold of every prefix it can grow into.
 

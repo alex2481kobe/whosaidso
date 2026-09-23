@@ -24,7 +24,7 @@ func intakeProject(t *testing.T) Project {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	root := t.TempDir()
-	return Project{ID: "team/project", Root: root, Ledger: filepath.Join(root, "record/events")}
+	return Project{ID: "team/project", Root: root, Ledger: filepath.Join(root, ".datum/events")}
 }
 
 func commandID(n int) model.ID { return model.ID(fmt.Sprintf("%026d", n)) }
@@ -105,7 +105,7 @@ func TestCaptureSurvivesMovedAndRemovedRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	p.Root = moved
-	p.Ledger = filepath.Join(moved, "record/events")
+	p.Ledger = filepath.Join(moved, ".datum/events")
 	if _, err := ReadIntake(p, nil); err != nil {
 		t.Fatalf("after move: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestDistinctDeclaredProjectsSharingGit(t *testing.T) {
 	for i, id := range ids {
 		root := t.TempDir()
 		putFile(t, filepath.Join(root, ".git"), []byte("gitdir: "+common+"\n"))
-		putFile(t, filepath.Join(root, "datum.toml"), []byte("id='"+string(id)+"'\nledger='record/events'"))
+		putFile(t, filepath.Join(root, "datum.toml"), []byte("id='"+string(id)+"'\nledger='.datum/events'"))
 		project, err := Discover(root)
 		if err != nil {
 			t.Fatal(err)

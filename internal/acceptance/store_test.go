@@ -130,9 +130,9 @@ func stEntries(t *testing.T, inbox string) []string {
 
 func TestIntakeCapturesOnePacketWithItsBlobsAndReadsItBackVerified(t *testing.T) {
 	home := stHome(t)
-	project := stDiscover(t, "datum/acceptance", "record/events")
+	project := stDiscover(t, "datum/acceptance", ".datum/events")
 
-	if want := filepath.Join(project.Root, "record", "events"); project.Ledger != want {
+	if want := filepath.Join(project.Root, ".datum", "events"); project.Ledger != want {
 		t.Fatalf("relative ledger resolved to %q, want %q", project.Ledger, want)
 	}
 	ref, err := store.WriteIntake(context.Background(), project, stRequest("", "the owner said the blind spot is required", 1))
@@ -174,7 +174,7 @@ func TestIntakeCapturesOnePacketWithItsBlobsAndReadsItBackVerified(t *testing.T)
 func TestConfigNearestRootWins(t *testing.T) {
 	stHome(t)
 	outer := t.TempDir()
-	stWriteConfig(t, outer, "datum/outer", "record/events")
+	stWriteConfig(t, outer, "datum/outer", ".datum/events")
 	inner := filepath.Join(outer, "lane", "worktree")
 	if err := os.MkdirAll(inner, 0700); err != nil {
 		t.Fatal(err)
@@ -185,12 +185,12 @@ func TestConfigNearestRootWins(t *testing.T) {
 	if err != nil || p.ID != "datum/outer" {
 		t.Fatalf("control: the outer config must win from a nested directory: %+v, %v", p, err)
 	}
-	stWriteConfig(t, inner, "datum/inner", "record/events")
+	stWriteConfig(t, inner, "datum/inner", ".datum/events")
 	p, err = store.Discover(inner)
 	if err != nil || p.ID != "datum/inner" {
 		t.Fatalf("control: the nearest config must win: %+v, %v", p, err)
 	}
-	if want := filepath.Join(inner, "record", "events"); p.Ledger != want {
+	if want := filepath.Join(inner, ".datum", "events"); p.Ledger != want {
 		t.Fatalf("the nearest config resolved its ledger to %q, want %q", p.Ledger, want)
 	}
 
@@ -210,8 +210,8 @@ func TestConfigNearestRootWins(t *testing.T) {
 func TestConfigLedgerLeavingItsRootContradictsTheCommittedLedgerRule(t *testing.T) {
 	stHome(t)
 	// Control: an ordinary relative ledger resolves under its own root.
-	inside := stDiscover(t, "datum/inside", "record/events")
-	if rel, err := filepath.Rel(inside.Root, inside.Ledger); err != nil || rel != filepath.Join("record", "events") {
+	inside := stDiscover(t, "datum/inside", ".datum/events")
+	if rel, err := filepath.Rel(inside.Root, inside.Ledger); err != nil || rel != filepath.Join(".datum", "events") {
 		t.Fatalf("control: a relative ledger must land under its root, got %q, %v", rel, err)
 	}
 
@@ -221,7 +221,7 @@ func TestConfigLedgerLeavingItsRootContradictsTheCommittedLedgerRule(t *testing.
 	}{
 		{"a parent hop", "../events"},
 		{"several parent hops", "../../../../../../events"},
-		{"a hop hidden mid-path", "record/../../events"},
+		{"a hop hidden mid-path", ".datum/../../events"},
 		{"an absolute path", filepath.Join(t.TempDir(), "elsewhere", "events")},
 		{"an absolute path in a system directory", "/tmp/datum-escaped-ledger"},
 	}
@@ -247,7 +247,7 @@ func TestConfigLedgerLeavingItsRootContradictsTheCommittedLedgerRule(t *testing.
 func TestConfigRefusesAnIdentityOrLedgerThatRendersAsNothing(t *testing.T) {
 	stHome(t)
 	// Control: a real identity and a real ledger are accepted.
-	if p := stDiscover(t, "datum/acceptance", "record/events"); p.ID != "datum/acceptance" {
+	if p := stDiscover(t, "datum/acceptance", ".datum/events"); p.ID != "datum/acceptance" {
 		t.Fatalf("control: %+v", p)
 	}
 
@@ -255,7 +255,7 @@ func TestConfigRefusesAnIdentityOrLedgerThatRendersAsNothing(t *testing.T) {
 		for _, key := range []string{"id", "ledger"} {
 			t.Run(key+"/"+blank.name, func(t *testing.T) {
 				root := t.TempDir()
-				id, ledger := "datum/acceptance", "record/events"
+				id, ledger := "datum/acceptance", ".datum/events"
 				if key == "id" {
 					id = blank.text
 				} else {
@@ -281,22 +281,22 @@ func TestConfigRefusesAnIdentityOrLedgerThatRendersAsNothing(t *testing.T) {
 func TestConfigRefusesKeysThatOnlyLookLikeTheTwoItAccepts(t *testing.T) {
 	stHome(t)
 	cases := []struct{ name, body string }{
-		{"a capitalised id", "ID = 'datum/x'\nledger = 'record/events'\n"},
-		{"a capitalised ledger", "id = 'datum/x'\nLedger = 'record/events'\n"},
-		{"an all caps pair", "ID = 'datum/x'\nLEDGER = 'record/events'\n"},
-		{"a key inside a table header", "[project]\nid = 'datum/x'\nledger = 'record/events'\n"},
-		{"a duplicate id", "id = 'datum/x'\nid = 'datum/y'\nledger = 'record/events'\n"},
-		{"a duplicate id spelled through a quoted key", "id = 'datum/x'\n\"id\" = 'datum/y'\nledger = 'record/events'\n"},
-		{"a multi-line basic string", "id = \"\"\"datum/x\"\"\"\nledger = 'record/events'\n"},
-		{"a multi-line literal string", "id = '''datum/x'''\nledger = 'record/events'\n"},
-		{"trailing content after the value", "id = 'datum/x' and more\nledger = 'record/events'\n"},
-		{"a third key", "id = 'datum/x'\nledger = 'record/events'\nactor = 'lane-e'\n"},
+		{"a capitalised id", "ID = 'datum/x'\nledger = '.datum/events'\n"},
+		{"a capitalised ledger", "id = 'datum/x'\nLedger = '.datum/events'\n"},
+		{"an all caps pair", "ID = 'datum/x'\nLEDGER = '.datum/events'\n"},
+		{"a key inside a table header", "[project]\nid = 'datum/x'\nledger = '.datum/events'\n"},
+		{"a duplicate id", "id = 'datum/x'\nid = 'datum/y'\nledger = '.datum/events'\n"},
+		{"a duplicate id spelled through a quoted key", "id = 'datum/x'\n\"id\" = 'datum/y'\nledger = '.datum/events'\n"},
+		{"a multi-line basic string", "id = \"\"\"datum/x\"\"\"\nledger = '.datum/events'\n"},
+		{"a multi-line literal string", "id = '''datum/x'''\nledger = '.datum/events'\n"},
+		{"trailing content after the value", "id = 'datum/x' and more\nledger = '.datum/events'\n"},
+		{"a third key", "id = 'datum/x'\nledger = '.datum/events'\nactor = 'lane-e'\n"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			root := t.TempDir()
 			if err := os.WriteFile(filepath.Join(root, "datum.toml"), []byte(
-				"id = 'datum/control'\nledger = 'record/events'\n"), 0600); err != nil {
+				"id = 'datum/control'\nledger = '.datum/events'\n"), 0600); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := store.Discover(root); err != nil {
@@ -325,8 +325,8 @@ func TestIntakeDistinctProjectIdsNeverShareAnInbox(t *testing.T) {
 
 	// Control: two plainly different ids get two inboxes, and each reads back
 	// only its own packet even though one Git checkout could hold both.
-	alpha := stDiscover(t, "datum/alpha", "record/events")
-	beta := stDiscover(t, "datum/beta", "record/events")
+	alpha := stDiscover(t, "datum/alpha", ".datum/events")
+	beta := stDiscover(t, "datum/beta", ".datum/events")
 	if stInbox(t, alpha) == stInbox(t, beta) {
 		t.Fatalf("control: two obviously different ids already share an inbox")
 	}
@@ -348,8 +348,8 @@ func TestIntakeDistinctProjectIdsNeverShareAnInbox(t *testing.T) {
 		// and macOS compares path components without regard to case, so the
 		// injective property is a true fact about the wrong object. This pair
 		// was found by exhaustive search over short ids.
-		one := stDiscover(t, "datum/aaa", "record/events")
-		two := stDiscover(t, "datum/aaG", "record/events")
+		one := stDiscover(t, "datum/aaa", ".datum/events")
+		two := stDiscover(t, "datum/aaG", ".datum/events")
 		dirOne, dirTwo := stInbox(t, one), stInbox(t, two)
 		// The original form of this attack asserted the two names differ only in
 		// case, which was the precondition for the collision. The encoding is
@@ -433,7 +433,7 @@ func TestIntakeDistinctProjectIdsNeverShareAnInbox(t *testing.T) {
 
 func TestIntakeCapturedSourceOutlivesTheWorktreeItCameFrom(t *testing.T) {
 	stHome(t)
-	project := stDiscover(t, "datum/lane-worktree", "record/events")
+	project := stDiscover(t, "datum/lane-worktree", ".datum/events")
 	ref, err := store.WriteIntake(context.Background(), project, stRequest("", "the lane's only copy of this source", 6))
 	if err != nil {
 		t.Fatalf("control capture: %v", err)
@@ -461,7 +461,7 @@ func TestIntakeCapturedSourceOutlivesTheWorktreeItCameFrom(t *testing.T) {
 
 func TestIntakeFiveConcurrentWritersPublishWithoutALockOrAPartialPacket(t *testing.T) {
 	stHome(t)
-	project := stDiscover(t, "datum/five-writers", "record/events")
+	project := stDiscover(t, "datum/five-writers", ".datum/events")
 	if _, err := store.WriteIntake(context.Background(), project, stRequest("", "first source", 1)); err != nil {
 		t.Fatalf("control capture: %v", err)
 	}
@@ -532,7 +532,7 @@ func TestIntakeFiveConcurrentWritersPublishWithoutALockOrAPartialPacket(t *testi
 
 func TestIntakeRetryWithDifferentBytesUnderOneCommandIdIsAConflict(t *testing.T) {
 	stHome(t)
-	project := stDiscover(t, "datum/retry", "record/events")
+	project := stDiscover(t, "datum/retry", ".datum/events")
 	id := recID(100)
 
 	first, err := store.WriteIntake(context.Background(), project, stRequest(id, "the original source", 1))
@@ -639,7 +639,7 @@ func TestIntakeBlobNameMustEqualItsOwnContentHash(t *testing.T) {
 	for _, c := range tamper {
 		t.Run(c.name, func(t *testing.T) {
 			stHome(t)
-			project := stDiscover(t, "datum/blobs", "record/events")
+			project := stDiscover(t, "datum/blobs", ".datum/events")
 			ref, err := store.WriteIntake(context.Background(), project, stRequest("", "the source bytes as captured", 1))
 			if err != nil {
 				t.Fatalf("control capture: %v", err)
@@ -696,7 +696,7 @@ func (r *stCancelOnEOF) Read(p []byte) (int, error) {
 
 func TestIntakeInterruptedPublishIsNeverVisibleAsACompletePacket(t *testing.T) {
 	stHome(t)
-	project := stDiscover(t, "datum/interrupted", "record/events")
+	project := stDiscover(t, "datum/interrupted", ".datum/events")
 	good, err := store.WriteIntake(context.Background(), project, stRequest("", "a source that was fully captured", 1))
 	if err != nil {
 		t.Fatalf("control capture: %v", err)

@@ -245,7 +245,7 @@ func writeVerifyCLIPacket(binary string, f *gateVerifyFixture, input string, arg
 func TestWriteVerifyCLIJSONAliasesCannotChooseAuthoredMeaning(t *testing.T) {
 	f := gateVerifyNew(t)
 	f.control()
-	stWriteConfig(t, f.p.Root, string(f.p.ID), "record/events")
+	stWriteConfig(t, f.p.Root, string(f.p.ID), ".datum/events")
 	binary := writeVerifyCLI(t)
 	author := model.Actor{ID: "reviewer"}
 	t.Run("capture-event-type", func(t *testing.T) {

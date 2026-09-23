@@ -87,7 +87,7 @@ func hbVerifyCLI(t *testing.T) hbVerifyCapture {
 		t.Fatalf("Go CLI control build failed (no dependency downloads allowed): %v\n%s", err, out)
 	}
 	return func(f *gateVerifyFixture, r write.HandbackRequest) (model.PacketRef, error) {
-		stWriteConfig(t, f.p.Root, string(f.p.ID), "record/events")
+		stWriteConfig(t, f.p.Root, string(f.p.ID), ".datum/events")
 		args := []string{"handback", "--command-id", string(r.CommandID), "--actor", r.Author.ID,
 			"--attempt-id", string(r.AttemptID), "--outcome", string(r.Outcome), "--reason", r.Reason, "--next-action", r.NextAction}
 		if r.CommitsDenied {

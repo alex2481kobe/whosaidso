@@ -155,7 +155,7 @@ func TestEvidenceArtifactIdentitySurvivesLocatorFallbackAndPinDirection(t *testi
 	root, commit := laneEEvidenceRepo(t, "sha256", "out/result.json", laneEEvidenceBody)
 	ref := laneEEvidenceBoth("sha256", commit, laneEEvidenceBody)
 	digest := laneEEvidenceDigest(laneEEvidenceBody)
-	laneEEvidenceWrite(t, root, "record/artifacts/"+string(digest), laneEEvidenceBody)
+	laneEEvidenceWrite(t, root, ".datum/artifacts/"+string(digest), laneEEvidenceBody)
 	laneEEvidenceWrite(t, root, "out/result.json", `{"stale":true}`)
 	for _, kind := range []string{"content", "git"} {
 		t.Run(kind, func(t *testing.T) {
@@ -198,7 +198,7 @@ func TestEvidenceLFSPayloadResolvesOnlyWhenItsOwnBytesCanBeRead(t *testing.T) {
 	root, commit := laneEEvidenceRepo(t, "sha1", "out/result.json", pointer)
 	ref := laneEEvidenceBoth("sha1", commit, laneEEvidenceBody)
 	laneEEvidenceRefusal(t, evidence.NewResolver(root), ref)
-	laneEEvidenceWrite(t, root, "record/artifacts/"+string(ref.Content.SHA256), laneEEvidenceBody)
+	laneEEvidenceWrite(t, root, ".datum/artifacts/"+string(ref.Content.SHA256), laneEEvidenceBody)
 	for _, kind := range []string{"git", "content"} {
 		t.Run(kind, func(t *testing.T) {
 			ref.Kind = kind

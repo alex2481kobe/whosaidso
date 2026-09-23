@@ -32,7 +32,7 @@ func TestInvocationTimestampIsUTCThroughApplicationAdmission(t *testing.T) {
 	// writes to the user's inbox.
 	t.Setenv("HOME", t.TempDir())
 	root := t.TempDir()
-	project := store.Project{ID: "test/zone-admission", Root: root, Ledger: filepath.Join(root, "record", "events")}
+	project := store.Project{ID: "test/zone-admission", Root: root, Ledger: filepath.Join(root, ".datum", "events")}
 	id := func(n int) model.ID { return model.ID(fmt.Sprintf("%026d", n)) }
 	author := model.Actor{ID: "runner"}
 	capture := func(command int, event model.TypedEvent) model.PacketRef {

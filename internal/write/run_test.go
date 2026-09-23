@@ -32,7 +32,7 @@ func runTestProject(t *testing.T) store.Project {
 	if err := os.Mkdir(root, 0700); err != nil {
 		t.Fatal(err)
 	}
-	return store.Project{ID: "datum/run-test", Root: root, Ledger: filepath.Join(root, "record", "events")}
+	return store.Project{ID: "datum/run-test", Root: root, Ledger: filepath.Join(root, ".datum", "events")}
 }
 
 func runTestNumber(s string) model.Scalar {

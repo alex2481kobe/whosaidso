@@ -23,7 +23,7 @@ func readVerifyProject(t *testing.T) store.Project {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	root := t.TempDir()
-	return store.Project{ID: laneEReduceProject, Root: root, Ledger: filepath.Join(root, "record", "events")}
+	return store.Project{ID: laneEReduceProject, Root: root, Ledger: filepath.Join(root, ".datum", "events")}
 }
 
 // Publish through the real store and validate the sealed prefix with Replay.

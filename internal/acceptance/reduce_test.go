@@ -30,7 +30,7 @@ func laneEReduceArtifact(name string) model.ArtifactRef {
 		Kind: "content", Selector: model.Selector{Kind: "whole"},
 		Content: &model.ContentPin{
 			SHA256: model.HashBytes([]byte(name)), Length: uint64(len(name)),
-			MediaType: "text/plain", Locators: []model.Locator{{Path: "record/artifacts/" + name}},
+			MediaType: "text/plain", Locators: []model.Locator{{Path: ".datum/artifacts/" + name}},
 		},
 	}
 }

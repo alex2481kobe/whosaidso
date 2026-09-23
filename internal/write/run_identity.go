@@ -56,7 +56,7 @@ func runGitState(ctx context.Context, project store.Project, git evidence.GitRun
 		return unknown("git reported a HEAD that is not a valid commit name: " + err.Error())
 	}
 	args := []string{"status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=none", "--", "."}
-	for _, own := range []string{project.Ledger, filepath.Join(root, filepath.FromSlash(evidence.DefaultArtifactDir))} {
+	for _, own := range []string{project.Ledger, filepath.Join(root, filepath.FromSlash(project.ArtifactDir()))} {
 		if rel, err := filepath.Rel(root, own); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
 			args = append(args, ":(exclude)"+filepath.ToSlash(rel))
 		}

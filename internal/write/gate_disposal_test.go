@@ -97,7 +97,7 @@ func TestDisposalNeverResolvesOrPreservesTheDisposedBytes(t *testing.T) {
 	w := newProofWorld(t, true)
 	gone := `{"bytes":"already deleted by hand"}`
 	w.f.accept(w.f.capture(nil, w.disposal(gone)))
-	if _, err := os.Stat(filepath.Join(w.f.project.Root, "record", "artifacts", string(model.HashBytes([]byte(gone))))); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(w.f.project.Root, ".datum", "artifacts", string(model.HashBytes([]byte(gone))))); !os.IsNotExist(err) {
 		t.Fatalf("disposed bytes were preserved as evidence: %v", err)
 	}
 	if len(w.f.snapshot().ArtifactDisposals()) != 1 {
@@ -121,7 +121,7 @@ func TestDisposedArtifactIsNeverAvailableAgain(t *testing.T) {
 	w.f.refuse(w.f.request(w.f.capture(nil, cites)), "artifact-disposed")
 	// The owner then deletes the bytes by hand. The disposed member is
 	// accounted for as inconclusive, and the verifiable run still proves.
-	if err := os.Remove(filepath.Join(w.f.project.Root, "record", "artifacts", string(model.HashBytes([]byte(gone))))); err != nil {
+	if err := os.Remove(filepath.Join(w.f.project.Root, ".datum", "artifacts", string(model.HashBytes([]byte(gone))))); err != nil {
 		t.Fatal(err)
 	}
 	w.f.accept(w.f.capture(nil, w.proof(w.criterion, map[model.InvocationRef]string{first: "inconclusive", second: "supports"})))

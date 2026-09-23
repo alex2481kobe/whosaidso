@@ -19,15 +19,15 @@ import (
 // runAdmitOutputs proves each output a seal declares existed as THIS run's
 // output when its seal is admitted; materializeAdmission then stores it so
 // evaluation can read it after the run directory is gone. R9 gives one output form: every locator
-// lies in record/artifacts/runs/<invocation-id>/. The bytes must come from
+// lies in <artifacts>/runs/<invocation-id>/, the store beside the ledger. The bytes must come from
 // this packet's own captured blob or from the run's directory, walked without
 // symlinks. Never from the content store or any other packet: a same-digest
 // copy there (the criterion's example, say) was not produced by this run.
-func runAdmitOutputs(root, inbox string, packet model.Packet, env model.InvocationEnvelope) error {
+func runAdmitOutputs(root, artifactDir, inbox string, packet model.Packet, env model.InvocationEnvelope) error {
 	if env.OutputRefs.State != model.Known || env.OutputRefs.Value == nil {
 		return nil
 	}
-	runDir := evidence.RunDir(env.InvocationID)
+	runDir := evidence.RunDirIn(artifactDir, env.InvocationID)
 	for i, ref := range *env.OutputRefs.Value {
 		at := fmt.Sprintf("envelope.output_refs[%d]", i)
 		if ref.Content == nil || len(ref.Content.Locators) == 0 {

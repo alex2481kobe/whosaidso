@@ -148,7 +148,7 @@ func e2eStatus(t *testing.T, root string, claim model.RecordRef) reduce.ClaimSta
 // admit the records, a frozen criterion and an attempt, `datum run` a producer,
 // admit its start and seal (MEASURED), then capture and admit proof (PROVEN).
 // The criterion's contract path out/result.json resolves in this run's own
-// directory, record/artifacts/runs/<invocation-id>/out/result.json (R8.3).
+// directory, .datum/artifacts/runs/<invocation-id>/out/result.json (R8.3).
 func TestCLIFreshProcessesRunToProven(t *testing.T) {
 	root, criterion, instrument, attempt := e2eWorld(t)
 	out, err := e2eInvoke(t, root, nil, "run", "--attempt-id", string(attempt), "--instrument", string(instrument.RecordID),
@@ -213,7 +213,7 @@ func TestCLIFreshProcessesCaptureAdmitProofToProven(t *testing.T) {
 	seal := env
 	exit := 0
 	seal.ObservedAt, seal.Outcome = e2eKnown(env.StartedAt.Add(time.Millisecond)), e2eKnown(model.ProcessOutcome{Kind: "exit", ExitCode: &exit})
-	output := "record/artifacts/runs/" + string(env.InvocationID) + "/out/result.json"
+	output := ".datum/artifacts/runs/" + string(env.InvocationID) + "/out/result.json"
 	proofWrite(t, root, output, e2ePass)
 	seal.OutputRefs = e2eKnown([]model.ArtifactRef{e2ePin(e2ePass, output, "application/json")})
 	steps := [][]string{{"capture", "--command-id", string(cliID(701))}, {"capture", "--command-id", string(cliID(702))}}
@@ -235,6 +235,60 @@ func TestCLIFreshProcessesCaptureAdmitProofToProven(t *testing.T) {
 	}
 	if status := e2eStatus(t, root, criterion.Claim); status != reduce.StatusProven {
 		t.Fatalf("fresh-process proof left the claim %s", status)
+	}
+}
+
+// R13.1: the artifact store and run directories sit beside the configured
+// ledger, in its record folder, never at a second hard-coded location. The
+// fixture's record folder is moved and datum.toml follows it; a real run must
+// then write, admit, store and prove from the moved folder alone.
+func TestCLIRunKeepsArtifactsBesideAConfiguredLedger(t *testing.T) {
+	root, criterion, instrument, attempt := e2eWorld(t)
+	moved := filepath.Join(root, "custom", "rec")
+	if err := os.MkdirAll(filepath.Dir(moved), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(root, ".datum"), moved); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "datum.toml"), []byte("id = \"test/cli\"\nledger = \"custom/rec/events\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := e2eInvoke(t, root, nil, "run", "--attempt-id", string(attempt), "--instrument", string(instrument.RecordID),
+		"--claim", string(criterion.Claim.RecordID), "--claim-revision", "1", "--criterion-id", string(criterion.CriterionID), "--criterion-revision", "1", "--", "/bin/sh", "tools/measure.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Envelope    model.InvocationEnvelope `json:"Envelope"`
+		StartPacket model.PacketRef          `json:"StartPacket"`
+		SealPacket  model.PacketRef          `json:"SealPacket"`
+	}
+	if err := json.Unmarshal(out, &result); err != nil || result.SealPacket.CommandID == "" {
+		t.Fatalf("run printed no packets: %s, %v", out, err)
+	}
+	if _, err := os.Stat(filepath.Join(moved, "artifacts", "runs", string(result.Envelope.InvocationID), "out", "result.json")); err != nil {
+		t.Fatalf("the run directory must sit beside the configured ledger: %v", err)
+	}
+	if _, err := e2eInvoke(t, root, nil, "admit", "--command-id", string(cliID(900)), "--actor", "coordinator", "--outcome", "accepted", "--reason", "admit the run", string(result.StartPacket.CommandID), string(result.SealPacket.CommandID)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(moved, "artifacts", string(model.HashBytes([]byte(e2ePass))))); err != nil {
+		t.Fatalf("admission must store the run's output beside the configured ledger: %v", err)
+	}
+	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "lane"}, Reason: "the run passed"},
+		Evidence: []model.ObservationDisposition{{InvocationRef: model.InvocationRef{Project: "test/cli", InvocationID: result.Envelope.InvocationID}, Disposition: "supports", Reason: "passed"}}}
+	if _, err := e2eInvoke(t, root, []model.TypedEvent{proof}, "capture", "--command-id", string(cliID(901))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e2eInvoke(t, root, nil, "admit", "--command-id", string(cliID(902)), "--actor", "coordinator", "--outcome", "accepted", "--reason", "proof", string(cliID(901))); err != nil {
+		t.Fatal(err)
+	}
+	if status := e2eStatus(t, root, criterion.Claim); status != reduce.StatusProven {
+		t.Fatalf("a run beside a configured ledger left the claim %s", status)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".datum")); !os.IsNotExist(err) {
+		t.Fatalf("nothing may be written to the default record folder when the ledger is elsewhere: %v", err)
 	}
 }
 

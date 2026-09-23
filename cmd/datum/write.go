@@ -239,7 +239,7 @@ func captureCLI(ctx context.Context, project store.Project, id model.ID, author 
 // does not resolve is left to --blob; store.WriteIntake refuses what neither
 // supplied.
 func sourceBlobs(ctx context.Context, project store.Project, events []model.Event) ([]io.Reader, error) {
-	resolver := evidence.NewResolver(project.Root)
+	resolver := evidence.NewResolverAt(project.Root, project.ArtifactDir())
 	var readers []io.Reader
 	for _, raw := range events {
 		event, err := model.DecodeEvent(raw)

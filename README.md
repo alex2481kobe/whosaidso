@@ -136,7 +136,7 @@ reliably produces ids that parse and mean nothing.
 
 Early construction. Nothing here is stable yet.
 
-Datum records its own construction: `record/events/` is this project's ledger,
+Datum records its own construction: `.datum/events/` is this project's ledger,
 and the task it holds is the task of building this project. It is currently
 BLOCKED there, honestly, on a resume hold recorded when the implementing tool
 ran out of quota.

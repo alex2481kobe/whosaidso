@@ -28,7 +28,7 @@ func identityGit(t *testing.T, dir string, args ...string) string {
 }
 
 func identityProject(t *testing.T, root string) store.Project {
-	return store.Project{ID: "test/identity", Root: root, Ledger: filepath.Join(root, "record", "events")}
+	return store.Project{ID: "test/identity", Root: root, Ledger: filepath.Join(root, ".datum", "events")}
 }
 
 // identityRepo is a committed checkout whose datum root is a subdirectory.
@@ -67,8 +67,8 @@ func TestRunIdentityRecordsMachineHeadAndCleanState(t *testing.T) {
 	}
 
 	t.Run("datum's own record directories do not make the source dirty", func(t *testing.T) {
-		proofPut(t, root, "record/artifacts/runs/01ARZ3NDEKTSV4RRFFQ69G5FAX/stdout", "x")
-		proofPut(t, root, "record/events/000001.json", "{}")
+		proofPut(t, root, ".datum/artifacts/runs/01ARZ3NDEKTSV4RRFFQ69G5FAX/stdout", "x")
+		proofPut(t, root, ".datum/events/000001.json", "{}")
 		if id := RunExecutionIdentity(context.Background(), identityProject(t, root)); id.Dirty.State != model.Known || *id.Dirty.Value {
 			t.Fatalf("records of runs are not the source a run executes: %+v", id.Dirty)
 		}
@@ -79,6 +79,18 @@ func TestRunIdentityRecordsMachineHeadAndCleanState(t *testing.T) {
 			t.Fatalf("the project root's state is what is recorded: %+v", id.Dirty)
 		}
 	})
+}
+
+// R13.1: the excluded artifact store is the one beside the configured ledger.
+func TestRunIdentityExcludesTheStoreBesideAConfiguredLedger(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	_, root := identityRepo(t)
+	moved := store.Project{ID: "test/identity", Root: root, Ledger: filepath.Join(root, "custom", "events")}
+	proofPut(t, root, "custom/artifacts/runs/01ARZ3NDEKTSV4RRFFQ69G5FAX/stdout", "x")
+	proofPut(t, root, "custom/events/000001.json", "{}")
+	if id := RunExecutionIdentity(context.Background(), moved); id.Dirty.State != model.Known || *id.Dirty.Value {
+		t.Fatalf("the artifact store beside a configured ledger is not source: %+v", id.Dirty)
+	}
 }
 
 func TestRunIdentityDirtyOrUnobservableIsUnknownWithAReason(t *testing.T) {

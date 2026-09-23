@@ -23,10 +23,17 @@ import (
 	"datum/internal/model"
 )
 
+// RecordDir is Datum's in-repo record folder beside datum.toml (R13.1). This
+// is the one place the name is spelled in code; datum.toml's ledger names it
+// for a project, and a project's artifact store is derived from that ledger.
+const RecordDir = ".datum"
+
 // DefaultArtifactDir is where admission materializes incoming blobs, keyed by
-// digest. The resolver checks it after the authored locators so a reference
-// stays resolvable when the lane worktree that produced it is gone.
-const DefaultArtifactDir = "record/artifacts"
+// digest, for a resolver built from a root alone. The resolver checks it after
+// the authored locators so a reference stays resolvable when the lane worktree
+// that produced it is gone. Production builds its resolver with
+// NewResolverAt and the project's ledger-derived store.
+const DefaultArtifactDir = RecordDir + "/artifacts"
 
 // DefaultMaxBytes bounds what the resolver will pull into memory. A pin naming
 // something enormous is refused out loud rather than taking the process down.
@@ -44,9 +51,15 @@ type Resolver struct {
 	MaxBytes    int64
 }
 
-// NewResolver builds the production resolver for one project root.
+// NewResolver builds a resolver for one project root and the default store.
 func NewResolver(root string) *Resolver {
-	return &Resolver{Root: root, ArtifactDir: DefaultArtifactDir, Git: ExecGit, MaxBytes: DefaultMaxBytes}
+	return NewResolverAt(root, DefaultArtifactDir)
+}
+
+// NewResolverAt builds the production resolver for one project root and its
+// project-relative artifact store (store.Project.ArtifactDir).
+func NewResolverAt(root, artifactDir string) *Resolver {
+	return &Resolver{Root: root, ArtifactDir: artifactDir, Git: ExecGit, MaxBytes: DefaultMaxBytes}
 }
 
 // Origin records where the bytes came from, so a reader can tell a committed
