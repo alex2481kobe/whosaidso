@@ -43,7 +43,7 @@ is stale. Nothing below is written by hand, so it cannot quietly stop being true
 datum
 |-- cmd/
 |   `-- datum          This file holds `datum id [N]`, which prints N fresh record identifiers (default one)
-|          5 files, tested -- uses evidence, model, query, reduce, store, write
+|          9 files, tested -- uses evidence, model, query, reduce, store, write
 |-- internal/
 |   |-- acceptance     (tests only, no production code)
 |   |      tests only
@@ -54,11 +54,11 @@ datum
 |   |-- query          selects admitted facts before either output format renders them
 |   |      11 files, tested -- uses model, reduce, store
 |   |-- reduce         folds admitted bundles into the state every Datum answer is read from
-|   |      19 files, tested -- uses model
+|   |      20 files, tested -- uses model
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
 |   |      10 files, tested -- uses model
 |   `-- write          joins immutable capture to canonical state through one admission gate
-|          16 files, tested -- uses evidence, model, reduce, store
+|          17 files, tested -- uses evidence, model, reduce, store
 `-- tools/
     `-- archtree       instrument that reports how this module's packages fit together
            5 files, tested -- leaf
