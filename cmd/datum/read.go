@@ -79,7 +79,7 @@ func readView(c *call, request query.ViewRequest, stale, jsonOutput bool) error 
 		return err
 	}
 	if request.View == "continue" {
-		observed := observe(c.ctx, project.Root)
+		observed := observe(c.ctx, project.ExecRoot())
 		request.Observed = &observed
 	}
 	if stale {

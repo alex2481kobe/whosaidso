@@ -14,9 +14,10 @@ import (
 // its outputs into while it runs, and returns its absolute path.
 //
 // Staging is per-machine working state, never a record, so it lives in the
-// per-machine Datum home beside intake (<home>/.datum/staging/<project>/<id>),
-// outside the project and its committed artifact store. The home is derived
-// from IntakeDir so the two can never be relocated apart. A run's bytes reach
+// per-machine Datum home beside intake (<Home>/staging/<project>/<id>), outside
+// the project and its committed artifact store. Home is the one function that
+// places intake, staging, the machine id and the registry, so they can never
+// be relocated apart. A run's bytes reach
 // committed storage only through capture and admission, and only once.
 //
 // The staging directories below the Datum home are created here and must be
@@ -26,16 +27,19 @@ func MakeRunStaging(project Project, invocation model.ID) (string, error) {
 	if !model.ValidID(invocation) {
 		return "", storeFault("invalid-field", "invocation_id", "not a ULID")
 	}
-	inbox, err := IntakeDir(project)
+	encoded, err := encodeProjectID(project.ID)
 	if err != nil {
 		return "", err
 	}
-	home := filepath.Dir(filepath.Dir(inbox))
+	home, err := Home()
+	if err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(home, 0700); err != nil {
 		return "", storeFault("io", home, err.Error())
 	}
 	dir := home
-	parts := []string{"staging", filepath.Base(inbox), string(invocation)}
+	parts := []string{"staging", encoded, string(invocation)}
 	for i, part := range parts {
 		dir = filepath.Join(dir, part)
 		err := os.Mkdir(dir, 0700)

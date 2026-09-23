@@ -16,10 +16,29 @@ import (
 
 // Project keeps absolute paths at the runtime boundary. Only ID is persisted in
 // packets; moving a checkout must not change its identity or lose its intake.
+//
+// Root is the project's home: the ledger, definitions, admission, canonical
+// artifacts and the cache live under it. Checkout is the checkout the command
+// was invoked in: processes run there, sources are captured from it and its
+// git HEAD and dirty state are observed there. Discover sets both to the
+// nearest config's directory; Open sets Root to the registered home (home.go).
 type Project struct {
-	ID     model.ProjectID
-	Root   string
-	Ledger string
+	ID       model.ProjectID
+	Root     string
+	Ledger   string
+	Checkout string
+	// bound records that Root came from this machine's registry, so admission
+	// re-checks that binding under the ledger lock (home.go).
+	bound bool
+}
+
+// ExecRoot is where processes run and git is observed: the invoking checkout,
+// or Root for a Project built without one, where the two are the same place.
+func (p Project) ExecRoot() string {
+	if p.Checkout == "" {
+		return p.Root
+	}
+	return p.Checkout
 }
 
 // ArtifactDir is the project-relative, slash-separated artifact store: the
@@ -51,20 +70,9 @@ func Discover(cwd string) (Project, error) {
 	}
 	for {
 		path := filepath.Join(root, "datum.toml")
-		data, err := os.ReadFile(path)
-		if err == nil {
-			values, err := parseConfig(data, path)
-			if err != nil {
-				return Project{}, err
-			}
-			ledger, err := ledgerInRoot(root, values["ledger"], path)
-			if err != nil {
-				return Project{}, err
-			}
-			return Project{ID: model.ProjectID(values["id"]), Root: root, Ledger: ledger}, nil
-		}
-		if !os.IsNotExist(err) {
-			return Project{}, storeFault("io", path, err.Error())
+		project, err := configAt(root)
+		if err == nil || !os.IsNotExist(err) {
+			return project, err
 		}
 		// A dangling config is still the nearest config, not permission to use
 		// a different project's identity above it.
@@ -77,6 +85,28 @@ func Discover(cwd string) (Project, error) {
 		}
 		root = parent
 	}
+}
+
+// configAt reads the config in root itself, never a parent's. A missing file
+// is returned as the os error, so callers can tell absence from a bad config.
+func configAt(root string) (Project, error) {
+	path := filepath.Join(root, "datum.toml")
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return Project{}, err
+	}
+	if err != nil {
+		return Project{}, storeFault("io", path, err.Error())
+	}
+	values, err := parseConfig(data, path)
+	if err != nil {
+		return Project{}, err
+	}
+	ledger, err := ledgerInRoot(root, values["ledger"], path)
+	if err != nil {
+		return Project{}, err
+	}
+	return Project{ID: model.ProjectID(values["id"]), Root: root, Ledger: ledger, Checkout: root}, nil
 }
 
 // ledgerInRoot enforces ruling R8.1: the ledger is committed with the project,

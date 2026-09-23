@@ -22,7 +22,8 @@ and disagreed"; what could not be compared is UNKNOWN.
 
 Setup. Build with: go build -o datum ./cmd/datum. The project is the nearest
 datum.toml above the working directory; it names the project id and the
-ledger path, conventionally .datum/events.
+ledger path, conventionally .datum/events. Bind the checkout holding the live
+ledger once per machine: datum home PATH (datum help home).
 Set DATUM_ACTOR to your name; --actor overrides it; a missing actor is
 recorded unknown, never guessed. Ids: datum id prints one, datum id 5 five.
 Never hand-write an id.
@@ -141,12 +142,20 @@ is off unless asked, and it cannot see uncommitted changes. Re-measure a
 stale claim; do not change its criterion because the code changed. An old
 failing run is set aside only as inapplicable with a verified code_change.
 `},
-	{"home", "where the ledger, intake and runs live", `The ledger is the datum.toml's ledger path under the project root (the
-nearest datum.toml). Intake is per machine: $HOME/.datum/intake/<encoded
-project id>/, shared by every clone and worktree of the project; the
-machine id lives in $HOME/.datum too. To rehearse without touching the real
-inbox, run with HOME set to a scratch directory on a scratch copy. run and
-fresh git observations use the checkout you invoke them in.
+	{"home", "where the ledger, intake and runs live", `Every clone and worktree of a project reads and admits through ONE ledger
+on this machine: the one in its home, the checkout bound with
+datum home PATH. The binding is explicit: in an unbound project reads and
+admission refuse, and a missing home refuses too; Datum never falls back to
+the invoking checkout's .datum or creates an empty ledger. Output from
+another checkout names the home it used.
+Two roots: the ledger, definitions, admission, canonical artifacts and the
+cache use the home; run, source capture and fresh git HEAD and dirty state
+use the checkout you invoke them in. A git object missing from the home
+repository stays unavailable. Plain capture needs no home: intake is routed
+by the declared project id.
+Per machine, one Datum home holds the registry (projects/), intake,
+staging and the machine id: $DATUM_HOME, else $HOME/.datum. Set DATUM_HOME
+to a scratch directory to rehearse without touching the real ones.
 `},
 	{"pitfalls", "rules that prevent the known mistakes", `- Never invent a value: a missing actor, reading, unit or validation stays
   UNKNOWN with its reason. Two unknowns never match.

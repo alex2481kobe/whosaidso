@@ -232,6 +232,7 @@ func writeVerifyCLI(t *testing.T) string {
 func writeVerifyCLIPacket(binary string, f *gateVerifyFixture, input string, args ...string) (model.PacketRef, error) {
 	cmd := exec.Command(binary, args...)
 	cmd.Dir, cmd.Stdin = f.p.Root, strings.NewReader(input)
+	bindProjectHome(cmd)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {

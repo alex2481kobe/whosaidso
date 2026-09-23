@@ -17,7 +17,7 @@ import (
 
 func runIntent(project store.Project, r RunRequest) (model.InvocationEnvelope, error) {
 	e := model.InvocationEnvelope{}
-	if !filepath.IsAbs(project.Root) || r.Timeout < 0 {
+	if !filepath.IsAbs(project.Root) || !filepath.IsAbs(project.ExecRoot()) || r.Timeout < 0 {
 		return e, fmt.Errorf("run: absolute project root and nonnegative timeout required")
 	}
 	if r.ExecutionSourceIdentity.Project != project.ID {

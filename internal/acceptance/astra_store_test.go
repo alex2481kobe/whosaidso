@@ -38,6 +38,7 @@ func astraCommand(w *flowWorld, args ...string) *exec.Cmd {
 	w.t.Cleanup(cancel)
 	cmd := exec.CommandContext(ctx, pvDatum(w.t), args...)
 	cmd.Dir, cmd.Env = w.root, append(os.Environ(), "HOME="+w.home)
+	bindProjectHome(cmd)
 	return cmd
 }
 

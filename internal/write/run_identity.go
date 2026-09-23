@@ -1,7 +1,7 @@
 package write
 
 // Observing a run's execution identity lives here: the persistent machine id and
-// the project root's git HEAD and dirty state, each KNOWN only when observed.
+// the invoking checkout's git HEAD and dirty state, each KNOWN only when observed.
 // Launching the process, the producer report and comparability rules do not.
 
 import (
@@ -38,7 +38,9 @@ func runGitState(ctx context.Context, project store.Project, git evidence.GitRun
 	unknown := func(reason string) (model.Availability[model.GitHead], model.Availability[bool]) {
 		return model.Availability[model.GitHead]{State: model.Unknown, Reason: reason}, model.Availability[bool]{State: model.Unknown, Reason: reason}
 	}
-	root := project.Root
+	// The invoking checkout is what executes, so its HEAD and dirty state are
+	// the run's, whichever checkout holds the home ledger.
+	root := project.ExecRoot()
 	inside, err := git(ctx, root, "rev-parse", "--is-inside-work-tree")
 	if err != nil || strings.TrimSpace(string(inside)) != "true" {
 		return unknown("the project root is not a readable git checkout, so no HEAD or dirty state was observed")
@@ -56,7 +58,13 @@ func runGitState(ctx context.Context, project store.Project, git evidence.GitRun
 		return unknown("git reported a HEAD that is not a valid commit name: " + err.Error())
 	}
 	args := []string{"status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=none", "--", "."}
-	for _, own := range []string{project.Ledger, filepath.Join(root, filepath.FromSlash(project.ArtifactDir()))} {
+	// Datum's own record folders, at the same project-relative place in this
+	// checkout as in the home.
+	ledger, err := filepath.Rel(project.Root, project.Ledger)
+	if err != nil {
+		ledger = "."
+	}
+	for _, own := range []string{filepath.Join(root, ledger), filepath.Join(root, filepath.FromSlash(project.ArtifactDir()))} {
 		if rel, err := filepath.Rel(root, own); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
 			args = append(args, ":(exclude)"+filepath.ToSlash(rel))
 		}

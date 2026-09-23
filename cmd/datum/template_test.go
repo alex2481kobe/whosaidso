@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"datum/internal/model"
+	"datum/internal/store"
 )
 
 // templateFill is what a test author types for each placeholder kind. Every
@@ -434,11 +435,15 @@ func TestTemplateFreshProcessWritesNothing(t *testing.T) {
 	}
 }
 
-// cliTree fingerprints the project root and the intake under HOME.
+// cliTree fingerprints the project root and the Datum home (store.Home).
 func cliTree(t *testing.T, root string) string {
 	t.Helper()
+	home, err := store.Home()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var lines []string
-	for _, dir := range []string{root, filepath.Join(os.Getenv("HOME"), ".datum")} {
+	for _, dir := range []string{root, home} {
 		filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 			if err != nil || cacheImagePath(path) || info.IsDir() && path == filepath.Join(root, ".datum", "cache") {
 				return nil // the disposable snapshot cache may be refreshed by any read

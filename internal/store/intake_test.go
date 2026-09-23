@@ -23,6 +23,7 @@ func intakeProject(t *testing.T) Project {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv(HomeEnv, "") // HOME alone places the Datum home here
 	root := t.TempDir()
 	return Project{ID: "team/project", Root: root, Ledger: filepath.Join(root, ".datum/events")}
 }

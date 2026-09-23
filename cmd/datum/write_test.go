@@ -21,6 +21,7 @@ func cliFixture(t *testing.T) (string, []byte) {
 	if err := os.WriteFile(filepath.Join(root, "datum.toml"), []byte("id = \"test/cli\"\nledger = \".datum/events\"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	bindTestHome(t, root)
 	task, err := model.EncodeEvent(&model.TaskCreate{
 		ID: cliID(1), Provenance: model.Provenance{Author: model.Actor{ID: "lane"}, SourceRefs: []model.ArtifactRef{}},
 		Spec: model.TaskSpec{

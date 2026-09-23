@@ -16,7 +16,7 @@ import (
 	"datum/internal/model"
 )
 
-// MachineIDFile is the machine identity's name under ~/.datum/. It holds one
+// MachineIDFile is the machine identity's name in the Datum home (Home). It holds one
 // ULID and a newline, nothing else.
 const MachineIDFile = "machine-id"
 
@@ -30,11 +30,11 @@ const MachineIDFile = "machine-id"
 // unreadable or malformed is an error, never replaced, because a new id would
 // silently make this machine a different condition from its own earlier runs.
 func MachineID() (model.ID, error) {
-	home, err := os.UserHomeDir()
-	if err != nil || !filepath.IsAbs(home) {
-		return "", storeFault("io", "home", "an absolute user home directory is required")
+	home, err := Home()
+	if err != nil {
+		return "", err
 	}
-	return machineIDAt(filepath.Join(home, ".datum"))
+	return machineIDAt(home)
 }
 
 func machineIDAt(dir string) (model.ID, error) {
@@ -42,7 +42,7 @@ func machineIDAt(dir string) (model.ID, error) {
 	if id, err := readMachineID(final); !os.IsNotExist(err) {
 		return id, err
 	}
-	if err := os.Mkdir(dir, 0700); err != nil && !os.IsExist(err) {
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return "", storeFault("io", dir, err.Error())
 	}
 	if info, err := os.Lstat(dir); err != nil || !info.IsDir() {

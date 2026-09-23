@@ -51,7 +51,11 @@ func captureVerb(fs *flag.FlagSet) func(*call) error {
 		if !*admitAfter && (isSet(fs, "reason") || isSet(fs, "admit-command-id")) {
 			return usageError("datum capture: --reason and --admit-command-id belong to --admit")
 		}
-		project, err := c.project()
+		open := c.checkout
+		if *admitAfter {
+			open = c.project
+		}
+		project, err := open()
 		if err != nil {
 			return err
 		}
@@ -265,13 +269,13 @@ func captureCLI(ctx context.Context, project store.Project, id model.ID, author 
 
 // sourceBlobs implements capture durability (contract: intake durably saves
 // incoming source before acknowledging capture). Each source.intake's reference
-// is resolved inside the datum root, and bytes that verify against the
+// is resolved inside the invoking checkout, and bytes that verify against the
 // original's digest and length are captured into the packet with it, so the
 // source survives its original being deleted before admission. A reference that
 // does not resolve is left to --blob; store.WriteIntake refuses what neither
 // supplied.
 func sourceBlobs(ctx context.Context, project store.Project, events []model.Event) ([]io.Reader, error) {
-	resolver := evidence.NewResolverAt(project.Root, project.ArtifactDir())
+	resolver := evidence.NewResolverAt(project.ExecRoot(), project.ArtifactDir())
 	var readers []io.Reader
 	for _, raw := range events {
 		event, err := model.DecodeEvent(raw)

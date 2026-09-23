@@ -102,6 +102,7 @@ func hbVerifyCLI(t *testing.T) hbVerifyCapture {
 		}
 		cmd := exec.Command(binary, args...)
 		cmd.Dir = f.p.Root
+		bindProjectHome(cmd)
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &stdout, &stderr
 		if err := cmd.Run(); err != nil {
