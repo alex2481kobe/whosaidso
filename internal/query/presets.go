@@ -222,7 +222,7 @@ func closureAttention(c Closure, p *Preset) {
 	}
 }
 
-func preset(project store.Project, s reduce.Snapshot, prefix []model.Bundle, request Request, a *Answer) error {
+func preset(project store.Project, s reduce.Snapshot, request Request, a *Answer) error {
 	p := &Preset{Attention: []Attention{}}
 	switch request.Command {
 	case "instruments":
@@ -233,7 +233,7 @@ func preset(project store.Project, s reduce.Snapshot, prefix []model.Bundle, req
 		p = nowPreset(s, describeTasks(s))
 	case "todo":
 		var err error
-		if a.Intake, err = pending(project, s, prefix); err != nil {
+		if a.Intake, err = pending(project, s); err != nil {
 			return err
 		}
 		todoInto(s, describeTasks(s), p, request.Limit)
