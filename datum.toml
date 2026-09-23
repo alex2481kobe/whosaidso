@@ -1,4 +1,4 @@
 # Datum marks its own project root. The nearest datum.toml wins, walking up
 # from the working directory.
 id     = "datum/datum"
-ledger = "record/events"
+ledger = ".datum/events"

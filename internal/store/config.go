@@ -5,6 +5,7 @@ package store
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -19,6 +20,19 @@ type Project struct {
 	ID     model.ProjectID
 	Root   string
 	Ledger string
+}
+
+// ArtifactDir is the project-relative, slash-separated artifact store: the
+// sibling "artifacts" of the ledger inside the ledger's record folder (R13.1:
+// .datum/events beside .datum/artifacts). It is derived from the configured
+// ledger, never named separately, so the two cannot drift apart, and it is
+// computed lexically under Root, which R8.1 already confines the ledger to.
+func (p Project) ArtifactDir() string {
+	rel, err := filepath.Rel(p.Root, p.Ledger)
+	if err != nil {
+		rel = "."
+	}
+	return path.Join(filepath.ToSlash(filepath.Dir(rel)), "artifacts")
 }
 
 // Discover stops at the nearest config, including an invalid one: falling back

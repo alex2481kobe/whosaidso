@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"datum/internal/evidence"
 	"datum/internal/model"
 	"datum/internal/store"
 )
@@ -77,7 +78,7 @@ func Run(ctx context.Context, project store.Project, request RunRequest) (RunRes
 		ctx, cancel = context.WithTimeout(ctx, request.Timeout)
 		defer cancel()
 	}
-	dir := filepath.Join(project.Root, "record", "artifacts", "runs", string(envelope.InvocationID))
+	dir := filepath.Join(project.Root, filepath.FromSlash(evidence.RunDirIn(project.ArtifactDir(), envelope.InvocationID)))
 	result.ArtifactDir = dir
 	if err := runMakeDir(project.Root, dir); err != nil {
 		return result, err

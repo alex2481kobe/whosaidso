@@ -68,7 +68,7 @@ func TestAstraStoreRetrySurvivesIntakeLoss(t *testing.T) {
 	for _, verb := range []string{"show", "history", "state", "now", "todo", "context"} {
 		reads[verb] = w.readJSON(verb)
 	}
-	// Leave only datum.toml and record/events, with an empty machine inbox.
+	// Leave only datum.toml and .datum/events, with an empty machine inbox.
 	if err := os.RemoveAll(w.home); err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestAstraStoreLockCannotCreateOutsideRoot(t *testing.T) {
 	w := flowNew(t)
 	w.mustAdmit(flowLane, astraClaim(w)) // passing ordinary-lock control
 	before := w.ledger()
-	lock := filepath.Join(w.root, "record/events/.lock")
+	lock := filepath.Join(w.root, ".datum/events/.lock")
 	if err := os.Remove(lock); err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestAstraStoreLockCannotCreateOutsideRoot(t *testing.T) {
 	if err := os.Remove(lock); err != nil {
 		t.Fatal(err)
 	}
-	w.put("record/events/.lock", nil) // restore the fixture's lock to compare bundles
+	w.put(".datum/events/.lock", nil) // restore the fixture's lock to compare bundles
 	if !reflect.DeepEqual(before, w.ledger()) {
 		t.Error("expected an unchanged ledger after refusing an escaping lock; a new canonical bundle appeared")
 	}
@@ -202,7 +202,7 @@ func TestAstraStoreKilledAdmissionAndNestedGit(t *testing.T) {
 	w := flowNew(t)
 	repo := t.TempDir()
 	w.root = filepath.Join(repo, "project")
-	w.put("datum.toml", []byte("id = 'flow/review'\nledger = 'record/events'\n"))
+	w.put("datum.toml", []byte("id = 'flow/review'\nledger = '.datum/events'\n"))
 	w.put("evidence.json", []byte(`{"scope":"inside"}`))
 	pvPut(t, repo, "evidence.json", []byte(`{"scope":"outside"}`))
 	git := func(args ...string) string {
@@ -242,7 +242,7 @@ func TestAstraStoreKilledAdmissionAndNestedGit(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = cmd.Process.Kill() })
 	astraWait(t, func() bool { _, err := os.Stat(marker); return err == nil })
-	lock, err := os.OpenFile(filepath.Join(w.root, "record/events/.lock"), os.O_RDWR, 0)
+	lock, err := os.OpenFile(filepath.Join(w.root, ".datum/events/.lock"), os.O_RDWR, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +259,7 @@ func TestAstraStoreKilledAdmissionAndNestedGit(t *testing.T) {
 	}
 	// A torn temporary models an interrupted file write, without racing a
 	// sub-millisecond syscall window or adding production fault-injection hooks.
-	partial := "record/events/00000001-" + string(w.id()) + ".json.tmp"
+	partial := ".datum/events/00000001-" + string(w.id()) + ".json.tmp"
 	w.put(partial, []byte(`{"version":`))
 	if _, err := w.cli(nil, args...); err != nil {
 		t.Fatalf("next process must release the dead writer's lock and recover the partial file: %v", err)
@@ -304,7 +304,7 @@ func TestAstraStoreKilledAcknowledgement(t *testing.T) {
 	t.Cleanup(func() { _ = cmd.Process.Kill() })
 	var published []byte
 	astraWait(t, func() bool {
-		files, _ := filepath.Glob(filepath.Join(w.root, "record/events/*-"+args[2]+".json"))
+		files, _ := filepath.Glob(filepath.Join(w.root, ".datum/events/*-"+args[2]+".json"))
 		if len(files) == 0 {
 			return false
 		}

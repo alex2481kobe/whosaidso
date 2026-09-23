@@ -71,7 +71,7 @@ func (r *Resolver) Observe(ctx context.Context, c model.CriterionFix, env model.
 			o.ImageOutput = true
 		}
 	}
-	runDir := RunDir(env.InvocationID)
+	runDir := RunDirIn(r.artifactDir(), env.InvocationID)
 
 	result, why, err := r.readSelector(ctx, outs, runDir, c.Expression.ResultSelector)
 	if err != nil {
@@ -130,9 +130,16 @@ func (r *Resolver) readSelector(ctx context.Context, outs []model.ArtifactRef, r
 	return reading, "", nil
 }
 
-// RunDir is the project-relative directory write.Run gives one invocation.
+// RunDir is the project-relative directory write.Run gives one invocation in
+// the default artifact store. Production names the project's store: RunDirIn.
 func RunDir(invocation model.ID) string {
-	return path.Join(DefaultArtifactDir, "runs", string(invocation))
+	return RunDirIn(DefaultArtifactDir, invocation)
+}
+
+// RunDirIn is the project-relative directory write.Run gives one invocation,
+// inside the project-relative artifact store artifactDir.
+func RunDirIn(artifactDir string, invocation model.ID) string {
+	return path.Join(artifactDir, "runs", string(invocation))
 }
 
 // matchOutput pairs a criterion selector with an output by the path each

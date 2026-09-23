@@ -23,7 +23,7 @@ func testProject(t *testing.T) store.Project {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	root := t.TempDir()
-	return store.Project{ID: projectID, Root: root, Ledger: filepath.Join(root, "record", "events")}
+	return store.Project{ID: projectID, Root: root, Ledger: filepath.Join(root, ".datum", "events")}
 }
 func testScope() model.Scope {
 	return model.Scope{SourcePaths: []string{"internal/query/query.go"}, ContextRefs: []model.RecordRef{},

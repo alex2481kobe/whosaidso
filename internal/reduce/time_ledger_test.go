@@ -27,7 +27,7 @@ import (
 func TestInvocationTimestampIsUTCThroughLedgerPublication(t *testing.T) {
 	t.Setenv("HOME", t.TempDir()) // isolate the real intake publisher
 	root := t.TempDir()
-	project := store.Project{ID: testProject, Root: root, Ledger: filepath.Join(root, "record", "events")}
+	project := store.Project{ID: testProject, Root: root, Ledger: filepath.Join(root, ".datum", "events")}
 	l, env, _ := sealStart(t)
 	env.StartedAt = time.Date(2026, 9, 22, 12, 0, 0, 0, time.FixedZone("fixture", 37*60))
 	// This one bundle also fixes the claim, so the run names no criterion:

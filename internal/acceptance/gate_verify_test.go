@@ -34,7 +34,7 @@ func gateVerifyNew(t *testing.T) *gateVerifyFixture {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	root := t.TempDir()
-	return &gateVerifyFixture{t: t, p: store.Project{ID: recProject, Root: root, Ledger: filepath.Join(root, "record", "events")}, n: 200}
+	return &gateVerifyFixture{t: t, p: store.Project{ID: recProject, Root: root, Ledger: filepath.Join(root, ".datum", "events")}, n: 200}
 }
 
 func (f *gateVerifyFixture) id() model.ID { f.n++; return recID(f.n) }

@@ -141,7 +141,7 @@ func TestSelfAdmissionMalformedActorIsUnknown(t *testing.T) {
 // Datum's own bundles 3 and 4 store "true" without recording packet authors.
 // Under C39 they read UNKNOWN; their committed bytes are not rewritten.
 func TestReviewSelfAdmissionCommittedHistoryIsUnknown(t *testing.T) {
-	paths, err := filepath.Glob("../../record/events/*.json")
+	paths, err := filepath.Glob("../../.datum/events/*.json")
 	if err != nil || len(paths) < 4 {
 		t.Fatalf("committed history missing: %v %v", paths, err)
 	}
@@ -209,7 +209,7 @@ func TestReviewSelfAdmissionLegacyIgnoresProse(t *testing.T) {
 }
 
 func TestReviewSelfAdmissionCommittedSequenceOneReplay(t *testing.T) {
-	data, err := os.ReadFile("../../record/events/00000001-01M3408ER2RFD597S5KPXMYP4P.json")
+	data, err := os.ReadFile("../../.datum/events/00000001-01M3408ER2RFD597S5KPXMYP4P.json")
 	if err != nil {
 		t.Fatal(err)
 	}

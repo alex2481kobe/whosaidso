@@ -5,7 +5,7 @@ package acceptance_test
 // own HOME (so its own intake), and every fact is read back through the read
 // surface. Every read is taken twice, as text and as --json, and the two are
 // compared field by field; every answer must carry the watermark of the
-// ledger it was read from. Refusals must leave record/events byte-identical.
+// ledger it was read from. Refusals must leave .datum/events byte-identical.
 //
 // Event payloads are built with the model types only to produce the JSON a
 // lane would pipe to `datum capture`; nothing here calls the write, store or
@@ -52,7 +52,7 @@ func flowNew(t *testing.T) *flowWorld {
 		t.Skip("flows use POSIX producers; Windows is out of scope")
 	}
 	w := &flowWorld{t: t, root: t.TempDir(), home: t.TempDir(), project: "flow/review", n: 100}
-	w.put("datum.toml", []byte("id = \"flow/review\"\nledger = \"record/events\"\n"))
+	w.put("datum.toml", []byte("id = \"flow/review\"\nledger = \".datum/events\"\n"))
 	w.scope = model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this flow fixture", Limitations: "a temp project"}
 	return w
 }
@@ -129,11 +129,11 @@ func (w *flowWorld) mustAdmit(author string, events ...model.TypedEvent) {
 	}
 }
 
-// ledger is every byte under record/events, by file name.
+// ledger is every byte under .datum/events, by file name.
 func (w *flowWorld) ledger() map[string][]byte {
 	w.t.Helper()
 	out := map[string][]byte{}
-	dir := filepath.Join(w.root, "record", "events")
+	dir := filepath.Join(w.root, ".datum", "events")
 	entries, err := os.ReadDir(dir)
 	if err != nil && !os.IsNotExist(err) {
 		w.t.Fatal(err)
@@ -159,7 +159,7 @@ func (w *flowWorld) refused(what string, step func() error) {
 		w.t.Logf("%s: refused: %v", what, err)
 	}
 	if after := w.ledger(); !reflect.DeepEqual(before, after) {
-		w.t.Errorf("%s: a refused admission changed record/events (%d files before, %d after)", what, len(before), len(after))
+		w.t.Errorf("%s: a refused admission changed .datum/events (%d files before, %d after)", what, len(before), len(after))
 	}
 }
 
@@ -1036,14 +1036,14 @@ func TestFlowRecovery(t *testing.T) {
 	for _, e := range entries {
 		switch e.Name() {
 		case "datum.toml":
-		case "record":
-			inner, err := os.ReadDir(filepath.Join(w.root, "record"))
+		case ".datum":
+			inner, err := os.ReadDir(filepath.Join(w.root, ".datum"))
 			if err != nil {
 				t.Fatal(err)
 			}
 			for _, r := range inner {
 				if r.Name() != "events" {
-					if err := os.RemoveAll(filepath.Join(w.root, "record", r.Name())); err != nil {
+					if err := os.RemoveAll(filepath.Join(w.root, ".datum", r.Name())); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -1055,7 +1055,7 @@ func TestFlowRecovery(t *testing.T) {
 		}
 	}
 	if !reflect.DeepEqual(ledger, w.ledger()) {
-		t.Fatal("fixture: deleting generated output touched record/events")
+		t.Fatal("fixture: deleting generated output touched .datum/events")
 	}
 	for _, args := range reads {
 		if after := w.read(args...); !reflect.DeepEqual(before[strings.Join(args, " ")], after) {

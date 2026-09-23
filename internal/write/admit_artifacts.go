@@ -23,7 +23,7 @@ func materializeAdmission(ctx context.Context, project store.Project, packets []
 	if err != nil {
 		return err
 	}
-	resolver := evidence.NewResolver(project.Root)
+	resolver := evidence.NewResolverAt(project.Root, project.ArtifactDir())
 	for _, packet := range packets {
 		for _, raw := range packet.Events {
 			event, err := model.DecodeEvent(raw)
@@ -31,7 +31,7 @@ func materializeAdmission(ctx context.Context, project store.Project, packets []
 				return err
 			}
 			if seal, ok := event.(*model.InvocationSeal); ok {
-				if err := runAdmitOutputs(project.Root, inbox, packet, seal.Envelope); err != nil {
+				if err := runAdmitOutputs(project.Root, project.ArtifactDir(), inbox, packet, seal.Envelope); err != nil {
 					return err
 				}
 			}
@@ -52,7 +52,7 @@ func materializeAdmission(ctx context.Context, project store.Project, packets []
 						if model.HashBytes(blob) != ref.Content.SHA256 || uint64(len(blob)) != ref.Content.Length {
 							return admissionFault("conflict", path, "intake bytes disagree with the accepted content pin")
 						}
-						if err := preserveAdmissionBlob(project.Root, blob); err != nil {
+						if err := preserveAdmissionBlob(project.Root, project.ArtifactDir(), blob); err != nil {
 							return err
 						}
 						break
@@ -65,7 +65,7 @@ func materializeAdmission(ctx context.Context, project store.Project, packets []
 				// A working locator can disappear with its producer. Keep its verified
 				// bytes without adding our location to the authored event.
 				if resolved.Origin == evidence.OriginLocator {
-					if err := preserveAdmissionBlob(project.Root, resolved.Bytes); err != nil {
+					if err := preserveAdmissionBlob(project.Root, project.ArtifactDir(), resolved.Bytes); err != nil {
 						return err
 					}
 				}
@@ -111,12 +111,12 @@ func admissionBlob(path string) ([]byte, error) {
 	return data, nil
 }
 
-func preserveAdmissionBlob(root string, data []byte) error {
+func preserveAdmissionBlob(root, artifactDir string, data []byte) error {
 	if !filepath.IsAbs(root) {
 		return admissionFault("invalid-field", "project.root", "artifact publication needs an absolute project root")
 	}
 	dir := root
-	for _, part := range strings.Split(evidence.DefaultArtifactDir, "/") {
+	for _, part := range strings.Split(artifactDir, "/") {
 		parent := dir
 		dir = filepath.Join(dir, part)
 		if err := os.Mkdir(dir, 0755); err != nil && !os.IsExist(err) {

@@ -68,7 +68,7 @@ func pvNew(t *testing.T) *pvWorld {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	root := t.TempDir()
-	pvPut(t, root, "datum.toml", []byte("id = \"verify/proof\"\nledger = \"record/events\"\n"))
+	pvPut(t, root, "datum.toml", []byte("id = \"verify/proof\"\nledger = \".datum/events\"\n"))
 	p, err := store.Discover(root)
 	if err != nil {
 		t.Fatal(err)
@@ -213,7 +213,7 @@ func (w *pvWorld) status() reduce.ClaimStatus {
 }
 
 func pvRunPath(id model.ID, rel string) string {
-	return "record/artifacts/runs/" + string(id) + "/" + rel
+	return ".datum/artifacts/runs/" + string(id) + "/" + rel
 }
 
 // ---- run-directory binding -------------------------------------------------
@@ -291,9 +291,9 @@ func TestProofVerifyContractPathNamingAnotherRunNeverMatches(t *testing.T) {
 			contract := pvRunPath(other, "out/result.json")
 			switch form {
 			case "dot-segment":
-				contract = "record/./artifacts/runs/" + string(other) + "/out/result.json"
+				contract = ".datum/./artifacts/runs/" + string(other) + "/out/result.json"
 			case "double-slash":
-				contract = "record//artifacts/runs/" + string(other) + "/out/result.json"
+				contract = ".datum//artifacts/runs/" + string(other) + "/out/result.json"
 			}
 			w.fix(contract, []byte(pvPass))
 			// Run A declares B's file under the same spelling the criterion uses.
@@ -305,7 +305,7 @@ func TestProofVerifyContractPathNamingAnotherRunNeverMatches(t *testing.T) {
 				proofErr = w.prove(map[model.ID]string{id: "supports"})
 			}
 			if status := w.status(); status == reduce.StatusProven {
-				t.Errorf("expected run %s's observation to find nothing: the contract path %q names run %s's directory, which must never match. Got seal error %v, proof error %v, claim %s. The matcher excludes other runs by the literal prefix record/artifacts/runs/, not by the path it resolves to",
+				t.Errorf("expected run %s's observation to find nothing: the contract path %q names run %s's directory, which must never match. Got seal error %v, proof error %v, claim %s. The matcher excludes other runs by the literal prefix .datum/artifacts/runs/, not by the path it resolves to",
 					id, contract, other, sealErr, proofErr, status)
 			}
 		})
@@ -698,7 +698,7 @@ func TestProofVerifyCorrectiveGitPinResolvesInsideTheDatumRoot(t *testing.T) {
 	if err := os.Rename(w.p.Root, root); err != nil {
 		t.Fatal(err)
 	}
-	w.p.Root, w.p.Ledger = root, filepath.Join(root, "record", "events")
+	w.p.Root, w.p.Ledger = root, filepath.Join(root, ".datum", "events")
 	outsideBody := []byte(`{"secret":"repository root, outside the datum root"}`)
 	insideBody := []byte(`{"inside":"the datum root"}`)
 	pvPut(t, repo, "secret.json", outsideBody)

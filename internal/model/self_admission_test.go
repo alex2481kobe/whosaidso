@@ -176,7 +176,7 @@ func TestReviewSelfAdmissionDoesNotRelaxRequiredFields(t *testing.T) {
 
 func TestReviewSelfAdmissionCommittedSequenceOne(t *testing.T) {
 	// Read the actual committed history, not a recreated fixture or a prose guess.
-	data, err := os.ReadFile("../../record/events/00000001-01M3408ER2RFD597S5KPXMYP4P.json")
+	data, err := os.ReadFile("../../.datum/events/00000001-01M3408ER2RFD597S5KPXMYP4P.json")
 	if err != nil {
 		t.Fatal(err)
 	}

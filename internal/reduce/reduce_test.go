@@ -45,7 +45,7 @@ func blobRef(name string) model.ArtifactRef {
 			SHA256:    newDigest(name),
 			Length:    uint64(len(name)),
 			MediaType: "text/plain",
-			Locators:  []model.Locator{{Path: "record/artifacts/" + name}},
+			Locators:  []model.Locator{{Path: ".datum/artifacts/" + name}},
 		},
 		Selector: model.Selector{Kind: "whole"},
 	}
@@ -876,7 +876,7 @@ func goldenLedger(t *testing.T) *ledgerBuilder {
 				SHA256:    newDigest("owner transcript"),
 				Length:    uint64(len("owner transcript")),
 				MediaType: "text/plain",
-				Locators:  []model.Locator{{Path: "record/artifacts/transcript"}},
+				Locators:  []model.Locator{{Path: ".datum/artifacts/transcript"}},
 			},
 			Selector: model.Selector{Kind: "whole"},
 		},

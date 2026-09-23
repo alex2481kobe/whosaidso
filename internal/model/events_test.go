@@ -24,7 +24,7 @@ func schemaUnknown[T any]() Availability[T] {
 }
 func schemaNumber(s string) Scalar { n := json.Number(s); return Scalar{Type: "number", Number: &n} }
 func schemaArtifact() ArtifactRef {
-	return ArtifactRef{Kind: "content", Content: &ContentPin{SHA256: HashBytes([]byte("source")), Length: 6, MediaType: "application/json", Locators: []Locator{{Path: "record/artifacts/source.json"}}}, Selector: Selector{Kind: "whole"}}
+	return ArtifactRef{Kind: "content", Content: &ContentPin{SHA256: HashBytes([]byte("source")), Length: 6, MediaType: "application/json", Locators: []Locator{{Path: ".datum/artifacts/source.json"}}}, Selector: Selector{Kind: "whole"}}
 }
 func schemaScope() Scope {
 	return Scope{SourcePaths: []string{"internal/model"}, ContextRefs: []RecordRef{schemaRef(2)}, AppliesWhen: "the pinned source and configuration match", Limitations: "does not establish runtime behavior"}
@@ -89,7 +89,7 @@ func schemaEvents() []TypedEvent {
 		&InstrumentRevise{Target: schemaRef(1), ExpectedRevision: 1, Replacement: schemaInstrument(), Provenance: schemaProvenance()},
 		&TrustWithdraw{Instrument: schemaRef(1), Scope: schemaScope(), RevalidationCondition: "bind validation to the repaired implementation"},
 		&ReviewAdmit{Packets: []PacketRef{{CommandID: schemaID(16), Digest: HashBytes([]byte("packet"))}}, Outcome: "accepted", Actor: Actor{ID: "coordinator"}, Reason: "reviewed against the current record"},
-		&ArtifactDispose{Artifact: schemaArtifact(), Digest: schemaArtifact().Content.SHA256, PreviousLocation: "record/artifacts/source.json", SupportLoss: []SupportLoss{{Target: schemaRef(1), Reason: "the observation is no longer verifiable"}}, Authority: schemaAuthority()},
+		&ArtifactDispose{Artifact: schemaArtifact(), Digest: schemaArtifact().Content.SHA256, PreviousLocation: ".datum/artifacts/source.json", SupportLoss: []SupportLoss{{Target: schemaRef(1), Reason: "the observation is no longer verifiable"}}, Authority: schemaAuthority()},
 	}
 }
 

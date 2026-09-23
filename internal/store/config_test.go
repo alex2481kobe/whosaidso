@@ -12,15 +12,15 @@ import (
 
 func TestDiscoverNearestAndRelativeLedger(t *testing.T) {
 	root := t.TempDir()
-	putFile(t, filepath.Join(root, "datum.toml"), []byte("id = 'parent'\nledger = 'record/events'\n"))
+	putFile(t, filepath.Join(root, "datum.toml"), []byte("id = 'parent'\nledger = '.datum/events'\n"))
 	nested := filepath.Join(root, "nested")
 	cwd := filepath.Join(nested, "a", "b")
 	mustMkdir(t, cwd)
 	parent, err := Discover(cwd)
-	if err != nil || string(parent.ID) != "parent" || parent.Root != root || parent.Ledger != filepath.Join(root, "record/events") {
+	if err != nil || string(parent.ID) != "parent" || parent.Root != root || parent.Ledger != filepath.Join(root, ".datum/events") {
 		t.Fatalf("parent discovery: %+v, %v", parent, err)
 	}
-	putFile(t, filepath.Join(nested, "datum.toml"), []byte("# nearest wins\n'id' = \"team/project # one\" # comment\nledger = 'record/../events'\n"))
+	putFile(t, filepath.Join(nested, "datum.toml"), []byte("# nearest wins\n'id' = \"team/project # one\" # comment\nledger = '.datum/../events'\n"))
 	p, err := Discover(cwd)
 	if err != nil || string(p.ID) != "team/project # one" || p.Root != nested || p.Ledger != filepath.Join(nested, "events") {
 		t.Fatalf("nearest discovery: %+v, %v", p, err)
@@ -33,17 +33,17 @@ func TestDiscoverRefusesALedgerLeavingItsRoot(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "proj")
 	outside := filepath.Join(parent, "elsewhere")
-	mustMkdir(t, filepath.Join(root, "record"))
+	mustMkdir(t, filepath.Join(root, ".datum"))
 	mustMkdir(t, outside)
 	mustSymlink(t, outside, filepath.Join(root, "out"))
 	mustSymlink(t, filepath.Join(parent, "missing"), filepath.Join(root, "dangling"))
 	for _, ledger := range []string{
 		filepath.Join(parent, "ledger"), // absolute
 		filepath.Join(root, "events"),   // absolute, even when it names the root
-		"..", "../events", "record/../../events",
+		"..", "../events", ".datum/../../events",
 		"../proj-events",    // a string prefix of the root, not a segment
 		"out/events", "out", // an in-root link that points out
-		"record/../out/new/events", // a missing tail beneath the link
+		".datum/../out/new/events", // a missing tail beneath the link
 	} {
 		putFile(t, filepath.Join(root, "datum.toml"), []byte("id='p'\nledger='"+ledger+"'"))
 		_, err := Discover(root)
@@ -65,9 +65,9 @@ func TestDiscoverKeepsALedgerInsideItsRoot(t *testing.T) {
 	linked := filepath.Join(t.TempDir(), "linked-root")
 	mustSymlink(t, real, linked)
 	mustMkdir(t, filepath.Join(real, "store", "events"))
-	mustSymlink(t, filepath.Join(real, "store"), filepath.Join(real, "record"))
+	mustSymlink(t, filepath.Join(real, "store"), filepath.Join(real, ".datum"))
 	// "..events" is a name inside the root: segments, not a string prefix.
-	for _, ledger := range []string{"record/events", "record/new/events", "fresh/events", "./events", "..events"} {
+	for _, ledger := range []string{".datum/events", ".datum/new/events", "fresh/events", "./events", "..events"} {
 		putFile(t, filepath.Join(real, "datum.toml"), []byte("id='p'\nledger='"+ledger+"'"))
 		p, err := Discover(linked)
 		if err != nil || p.Root != linked || p.Ledger != filepath.Join(linked, ledger) {
@@ -78,9 +78,9 @@ func TestDiscoverKeepsALedgerInsideItsRoot(t *testing.T) {
 
 func TestConfigStringSubset(t *testing.T) {
 	tests := []struct{ text, id, ledger string }{
-		{"id='a/b'\nledger='record/events'", "a/b", "record/events"},
+		{"id='a/b'\nledger='.datum/events'", "a/b", ".datum/events"},
 		{"\t\"id\" = \"slash\\\\quote\\\"\\t\\b\\f\\n\\r\\u03BB\\U0001F40B\"\r\nledger='C:\\literal\\path#x' # comment\r\n", "slash\\quote\"\t\b\f\n\rλ\U0001F40B", `C:\literal\path#x`},
-		{"id='space # = literal' # comment\nledger=\"record/#events\"", "space # = literal", "record/#events"},
+		{"id='space # = literal' # comment\nledger=\".datum/#events\"", "space # = literal", ".datum/#events"},
 	}
 	for _, tt := range tests {
 		values, err := parseConfig([]byte(tt.text), "datum.toml")
@@ -123,7 +123,7 @@ func TestConfigRefusals(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := parseConfig([]byte("id='good'\nledger='record/events'"), "datum.toml"); err != nil {
+			if _, err := parseConfig([]byte("id='good'\nledger='.datum/events'"), "datum.toml"); err != nil {
 				t.Fatalf("good control: %v", err)
 			}
 			_, err := parseConfig([]byte(tt.text), "datum.toml")
@@ -187,5 +187,22 @@ func putFile(t *testing.T, path string, data []byte) {
 	t.Helper()
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// R13.1: the artifact store is the ledger's sibling in its record folder,
+// derived from the configured ledger rather than named a second time.
+func TestProjectArtifactDirSitsBesideTheLedger(t *testing.T) {
+	root := t.TempDir()
+	for ledger, want := range map[string]string{
+		".datum/events":        ".datum/artifacts",
+		"custom/deep/events":   "custom/deep/artifacts",
+		"events":               "artifacts",
+		"record/../rec/ledger": "rec/artifacts",
+	} {
+		p := Project{Root: root, Ledger: filepath.Join(root, ledger)}
+		if got := p.ArtifactDir(); got != want {
+			t.Errorf("ledger %q: artifact dir %q, want %q", ledger, got, want)
+		}
 	}
 }

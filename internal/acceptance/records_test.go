@@ -63,7 +63,7 @@ func recContent(d model.Digest, length uint64) model.ArtifactRef {
 		Kind: "content",
 		Content: &model.ContentPin{
 			SHA256: d, Length: length, MediaType: "application/json",
-			Locators: []model.Locator{{Path: "record/artifacts/" + string(d)}},
+			Locators: []model.Locator{{Path: ".datum/artifacts/" + string(d)}},
 		},
 		Selector: model.Selector{Kind: "whole"},
 	}

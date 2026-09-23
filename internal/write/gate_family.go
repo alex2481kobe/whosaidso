@@ -34,7 +34,7 @@ func gateProofFamily(ctx context.Context, project store.Project, after reduce.Sn
 	if err := gatePendingIntake(project, after, carries); err != nil {
 		return err
 	}
-	resolver := evidence.NewResolver(project.Root)
+	resolver := evidence.NewResolverAt(project.Root, project.ArtifactDir())
 	supports := []evidence.Observation{}
 	for i, member := range e.Evidence {
 		path := fmt.Sprintf("evidence[%d]", i)

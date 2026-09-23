@@ -130,7 +130,7 @@ func TestLedgerAdmitChild(t *testing.T) {
 
 func childProject() Project {
 	root := os.Getenv("DATUM_LEDGER_ROOT")
-	return Project{ID: "team/project", Root: root, Ledger: filepath.Join(root, "record", "events")}
+	return Project{ID: "team/project", Root: root, Ledger: filepath.Join(root, ".datum", "events")}
 }
 
 // ---- idempotency and the lost acknowledgement ----------------------------

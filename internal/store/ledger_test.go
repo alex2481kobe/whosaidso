@@ -25,7 +25,7 @@ func ledgerProject(t *testing.T) Project {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	return Project{ID: "team/project", Root: root, Ledger: filepath.Join(root, "record", "events")}
+	return Project{ID: "team/project", Root: root, Ledger: filepath.Join(root, ".datum", "events")}
 }
 
 // admissionID is a readable, deterministic ULID: 26 digits, first below '8'.

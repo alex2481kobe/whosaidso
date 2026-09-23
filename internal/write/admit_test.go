@@ -31,7 +31,7 @@ func newAdmissionFixture(t *testing.T) *admissionFixture {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	root := t.TempDir()
-	return &admissionFixture{t: t, project: store.Project{ID: "test/admission", Root: root, Ledger: filepath.Join(root, "record", "events")}, author: model.Actor{ID: "lane-c2"}}
+	return &admissionFixture{t: t, project: store.Project{ID: "test/admission", Root: root, Ledger: filepath.Join(root, ".datum", "events")}, author: model.Actor{ID: "lane-c2"}}
 }
 
 func (f *admissionFixture) id() model.ID {

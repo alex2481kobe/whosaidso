@@ -19,7 +19,7 @@ func cliFixture(t *testing.T) (string, []byte) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "datum.toml"), []byte("id = \"test/cli\"\nledger = \"record/events\"\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "datum.toml"), []byte("id = \"test/cli\"\nledger = \".datum/events\"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	task, err := model.EncodeEvent(&model.TaskCreate{

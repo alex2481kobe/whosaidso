@@ -69,8 +69,8 @@ func TestNonCanonicalPathsMatchNothing(t *testing.T) {
 	ref := func(p string) model.ArtifactRef {
 		return contentRef(criterionExample, "application/json", []string{p}, "whole", "")
 	}
-	dot := "record/./artifacts/runs/" + string(invocationB) + "/out/result.json"
-	dbl := "record//artifacts/runs/" + string(invocationB) + "/out/result.json"
+	dot := ".datum/./artifacts/runs/" + string(invocationB) + "/out/result.json"
+	dbl := ".datum//artifacts/runs/" + string(invocationB) + "/out/result.json"
 	for _, tc := range []struct {
 		name, contract, output string
 		match                  bool
