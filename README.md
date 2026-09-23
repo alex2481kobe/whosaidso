@@ -47,6 +47,8 @@ datum
 |-- internal/
 |   |-- acceptance     (tests only, no production code)
 |   |      tests only
+|   |-- benchmarks     (tests only, no production code)
+|   |      tests only
 |   |-- evidence       turns a reference into the exact bytes it names, and a frozen criterion into a verdict over what those bytes actually say
 |   |      8 files, tested -- uses model
 |   |-- model          wire vocabulary every other package shares: identities, references, packets and bundles, plus the strict encode/decode boundary
