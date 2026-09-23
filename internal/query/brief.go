@@ -184,20 +184,21 @@ func briefOf(exported []byte) (*briefWriter, error) {
 	}
 	b := &briefWriter{}
 	root := cur{v: value}
-	briefHeader(b, root)
+	briefHeader(b, root, root.at("command"))
 	briefBody(b, root, root.at("command").text())
 	b.line(0, "full detail: add --json")
 	return b, nil
 }
 
-func briefHeader(b *briefWriter, a cur) {
+// briefHeader opens a brief with its name (the command or view) and watermark.
+func briefHeader(b *briefWriter, a, name cur) {
 	mark := a.at("watermark")
 	head := mark.at("head")
 	headPieces := []any{"head", head.at("command_id"), "at", head.at("recorded_at")}
 	if !head.at("command_id").ok() {
 		headPieces = []any{"head", head.at("state"), prefix(head.at("reason"))}
 	}
-	b.line(0, append([]any{a.at("command"), a.at("project"), a.at("result"), "| watermark sequence", mark.at("sequence"),
+	b.line(0, append([]any{name, a.at("project"), a.at("result"), "| watermark sequence", mark.at("sequence"),
 		"bundles", mark.at("bundles"), "events", mark.at("events")}, headPieces...)...)
 	if a.at("reason").ok() {
 		b.line(0, "reason:", a.at("reason"))
