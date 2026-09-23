@@ -7,7 +7,6 @@ package write
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -34,9 +33,10 @@ type AdmitRequest struct {
 // already published is answered from the ledger alone: the published bundle
 // binds the packet refs this request named, so its digest is recomputed from
 // them and intake is never needed, which is what lets a moved or cloned project
-// recover a lost acknowledgement. Otherwise intake is read and verified once,
-// and that one verified read supplies the packets, their exact-byte refs and
-// the request digest for the rest of this admission.
+// recover a lost acknowledgement, and why unreadable or corrupt intake cannot
+// fail it either. Otherwise intake is read and verified once, and that one
+// verified read supplies the packets, their exact-byte refs and the request
+// digest for the rest of this admission.
 func Admit(ctx context.Context, project store.Project, request AdmitRequest) (model.Bundle, error) {
 	ids, err := admissionIDs(request)
 	if err != nil {
@@ -63,25 +63,14 @@ func Admit(ctx context.Context, project store.Project, request AdmitRequest) (mo
 }
 
 // retryDigest recomputes the request digest against an admission already
-// published under this id. A packet whose intake is gone is known only by the
-// ref the ledger bound, so that ref stands for it. A packet still in intake is
-// read and verified again, so different bytes under the same packet id are a
-// different request and are refused, not answered with the old bundle.
+// published under this id, from the ledger alone. The published bundle is
+// authoritative: its packet refs bound the exact packet bytes when it was
+// admitted, so they stand for the packets whatever intake now holds, and
+// missing, unreadable or corrupt intake cannot fail an identical retry. A
+// request differing in the packet set, actor, outcome or reason still yields a
+// different digest and is refused.
 func retryDigest(project store.Project, request AdmitRequest, published []model.PacketRef) (model.Digest, error) {
-	refs := make([]model.PacketRef, len(published))
-	for i, ref := range published {
-		verified, err := store.ReadVerifiedIntake(project, []model.ID{ref.CommandID})
-		var fault *model.Fault
-		switch {
-		case errors.As(err, &fault) && fault.Code == "intake-not-found":
-			refs[i] = ref
-		case err != nil:
-			return "", err
-		default:
-			refs[i] = verified[0].Ref
-		}
-	}
-	return admissionDigest(project, request, refs)
+	return admissionDigest(project, request, published)
 }
 
 // admissionDigest is the request identity: the packets by exact bytes, and the

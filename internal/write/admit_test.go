@@ -336,12 +336,19 @@ func TestAdmissionMixedContentRetryRefused(t *testing.T) {
 	f.refuse(f.request(packet), "conflict")
 }
 
-func TestAdmissionRetryBindsStoredPacketBytes(t *testing.T) {
+// The published bundle, not intake, answers a retry. A different valid request
+// copied under an admitted packet id changes nothing a retry returns: the
+// ledger's bound ref still names the original bytes. The swapped packet is no
+// route to a new admission either, because its id already has a disposition.
+// (This test once required the swap to refuse the identical retry; the ledger
+// is authoritative, so an identical retry now gets the published answer.)
+func TestAdmissionRetryAnsweredFromLedgerNotIntake(t *testing.T) {
 	f := newAdmissionFixture(t)
 	f.goodControl()
 	original := f.capture(nil, f.task())
 	request := f.request(original)
-	if _, err := Admit(context.Background(), f.project, request); err != nil {
+	want, err := Admit(context.Background(), f.project, request)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Admit(context.Background(), f.project, request); err != nil {
@@ -352,8 +359,8 @@ func TestAdmissionRetryBindsStoredPacketBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Intake request identity excludes its clerical command id. Copying another
-	// valid request under this id proves retry checks content, not just the set.
+	// Intake request identity excludes its clerical command id, so this is a
+	// packet that verifies under the original id with different content.
 	packets[0].CommandID = original.CommandID
 	encoded, err := model.Encode(packets[0])
 	if err != nil {
@@ -366,7 +373,22 @@ func TestAdmissionRetryBindsStoredPacketBytes(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(inbox, string(original.CommandID), "packet.json"), encoded, 0600); err != nil {
 		t.Fatal(err)
 	}
-	f.refuse(request, "conflict")
+	if verified, err := store.ReadVerifiedIntake(f.project, []model.ID{original.CommandID}); err != nil || verified[0].Ref == want.Packets[0] {
+		t.Fatalf("fixture must leave different verifiable bytes under the admitted id: %v", err)
+	}
+	got, err := Admit(context.Background(), f.project, request)
+	if err != nil {
+		t.Fatalf("identical retry after intake changed: %v", err)
+	}
+	a, errA := model.Encode(got)
+	b, errB := model.Encode(want)
+	if errA != nil || errB != nil || string(a) != string(b) {
+		t.Fatalf("retry returned a different bundle:\n%s\nwant\n%s", a, b)
+	}
+	changedReason := request
+	changedReason.Reason = "a different judgment"
+	f.refuse(changedReason, "conflict")
+	f.refuse(f.request(original), "conflict")
 }
 
 func TestAdmissionPacketProjectVerified(t *testing.T) {
