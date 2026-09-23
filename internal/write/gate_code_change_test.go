@@ -2,12 +2,11 @@ package write
 
 // R14.2 through admission: a failing run of the proof's own criterion revision
 // is set aside only beside a code change git verifies over the claim's scope,
-// and the stale-claims read reports a claim whose scoped code changed since
-// its last run. The replay-side structure is tested in internal/reduce.
+// in the home repository (the ledger's), never the invoking checkout. The
+// replay-side structure is tested in internal/reduce; the stale-claims read,
+// which uses the invoking checkout, in internal/query and cmd/datum.
 
 import (
-	"context"
-	"reflect"
 	"testing"
 
 	"datum/internal/model"
@@ -80,6 +79,27 @@ func TestCodeChangeVerifiedByGitSetsTheFailingRunAside(t *testing.T) {
 	}
 }
 
+// Two roots (R19): the checkout the admission is invoked from sits at a HEAD
+// the home does not have, and holds none of the home's commits, so a gate
+// that asked it would refuse the change as unverified.
+func TestCodeChangeIsVerifiedInTheHomeNotTheInvokingCheckout(t *testing.T) {
+	w := newCodeWorld(t)
+	checkout := t.TempDir()
+	identityGit(t, checkout, "init", "--quiet")
+	proofPut(t, checkout, "src/code.go", "package src // elsewhere\n")
+	identityGit(t, checkout, "add", ".")
+	identityGit(t, checkout, "commit", "--quiet", "-m", "another history")
+	if identityGit(t, checkout, "rev-parse", "HEAD") == identityGit(t, w.f.project.Root, "rev-parse", "HEAD") {
+		t.Fatal("control: the checkout and the home must sit at different commits")
+	}
+	w.f.project.Checkout = checkout
+	fail, pass := w.runAt(proofFail, &w.a), w.runAt(proofPass, &w.b)
+	w.f.accept(w.f.capture(nil, w.proofSettingAside(pass, fail, &model.CodeChange{From: w.a, To: w.b, ChangedPaths: []string{"src/code.go"}})))
+	if w.status(t) != reduce.StatusProven {
+		t.Fatalf("the code change is the home repository's to verify, got %s", w.status(t))
+	}
+}
+
 func TestCodeChangeRefusals(t *testing.T) {
 	for _, tc := range []struct {
 		name, code string
@@ -127,27 +147,5 @@ func TestCodeChangeRefusals(t *testing.T) {
 				t.Fatalf("a refused proof changed the claim to %s", w.status(t))
 			}
 		})
-	}
-}
-
-func TestStaleClaimsReportsScopedChangesSinceTheLastRun(t *testing.T) {
-	w := newCodeWorld(t)
-	ctx := context.Background()
-	if got := StaleClaims(ctx, w.f.project, w.f.snapshot()); len(got) != 0 {
-		t.Fatalf("control: an unobserved claim has no last run to be stale against: %+v", got)
-	}
-	w.runAt(proofFail, &w.a)
-	got := StaleClaims(ctx, w.f.project, w.f.snapshot())
-	if len(got) != 1 || got[0].Stale != reduce.TruthTrue || !reflect.DeepEqual(got[0].ChangedPaths, []string{"src/code.go"}) ||
-		*got[0].RunHead != w.a || *got[0].CurrentHead != w.c {
-		t.Fatalf("a run at a, HEAD at c, src changed in b: want stale TRUE over src/code.go, got %+v", got)
-	}
-	w.runAt(proofPass, &w.b)
-	if got := StaleClaims(ctx, w.f.project, w.f.snapshot()); len(got) != 1 || got[0].Stale != reduce.TruthFalse || len(got[0].ChangedPaths) != 0 {
-		t.Fatalf("the last run at b and only notes/ changed since: want stale FALSE, got %+v", got)
-	}
-	w.runAt(proofPass, nil)
-	if got := StaleClaims(ctx, w.f.project, w.f.snapshot()); len(got) != 1 || got[0].Stale != reduce.TruthUnknown || got[0].Reason == "" {
-		t.Fatalf("a last run with an unknown head cannot be compared: want UNKNOWN with a reason, got %+v", got)
 	}
 }

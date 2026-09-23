@@ -19,20 +19,24 @@ import (
 )
 
 const (
-	purposeMissing  = "(no package comment)"
+	purposeMissing  = "(no package doc comment supplied)"
 	purposeTestOnly = "(tests only, no production code)"
 )
 
 type pkg struct {
-	Path      string   `json:"path"`
-	Name      string   `json:"name"`
-	Purpose   string   `json:"purpose"`
-	Files     int      `json:"files"`
-	Lines     int      `json:"lines"`
-	TestLines int      `json:"test_lines"`
-	Largest   string   `json:"largest_file"`
-	LargestN  int      `json:"largest_file_lines"`
-	Imports   []string `json:"imports"`
+	Path string `json:"path"`
+	Name string `json:"name"`
+	// Purpose is text the author supplied, not a fact this scan measured:
+	// the package doc comment's first sentence, or purposeMissing.
+	// PurposeFrom names the file it was read from, empty when none was.
+	Purpose     string   `json:"purpose"`
+	PurposeFrom string   `json:"purpose_from"`
+	Files       int      `json:"files"`
+	Lines       int      `json:"lines"`
+	TestLines   int      `json:"test_lines"`
+	Largest     string   `json:"largest_file"`
+	LargestN    int      `json:"largest_file_lines"`
+	Imports     []string `json:"imports"`
 	// FileLines is every production file in the package with its own count,
 	// the per-file answer tools/filesize.sh used to give. Test files are
 	// excluded here as they were there; their total is TestLines.
@@ -101,6 +105,7 @@ func scan(root, mod string) ([]pkg, error) {
 		rel, _ := filepath.Rel(root, dir)
 		p.Path = filepath.ToSlash(rel)
 		imports := map[string]bool{}
+		docs := map[string]string{} // file name -> its package doc comment
 
 		entries, err := os.ReadDir(dir)
 		if err != nil {
@@ -127,8 +132,8 @@ func scan(root, mod string) ([]pkg, error) {
 			if n > p.LargestN {
 				p.LargestN, p.Largest = n, e.Name()
 			}
-			if f.Doc != nil && p.Purpose == "" {
-				p.Purpose = firstSentence(f.Doc.Text())
+			if f.Doc != nil && isPackageDoc(f.Doc.Text(), f.Name.Name) {
+				docs[e.Name()] = f.Doc.Text()
 			}
 			for _, im := range f.Imports {
 				path := strings.Trim(im.Path.Value, `"`)
@@ -143,6 +148,9 @@ func scan(root, mod string) ([]pkg, error) {
 		// package whose absence from the picture would matter most.
 		if p.Files == 0 && p.TestLines == 0 {
 			continue
+		}
+		if name := packageDocFile(docs); name != "" {
+			p.Purpose, p.PurposeFrom = firstSentence(docs[name]), name
 		}
 		if p.Files == 0 {
 			p.Purpose = purposeTestOnly
@@ -172,6 +180,36 @@ func countLines(path string) int {
 		n++
 	}
 	return n
+}
+
+// isPackageDoc reports whether a comment attached to the package clause is
+// the package's doc comment by Go convention: it opens "Package" or, for a
+// main package, "Command". The name after it is not checked. Any other attached comment describes
+// its file (cmd/datum once got "the datum id implementation" that way), and a
+// file's comment is never borrowed as the package's purpose.
+func isPackageDoc(doc, name string) bool {
+	f := strings.Fields(doc)
+	if len(f) < 2 {
+		return false
+	}
+	return f[0] == "Package" || name == "main" && f[0] == "Command"
+}
+
+// packageDocFile picks which file's package doc to report: doc.go when it has
+// one, otherwise the first by name. Empty means none was supplied.
+func packageDocFile(docs map[string]string) string {
+	if _, ok := docs["doc.go"]; ok {
+		return "doc.go"
+	}
+	names := make([]string, 0, len(docs))
+	for n := range docs {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	if len(names) == 0 {
+		return ""
+	}
+	return names[0]
 }
 
 // firstSentence takes the package comment's opening sentence, with the Go

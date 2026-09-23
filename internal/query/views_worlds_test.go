@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"datum/internal/model"
-	"datum/internal/reduce"
 	"datum/internal/store"
 )
 
@@ -29,9 +28,11 @@ func richObservation() *Observation {
 		Head: notKnown[model.GitHead]("not a git checkout"), Dirty: notKnown[bool]("not a git checkout")}
 }
 
-func richStale(s reduce.Snapshot) []StaleClaim {
-	return []StaleClaim{{Claim: testRef(21, 1), LastRun: model.InvocationRef{Project: projectID, InvocationID: testID(50)},
-		Stale: reduce.TruthUnknown, ChangedPaths: []string{}, Reason: "fixture: git is not run here"}}
+// richStale is a git never run: HEAD is unknown, so every observed claim with
+// a clean last run reads UNKNOWN with that reason.
+func richStale() *StaleGit {
+	return &StaleGit{Head: notKnown[model.GitHead]("fixture: git is not run here"),
+		Changes: func(model.GitHead, model.GitHead, []string) ([]string, error) { panic("fixture: git is not run here") }}
 }
 
 // thousandFixture opens a retained 1k benchmark fixture, or skips.

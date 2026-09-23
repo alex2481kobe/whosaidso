@@ -30,51 +30,35 @@ func RunExecutionIdentity(ctx context.Context, project store.Project) model.Exec
 	} else {
 		identity.MachineID = runKnown(machine)
 	}
-	identity.Head, identity.Dirty = runGitState(ctx, project, evidence.ExecGit)
+	identity.Head, identity.Dirty = runGitState(ctx, project)
 	return identity
 }
 
-func runGitState(ctx context.Context, project store.Project, git evidence.GitRunner) (model.Availability[model.GitHead], model.Availability[bool]) {
-	unknown := func(reason string) (model.Availability[model.GitHead], model.Availability[bool]) {
-		return model.Availability[model.GitHead]{State: model.Unknown, Reason: reason}, model.Availability[bool]{State: model.Unknown, Reason: reason}
-	}
-	// The invoking checkout is what executes, so its HEAD and dirty state are
-	// the run's, whichever checkout holds the home ledger.
+// runGitState applies the run's policy to the raw observation of the invoking
+// checkout, which is what executes, whichever checkout holds the home ledger:
+// a HEAD it cannot read leaves dirty UNKNOWN for the same reason, and a dirty
+// tree is recorded UNKNOWN, never dirty=true, because no source was captured.
+func runGitState(ctx context.Context, project store.Project) (model.Availability[model.GitHead], model.Availability[bool]) {
 	root := project.ExecRoot()
-	inside, err := git(ctx, root, "rev-parse", "--is-inside-work-tree")
-	if err != nil || strings.TrimSpace(string(inside)) != "true" {
-		return unknown("the project root is not a readable git checkout, so no HEAD or dirty state was observed")
+	head := evidence.CheckoutHead(ctx, evidence.ExecGit, root)
+	if head.State != model.Known {
+		return head, model.Availability[bool]{State: model.Unknown, Reason: head.Reason}
 	}
-	format, err := git(ctx, root, "rev-parse", "--show-object-format")
-	if err != nil {
-		return unknown("git could not report the repository's object format: " + err.Error())
-	}
-	commit, err := git(ctx, root, "rev-parse", "--verify", "--quiet", "HEAD^{commit}")
-	if err != nil {
-		return unknown("the checkout has no readable HEAD commit")
-	}
-	head := model.GitHead{ObjectFormat: strings.TrimSpace(string(format)), Commit: strings.TrimSpace(string(commit))}
-	if err := model.ValidateSchema(head); err != nil {
-		return unknown("git reported a HEAD that is not a valid commit name: " + err.Error())
-	}
-	args := []string{"status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=none", "--", "."}
-	// Datum's own record folders, at the same project-relative place in this
-	// checkout as in the home.
+	// The project directory only, less Datum's own record folders, at the same
+	// project-relative place in this checkout as in the home.
+	pathspec := []string{"."}
 	ledger, err := filepath.Rel(project.Root, project.Ledger)
 	if err != nil {
 		ledger = "."
 	}
 	for _, own := range []string{filepath.Join(root, ledger), filepath.Join(root, filepath.FromSlash(project.ArtifactDir()))} {
 		if rel, err := filepath.Rel(root, own); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
-			args = append(args, ":(exclude)"+filepath.ToSlash(rel))
+			pathspec = append(pathspec, ":(exclude)"+filepath.ToSlash(rel))
 		}
 	}
-	status, err := git(ctx, root, args...)
-	if err != nil {
-		return runKnown(head), model.Availability[bool]{State: model.Unknown, Reason: "git could not report the checkout's status: " + err.Error()}
+	dirty := evidence.CheckoutDirty(ctx, evidence.ExecGit, root, pathspec...)
+	if dirty.State == model.Known && *dirty.Value {
+		return head, model.Availability[bool]{State: model.Unknown, Reason: "the checkout differs from HEAD, and datum run captures no source content, which recording dirty=true requires"}
 	}
-	if len(status) > 0 {
-		return runKnown(head), model.Availability[bool]{State: model.Unknown, Reason: "the checkout differs from HEAD, and datum run captures no source content, which recording dirty=true requires"}
-	}
-	return runKnown(head), runKnown(false)
+	return head, dirty
 }

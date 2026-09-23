@@ -8,14 +8,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"os/exec"
-	"strings"
 	"time"
 
+	"datum/internal/evidence"
 	"datum/internal/model"
 	"datum/internal/query"
-	"datum/internal/reduce"
-	"datum/internal/write"
+	"datum/internal/store"
 )
 
 // A bare audit flag means true, while explicit values retain all three states.
@@ -79,17 +77,11 @@ func readView(c *call, request query.ViewRequest, stale, jsonOutput bool) error 
 		return err
 	}
 	if request.View == "continue" {
-		observed := observe(c.ctx, project.ExecRoot())
+		observed := observe(c.ctx, project)
 		request.Observed = &observed
 	}
 	if stale {
-		request.Stale = func(s reduce.Snapshot) []query.StaleClaim {
-			out := []query.StaleClaim{}
-			for _, claim := range write.StaleClaims(c.ctx, project, s) {
-				out = append(out, query.StaleClaim(claim))
-			}
-			return out
-		}
+		request.Stale = staleGit(c.ctx, project)
 	}
 	answer, err := query.ReadView(project, request)
 	if err != nil {
@@ -104,28 +96,22 @@ func readView(c *call, request query.ViewRequest, stale, jsonOutput bool) error 
 	return query.RenderViewBrief(c.stdout, answer)
 }
 
-// observe is continue's fresh look at the workspace. Anything git cannot
-// report stays UNKNOWN with git's reason. --no-optional-locks keeps status
-// from refreshing the index, so continue writes nothing, not even there.
-func observe(ctx context.Context, root string) query.Observation {
-	git := func(args ...string) (string, error) {
-		out, err := exec.CommandContext(ctx, "git", append([]string{"--no-optional-locks", "-C", root}, args...)...).Output()
-		return strings.TrimSpace(string(out)), err
-	}
-	at := time.Now().UTC()
-	o := query.Observation{ObservedAt: model.Availability[time.Time]{State: model.Known, Value: &at}}
-	head, err := git("rev-parse", "--verify", "HEAD")
-	format, formatErr := git("rev-parse", "--show-object-format")
-	if err == nil && formatErr == nil && head != "" && format != "" {
-		o.Head = model.Availability[model.GitHead]{State: model.Known, Value: &model.GitHead{ObjectFormat: format, Commit: head}}
-	} else {
-		o.Head = model.Availability[model.GitHead]{State: model.Unknown, Reason: fmt.Sprintf("git could not report HEAD here: %v %v", err, formatErr)}
-	}
-	if status, err := git("status", "--porcelain"); err == nil {
-		dirty := status != ""
-		o.Dirty = model.Availability[bool]{State: model.Known, Value: &dirty}
-	} else {
-		o.Dirty = model.Availability[bool]{State: model.Unknown, Reason: fmt.Sprintf("git could not report working-tree status here: %v", err)}
-	}
-	return o
+// observe is continue's fresh look at the invoking checkout: its HEAD and
+// whether its working tree differs from it, as observed, and the time.
+// Anything git cannot report stays UNKNOWN with the reason. Git runs without
+// optional locks, so continue writes nothing, not even the index.
+func observe(ctx context.Context, project store.Project) query.Observation {
+	root, at := project.ExecRoot(), time.Now().UTC()
+	return query.Observation{Head: evidence.CheckoutHead(ctx, evidence.ExecGit, root), Dirty: evidence.CheckoutDirty(ctx, evidence.ExecGit, root),
+		ObservedAt: model.Availability[time.Time]{State: model.Known, Value: &at}}
+}
+
+// staleGit is show --stale's git, in the invoking checkout: its HEAD, and the
+// scoped diff between a run's commit and that HEAD.
+func staleGit(ctx context.Context, project store.Project) *query.StaleGit {
+	root := project.ExecRoot()
+	return &query.StaleGit{Head: evidence.CheckoutHead(ctx, evidence.ExecGit, root),
+		Changes: func(from, to model.GitHead, scope []string) ([]string, error) {
+			return evidence.ScopeChanges(ctx, evidence.ExecGit, root, from, to, scope)
+		}}
 }
