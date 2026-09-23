@@ -239,7 +239,8 @@ func (s *state) apply(b model.Bundle) error {
 		if err := s.checkExpectations(b, i, typed); err != nil {
 			return err
 		}
-		if err := s.checkReferences(b, i, typed); err != nil {
+		refs, err := s.checkReferences(b, i, typed)
+		if err != nil {
 			return err
 		}
 		if err := s.route(b, i, typed); err != nil {
@@ -248,7 +249,7 @@ func (s *state) apply(b model.Bundle) error {
 		origin := Origin{Sequence: b.Sequence, EventIndex: i}
 		s.events[origin] = typed
 		s.log.add(origin, typed)
-		s.recordReferrers(b, i, typed)
+		s.recordReferrers(b, i, typed, refs)
 	}
 	s.commands[b.CommandID] = b.Sequence
 	s.watermark = Watermark{

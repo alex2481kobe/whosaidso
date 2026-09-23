@@ -1,6 +1,7 @@
 package reduce
 
-// Snapshot isolation for the amortized reverse-reference lists: applying to a
+// Reverse references: they are exactly each event's walked references, and
+// snapshot isolation holds for their amortized lists: applying to a
 // snapshot, or further mutating what Apply returned, never changes the input
 // snapshot or a sibling Apply result.
 
@@ -86,5 +87,62 @@ func TestMutatingAnApplyResultNeverChangesItsInput(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// recordReferrers indexes the list checkReferences walked instead of walking
+// again; the index must still be exactly every admitted event's same-project
+// references, no more and no fewer.
+func TestReferrersAreExactlyEachEventsWalkedReferences(t *testing.T) {
+	s := mustReplay(t, lossLedger(t).bundles())
+	type entry struct {
+		origin Origin
+		path   string
+		target string
+	}
+	want := map[entry]int{}
+	for o, e := range s.st.events {
+		refs, err := model.SameProjectReferences(e, s.Project())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range refs {
+			var target any
+			switch {
+			case r.Record != nil:
+				target = recordKey(*r.Record)
+			case r.Criterion != nil:
+				target = criterionKey(*r.Criterion)
+			case r.Invocation != nil:
+				target = invocationKey(*r.Invocation)
+			case r.Blocker != nil:
+				target = blockerKey(*r.Blocker)
+			}
+			want[entry{o, r.Path, fmt.Sprint(target)}]++
+		}
+	}
+	got := map[entry]int{}
+	collect := func(target any, refs []Referrer) {
+		for _, r := range refs {
+			if s.st.events[r.Origin].EventType() != r.Type {
+				t.Fatalf("referrer %+v has the wrong event type", r)
+			}
+			got[entry{r.Origin, r.Path, fmt.Sprint(target)}]++
+		}
+	}
+	for k, v := range s.st.reverseRecord {
+		collect(k, v)
+	}
+	for k, v := range s.st.reverseCriterion {
+		collect(k, v)
+	}
+	for k, v := range s.st.reverseInvocation {
+		collect(k, v)
+	}
+	for k, v := range s.st.reverseBlocker {
+		collect(k, v)
+	}
+	if len(want) == 0 || !reflect.DeepEqual(got, want) {
+		t.Fatalf("reverse references differ from the walked references:\ngot  %v\nwant %v", got, want)
 	}
 }

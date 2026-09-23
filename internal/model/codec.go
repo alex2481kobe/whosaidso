@@ -28,10 +28,8 @@ var envelopeKeys = map[string]map[string]bool{
 }
 
 func strictUnmarshal(b []byte, into any, what string) error {
-	// The DECODER accepted invalid UTF-8 even once the encoder refused it: the
-	// same collision, entering from the other side. Found by lane E.
-	if !utf8.Valid(b) {
-		return fault("invalid-json", what, "input contains invalid UTF-8")
+	if err := refuseInvalidUTF8Bytes(b, what); err != nil {
+		return err
 	}
 	// Three passes on purpose: the ordered parse catches duplicate keys and
 	// trailing content; the exact-name check catches case aliases; the struct
@@ -40,6 +38,23 @@ func strictUnmarshal(b []byte, into any, what string) error {
 	if err != nil {
 		return err
 	}
+	return strictDecodeParsed(b, tree, into, what)
+}
+
+// The DECODER accepted invalid UTF-8 even once the encoder refused it: the
+// same collision, entering from the other side. Found by lane E.
+func refuseInvalidUTF8Bytes(b []byte, what string) error {
+	if !utf8.Valid(b) {
+		return fault("invalid-json", what, "input contains invalid UTF-8")
+	}
+	return nil
+}
+
+// strictDecodeParsed is strictUnmarshal after its UTF-8 check and ordered
+// parse: tree must be parseOrdered(b) for these same bytes, which a caller that
+// already parsed them passes instead of parsing twice. The exact-name checks,
+// the struct decoder and the UTC refusal all still run.
+func strictDecodeParsed(b []byte, tree any, into any, what string) error {
 	// A bare event array (CLI capture) gets the same per-event exact-key check
 	// an envelope's events get; there is one rule, reached from both entries.
 	if what == "events" {
