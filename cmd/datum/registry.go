@@ -68,7 +68,14 @@ reassignment criterion and actor.
 		{name: "run", args: "-- ARGV", summary: "run a measurement; capture its start and seal", detail: `Runs ARGV in this checkout without a shell, and captures the start (before
 launch) and the seal as two packets; admit both, or pass --admit. The
 instrument and any criterion must already be admitted, the criterion in an
-earlier bundle. A failed run still prints its packets: it is evidence.
+earlier bundle. What of the criterion is omitted resolves once, before
+launch, to the current admitted one: the claim that alone carries
+--criterion-id, the claim's current revision, its one criterion, that
+criterion's highest revision there. A named revision is checked, never
+replaced; an omission with no single answer is refused with the candidates.
+The exact revisions are recorded, and printed on stderr when any was
+omitted; the acknowledgement prints the admit command for the packets. A
+failed run still prints its packets: it is evidence.
 `, define: runVerb},
 		{name: "reconcile", summary: "seal a run whose observer died, outcome UNKNOWN", detail: `Captures an UNKNOWN-outcome seal with no reading for an admitted, unsealed
 run. It needs an identified actor. Admit its packet with datum admit.
@@ -81,17 +88,38 @@ one completed run produced the candidate. Writes nothing. Exit 0 TRUE,
 through the admission gate at this watermark and collects every refusal the
 gate's stages allow, with each proof member's criterion verdict and its
 instrument's validation. The events packet carries no blobs. Writes nothing.
-Exit 0 would-admit, 1 would-refuse.
+Exit 0 would-admit, 1 would-refuse. --family CLAIM instead lists every run a
+proof of the claim's current criterion must name (earlier revisions and
+rejected runs included), confirms the list through the same dry run, shows
+each run's criterion verdict, and prints a proof skeleton whose
+dispositions, reasons, judgment and verdict stay placeholders. Exit 1 when
+the gate disagrees with the list.
 `, define: checkVerb("admission")},
 		{name: "check disposal", summary: "list what an artifact.dispose must record", detail: `Prints the support_loss targets an artifact.dispose of exactly this identity
 must record at this watermark, and the admitted events citing it. Give --git
 when the disposal names a git pin. Writes nothing.
 `, define: checkVerb("disposal")},
-		{name: "template", args: "EVENT-TYPE", summary: "print a capture-ready JSON skeleton of one event", detail: `Every "<kind: hint>" string is a placeholder to fill; an unfilled template
-does not decode, so it cannot be captured by accident. Ids the event creates
-are minted; every other id is a reference to look up. Reasons, dispositions
-and judgments stay placeholders. Choices, optional and minted keys are
-listed on stderr. Event types:
+		{name: "template", args: "EVENT-TYPE", summary: "print a capture-ready JSON skeleton of one event", detail: `Every "<kind: hint>" string is a placeholder to fill. Datum fills only what
+has one computable answer: minted ids (revision 1), the project id, the
+packet author where admission requires it (from --actor or DATUM_ACTOR), a
+choice with one member, and with bind flags the exact references at their
+CURRENT revisions: --from copies a record's current spec into an amend or
+revise (change what changed), --task, --claim, --criterion and --attempt
+fill those references (a proof gets its criterion's whole family as
+evidence), --hold finds an open hold for blocker.clear. --pin NAME=PATH
+builds a reference from real bytes: PATH (project-relative) is a content pin
+(digest, length, a media type the bytes pass), PATH@REV the committed object
+(full commit, object format), #POINTER a json-pointer selector, else whole;
+a pinned file travels with --capture as a blob. --example OUTPUT=FILE lets
+--pin NAME=OUTPUT pin FILE's bytes under a run output's name, for a
+criterion's example (never an observation). Judgment never:
+assertions, falsifiers, blind spots, reasons, dispositions, verdicts,
+acceptance and validation stay placeholders; fill them with --set PATH=VALUE
+(paths as the notes print them, e.g. evidence[0].disposition) or by editing.
+--capture captures the result through capture's own path, refused while any
+placeholder remains; an optional key nobody filled is omitted, and the ids
+it minted are named on stderr. --admit then admits it, as capture --admit
+does. Notes go to stderr. Event types:
 ` + templateEventList() + "\n", define: templateVerb},
 		{name: "home", args: "[PATH]", summary: "show or set where this project's live ledger is", detail: `Bare, shows this project's binding on this machine: its home, or unbound,
 and whether the home is available. With PATH, binds the project to the

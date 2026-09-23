@@ -33,6 +33,10 @@ Writing is two acts: capture, then admit the packet id it prints.
   datum capture --events task.json            # captured PACKET ...
   datum admit --outcome accepted --reason "why this is right" PACKET
 or both at once: datum capture --events task.json --admit --reason "...".
+A template fills what Datum can compute (datum help template); give the
+rest with --set and capture it in one step:
+  datum template blocker.clear --hold HOLD --set resolving_witness=... \
+      --capture --admit --reason "..."
 Common records: task.create (new work; one task per piece of work),
 task.start (take an attempt; keep its attempt_id for run and handback),
 claim.assert, decision.open, and decision.dispose to record an owner's
@@ -104,15 +108,25 @@ prerequisites (task.amend).
 	{"proof", "criterion first, the whole family, a verdict", `1. Fix the criterion (criterion.fix) and admit it in an EARLIER bundle than
    any run it judges; freezing is checked against Datum's capture stamp, not
    the started_at you write. Dry-run it first: datum check criterion.
-2. Run: datum run --attempt-id A --instrument I --claim C --claim-revision N
-   --criterion-id K --criterion-revision N -- ARGV. ARGV runs without a
-   shell (need a pipeline? -- sh -c '...'). One run carries one criterion.
+   datum template criterion.fix --claim C --example stdout=FILE
+   --pin expression.result_selector=stdout#/PTR pins an example run output
+   (an example, never an observation); the unit, target and the rest are yours.
+2. Run: datum run --attempt-id A --instrument I --claim C -- ARGV. Omitted
+   revisions (and the criterion, when the claim has one) resolve to the
+   current admitted ones; the run records and prints them. Name
+   --claim-revision or --criterion-revision only to pin an older one. ARGV
+   runs without a shell (need a pipeline? -- sh -c '...'). One run carries
+   one criterion.
    Its stdout is the output named stdout, in the run's own directory, where a
    criterion's locator path resolves. Admit the start and seal.
 3. Prove: proof.admit lists the whole family, every run of the criterion
    including rejected runs and earlier revisions, each with a disposition,
-   and states verdict: supports or refutes. Dry-run it with
-   datum check admission --events proof.json, then capture and admit it.
+   and states verdict: supports or refutes. datum check admission --family C
+   lists that family as the gate counts it, with each run's criterion
+   verdict, and prints a proof skeleton (datum template proof.admit --claim C
+   fills the same); each disposition, reason, the judgment and the verdict
+   are yours. Dry-run it with datum check admission --events proof.json,
+   then capture and admit it.
 PROVEN needs a validated instrument (R9). A FAILING member can only be
 contradicts, or inapplicable with a code_change git verifies over the
 claim's scope (R14.2). Record a failing criterion with a refutes proof: the
@@ -127,13 +141,17 @@ An observer that died before sealing: datum reconcile --invocation-id ID
   datum check admission --events ev.json [--packet ID ...]
       admission dry run at watermark W: full gate, evidence and authority
       checks; result may change if the ledger moves
+  datum check admission --family CLAIM [--criterion ID]
+      proof family at watermark W, confirmed by an admission dry run;
+      dispositions, reasons, judgment and verdict were NOT chosen
   datum check disposal --digest SHA256 [--git FORMAT:COMMIT:PATH]
       disposal-loss preview at watermark W: admission recomputes and stays
       the authority; reasons are yours to write
-Each prints that scope first. None writes anything. Exit status: 0 TRUE or
-would-admit, 1 FALSE or would-refuse, 3 UNKNOWN. A TRUE criterion preview
-is not an admission. Datum never deletes bytes (R11.1): an artifact.dispose
-records the loss, and check disposal lists what it must account for.
+Each prints that scope first. None writes anything. Exit status: 0 TRUE,
+would-admit or a listed family; 1 FALSE, would-refuse or a family the gate
+disagrees with; 3 UNKNOWN. A TRUE criterion preview is not an admission.
+Datum never deletes bytes (R11.1): an artifact.dispose records the loss,
+and check disposal lists what it must account for.
 `},
 	{"stale", "re-measuring after a code change", `datum show --stale adds, per observed current claim, stale TRUE, FALSE or
 UNKNOWN with the reason: whether code under the claim's scope changed
@@ -163,12 +181,13 @@ to a scratch directory to rehearse without touching the real ones.
   fact Datum observed. Comparability needs the same clean HEAD or equal pins.
 - Instruments declare what they cannot see (blind_to). KNOWN validation
   cites a resolvable pinned artifact and is judged at admission (R9).
-- Every "<kind: hint>" in a template is a placeholder; revise events restate
-  the whole spec (copy it from datum show --json ID, change what changed).
+- Every "<kind: hint>" in a template is a placeholder. A revise restates the
+  whole spec: datum template claim.revise --from ID copies the current one,
+  so change only what changed. Judgment is never filled for you.
 - Tests read a fixed ledger prefix, never the live head; commit ledger
   bundles only after the full test run.
 - Quote shell variables. An error naming a flag as a value (--claim
-  --claim-revision) is word-splitting; in zsh a variable holding two ids is
+  --attempt-id) is word-splitting; in zsh a variable holding two ids is
   one argument, use an array.
 - Flags go before or after positional ids: datum show ID --json works.
 - Exit status: 0 ok, 1 refused or false, 2 usage, 3 UNKNOWN (check), 4

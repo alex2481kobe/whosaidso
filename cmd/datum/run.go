@@ -78,10 +78,10 @@ func runVerb(fs *flag.FlagSet) func(*call) error {
 	jsonOutput := jsonFlag(fs)
 	attempt := fs.String("attempt-id", "", "the admitted attempt's `ULID`")
 	instrument := fs.String("instrument", "", "the admitted instrument `ID`; its current revision is used")
-	claim := fs.String("claim", "", "the claim `ID` the criterion tests")
-	claimRevision := fs.Uint64("claim-revision", 0, "the exact claim revision `N`")
-	criterion := fs.String("criterion-id", "", "the admitted criterion `ULID`")
-	criterionRevision := fs.Uint64("criterion-revision", 0, "the exact criterion revision `N`")
+	claim := fs.String("claim", "", "the claim `ID` the criterion tests; omitted, the one claim that carries --criterion-id")
+	claimRevision := fs.Uint64("claim-revision", 0, "the exact claim revision `N`; omitted, the current one")
+	criterion := fs.String("criterion-id", "", "the admitted criterion `ULID`; omitted, the claim's one criterion")
+	criterionRevision := fs.Uint64("criterion-revision", 0, "the exact criterion revision `N`; omitted, the current one")
 	timeout := fs.Duration("timeout", 0, "the execution deadline as a `DURATION`; zero leaves it to the caller")
 	admitAfter := fs.Bool("admit", false, "then admit the start and seal as accepted under the same actor")
 	admitID := fs.String("admit-command-id", "", "--admit: the admission's `ULID`; minted when omitted")
@@ -115,9 +115,16 @@ func runVerb(fs *flag.FlagSet) func(*call) error {
 			CriterionRef:            model.Availability[model.CriterionRef]{State: model.Unknown, Reason: "no criterion named for this run"},
 			ExecutionSourceIdentity: write.RunExecutionIdentity(c.ctx, project)}
 		if *criterion != "" || *claim != "" {
-			ref := model.CriterionRef{Claim: model.RecordRef{Project: project.ID, RecordID: model.ID(*claim), Revision: model.Revision(*claimRevision)}, CriterionID: model.ID(*criterion), Revision: model.Revision(*criterionRevision)}
-			if _, ok := snapshot.Criterion(ref); !ok {
-				return fmt.Errorf("run: criterion %s revision %d of claim %s revision %d is not admitted; fix and admit it before launch", *criterion, *criterionRevision, *claim, *claimRevision)
+			// Omitted parts resolve once, here, to the current admitted ones;
+			// the run records the exact revisions it resolved.
+			ref, err := write.ResolveCriterion(loaded, project.ID, write.CriterionChoice{Claim: model.ID(*claim), ClaimRevision: model.Revision(*claimRevision),
+				CriterionID: model.ID(*criterion), CriterionRevision: model.Revision(*criterionRevision)})
+			if err != nil {
+				return fmt.Errorf("run: %w; fix and admit it before launch", err)
+			}
+			if *claim == "" || *claimRevision == 0 || *criterion == "" || *criterionRevision == 0 {
+				fmt.Fprintf(c.stderr, "run: claim %s revision %d, criterion %s revision %d (the current admitted ones for what was omitted)\n",
+					ref.Claim.RecordID, ref.Claim.Revision, ref.CriterionID, ref.Revision)
 			}
 			request.CriterionRef = model.Availability[model.CriterionRef]{State: model.Known, Value: &ref}
 		}

@@ -43,7 +43,7 @@ is stale. Nothing below is written by hand, so it cannot quietly stop being true
 datum
 |-- cmd/
 |   `-- datum          whole command surface: the write side that captures and admits, and the read side that answers from what was admitted
-|          14 files, tested -- uses evidence, model, query, reduce, store, write
+|          20 files, tested -- uses evidence, model, query, reduce, store, write
 |-- internal/
 |   |-- acceptance     (tests only, no production code)
 |   |      tests only
@@ -60,7 +60,7 @@ datum
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
 |   |      18 files, tested -- uses model, reduce
 |   `-- write          joins immutable capture to canonical state through one admission gate
-|          18 files, tested -- uses evidence, model, reduce, store
+|          19 files, tested -- uses evidence, model, reduce, store
 `-- tools/
     |-- archtree       instrument that reports how this module's packages fit together
     |      5 files, tested -- leaf
