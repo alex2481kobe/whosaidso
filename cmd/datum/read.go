@@ -1,10 +1,13 @@
 package main
 
+// This file holds the four read verbs (todo, continue, show, history) and
+// continue's fresh look at the workspace. What each view selects lives in
+// internal/query; the verbs' help lives in the registry.
+
 import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"os/exec"
 	"strings"
 	"time"
@@ -12,28 +15,8 @@ import (
 	"datum/internal/model"
 	"datum/internal/query"
 	"datum/internal/reduce"
-	"datum/internal/store"
 	"datum/internal/write"
 )
-
-const readUsage = `datum todo [--limit N] [--json]
-datum continue RECORD_ID [--limit N] [--json]
-datum show [RECORD_ID] [--kind task|claim|decision|instrument] [--stale] [--json]
-datum history [RECORD_ID] [--self-admitted[=true|false|unknown]] [--json]
-
-todo is everything owed, in flight first: in-flight tasks and their runs,
-tasks awaiting acceptance, blocked and ready tasks, open decisions, pending
-intake and attention. continue resumes any record: its detail, closure,
-context and, for a task, progress, attempts, runs and what is owed, plus a
-fresh look at git HEAD, dirty state and the time. show ID is one record;
-bare show is a summary, every current record by kind and every run; --kind
-keeps one kind; --stale adds, per observed claim, whether code under its
-scope changed since its last run (it runs git and cannot see uncommitted
-changes). history is admitted events in order, and without an ID every
-per-packet review; --self-admitted selects reviews by self-admission.
-Every answer carries its ledger watermark. The default text is the brief;
---json is the complete answer. --limit cuts only optional results.
-`
 
 // A bare audit flag means true, while explicit values retain all three states.
 type selfAdmissionFlag string
@@ -50,71 +33,60 @@ func (f *selfAdmissionFlag) Set(value string) error {
 	}
 }
 
-func isReadCommand(args []string) bool {
-	if len(args) == 0 {
-		return false
+// viewVerb is one of the four views: todo, continue, show or history. It
+// declares only that view's flags. Discovery, the request and the rendering
+// are its whole role; it never writes files.
+func viewVerb(view string) func(*flag.FlagSet) func(*call) error {
+	return func(fs *flag.FlagSet) func(*call) error {
+		jsonOutput := jsonFlag(fs)
+		var limit int
+		var kind string
+		var selfAdmitted selfAdmissionFlag
+		stale := false
+		switch view {
+		case "todo", "continue":
+			fs.IntVar(&limit, "limit", 0, "cap optional results at `N`; blockers, closure and attention are never cut")
+		case "show":
+			fs.StringVar(&kind, "kind", "", "bare show kept to one `KIND`: task, claim, decision or instrument")
+			fs.BoolVar(&stale, "stale", false, "add, per observed claim, whether code under its scope changed since its last run (runs git)")
+		case "history":
+			fs.Var(&selfAdmitted, "self-admitted", "only the per-packet reviews whose self-admission is `true|false|unknown` (bare: true)")
+		}
+		return func(c *call) error {
+			request := query.ViewRequest{View: view, Limit: limit, Kind: kind, SelfAdmitted: model.SelfAdmissionState(selfAdmitted)}
+			switch {
+			case c.argv != nil || len(c.args) > 1 || len(c.args) > 0 && view == "todo":
+				return usageError("datum %s: unexpected positional arguments", view)
+			case len(c.args) == 0 && view == "continue":
+				return usageError("datum continue needs a RECORD_ID")
+			case len(c.args) == 1:
+				request.ID = model.ID(c.args[0])
+			}
+			if err := query.CheckView(request); err != nil {
+				return usageError("datum %s: %v", view, err)
+			}
+			return readView(c, request, stale, *jsonOutput)
+		}
 	}
-	switch args[0] {
-	case "todo", "continue", "show", "history":
-		return true
-	}
-	return false
 }
 
-// readCLI answers one of the four views. Discovery, flag parsing and output
-// selection are its entire role. It never writes files.
-func readCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.Writer) error {
-	view, rest := args[0], args[1:]
-	flags := flag.NewFlagSet(view, flag.ContinueOnError)
-	flags.SetOutput(stderr)
-	flags.Usage = func() { fmt.Fprint(stderr, readUsage) }
-	jsonOutput := flags.Bool("json", false, "print the complete answer as JSON")
-	request := query.ViewRequest{View: view}
-	var selfAdmitted selfAdmissionFlag
-	stale := false
-	switch view {
-	case "todo", "continue":
-		flags.IntVar(&request.Limit, "limit", 0, "cap optional results; mandatory facts are never cut")
-	case "show":
-		flags.StringVar(&request.Kind, "kind", "", "bare show restricted to one kind: task, claim, decision or instrument")
-		flags.BoolVar(&stale, "stale", false, "add whether each observed claim's scoped code changed since its last run (runs git)")
-	case "history":
-		flags.Var(&selfAdmitted, "self-admitted", "select per-packet reviews by true, false, or unknown (bare flag: true)")
-	}
-	if err := flags.Parse(rest); err != nil {
-		if err == flag.ErrHelp {
-			return nil
-		}
-		return usageError("%v", err)
-	}
-	request.SelfAdmitted = model.SelfAdmissionState(selfAdmitted)
-	switch {
-	case flags.NArg() > 1 || flags.NArg() > 0 && view == "todo":
-		return usageError("%s: unexpected positional arguments", view)
-	case flags.NArg() == 0 && view == "continue":
-		return usageError("continue needs a RECORD_ID")
-	case flags.NArg() == 1:
-		request.ID = model.ID(flags.Arg(0))
-	}
-	if err := query.CheckView(request); err != nil {
-		return usageError("%s: %v", view, err)
-	}
-	if err := ctx.Err(); err != nil {
+func readView(c *call, request query.ViewRequest, stale, jsonOutput bool) error {
+	if err := c.ctx.Err(); err != nil {
 		return err
 	}
-	project, err := store.Discover(cwd)
+	project, err := c.project()
 	if err != nil {
 		return err
 	}
-	if view == "continue" {
-		observed := observe(ctx, project.Root)
+	if request.View == "continue" {
+		observed := observe(c.ctx, project.Root)
 		request.Observed = &observed
 	}
 	if stale {
 		request.Stale = func(s reduce.Snapshot) []query.StaleClaim {
 			out := []query.StaleClaim{}
-			for _, c := range write.StaleClaims(ctx, project, s) {
-				out = append(out, query.StaleClaim(c))
+			for _, claim := range write.StaleClaims(c.ctx, project, s) {
+				out = append(out, query.StaleClaim(claim))
 			}
 			return out
 		}
@@ -123,13 +95,13 @@ func readCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.W
 	if err != nil {
 		return err
 	}
-	if err := ctx.Err(); err != nil {
+	if err := c.ctx.Err(); err != nil {
 		return err
 	}
-	if *jsonOutput {
-		return query.RenderViewJSON(stdout, answer)
+	if jsonOutput {
+		return query.RenderViewJSON(c.stdout, answer)
 	}
-	return query.RenderViewBrief(stdout, answer)
+	return query.RenderViewBrief(c.stdout, answer)
 }
 
 // observe is continue's fresh look at the workspace. Anything git cannot

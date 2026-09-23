@@ -8,7 +8,6 @@ import (
 	"datum/internal/store"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,9 +47,29 @@ func cliID(n int) model.ID { return model.ID(fmt.Sprintf("%026d", n)) }
 // in acks_test.go.
 func callWriteCLI(t *testing.T, root string, input []byte, args ...string) ([]byte, error) {
 	t.Helper()
+	return callCLI(root, input, func(string) string { return "" }, withJSON(args)...)
+}
+
+// callCLI runs one command in process; a nonzero exit is an error carrying
+// the status and stderr.
+func callCLI(root string, input []byte, getenv func(string) string, args ...string) ([]byte, error) {
 	var output, diagnostic bytes.Buffer
-	err := writeCLI(context.Background(), withJSON(args), root, bytes.NewReader(input), &output, &diagnostic, func(string) string { return "" })
-	return output.Bytes(), err
+	if code := datum(context.Background(), args, root, bytes.NewReader(input), &output, &diagnostic, getenv); code != 0 {
+		return output.Bytes(), fmt.Errorf("exit status %d: %s", code, diagnostic.String())
+	}
+	if diagnostic.Len() != 0 {
+		return output.Bytes(), fmt.Errorf("stderr: %s", diagnostic.String())
+	}
+	return output.Bytes(), nil
+}
+
+// acknowledged reports whether a failed write printed anything but the JSON
+// error object --json prints for a failure.
+func acknowledged(out []byte) bool {
+	var e struct {
+		Error *struct{ Code, Message string } `json:"error"`
+	}
+	return len(out) != 0 && (json.Unmarshal(out, &e) != nil || e.Error == nil)
 }
 
 // withJSON adds --json after a write verb, so the test reads the full result.
@@ -143,17 +162,17 @@ func TestCLIActorFallbackUnknownAndBlobCapture(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i, expected := range []model.Actor{{ID: "from-environment"}, {UnknownReason: "no actor supplied by --actor or DATUM_ACTOR"}} {
-		var out bytes.Buffer
 		env := func(string) string { return "from-environment" }
 		args := []string{"capture", "--command-id", string(cliID(21 + i)), "--blob", blob}
 		if i == 1 {
 			args = append(args, "--actor", "")
 		}
-		if err := writeCLI(context.Background(), withJSON(args), root, bytes.NewReader(data), &out, io.Discard, env); err != nil {
+		out, err := callCLI(root, data, env, withJSON(args)...)
+		if err != nil {
 			t.Fatal(err)
 		}
 		var packet model.PacketRef
-		if err := json.Unmarshal(out.Bytes(), &packet); err != nil {
+		if err := json.Unmarshal(out, &packet); err != nil {
 			t.Fatal(err)
 		}
 		project, err := store.Discover(root)

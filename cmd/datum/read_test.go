@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -180,8 +179,9 @@ func TestReadCLIConventionsErrorsAndNoCanonicalWrites(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := readCLI(ctx, []string{"show"}, root, io.Discard, io.Discard); err != context.Canceled {
-		t.Fatalf("cancelled read must stop, got %v", err)
+	var stdout, stderr bytes.Buffer
+	if code := datum(ctx, []string{"show"}, root, nil, &stdout, &stderr, func(string) string { return "" }); code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), context.Canceled.Error()) {
+		t.Fatalf("cancelled read must stop without an answer, got %d %q %q", code, stdout.String(), stderr.String())
 	}
 	after, err := store.ReadPrefix(project)
 	if err != nil || !reflect.DeepEqual(before, after) {

@@ -1,5 +1,10 @@
 package main
 
+// This file holds the capture, admit and handback verbs and what capture
+// reads: events, blobs and the source bytes a source.intake names. run and
+// reconcile live in run.go; acknowledgements and --admit's second act in
+// acks.go.
+
 import (
 	"bytes"
 	"context"
@@ -16,56 +21,6 @@ import (
 	"time"
 )
 
-const writeUsage = `datum capture [--command-id ULID] [--actor ID] [--events FILE|-] [--blob FILE ...]
-              [--admit [--admit-command-id ULID] --reason TEXT] [--json]
-datum admit [--command-id ULID] [--actor ID] --outcome accepted|rejected|correction-requested --reason TEXT [--json] PACKET_ID ...
-datum handback [--command-id ULID] [--actor ID] --attempt-id ULID --outcome OUTCOME --reason TEXT --next-action TEXT
-              [--commits-denied] [--reconciliation-owed] [--delivery-refs FILE|-]
-              [--hold-id ULID --hold-reason REASON --hold-actor ID --hold-criterion TEXT]
-datum run [--actor ID] --attempt-id ULID --instrument ID [--claim ID --claim-revision N
-          --criterion-id ULID --criterion-revision N] [--timeout DURATION]
-          [--admit [--admit-command-id ULID] --reason TEXT] [--json] -- ARGV ...
-datum reconcile [--actor ID] --invocation-id ULID --reason TEXT
-datum id [N]
-datum template EVENT-TYPE
-datum check criterion|admission|disposal ...
-
-Each write prints one line per durable act; --json prints its full result.
-An omitted command id is minted and printed; give it to make a retry exact.
-Capture reads a JSON array of typed events and writes only immutable intake.
-With --admit it then admits the packet as accepted under the same actor; if
-that admission is refused the capture stands, the packet stays pending, and
-the exit status is 4.
-A source.intake is captured with its original bytes, read from its reference
-or from --blob; capture refuses a source whose bytes it cannot save.
-Admission reviews a packet set and is the only command that publishes a bundle.
-Handback captures a receipt for an admitted attempt; admit its returned packet ID.
-OUTCOME is one of nine; no meaning is defaulted. Only success says the work got done,
-and it closes the attempt, not the task. Every other outcome leaves the task open.
-  success                 the work is done; with no witness the task awaits acceptance
-  stopped                 interrupted before finishing; say why and the unfinished step
-  refused                 the instrument or tool declined to measure; not a pass
-  no-reading              no reading was obtained; say what would get one, never a zero
-  measurement-impossible  cannot be measured here; name the missing capability
-  runner-died             the process died; observer died too: --reconciliation-owed
-  harness-broken          the producer or setup failed, not the work under test
-  out-of-scope            needs work outside the task; kept owed, reassignment proposed
-  blocked-mid-task        cannot go on until something happens; admitted with its hold
-Delivery refs are a JSON array of artifact references. A hold is captured with the receipt.
-Blocked-mid-task admission needs an open hold in the same bundle; out-of-scope
-needs a resume hold with an authored reassignment criterion and actor.
-Hold reasons: prerequisite, awaiting-acceptance, resume, reconciliation.
-Missing hold attribution is unknown; --hold-actor never inherits the receipt actor.
-Run executes ARGV without a shell, captures its start and seal as two packets
-and prints both packet IDs; admit them. The instrument and any criterion must
-already be admitted: a criterion admitted after launch cannot freeze this run.
-Reconcile captures an UNKNOWN-outcome seal, with no reading, for an admitted run
-whose observer died; admit its packet. It needs an identified actor.
-Template prints a capture-ready skeleton of any event type. check dry-runs a
-criterion, an admission or a disposal and writes nothing; see datum check --help.
-Actor falls back to DATUM_ACTOR. Missing attribution is recorded as unknown.
-`
-
 type blobPaths []string
 
 func (p *blobPaths) String() string { return strings.Join(*p, ", ") }
@@ -74,134 +29,61 @@ func (p *blobPaths) Set(value string) error {
 	return nil
 }
 
-func writeCLI(ctx context.Context, args []string, cwd string, stdin io.Reader, stdout, stderr io.Writer, getenv func(string) string) error {
-	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		_, err := io.WriteString(stdout, writeUsage)
-		return err
-	}
-	verb := args[0]
-	if verb == "run" || verb == "reconcile" {
-		return runCLI(ctx, args, cwd, stdout, stderr, getenv)
-	}
-	if verb == "template" {
-		return templateCLI(args[1:], stdout, stderr)
-	}
-	if verb == "check" {
-		return checkCLI(ctx, args, cwd, stdin, stdout, stderr, getenv)
-	}
-	if verb != "capture" && verb != "admit" && verb != "handback" {
-		return usageError("unknown command %q", verb)
-	}
-	flags := flag.NewFlagSet(verb, flag.ContinueOnError)
-	flags.SetOutput(stderr)
-	id := flags.String("command-id", "", "id retained for retries; minted when omitted")
-	actor := flags.String("actor", "", "attributed actor")
-	jsonOutput := flags.Bool("json", false, "print the full result as JSON")
-	var eventsPath, outcome, reason, admitID string
-	var admitAfter bool
+// captureVerb writes one immutable intake packet and publishes nothing; with
+// --admit it then admits that packet as a second act (acks.go).
+func captureVerb(fs *flag.FlagSet) func(*call) error {
+	id := fs.String("command-id", "", "the packet's `ULID`; minted when omitted, given for an exact retry")
+	actor := actorFlag(fs)
+	jsonOutput := jsonFlag(fs)
+	eventsPath := fs.String("events", "-", "the typed event array: a `FILE`, or - for stdin")
 	var blobs blobPaths
-	var handback write.HandbackRequest
-	var attemptID, holdID, holdReason, holdActor, deliveryPath string
-	var hold write.HandbackHold
-	if verb == "capture" {
-		flags.StringVar(&eventsPath, "events", "-", "typed event array file or stdin")
-		flags.Var(&blobs, "blob", "file whose exact bytes are captured")
-		flags.BoolVar(&admitAfter, "admit", false, "then admit the packet as accepted under the same actor")
-		flags.StringVar(&admitID, "admit-command-id", "", "--admit: the admission's id; minted when omitted")
-		flags.StringVar(&reason, "reason", "", "--admit: the review reason (required with --admit)")
-	} else if verb == "admit" {
-		flags.StringVar(&outcome, "outcome", "", "review disposition")
-		flags.StringVar(&reason, "reason", "", "review reason")
-	} else {
-		flags.StringVar(&attemptID, "attempt-id", "", "admitted attempt ULID")
-		flags.StringVar(&outcome, "outcome", "", "authored outcome: success|stopped|refused|no-reading|measurement-impossible|runner-died|harness-broken|out-of-scope|blocked-mid-task")
-		flags.StringVar(&reason, "reason", "", "authored reason (required)")
-		flags.StringVar(&handback.NextAction, "next-action", "", "authored next action (required)")
-		flags.BoolVar(&handback.CommitsDenied, "commits-denied", false, "commits were denied")
-		flags.BoolVar(&handback.ReconciliationOwed, "reconciliation-owed", false, "reconciliation is owed")
-		flags.StringVar(&deliveryPath, "delivery-refs", "", "artifact reference array file or stdin (-)")
-		flags.StringVar(&holdID, "hold-id", "", "bundled hold ULID")
-		flags.StringVar(&holdReason, "hold-reason", "", "prerequisite|awaiting-acceptance|resume|reconciliation")
-		flags.StringVar(&holdActor, "hold-actor", "", "authored hold assignment; missing is unknown")
-		flags.StringVar(&hold.Criterion, "hold-criterion", "", "authored hold discharge criterion")
-	}
-	if err := flags.Parse(args[1:]); err != nil {
-		if err == flag.ErrHelp {
-			return nil
+	fs.Var(&blobs, "blob", "a `FILE` whose exact bytes are captured with the packet (repeatable)")
+	admitAfter := fs.Bool("admit", false, "then admit the packet as accepted under the same actor")
+	admitID := fs.String("admit-command-id", "", "--admit: the admission's `ULID`; minted when omitted")
+	reason := fs.String("reason", "", "--admit: the review reason `TEXT` (required with --admit)")
+	return func(c *call) error {
+		if err := noPositionals(c, "capture"); err != nil {
+			return err
 		}
-		return usageError("%v", err)
-	}
-	actorSet, holdSet, admitOnly := false, false, false
-	flags.Visit(func(f *flag.Flag) {
-		if f.Name == "actor" {
-			actorSet = true
+		if *admitAfter && model.Blank(*reason) {
+			return usageError("datum capture --admit needs --reason: the review reason is authored, never defaulted")
 		}
-		if strings.HasPrefix(f.Name, "hold-") {
-			holdSet = true
+		if !*admitAfter && (isSet(fs, "reason") || isSet(fs, "admit-command-id")) {
+			return usageError("datum capture: --reason and --admit-command-id belong to --admit")
 		}
-		if verb == "capture" && (f.Name == "reason" || f.Name == "admit-command-id") {
-			admitOnly = true
-		}
-	})
-	if verb == "capture" && admitAfter && model.Blank(reason) {
-		return usageError("capture --admit needs --reason: the review reason is authored, never defaulted")
-	}
-	if admitOnly && !admitAfter {
-		return usageError("capture: --reason and --admit-command-id belong to --admit")
-	}
-	if !actorSet {
-		*actor = getenv("DATUM_ACTOR")
-	}
-	attribution := model.Actor{ID: *actor}
-	if model.Blank(*actor) {
-		attribution = model.Actor{UnknownReason: "no actor supplied by --actor or DATUM_ACTOR"}
-	}
-	project, err := store.Discover(cwd)
-	if err != nil {
-		return err
-	}
-	var result any
-	var ack string
-	switch verb {
-	case "capture":
-		if len(flags.Args()) != 0 {
-			return usageError("capture takes event and blob flags, not positional arguments")
-		}
-		ref, count, err := captureCLI(ctx, project, model.ID(*id), attribution, eventsPath, blobs, stdin)
+		project, err := c.project()
 		if err != nil {
 			return err
 		}
-		if admitAfter {
-			return captureAndAdmit(ctx, project, stdout, *jsonOutput, ref, count, model.ID(admitID), attribution, reason)
-		}
-		result, ack = ref, captureAck(ref, count)
-	case "handback":
-		if len(flags.Args()) != 0 {
-			return usageError("handback takes flags, not positional arguments")
-		}
-		handback.CommandID, handback.Author = model.ID(*id), attribution
-		handback.AttemptID, handback.Outcome, handback.Reason = model.ID(attemptID), model.AttemptOutcome(outcome), reason
-		if holdSet {
-			hold.BlockerID, hold.Reason, hold.Actor = model.ID(holdID), model.BlockerReason(holdReason), model.Actor{ID: holdActor}
-			if model.Blank(holdActor) {
-				hold.Actor = model.Actor{UnknownReason: "no actor supplied by --hold-actor"}
-			}
-			handback.Holds = []write.HandbackHold{hold}
-		}
-		if deliveryPath != "" {
-			if err := handbackDeliveryRefs(deliveryPath, stdin, &handback.DeliveryRefs); err != nil {
-				return err
-			}
-		}
-		ref, err := write.Handback(ctx, project, handback)
+		author := actor(c)
+		ref, count, err := captureCLI(c.ctx, project, model.ID(*id), author, *eventsPath, blobs, c.stdin)
 		if err != nil {
 			return err
 		}
-		result = ref
-		ack = fmt.Sprintf("handback captured %s outcome %s; admit it: %s\n", ref.CommandID, outcome, admitCommand("", model.Actor{}, "", []model.ID{ref.CommandID}))
-	default:
-		ids := make([]model.ID, len(flags.Args()))
-		for i, value := range flags.Args() {
+		if *admitAfter {
+			return captureAndAdmit(c.ctx, project, c.stdout, *jsonOutput, ref, count, model.ID(*admitID), author, *reason)
+		}
+		return printResult(c.stdout, *jsonOutput, ref, captureAck(ref, count))
+	}
+}
+
+// admitVerb reviews a packet set: the only command that publishes a bundle.
+func admitVerb(fs *flag.FlagSet) func(*call) error {
+	id := fs.String("command-id", "", "the admission's `ULID`; minted when omitted, given for an exact retry")
+	actor := actorFlag(fs)
+	jsonOutput := jsonFlag(fs)
+	outcome := fs.String("outcome", "", "the review `DISPOSITION`: accepted, rejected or correction-requested")
+	reason := fs.String("reason", "", "the review reason `TEXT` (required)")
+	return func(c *call) error {
+		if len(c.args) == 0 || c.argv != nil {
+			return usageError("datum admit needs one or more PACKET_ID arguments")
+		}
+		project, err := c.project()
+		if err != nil {
+			return err
+		}
+		ids := make([]model.ID, len(c.args))
+		for i, value := range c.args {
 			ids[i] = model.ID(value)
 		}
 		command := model.ID(*id)
@@ -210,15 +92,64 @@ func writeCLI(ctx context.Context, args []string, cwd string, stdin io.Reader, s
 				return err
 			}
 		}
-		bundle, err := write.Admit(ctx, project, write.AdmitRequest{
-			CommandID: command, PacketIDs: ids, Admitter: attribution, Outcome: outcome, Reason: reason,
-		})
+		bundle, err := write.Admit(c.ctx, project, write.AdmitRequest{CommandID: command, PacketIDs: ids, Admitter: actor(c), Outcome: *outcome, Reason: *reason})
 		if err != nil {
 			return err
 		}
-		result, ack = bundle, admitAck(bundle, outcome)
+		return printResult(c.stdout, *jsonOutput, bundle, admitAck(bundle, *outcome))
 	}
-	return printResult(stdout, *jsonOutput, result, ack)
+}
+
+// handbackVerb captures an attempt's terminal receipt, with its hold when
+// one is given; admitting it is a separate act.
+func handbackVerb(fs *flag.FlagSet) func(*call) error {
+	id := fs.String("command-id", "", "the packet's `ULID`; minted when omitted, given for an exact retry")
+	actor := actorFlag(fs)
+	jsonOutput := jsonFlag(fs)
+	var r write.HandbackRequest
+	var hold write.HandbackHold
+	attemptID := fs.String("attempt-id", "", "the admitted attempt's `ULID`")
+	outcome := fs.String("outcome", "", "the authored `OUTCOME`, one of nine (datum help outcomes)")
+	reason := fs.String("reason", "", "the authored reason `TEXT` (required)")
+	fs.StringVar(&r.NextAction, "next-action", "", "the authored next action `TEXT` (required)")
+	fs.BoolVar(&r.CommitsDenied, "commits-denied", false, "commits were denied")
+	fs.BoolVar(&r.ReconciliationOwed, "reconciliation-owed", false, "reconciliation is owed (the observer died too)")
+	deliveryPath := fs.String("delivery-refs", "", "an artifact reference array: a `FILE`, or - for stdin")
+	holdID := fs.String("hold-id", "", "a hold captured with the receipt: its `ULID`")
+	holdReason := fs.String("hold-reason", "", "the hold's `REASON`: prerequisite, awaiting-acceptance, resume or reconciliation")
+	holdActor := fs.String("hold-actor", "", "the hold's assigned actor `ID`; missing is unknown, never the receipt's actor")
+	fs.StringVar(&hold.Criterion, "hold-criterion", "", "the hold's authored discharge criterion `TEXT`")
+	return func(c *call) error {
+		if err := noPositionals(c, "handback"); err != nil {
+			return err
+		}
+		project, err := c.project()
+		if err != nil {
+			return err
+		}
+		r.CommandID, r.Author = model.ID(*id), actor(c)
+		r.AttemptID, r.Outcome, r.Reason = model.ID(*attemptID), model.AttemptOutcome(*outcome), *reason
+		holdSet := false
+		fs.Visit(func(f *flag.Flag) { holdSet = holdSet || strings.HasPrefix(f.Name, "hold-") })
+		if holdSet {
+			hold.BlockerID, hold.Reason, hold.Actor = model.ID(*holdID), model.BlockerReason(*holdReason), model.Actor{ID: *holdActor}
+			if model.Blank(*holdActor) {
+				hold.Actor = model.Actor{UnknownReason: "no actor supplied by --hold-actor"}
+			}
+			r.Holds = []write.HandbackHold{hold}
+		}
+		if *deliveryPath != "" {
+			if err := handbackDeliveryRefs(*deliveryPath, c.stdin, &r.DeliveryRefs); err != nil {
+				return err
+			}
+		}
+		ref, err := write.Handback(c.ctx, project, r)
+		if err != nil {
+			return err
+		}
+		return printResult(c.stdout, *jsonOutput, ref, fmt.Sprintf("handback captured %s outcome %s; admit it: %s\n",
+			ref.CommandID, *outcome, admitCommand("", model.Actor{}, "", []model.ID{ref.CommandID})))
+	}
 }
 
 // printResult writes the full result as JSON, or the one-line acknowledgement.

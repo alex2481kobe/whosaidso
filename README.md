@@ -42,8 +42,8 @@ is stale. Nothing below is written by hand, so it cannot quietly stop being true
 ```text
 datum
 |-- cmd/
-|   `-- datum          This file holds `datum id [N]`, which prints N fresh record identifiers (default one)
-|          10 files, tested -- uses evidence, model, query, reduce, store, write
+|   `-- datum          whole command surface: the write side that captures and admits, and the read side that answers from what was admitted
+|          13 files, tested -- uses evidence, model, query, reduce, store, write
 |-- internal/
 |   |-- acceptance     (tests only, no production code)
 |   |      tests only
@@ -88,90 +88,14 @@ blind to coupling through an interface or a callback.
 
 ```
 go build -o datum ./cmd/datum
+datum help
 ```
 
-Writing. Capture puts a packet in immutable intake and publishes nothing.
-Admission is the only command that writes a bundle.
-
-```
-datum capture --actor ID --events events.json
-datum admit --command-id ULID --actor ID \
-    --outcome accepted|rejected|correction-requested --reason TEXT PACKET_ID
-```
-
-Ending an attempt. Nine outcomes, and eight of them say the work did not get
-done. That symmetry is deliberate: if the honest answers are awkward to reach,
-people reach for `success`.
-
-```
-datum handback --attempt-id ULID --outcome OUTCOME \
-    --reason TEXT --next-action TEXT \
-    [--commits-denied] [--reconciliation-owed] \
-    [--hold-id ULID --hold-reason REASON --hold-actor ID --hold-criterion TEXT]
-```
-
-What each outcome means. Only `success` says the work got done, and it closes
-the attempt, not the task. Every other outcome leaves the task open.
-
-- `success`: the work is done. With no acceptance or delivery witness the task
-  waits in the awaiting-acceptance queue until someone with authority closes it.
-- `stopped`: interrupted before finishing. Say why and the exact unfinished
-  step; the task waits on a resume or reconciliation.
-- `refused`: the instrument or tool declined to measure. Name the refusal and
-  its cause. A refusal is not a passing measurement.
-- `no-reading`: no reading was obtained (not run, not kept, invalid or
-  unreachable). Say why and what would get one. Never a fake zero.
-- `measurement-impossible`: this cannot be measured here, because a capability
-  or mechanism is missing. Name it. A local limit is not universal impossibility.
-- `runner-died`: the process doing the work died. A known exit or signal is
-  recorded; if the observer died too, the outcome is UNKNOWN until reconciled
-  (`--reconciliation-owed`).
-- `harness-broken`: the producer or setup failed, not the work under test. Keep
-  the partial output and diagnostic; only the inference without a valid
-  observation is blocked.
-- `out-of-scope`: finishing needs action outside the task's scope. The owed work
-  is kept and reassignment proposed; authority is never widened automatically.
-- `blocked-mid-task`: work cannot go on until something else happens. The
-  receipt and its hold (`--hold-*`) are admitted together, atomically.
-
-Reading. Every answer carries the ledger watermark it was read at. The default
-text is the brief: one short block per record with kind, id, revision, status,
-why it is in this view and who acts next. Every value it shows is read from the
-answer `--json` exports; long text is cut and marked with `…`. Agents read
-`--json`, whose keys are all snake_case. `--full` prints a complete text outline
-of that same JSON, so the two cannot disagree.
-
-```
-datum show [--json|--full] [RECORD_ID]
-datum history [--json|--full] [RECORD_ID]
-datum intake pending [--json|--full]
-datum now|todo|state|instruments [--json|--full]
-```
-
-`now` is what is moving or owed right now: IN FLIGHT tasks and their runs,
-OPEN decisions, and under attention every hold, acceptance or reconciliation a
-BLOCKED task is waiting on, with the actor it waits on. `todo` holds the full
-blocked, awaiting-acceptance and READY queues, plus intake. `intake pending`
-lists packets not yet accepted: unreviewed ones, and rejected or
-correction-requested ones with the review that dispositioned them.
-
-Commands keep a disposable snapshot in `.datum/cache/`, beside the ledger and
-gitignored. It is never read as truth: every command still reads and hashes
-every bundle, reuses the snapshot only when the whole prefix it was folded from
-matches byte for byte, folds only the bundles after it, and rebuilds it on any
-mismatch or damage. Deleting it changes no answer, only how long the next
-command takes.
-
-Before disposing of an artifact, `datum disposal-loss --digest SHA256` prints
-the `support_loss` targets an `artifact.dispose` of those bytes must record,
-direct and transitive, and the admitted events that cite them (add
-`--git FORMAT:COMMIT:PATH` when the disposal names a git pin). It writes
-nothing and fills in nothing: you write each reason, and admission recomputes
-the list and refuses a short one as `loss-unaccounted`.
-
-A record needs an identifier, and `datum id` prints one (`datum id 5` prints
-five). Use it rather than inventing one: hand-writing Crockford base32
-reliably produces ids that parse and mean nothing.
+The manual ships with the binary: `datum help` prints a keyword index and the
+whole guide (the loop, the four views, admission, acceptance, the nine
+handback outcomes, proof, the dry-run checks and the pitfalls), `datum help
+TOPIC` one part of it, and `datum VERB --help` one verb's usage with its
+flags. Bare `datum` prints a short summary.
 
 ## Status
 

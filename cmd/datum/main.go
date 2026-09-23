@@ -7,13 +7,23 @@
 // canonical state.
 package main
 
+// This file holds the process entry, dispatch through the usage registry
+// (registry.go), argument parsing and exit status. What each verb does lives
+// in its own file; help text lives in help.go and guide.go.
+
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
+	"strings"
+
+	"datum/internal/model"
+	"datum/internal/store"
 )
 
 func main() {
@@ -55,20 +65,142 @@ func exitCode(err error) int {
 	return 1
 }
 
+// call is one invocation: where it runs, its streams, and its arguments once
+// the verb's flags are parsed out of them.
+type call struct {
+	ctx    context.Context
+	cwd    string
+	stdin  io.Reader
+	stdout *countingWriter
+	stderr io.Writer
+	getenv func(string) string
+	args   []string // positional arguments, wherever they stood among the flags
+	argv   []string // everything after a literal --
+	json   bool     // the verb's --json was given
+}
+
+func (c *call) project() (store.Project, error) { return store.Discover(c.cwd) }
+
+type countingWriter struct {
+	w io.Writer
+	n int
+}
+
+func (w *countingWriter) Write(p []byte) (int, error) {
+	n, err := w.w.Write(p)
+	w.n += n
+	return n, err
+}
+
 // datum runs one command and returns its exit status. Every message about a
-// failure goes to stderr; stdout carries only answers.
+// failure goes to stderr; stdout carries only answers. With --json, a failure
+// that printed no answer still prints one JSON object naming the error.
 func datum(ctx context.Context, args []string, cwd string, stdin io.Reader, stdout, stderr io.Writer, getenv func(string) string) int {
-	if len(args) > 0 && args[0] == "id" {
-		return idCLI(args[1:], stdout, stderr)
-	}
-	var err error
-	if isReadCommand(args) {
-		err = readCLI(ctx, args, cwd, stdout, stderr)
-	} else {
-		err = writeCLI(ctx, args, cwd, stdin, stdout, stderr, getenv)
-	}
+	c := &call{ctx: ctx, cwd: cwd, stdin: stdin, stdout: &countingWriter{w: stdout}, stderr: stderr, getenv: getenv}
+	err := dispatch(c, args)
+	code := exitCode(err)
 	if err != nil && err.Error() != "" {
 		fmt.Fprintln(stderr, err)
 	}
-	return exitCode(err)
+	if err != nil && c.json && c.stdout.n == 0 {
+		name := map[int]string{1: "refused", 2: "usage", 3: "unknown", 4: "partial"}[code]
+		encoded, _ := json.Marshal(map[string]any{"error": map[string]string{"code": name, "message": err.Error()}})
+		fmt.Fprintf(stdout, "%s\n", encoded)
+	}
+	return code
+}
+
+// dispatch finds the verb in the registry, parses its own flags (before or
+// after positional arguments), and runs it. `VERB --help` prints the verb's
+// usage from the same registry entry, once, on stdout.
+func dispatch(c *call, args []string) error {
+	if len(args) == 0 {
+		_, err := io.WriteString(c.stdout, bareSummary)
+		return err
+	}
+	if args[0] == "--help" || args[0] == "-h" {
+		args = append([]string{"help"}, args[1:]...)
+	}
+	v, rest := lookup(args)
+	if v == nil {
+		if modes := groupModes(args[0]); len(modes) > 0 {
+			if len(args) == 2 && (args[1] == "--help" || args[1] == "-h") {
+				_, err := io.WriteString(c.stdout, groupHelp(args[0]))
+				return err
+			}
+			return usageError("datum %s needs a mode: %s; run datum help %s", args[0], strings.Join(modes, ", "), args[0])
+		}
+		return usageError("unknown command %q; run datum help", args[0])
+	}
+	fs := flag.NewFlagSet("datum "+v.name, flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.Usage = func() {}
+	run := v.define(fs)
+	if err := parseArgs(fs, rest, c); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			_, err := io.WriteString(c.stdout, verbHelp(v))
+			return err
+		}
+		return usageError("datum %s: %v; run datum help %s", v.name, err, v.name)
+	}
+	if f := fs.Lookup("json"); f != nil {
+		c.json = f.Value.String() == "true"
+	}
+	return run(c)
+}
+
+// parseArgs accepts flags before or after positional arguments. Everything
+// after a literal -- is kept whole in c.argv (run's command line).
+func parseArgs(fs *flag.FlagSet, args []string, c *call) error {
+	for i, a := range args {
+		if a == "--" {
+			c.argv, args = args[i+1:], args[:i]
+			break
+		}
+	}
+	for {
+		if err := fs.Parse(args); err != nil {
+			return err
+		}
+		if fs.NArg() == 0 {
+			return nil
+		}
+		c.args = append(c.args, fs.Arg(0))
+		args = fs.Args()[1:]
+	}
+}
+
+// jsonFlag is --json, the complete answer as one JSON object.
+func jsonFlag(fs *flag.FlagSet) *bool {
+	return fs.Bool("json", false, "print the complete answer as one JSON object")
+}
+
+// actorFlag is --actor. Not given, it falls back to DATUM_ACTOR; given empty,
+// or absent from both, the actor is recorded unknown, never guessed.
+func actorFlag(fs *flag.FlagSet) func(*call) model.Actor {
+	id := fs.String("actor", "", "the attributed actor `ID`; default $DATUM_ACTOR")
+	return func(c *call) model.Actor {
+		value := *id
+		if !isSet(fs, "actor") {
+			value = c.getenv("DATUM_ACTOR")
+		}
+		if model.Blank(value) {
+			return model.Actor{UnknownReason: "no actor supplied by --actor or DATUM_ACTOR"}
+		}
+		return model.Actor{ID: value}
+	}
+}
+
+func isSet(fs *flag.FlagSet, name string) bool {
+	set := false
+	fs.Visit(func(f *flag.Flag) { set = set || f.Name == name })
+	return set
+}
+
+// noPositionals refuses positional arguments for a verb that takes none.
+func noPositionals(c *call, verb string) error {
+	if len(c.args) > 0 || c.argv != nil {
+		return usageError("datum %s takes flags, not positional arguments", verb)
+	}
+	return nil
 }

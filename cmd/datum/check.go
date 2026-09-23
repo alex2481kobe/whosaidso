@@ -22,16 +22,6 @@ import (
 	"datum/internal/write"
 )
 
-const checkUsage = `datum check criterion --events FILE|- [--blob FILE] [--output FILE] [--json]
-datum check admission [--actor ID] --events FILE|- [--packet ID ...] [--json]
-datum check admission [--actor ID] --packet ID [--packet ID ...] [--json]
-datum check disposal --digest SHA256 [--git FORMAT:COMMIT:PATH] [--json]
-
-Dry runs; nothing is written. Each prints first what it checked and what it
-did not. Exit status: 0 TRUE or would-admit, 1 FALSE or would-refuse,
-3 UNKNOWN.
-`
-
 // Scope statements: what each mode checked, and what it did NOT.
 const (
 	scopeCriterion = "criterion preview only: instrument validation, proof-family completeness, comparability and admission were NOT checked"
@@ -62,95 +52,85 @@ type checkMember struct {
 	Validation  string              `json:"validation"`
 }
 
-func checkCLI(ctx context.Context, args []string, cwd string, stdin io.Reader, stdout, stderr io.Writer, getenv func(string) string) error {
-	if len(args) < 2 || args[1] != "criterion" && args[1] != "admission" && args[1] != "disposal" {
-		if len(args) == 2 && (args[1] == "--help" || args[1] == "-h") {
-			_, err := io.WriteString(stdout, checkUsage)
-			return err
+// checkVerb is one `datum check` mode, with only that mode's flags. It
+// prints the scope first, then the result; --json prints the whole answer.
+func checkVerb(mode string) func(*flag.FlagSet) func(*call) error {
+	return func(fs *flag.FlagSet) func(*call) error {
+		jsonOutput := jsonFlag(fs)
+		var eventsPath, blob, output, digest, git string
+		var packets blobPaths
+		var actor func(*call) model.Actor
+		switch mode {
+		case "criterion":
+			fs.StringVar(&eventsPath, "events", "", "a JSON event array holding one criterion.fix: a `FILE`, or - for stdin")
+			fs.StringVar(&blob, "blob", "", "a `FILE` with the criterion example's bytes, when its pin does not resolve here")
+			fs.StringVar(&output, "output", "", "a candidate run output `FILE`; default: the criterion's pinned example")
+		case "admission":
+			fs.StringVar(&eventsPath, "events", "", "a JSON event array, dry-run as one uncaptured packet: a `FILE`, or - for stdin")
+			actor = actorFlag(fs)
+			fs.Var(&packets, "packet", "a captured packet `ID` to admit with the events (repeatable)")
+		case "disposal":
+			fs.StringVar(&digest, "digest", "", "the `SHA256` of the artifact a disposal would name (required)")
+			fs.StringVar(&git, "git", "", "the disposal's git pin, as `FORMAT:COMMIT:PATH`, when it names one")
 		}
-		return usageError("check needs a mode: criterion, admission or disposal\n%s", checkUsage)
-	}
-	mode := args[1]
-	flags := flag.NewFlagSet("check "+mode, flag.ContinueOnError)
-	flags.SetOutput(stderr)
-	flags.Usage = func() { io.WriteString(stderr, checkUsage) }
-	jsonOutput := flags.Bool("json", false, "print the complete answer as JSON")
-	var eventsPath, blob, output, actor, digest, git string
-	var packets blobPaths
-	switch mode {
-	case "criterion":
-		flags.StringVar(&eventsPath, "events", "", "JSON event array holding one criterion.fix, or - for stdin")
-		flags.StringVar(&blob, "blob", "", "the criterion example's bytes, when its pin does not resolve here")
-		flags.StringVar(&output, "output", "", "a candidate run output; default: the criterion's pinned example")
-	case "admission":
-		flags.StringVar(&eventsPath, "events", "", "JSON event array admitted as one uncaptured packet, or - for stdin")
-		flags.StringVar(&actor, "actor", "", "packet author for the events")
-		flags.Var(&packets, "packet", "a captured packet id to admit with the events")
-	case "disposal":
-		flags.StringVar(&digest, "digest", "", "sha-256 of the artifact a disposal would name (required)")
-		flags.StringVar(&git, "git", "", "the disposal's git pin as FORMAT:COMMIT:PATH, when it names one")
-	}
-	if err := flags.Parse(args[2:]); err != nil {
-		if err == flag.ErrHelp {
+		return func(c *call) error {
+			if err := noPositionals(c, "check "+mode); err != nil {
+				return err
+			}
+			if mode == "criterion" && eventsPath == "" || mode == "admission" && eventsPath == "" && len(packets) == 0 {
+				return usageError("datum check %s needs --events", mode)
+			}
+			project, err := c.project()
+			if err != nil {
+				return err
+			}
+			var events []model.Event
+			if eventsPath != "" {
+				if events, err = readCheckEvents(eventsPath, c.stdin); err != nil {
+					return err
+				}
+			}
+			var answer any
+			var header *checkHeader
+			var text string
+			switch mode {
+			case "criterion":
+				a, err := criterionAnswerOf(c.ctx, project, events, blob, output)
+				if err != nil {
+					return err
+				}
+				answer, header, text = a, &a.checkHeader, a.text
+			case "admission":
+				a, err := admissionCheck(c.ctx, project, events, packets, actor(c))
+				if err != nil {
+					return err
+				}
+				answer, header, text = a, &a.checkHeader, a.text
+			case "disposal":
+				a, err := disposalCheck(project, digest, git)
+				if err != nil {
+					return err
+				}
+				answer, header, text = a, &a.checkHeader, a.text
+			}
+			if *jsonOutput {
+				encoder := json.NewEncoder(c.stdout)
+				encoder.SetIndent("", "  ")
+				if err := encoder.Encode(answer); err != nil {
+					return err
+				}
+			} else if _, err := io.WriteString(c.stdout, header.Scope+"\nresult: "+header.Result+"\n"+text); err != nil {
+				return err
+			}
+			switch header.Result {
+			case string(evidence.False), "would-refuse":
+				return &exitError{code: 1}
+			case string(evidence.Unknown):
+				return &exitError{code: 3}
+			}
 			return nil
 		}
-		return usageError("%v", err)
 	}
-	if flags.NArg() != 0 {
-		return usageError("check %s takes flags, not positional arguments", mode)
-	}
-	if mode == "criterion" && eventsPath == "" || mode == "admission" && eventsPath == "" && len(packets) == 0 {
-		return usageError("check %s needs --events", mode)
-	}
-	project, err := store.Discover(cwd)
-	if err != nil {
-		return err
-	}
-	var events []model.Event
-	if eventsPath != "" {
-		if events, err = readCheckEvents(eventsPath, stdin); err != nil {
-			return err
-		}
-	}
-	var answer any
-	var header *checkHeader
-	var text string
-	switch mode {
-	case "criterion":
-		a, err := criterionAnswerOf(ctx, project, events, blob, output)
-		if err != nil {
-			return err
-		}
-		answer, header, text = a, &a.checkHeader, a.text
-	case "admission":
-		a, err := admissionCheck(ctx, project, events, packets, actor, getenv)
-		if err != nil {
-			return err
-		}
-		answer, header, text = a, &a.checkHeader, a.text
-	case "disposal":
-		a, err := disposalCheck(project, digest, git)
-		if err != nil {
-			return err
-		}
-		answer, header, text = a, &a.checkHeader, a.text
-	}
-	if *jsonOutput {
-		encoder := json.NewEncoder(stdout)
-		encoder.SetIndent("", "  ")
-		if err := encoder.Encode(answer); err != nil {
-			return err
-		}
-	} else if _, err := io.WriteString(stdout, header.Scope+"\nresult: "+header.Result+"\n"+text); err != nil {
-		return err
-	}
-	switch header.Result {
-	case string(evidence.False), "would-refuse":
-		return &exitError{code: 1}
-	case string(evidence.Unknown):
-		return &exitError{code: 3}
-	}
-	return nil
 }
 
 type criterionAnswer struct {
@@ -190,14 +170,7 @@ type admissionAnswer struct {
 // admissionCheck puts the events (as one uncaptured packet by the actor) and
 // any captured packets through the admission gate against the published
 // ledger, and collects every refusal the gate's stages allow.
-func admissionCheck(ctx context.Context, project store.Project, events []model.Event, packets []string, actor string, getenv func(string) string) (*admissionAnswer, error) {
-	if actor == "" {
-		actor = getenv("DATUM_ACTOR")
-	}
-	author := model.Actor{ID: actor}
-	if model.Blank(actor) {
-		author = model.Actor{UnknownReason: "no actor supplied by --actor or DATUM_ACTOR"}
-	}
+func admissionCheck(ctx context.Context, project store.Project, events []model.Event, packets []string, author model.Actor) (*admissionAnswer, error) {
 	var uncaptured []model.Packet
 	if len(events) > 0 {
 		packet, err := write.UncapturedPacket(project, author, events)
