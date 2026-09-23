@@ -2,7 +2,6 @@
 package query
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,14 +14,12 @@ import (
 )
 
 type Request struct {
-	Command      string // show, history, task todo, intake pending, or a preset in presets.go
+	Command      string // show, history, intake pending, or a preset in presets.go
 	ID           model.ID
 	SelfAdmitted model.SelfAdmissionState // empty means no filter; history only, without ID
 	Limit        int                      // optional-result cap for context, continue and todo; 0 means none
 	Observed     *Observation             // continue only: the caller's fresh workspace observation
 	Disposal     *DisposalTarget          // disposal-loss only: the artifact a disposal would name
-	Provider     Provider                 // optional; nil works fully offline
-	Context      context.Context          // for the provider only; nil means Background
 }
 
 // Answer is the complete read result shared by text and JSON. UNKNOWN is a
@@ -129,7 +126,7 @@ func Read(project store.Project, request Request) (Answer, error) {
 			return Answer{}, fmt.Errorf("self-admitted must be true, false, or unknown")
 		}
 	}
-	if request.Command != "show" && request.Command != "history" && request.Command != "task todo" && request.Command != "intake pending" && !presetCommands[request.Command] {
+	if request.Command != "show" && request.Command != "history" && request.Command != "intake pending" && !presetCommands[request.Command] {
 		return Answer{}, fmt.Errorf("unknown read command %q", request.Command)
 	}
 	if request.ID != "" && (!model.ValidID(request.ID) || request.Command != "show" && request.Command != "history" && !idPresets[request.Command]) {
@@ -162,7 +159,7 @@ func Read(project store.Project, request Request) (Answer, error) {
 		}
 	}
 	switch request.Command {
-	case "show", "task todo":
+	case "show":
 		for _, fact := range snapshot.Records() {
 			who := reduce.Ident{Project: fact.Key.Project, ID: fact.Key.ID}
 			revision, _ := snapshot.CurrentRevision(who)
@@ -170,9 +167,6 @@ func Read(project store.Project, request Request) (Answer, error) {
 				continue
 			}
 			r := describe(snapshot, fact)
-			if request.Command == "task todo" && (r.Task == nil || r.Task.Status == reduce.StatusClosed) {
-				continue
-			}
 			a.Records = append(a.Records, r)
 		}
 	case "history":

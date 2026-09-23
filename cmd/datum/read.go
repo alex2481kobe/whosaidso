@@ -17,7 +17,6 @@ import (
 const readUsage = `datum show [--json] [RECORD_ID]
 datum history [--json] [RECORD_ID]
 datum history [--json] --self-admitted[=true|false|unknown]
-datum task todo [--json]
 datum intake pending [--json]
 datum instruments|state|now [--json]
 datum todo [--json] [--limit N]
@@ -26,7 +25,7 @@ datum continue [--json] [--limit N] TASK_ID
 datum disposal-loss [--json] --digest SHA256 [--git FORMAT:COMMIT:PATH]
 
 Show selects current admitted records. History selects admitted events in order.
-TODO includes all tasks not CLOSED. Pending includes rejected and correction-requested packets.
+Pending includes rejected and correction-requested packets.
 History without an ID also lists per-packet reviews. --self-admitted selects only
 matching reviews, including rejected packets, without needing local intake bytes.
 The bare flag selects true; false excludes unknown. Legacy facts remain UNKNOWN.
@@ -63,7 +62,7 @@ func isReadCommand(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "show", "history", "task", "intake", "read", "instruments", "state", "now", "todo", "context", "continue", "disposal-loss":
+	case "show", "history", "intake", "read", "instruments", "state", "now", "todo", "context", "continue", "disposal-loss":
 		return true
 	}
 	return false
@@ -77,18 +76,14 @@ func readCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.W
 		return err
 	}
 	command, rest := args[0], args[1:]
-	if command == "task" || command == "intake" {
-		want := "todo"
-		if command == "intake" {
-			want = "pending"
-		}
-		if len(rest) == 0 || rest[0] != want {
-			return fmt.Errorf("expected task todo or intake pending; see datum read --help")
+	if command == "intake" {
+		if len(rest) == 0 || rest[0] != "pending" {
+			return fmt.Errorf("expected intake pending; see datum read --help")
 		}
 		command, rest = command+" "+rest[0], rest[1:]
 	}
 	presets := map[string]bool{"instruments": true, "state": true, "now": true, "todo": true, "context": true, "continue": true, "disposal-loss": true}
-	if command != "show" && command != "history" && command != "task todo" && command != "intake pending" && !presets[command] {
+	if command != "show" && command != "history" && command != "intake pending" && !presets[command] {
 		return fmt.Errorf("unknown read command %q; see datum read --help", command)
 	}
 	withID := command == "show" || command == "history" || command == "context" || command == "continue"
@@ -115,7 +110,7 @@ func readCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.W
 		}
 		return err
 	}
-	request := query.Request{Command: command, SelfAdmitted: model.SelfAdmissionState(selfAdmitted), Limit: limit, Context: ctx}
+	request := query.Request{Command: command, SelfAdmitted: model.SelfAdmissionState(selfAdmitted), Limit: limit}
 	if command == "disposal-loss" {
 		request.Disposal = &query.DisposalTarget{Digest: model.Digest(digest)}
 		if git != "" {

@@ -41,30 +41,6 @@ func TestTaskRevisionHoldersAndUnknownNeverBorrowNearbyActors(t *testing.T) {
 	}
 }
 
-func TestTodoIncludesEveryOpenStatusAndExcludesClosed(t *testing.T) {
-	p := testProject(t)
-	readyControl(t, p)
-	appendEvents(t, p, 101, testTask(2), testTask(3), testTask(4),
-		&model.TaskStart{Task: testRef(2, 1), AttemptID: testID(70), Actor: model.Actor{ID: "worker"}},
-		&model.BlockerHold{Task: testRef(3, 1), BlockerID: testID(80), Reason: model.BlockerResume,
-			Actor: model.Actor{ID: "owner"}, Criterion: "resume is authorized"},
-		&model.TaskClose{Task: testRef(4, 1), Outcome: model.ClosureCancelled,
-			Authority:             model.Authority{Actor: model.Actor{ID: "owner"}, SourceRef: testArtifact(), Selector: model.Selector{Kind: "whole"}, Scope: testScope()},
-			AcceptanceWitnessRefs: []model.AcceptanceWitness{}, DeliveryWitnessRefs: []model.ArtifactRef{}})
-	a := readAnswer(t, p, "task todo", "")
-	statuses := []reduce.TaskStatus{}
-	for _, record := range a.Records {
-		statuses = append(statuses, record.Task.Status)
-	}
-	want := []reduce.TaskStatus{reduce.StatusReady, reduce.StatusInFlight, reduce.StatusBlocked}
-	if !reflect.DeepEqual(statuses, want) {
-		t.Fatalf("TODO must contain READY, IN FLIGHT and BLOCKED in identity order and exclude CLOSED; got %v", statuses)
-	}
-	if got := readAnswer(t, p, "show", testID(4)).Records[0].Task.Status; got != reduce.StatusClosed {
-		t.Fatalf("excluded CLOSED task must remain inspectable, got %s", got)
-	}
-}
-
 func TestPendingRetainsRejectionsCorrectionsAndMissingLocalPackets(t *testing.T) {
 	p := testProject(t)
 	readyControl(t, p)
@@ -200,7 +176,7 @@ func TestDeletingGeneratedOutputChangesNeitherAnswerNorCanonicalBytes(t *testing
 		t.Fatal(err)
 	}
 	ledger, intake := treeBytes(t, p.Ledger), treeBytes(t, dir)
-	for _, command := range []string{"show", "history", "task todo", "intake pending"} {
+	for _, command := range []string{"show", "history", "intake pending"} {
 		before := readAnswer(t, p, command, "")
 		var rendered bytes.Buffer
 		if err := RenderText(&rendered, before); err != nil {
@@ -222,7 +198,7 @@ func TestDeletingGeneratedOutputChangesNeitherAnswerNorCanonicalBytes(t *testing
 
 func TestEmptyAndCorruptReadsAreDifferent(t *testing.T) {
 	p := testProject(t)
-	for _, command := range []string{"show", "history", "task todo", "intake pending"} {
+	for _, command := range []string{"show", "history", "intake pending"} {
 		a := readAnswer(t, p, command, "")
 		if a.Result != "KNOWN" || a.Watermark.Sequence != 0 || a.Watermark.Head.(Unknown).State != "UNKNOWN" {
 			t.Fatalf("empty control must have known empty inventory and UNKNOWN head, got %+v", a)

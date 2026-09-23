@@ -91,7 +91,7 @@ func TestTextAndJSONCarryExactlyTheSameFacts(t *testing.T) {
 	p := testProject(t)
 	readyControl(t, p)
 	capturePacket(t, p, 2)
-	for _, command := range []string{"show", "history", "task todo", "intake pending"} {
+	for _, command := range []string{"show", "history", "intake pending"} {
 		a := readAnswer(t, p, command, "")
 		var exported, rendered bytes.Buffer
 		if err := RenderJSON(&exported, a); err != nil {

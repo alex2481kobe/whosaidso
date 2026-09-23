@@ -102,7 +102,7 @@ func TestFreshProcessesExplainAdmittedDatumConstructionTaskAndSource(t *testing.
 	if !bytes.Contains(text, []byte(task.Spec.Intent)) || !bytes.Contains(text, []byte(artifact.Content.SHA256)) || !bytes.Contains(text, []byte("watermark")) {
 		t.Fatalf("text must explain the same obligation, source and watermark as JSON, got %s", text)
 	}
-	for _, args := range [][]string{{"history", "--json"}, {"task", "todo", "--json"}, {"intake", "pending", "--json"}} {
+	for _, args := range [][]string{{"history", "--json"}, {"intake", "pending", "--json"}} {
 		a := readJSON(t, readProcess(t, root, nil, args...))
 		if a.Watermark.Sequence != 1 {
 			t.Fatalf("every fresh read command needs watermark 1, got %+v for %v", a.Watermark, args)
@@ -166,12 +166,12 @@ func TestReadCLIConventionsErrorsAndNoCanonicalWrites(t *testing.T) {
 		t.Fatalf("control admitted record read must succeed at watermark 1: %v", err)
 	}
 	for _, args := range [][]string{{"task"}, {"task", "done"}, {"intake"}, {"intake", "all"}, {"show", "--bogus"},
-		{"show", "bad-id"}, {"show", string(cliID(1)), "--json"}, {"task", "todo", string(cliID(1))}, {"read", "show"}} {
+		{"show", "bad-id"}, {"show", string(cliID(1)), "--json"}, {"read", "show"}} {
 		if output, err := call(args...); err == nil || len(output) != 0 {
 			t.Fatalf("invalid read %v must fail without an answer, got %s, %v; flag conventions match writes", args, output, err)
 		}
 	}
-	for _, args := range [][]string{{"read", "--help"}, {"show", "--help"}, {"history", "--help"}, {"task", "todo", "--help"}, {"intake", "pending", "--help"}} {
+	for _, args := range [][]string{{"read", "--help"}, {"show", "--help"}, {"history", "--help"}, {"intake", "pending", "--help"}} {
 		if _, err := call(args...); err != nil {
 			t.Fatalf("read help must succeed for %v: %v", args, err)
 		}
@@ -240,7 +240,7 @@ func TestReadCLISelfAdmissionAudit(t *testing.T) {
 	for _, args := range [][]string{
 		{"history", "--self-admitted="}, {"history", "--self-admitted=no"}, {"history", "--self-admitted=UNKNOWN"},
 		{"history", "--self-admitted", string(cliID(1))}, {"show", "--self-admitted"},
-		{"task", "todo", "--self-admitted"}, {"intake", "pending", "--self-admitted"},
+		{"intake", "pending", "--self-admitted"},
 	} {
 		var out bytes.Buffer
 		if err := readCLI(context.Background(), args, root, &out, io.Discard); err == nil || out.Len() != 0 {
