@@ -1,7 +1,7 @@
 package evidence
 
-// Where observed and pinned bytes may come from: run-dir outputs read only from
-// the run's own directory, non-canonical paths matching nothing, and git pins
+// Where observed and pinned bytes may come from: run-dir outputs read from the
+// run's own directory or their admitted copy in the store, non-canonical paths matching nothing, and git pins
 // resolved relative to the datum root. General resolver and selector behaviour
 // belongs in resolve_test.go and selectors_test.go, not here.
 
@@ -32,7 +32,10 @@ func runDirObserve(t *testing.T, root string, extra ...string) Observation {
 	return o
 }
 
-func TestRunDirOutputIsReadOnlyFromTheRunsOwnDirectory(t *testing.T) {
+// Observe reads the matched run-dir path, then the content store: seal
+// admission proved the bytes were this run's output and materialized them, so
+// the store answers after the run directory is gone. No other locator answers.
+func TestRunDirOutputIsReadFromTheRunDirectoryOrItsAdmittedCopy(t *testing.T) {
 	sum := string(model.HashBytes([]byte(resultArtifact)))
 
 	control := t.TempDir()
@@ -41,14 +44,14 @@ func TestRunDirOutputIsReadOnlyFromTheRunsOwnDirectory(t *testing.T) {
 		t.Fatalf("control: a run-dir output present in the run directory must read: %s", o.Unavailable)
 	}
 
-	t.Run("bytes only in the content store", func(t *testing.T) {
+	t.Run("admitted bytes in the content store after the run directory is gone", func(t *testing.T) {
 		root := t.TempDir()
 		writeFile(t, root, DefaultArtifactDir+"/"+sum, resultArtifact)
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(RunDir(invocationA)))); !os.IsNotExist(err) {
 			t.Fatalf("fixture: the run directory must not exist: %v", err)
 		}
-		if o := runDirObserve(t, root); o.Unavailable == "" {
-			t.Fatal("a digest in the store is not this run's output; the observation must be unavailable")
+		if o := runDirObserve(t, root); o.Unavailable != "" {
+			t.Fatalf("the admitted copy of this run's output must read: %s", o.Unavailable)
 		}
 	})
 
@@ -73,7 +76,7 @@ func TestNonCanonicalPathsMatchNothing(t *testing.T) {
 		match                  bool
 	}{
 		{"control-own-run-dir", "out/result.json", a + "/out/result.json", true},
-		{"control-bare-form", "out/result.json", "out/result.json", true},
+		{"bare-form-names-nothing", "out/result.json", "out/result.json", false},
 		{"control-other-run-clean", b + "/out/result.json", b + "/out/result.json", false},
 		{"contract-dot-segment-to-other-run", dot, dot, false},
 		{"contract-double-slash-to-other-run", dbl, dbl, false},

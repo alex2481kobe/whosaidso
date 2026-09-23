@@ -1,6 +1,7 @@
 package evidence
 
-// Invocation observations, output binding, and cross-invocation comparability live here.
+// Invocation observations and output binding live here. Cross-invocation
+// comparability lives in comparable.go.
 
 import (
 	"context"
@@ -21,8 +22,13 @@ import (
 // which is the point: there is nothing to transcribe and therefore nothing to
 // drift.
 type Observation struct {
-	InvocationRef      model.InvocationRef
-	CriterionRef       model.Availability[model.CriterionRef]
+	InvocationRef model.InvocationRef
+	CriterionRef  model.Availability[model.CriterionRef]
+	Instrument    model.RecordRef
+	Execution     model.ExecutionIdentity
+	// ImageOutput is whether any output declares an image media type: a run
+	// that made a picture has visual conditions whether or not it reported them.
+	ImageOutput        bool
 	Outcome            model.Availability[model.ProcessOutcome]
 	ConfigEffective    model.Availability[map[string]model.Availability[model.Scalar]]
 	ConditionsObserved model.Availability[map[string]model.Availability[model.Scalar]]
@@ -48,6 +54,8 @@ func (r *Resolver) Observe(ctx context.Context, c model.CriterionFix, env model.
 	o := Observation{
 		InvocationRef:      model.InvocationRef{Project: env.ExecutionSourceIdentity.Project, InvocationID: env.InvocationID},
 		CriterionRef:       env.CriterionRef,
+		Instrument:         env.InstrumentRef,
+		Execution:          env.ExecutionSourceIdentity,
 		Outcome:            env.Outcome,
 		ConfigEffective:    env.ConfigEffective,
 		ConditionsObserved: env.ConditionsObserved,
@@ -58,6 +66,11 @@ func (r *Resolver) Observe(ctx context.Context, c model.CriterionFix, env model.
 		return o, nil
 	}
 	outs := *env.OutputRefs.Value
+	for _, out := range outs {
+		if out.Content != nil && strings.HasPrefix(out.Content.MediaType, "image/") {
+			o.ImageOutput = true
+		}
+	}
 	runDir := RunDir(env.InvocationID)
 
 	result, why, err := r.readSelector(ctx, outs, runDir, c.Expression.ResultSelector)
@@ -95,14 +108,15 @@ func (r *Resolver) readSelector(ctx context.Context, outs []model.ArtifactRef, r
 	// silently re-aiming at different bytes.
 	ref := match
 	ref.Selector = want.Selector
-	res := r
-	if strings.HasPrefix(at, runDir+"/") && ref.Content != nil {
-		// Only the run's own directory may answer. A same-digest copy elsewhere,
-		// such as the criterion's example in the store, is not this run's output.
-		pin, own := *ref.Content, *r
-		pin.Locators, ref.Content, own.noStore, res = []model.Locator{{Path: at}}, &pin, true, &own
+	if ref.Content != nil {
+		// Only the matched run-dir path, then the store. Seal admission proved
+		// these bytes existed as this run's output (its own directory or its
+		// captured blobs) and materialized them, so the store holds THIS run's
+		// admitted bytes under their digest once the run directory is gone.
+		pin := *ref.Content
+		pin.Locators, ref.Content = []model.Locator{{Path: at}}, &pin
 	}
-	resolved, err := res.Resolve(ctx, ref)
+	resolved, err := r.Resolve(ctx, ref)
 	if err != nil {
 		if code := faultCode(err); code == "unavailable" || code == "io" {
 			return Reading{}, err.Error(), nil
@@ -122,14 +136,15 @@ func RunDir(invocation model.ID) string {
 }
 
 // matchOutput pairs a criterion selector with an output by the path each
-// declares. R8.3: the contract path resolves in THIS run's own directory, so
+// declares. R8.3/R9: the contract path resolves in THIS run's own directory, so
 // out/result.json names runs/<this-id>/out/result.json and never another run's
 // file; a contract path that would leave that directory names nothing there.
-// An output declared at the contract path itself still matches (U07's form).
-// Ambiguity is refused rather than resolved by position, since which of two
-// same-path outputs was meant is not something order can answer. A path not in
-// canonical form names nothing: refused, not normalized, so no spelling can
-// slip past the runs/ prefix check. It returns the matched path.
+// That is the ONLY form: an output declared at the bare contract path names a
+// file any run, or the criterion's own example, could have put there. Ambiguity
+// is refused rather than resolved by position, since which of two same-path
+// outputs was meant is not something order can answer. A path not in canonical
+// form names nothing: refused, not normalized, so no spelling can reach another
+// run's directory. It returns the matched path.
 func matchOutput(outs []model.ArtifactRef, runDir string, want model.ArtifactRef) (model.ArtifactRef, string, string) {
 	wanted := map[string]bool{}
 	var odd []string
@@ -137,9 +152,6 @@ func matchOutput(outs []model.ArtifactRef, runDir string, want model.ArtifactRef
 		if path.Clean(p) != p {
 			odd = append(odd, p)
 			continue
-		}
-		if !strings.HasPrefix(p, DefaultArtifactDir+"/runs/") || strings.HasPrefix(p, runDir+"/") {
-			wanted[p] = true
 		}
 		if joined := path.Join(runDir, p); strings.HasPrefix(joined, runDir+"/") {
 			wanted[joined] = true
@@ -179,78 +191,6 @@ func faultCode(err error) string {
 		return f.Code
 	}
 	return ""
-}
-
-// comparable checks that the family measured the same thing under the same
-// conditions. Two runs whose effective configuration differs are two different
-// measurements, and reporting one result for them would hide which one it came
-// from. Values are compared, not the requested configuration, because what was
-// asked for is not what ran.
-func comparable(members []Observation) string {
-	for i := 1; i < len(members); i++ {
-		a, b := members[0], members[i]
-		pair := string(a.InvocationRef.InvocationID) + " and " + string(b.InvocationRef.InvocationID)
-		if why := mapDifference("effective configuration", a.ConfigEffective, b.ConfigEffective); why != "" {
-			return pair + " are not comparable: " + why
-		}
-		if why := mapDifference("observed conditions", a.ConditionsObserved, b.ConditionsObserved); why != "" {
-			return pair + " are not comparable: " + why
-		}
-	}
-	return ""
-}
-
-func mapDifference(label string, a, b model.Availability[map[string]model.Availability[model.Scalar]]) string {
-	switch {
-	case a.State != model.Known && b.State != model.Known:
-		// Neither run recorded it, so sameness is an assumption. It is a cheap
-		// assumption to make and an expensive one to be wrong about.
-		return "neither run observed its " + label
-	case a.State != model.Known || b.State != model.Known:
-		return "one run observed its " + label + " and the other did not"
-	}
-	left, right := *a.Value, *b.Value
-	for _, name := range union(left, right) {
-		lv, lok := left[name]
-		rv, rok := right[name]
-		switch {
-		case !lok || !rok:
-			// cameraPosition in one run and camera_pos in the other is the drift
-			// the instrument declares its knob names to prevent: it makes two
-			// comparable runs look different, or hides a real difference.
-			return label + " names " + quote(name) + " in only one run"
-		case lv.State != rv.State:
-			return label + " for " + quote(name) + " was observed in only one run"
-		case lv.State != model.Known:
-			// Like model.SameActor, two unknowns cannot establish equality.
-			return label + " for " + quote(name) + " was not observed in either run"
-		case lv.State == model.Known:
-			same, err := model.CompareScalars(*lv.Value, model.Equal, *rv.Value)
-			if err != nil {
-				return label + " for " + quote(name) + " is not comparable across the runs: " + err.Error()
-			}
-			if !same {
-				return label + " for " + quote(name) + " differs between the runs"
-			}
-		}
-	}
-	return ""
-}
-
-func union(a, b map[string]model.Availability[model.Scalar]) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, m := range []map[string]model.Availability[model.Scalar]{a, b} {
-		for k := range m {
-			if !seen[k] {
-				seen[k] = true
-				out = append(out, k)
-			}
-		}
-	}
-	// Sorted so a refusal names the same knob every time it runs.
-	sort.Strings(out)
-	return out
 }
 
 // metadataAgreement keeps reading-wide and member declarations separate while

@@ -47,7 +47,7 @@ datum
 |   |-- acceptance     (tests only, no production code)
 |   |      tests only
 |   |-- evidence       turns a reference into the exact bytes it names, and a frozen criterion into a verdict over what those bytes actually say
-|   |      7 files, tested -- uses model
+|   |      8 files, tested -- uses model
 |   |-- model          wire vocabulary every other package shares: identities, references, packets and bundles, plus the strict encode/decode boundary
 |   |      14 files, tested -- leaf
 |   |-- query          selects admitted facts before either output format renders them
@@ -55,9 +55,9 @@ datum
 |   |-- reduce         folds admitted bundles into the state every Datum answer is read from
 |   |      16 files, tested -- uses model
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
-|   |      9 files, tested -- uses model
+|   |      10 files, tested -- uses model
 |   `-- write          joins immutable capture to canonical state through one admission gate
-|          14 files, tested -- uses evidence, model, reduce, store
+|          16 files, tested -- uses evidence, model, reduce, store
 `-- tools/
     `-- archtree       instrument that reports how this module's packages fit together
            4 files, tested -- leaf

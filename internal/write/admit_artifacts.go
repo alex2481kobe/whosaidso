@@ -30,6 +30,11 @@ func materializeAdmission(ctx context.Context, project store.Project, packets []
 			if err != nil {
 				return err
 			}
+			if seal, ok := event.(*model.InvocationSeal); ok {
+				if err := runAdmitOutputs(project.Root, inbox, packet, seal.Envelope); err != nil {
+					return err
+				}
+			}
 			for _, ref := range admissionArtifacts(event) {
 				if err := ctx.Err(); err != nil {
 					return err

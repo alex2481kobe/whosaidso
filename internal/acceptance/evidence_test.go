@@ -327,9 +327,9 @@ func TestEvidenceUnreadableOutputIsAbsentWithAReasonInsteadOfUsingTheCriterionEx
 func TestEvidenceTwoOutputsAtOneDeclaredPathAreRefusedRegardlessOfTheirOrder(t *testing.T) {
 	c := laneEEvidenceCriterion()
 	root := t.TempDir()
-	laneEEvidenceWrite(t, root, "out/result.json", laneEEvidenceBody)
-	other := laneEEvidenceContent(strings.Replace(laneEEvidenceBody, "0.0100", "0.9900", 1))
-	for _, outputs := range [][]model.ArtifactRef{{laneEEvidenceContent(laneEEvidenceBody), other}, {other, laneEEvidenceContent(laneEEvidenceBody)}} {
+	laneEEvidenceWrite(t, root, laneEEvidenceRunPath(10), laneEEvidenceBody)
+	other := laneEEvidenceRunOutput(strings.Replace(laneEEvidenceBody, "0.0100", "0.9900", 1), 10)
+	for _, outputs := range [][]model.ArtifactRef{{laneEEvidenceRunOutput(laneEEvidenceBody, 10), other}, {other, laneEEvidenceRunOutput(laneEEvidenceBody, 10)}} {
 		env := laneEEvidenceEnvelope(c, laneEEvidenceBody, 10)
 		env.OutputRefs = laneEEvidenceKnown(outputs)
 		o, err := evidence.NewResolver(root).Observe(context.Background(), c, env)
@@ -484,6 +484,23 @@ func laneEEvidenceContent(body string) model.ArtifactRef {
 	}, Selector: model.Selector{Kind: "whole"}}
 }
 
+// laneEEvidenceRunPath is where invocation id's output lives (R9: the
+// run-relative path is the only form a run output may be declared at).
+func laneEEvidenceRunPath(id int) string {
+	return evidence.RunDir(model.ID(fmt.Sprintf("%026d", id))) + "/out/result.json"
+}
+
+// laneEEvidenceRunOutput pins body at invocation id's run-relative path.
+func laneEEvidenceRunOutput(body string, id int) model.ArtifactRef {
+	ref := laneEEvidenceContent(body)
+	ref.Content.Locators = []model.Locator{{Path: laneEEvidenceRunPath(id)}}
+	return ref
+}
+
+// laneEEvidenceMachine is a fixed, KNOWN machine id shared by runs meant to be
+// comparable (unknown machine ids never match).
+const laneEEvidenceMachine model.ID = "7ZZZZZZZZZZZZZZZZZZZZZZZZZ"
+
 func laneEEvidenceBoth(format, commit, body string) model.ArtifactRef {
 	ref := laneEEvidenceContent(body)
 	ref.Kind = "git"
@@ -573,7 +590,7 @@ func laneEEvidenceCriterion() model.CriterionFix {
 
 func laneEEvidenceObserve(t *testing.T, root string, c model.CriterionFix, body string, id int) evidence.Observation {
 	t.Helper()
-	laneEEvidenceWrite(t, root, "out/result.json", body)
+	laneEEvidenceWrite(t, root, laneEEvidenceRunPath(id), body)
 	env := laneEEvidenceEnvelope(c, body, id)
 	if err := model.ValidateSchema(c); err != nil {
 		t.Fatalf("criterion fixture must be valid: %v", err)
@@ -589,7 +606,7 @@ func laneEEvidenceObserve(t *testing.T, root string, c model.CriterionFix, body 
 }
 
 func laneEEvidenceEnvelope(c model.CriterionFix, body string, id int) model.InvocationEnvelope {
-	output := laneEEvidenceContent(body)
+	output := laneEEvidenceRunOutput(body, id)
 	// The output selector intentionally differs from the frozen criterion.
 	output.Selector = model.Selector{Kind: "json-pointer", Pointer: "/not-the-result"}
 	exit := 0
@@ -599,7 +616,7 @@ func laneEEvidenceEnvelope(c model.CriterionFix, body string, id int) model.Invo
 		InstrumentRef: model.RecordRef{Project: c.Claim.Project, RecordID: "00000000000000000000000004", Revision: 1},
 		CriterionRef:  laneEEvidenceKnown(model.CriterionRef{Claim: c.Claim, CriterionID: c.CriterionID, Revision: c.Revision}),
 		ExecutionSourceIdentity: model.ExecutionIdentity{
-			Project: c.Claim.Project, MachineID: laneEEvidenceUnknown[model.ID]("not captured"),
+			Project: c.Claim.Project, MachineID: laneEEvidenceKnown(laneEEvidenceMachine),
 			SourceRefs: []model.ArtifactRef{}, Head: laneEEvidenceUnknown[model.GitHead]("not captured"), Dirty: laneEEvidenceUnknown[bool]("not captured"),
 		},
 		Argv: []string{"fixture-measurement"}, InputRefs: []model.ArtifactRef{}, ConfigRequested: map[string]model.Scalar{},

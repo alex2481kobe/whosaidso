@@ -33,9 +33,7 @@ func (r *Resolver) readContent(c model.ContentPin) ([]byte, Origin, string, erro
 	for _, l := range c.Locators {
 		cands = append(cands, candidate{declared: l.Path, origin: OriginLocator})
 	}
-	if !r.noStore {
-		cands = append(cands, candidate{declared: path.Join(r.artifactDir(), string(c.SHA256)), origin: OriginArtifactStore})
-	}
+	cands = append(cands, candidate{declared: path.Join(r.artifactDir(), string(c.SHA256)), origin: OriginArtifactStore})
 
 	var notes []string
 	for _, cd := range cands {

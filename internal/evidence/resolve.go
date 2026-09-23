@@ -42,9 +42,6 @@ type Resolver struct {
 	ArtifactDir string
 	Git         GitRunner
 	MaxBytes    int64
-	// noStore limits content reads to the authored locators. Set only for a
-	// run-dir output, whose bytes count only if the run's directory holds them.
-	noStore bool
 }
 
 // NewResolver builds the production resolver for one project root.
