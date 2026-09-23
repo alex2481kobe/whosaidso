@@ -172,35 +172,9 @@ func ReadIntake(project Project, ids []model.ID) ([]model.Packet, error) {
 // ReadVerifiedIntake is ReadIntake keeping what verification already computed,
 // so an admission never reopens or rehashes a packet it has just verified.
 func ReadVerifiedIntake(project Project, ids []model.ID) ([]VerifiedPacket, error) {
-	inbox, err := IntakeDir(project)
+	inbox, ids, err := intakeIDs(project, ids)
 	if err != nil {
 		return nil, err
-	}
-	for _, dir := range []string{filepath.Dir(filepath.Dir(inbox)), filepath.Dir(inbox), inbox} {
-		if _, err := os.Lstat(dir); os.IsNotExist(err) && ids == nil {
-			return []VerifiedPacket{}, nil
-		}
-		if err := checkIntakePath(dir, true); err != nil {
-			return nil, err
-		}
-	}
-	if ids == nil {
-		entries, err := os.ReadDir(inbox)
-		if os.IsNotExist(err) {
-			return []VerifiedPacket{}, nil
-		}
-		if err != nil {
-			return nil, storeFault("io", inbox, err.Error())
-		}
-		for _, entry := range entries {
-			if strings.HasSuffix(entry.Name(), ".tmp") {
-				continue
-			}
-			if !model.ValidID(model.ID(entry.Name())) || !entry.IsDir() {
-				return nil, storeFault("intake-corrupt", filepath.Join(inbox, entry.Name()), "unexpected published intake entry")
-			}
-			ids = append(ids, model.ID(entry.Name()))
-		}
 	}
 	packets := make([]VerifiedPacket, 0, len(ids))
 	for _, id := range ids {
