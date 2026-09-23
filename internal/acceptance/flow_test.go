@@ -1013,8 +1013,8 @@ func TestFlowAcceptance(t *testing.T) {
 	scope := task.spec.Scope
 	scope.ContextRefs = []model.RecordRef{task.ref}
 	closure := func(witnessed bool) *model.TaskClose {
-		c := &model.TaskClose{Task: task.ref, Outcome: model.ClosureSuccess,
-			Authority:             model.Authority{Actor: model.Actor{ID: "owner"}, SourceRef: rulingRef, Selector: model.Selector{Kind: "json-pointer", Pointer: "/ruling"}, Scope: scope},
+		c := &model.TaskClose{Task: task.ref, Outcome: model.ClosureSuccess, // R15.1: the authority is optional, so a pointer.
+			Authority:             &model.Authority{Actor: model.Actor{ID: "owner"}, SourceRef: rulingRef, Selector: model.Selector{Kind: "json-pointer", Pointer: "/ruling"}, Scope: scope},
 			AcceptanceWitnessRefs: []model.AcceptanceWitness{}, DeliveryWitnessRefs: []model.ArtifactRef{}}
 		if witnessed {
 			c.AcceptanceWitnessRefs = []model.AcceptanceWitness{{CriterionID: task.spec.AcceptanceCriteria[0].ID, CriterionRevision: 1, WitnessRef: rulingRef}}

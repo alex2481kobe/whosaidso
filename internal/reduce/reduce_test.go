@@ -60,6 +60,12 @@ func testScope() model.Scope {
 	}
 }
 
+// closeAuthority is the authority a pre-R15.1 closure cited; it stays optional.
+func closeAuthority() *model.Authority {
+	a := rulingAuthority("owner")
+	return &a
+}
+
 func rulingAuthority(actor string) model.Authority {
 	return model.Authority{
 		Actor:     model.Actor{ID: actor},
@@ -804,7 +810,7 @@ func closeSuccess(task model.ID, rev model.Revision) *model.TaskClose {
 	return &model.TaskClose{
 		Task:      ref(task, rev),
 		Outcome:   model.ClosureSuccess,
-		Authority: rulingAuthority("owner"),
+		Authority: closeAuthority(),
 		AcceptanceWitnessRefs: []model.AcceptanceWitness{
 			{CriterionID: newID("ACCA"), CriterionRevision: 1, WitnessRef: blobRef("acceptance")},
 		},

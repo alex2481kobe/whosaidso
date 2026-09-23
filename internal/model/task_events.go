@@ -61,12 +61,15 @@ type AttemptTerminal struct {
 	ReconciliationOwed bool           `json:"reconciliation_owed"`
 }
 
-// TaskClose supplies U05/U12 authority and revision-applicable witnesses. Whether
-// all attempts are terminal and witnesses resolve is a gate/reducer question.
+// TaskClose supplies U05/U12 revision-applicable witnesses. Whether all
+// attempts are terminal and witnesses resolve is a gate/reducer question.
+// Authority is optional since R15.1: acceptance is the closing packet's
+// author (the accepter, when the task names one); an authority, when cited,
+// is still checked against its carrier.
 type TaskClose struct {
 	Task                  RecordRef           `json:"task"`
 	Outcome               ClosureOutcome      `json:"outcome"`
-	Authority             Authority           `json:"authority"`
+	Authority             *Authority          `json:"authority,omitempty"`
 	AcceptanceWitnessRefs []AcceptanceWitness `json:"acceptance_witness_refs"`
 	DeliveryWitnessRefs   []ArtifactRef       `json:"delivery_witness_refs"`
 }

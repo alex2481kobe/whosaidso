@@ -189,7 +189,7 @@ func TestProofRevisionAndTrustLossStayAttachedToTheirExactSubjects(t *testing.T)
 		t.Fatalf("control verified fixture support must be current: %+v", support)
 	}
 	spec := model.DecisionSpec{Question: "ship this revision", Options: []string{"approve", "reject"}, WaitingActor: model.Actor{ID: "owner"}, Scope: laneEReduceScope()}
-	authority := laneEReduceClose(1, 1, 1, model.ClosureSuccess).Authority
+	authority := *laneEReduceClose(1, 1, 1, model.ClosureSuccess).Authority // R15.1: a closure's authority is optional, so a pointer.
 	ruling := &model.DecisionDispose{Decision: laneEReduceRef(5, 1), Disposition: "approved", Quote: "ship revision one", Scope: spec.Scope, Authority: authority}
 	second := laneEReduceBundle(t, first, &model.DecisionOpen{ID: laneEReduceID(5), Provenance: laneEReduceProvenance(), Spec: spec}, ruling)
 	decided := laneEReduceReplay(t, append(prefix[:len(prefix):len(prefix)], second)...)

@@ -160,7 +160,11 @@ func (s *state) terminal(b model.Bundle, idx int, o Origin, e *model.AttemptTerm
 }
 
 func (s *state) close(b model.Bundle, idx int, o Origin, e *model.TaskClose) error {
-	if _, err := s.taskAt(b, idx, e.Task, "task"); err != nil {
+	rec, err := s.taskAt(b, idx, e.Task, "task")
+	if err != nil {
+		return err
+	}
+	if err := s.checkAccepter(b, idx, rec); err != nil {
 		return err
 	}
 	// Whether every attempt is terminal, and whether a success closure has

@@ -65,7 +65,7 @@ func laneEReduceCreate(n int, spec model.TaskSpec) *model.TaskCreate {
 func laneEReduceClose(n int, revision, criterionRevision model.Revision, outcome model.ClosureOutcome) *model.TaskClose {
 	return &model.TaskClose{
 		Task: laneEReduceRef(n, revision), Outcome: outcome,
-		Authority: model.Authority{
+		Authority: &model.Authority{ // R15.1: a closure's authority is optional, so a pointer.
 			Actor: model.Actor{ID: "owner"}, SourceRef: laneEReduceArtifact("ruling"),
 			Selector: model.Selector{Kind: "json-pointer", Pointer: "/ruling"}, Scope: laneEReduceScope(),
 		},

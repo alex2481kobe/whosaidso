@@ -1,8 +1,9 @@
 package write
 
-// Tests for the operations U12 opened outside proof: task.close (authority
-// carrier, terminal attempts, success witnesses, containment) and
-// decision.open/revise. Decision disposition is tested in gate_dispose_test.go.
+// Tests for the operations U12 opened outside proof: task.close (a cited
+// authority's carrier, terminal attempts, success witnesses, containment) and
+// decision.open/revise. Decision disposition is tested in gate_dispose_test.go;
+// closing with no authority and the accepter (R15.1) in gate_accept_test.go.
 
 import (
 	"context"
@@ -50,7 +51,7 @@ func (w *closeWorld) closure(outcome model.ClosureOutcome) *model.TaskClose {
 	scope.ContextRefs = []model.RecordRef{w.task}
 	delivery := proofPin(`{"delivered":true}`, "delivery/report.json")
 	return &model.TaskClose{Task: w.task, Outcome: outcome,
-		Authority:             model.Authority{Actor: model.Actor{ID: "owner"}, SourceRef: w.ruling, Selector: model.Selector{Kind: "json-pointer", Pointer: "/ruling"}, Scope: scope},
+		Authority:             &model.Authority{Actor: model.Actor{ID: "owner"}, SourceRef: w.ruling, Selector: model.Selector{Kind: "json-pointer", Pointer: "/ruling"}, Scope: scope},
 		AcceptanceWitnessRefs: []model.AcceptanceWitness{{CriterionID: w.spec.AcceptanceCriteria[0].ID, CriterionRevision: 1, WitnessRef: delivery}},
 		DeliveryWitnessRefs:   []model.ArtifactRef{delivery}}
 }
@@ -98,6 +99,7 @@ func TestTaskCloseSuccessRequiresWitnessesAndTerminalAttempts(t *testing.T) {
 	}
 }
 
+// R15.1 made the authority optional; one a closure does cite is still checked.
 func TestTaskCloseAuthorityNeedsItsCarrier(t *testing.T) {
 	for _, route := range []string{"no-carrier", "other-speaker", "unknown-actor", "scope-omits-task", "ruling-selector-absent", "witness-escape"} {
 		t.Run(route, func(t *testing.T) {

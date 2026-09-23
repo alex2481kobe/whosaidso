@@ -38,8 +38,10 @@ func gateProofOperation(event model.TypedEvent, author model.Actor) (*model.Prov
 	case *model.Supersede, *model.ArtifactDispose:
 		return nil, gateOwnerActOperation(event)
 	case *model.TaskClose:
-		// Authority is checked against its durable carrier in gateCloseAuthority;
-		// whether the closure takes effect is checked after replay.
+		// R15.1: no authority carrier is required. The accepter, when the task
+		// names one, is checked by the reducer against the packet author; a
+		// cited authority is still checked against its carrier in
+		// gateCloseAuthority; whether the closure takes effect, after replay.
 		return nil, nil
 	case *model.InstrumentRevise:
 		return &e.Provenance, gateValidation(e.Replacement.Validation)
@@ -124,7 +126,12 @@ func gateProofArtifacts(event model.TypedEvent) []model.ArtifactRef {
 		gateWalkArtifacts(reflect.ValueOf(event), &out)
 		return out
 	case *model.TaskClose:
-		return gateAuthorityArtifacts(event, e.Authority)
+		if e.Authority == nil {
+			out := []model.ArtifactRef{}
+			gateWalkArtifacts(reflect.ValueOf(event), &out)
+			return out
+		}
+		return gateAuthorityArtifacts(event, *e.Authority)
 	case *model.DecisionDispose:
 		return gateAuthorityArtifacts(event, e.Authority)
 	case *model.Supersede, *model.ArtifactDispose:
@@ -204,11 +211,13 @@ func gateProofs(ctx context.Context, project store.Project, after reduce.Snapsho
 	return nil
 }
 
-// gateCloseAuthority: a closure cites a named authority whose exact words are an
-// admitted or bundled source.intake spoken by that actor about this revision.
+// gateCloseAuthority: a closure that cites an authority (optional since
+// R15.1) names it, and its exact words are an admitted or bundled
+// source.intake spoken by that actor about this revision. A closure citing
+// none needs no carrier: acceptance is its packet author.
 func gateCloseAuthority(event model.TypedEvent, sources []reduce.Source) error {
 	e, ok := event.(*model.TaskClose)
-	if !ok {
+	if !ok || e.Authority == nil {
 		return nil
 	}
 	if model.Blank(e.Authority.Actor.ID) {
