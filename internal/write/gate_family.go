@@ -19,7 +19,7 @@ import (
 	"datum/internal/store"
 )
 
-func gateProofFamily(ctx context.Context, project store.Project, after reduce.Snapshot, e *model.ProofAdmit) error {
+func gateProofFamily(ctx context.Context, project store.Project, after reduce.Snapshot, intake *pendingIntake, e *model.ProofAdmit) error {
 	criterion, ok := after.Criterion(e.CriterionRef)
 	if !ok {
 		return admissionFault("unknown-reference", "criterion_ref", "proof names no admitted criterion")
@@ -31,7 +31,7 @@ func gateProofFamily(ctx context.Context, project store.Project, after reduce.Sn
 		member, _ := reduce.CriterionFamily(env.CriterionRef, e.CriterionRef)
 		return member
 	}
-	if err := gatePendingIntake(project, after, carries); err != nil {
+	if err := gatePendingIntake(intake, after, carries); err != nil {
 		return err
 	}
 	resolver := evidence.NewResolverAt(project.Root, project.ArtifactDir())
@@ -101,13 +101,13 @@ func gateInstrumentValidation(ctx context.Context, resolver *evidence.Resolver, 
 // criterion must be admitted in this set, so a proof is not admitted ahead of a
 // run waiting in review. This is an admission-time "not yet", never a validity
 // rule: reviewed packets, accepted or not, are judged from the ledger alone.
-func gatePendingIntake(project store.Project, after reduce.Snapshot, carries func(model.InvocationEnvelope) bool) error {
-	intake, err := store.ReadIntake(project, nil)
+func gatePendingIntake(intake *pendingIntake, after reduce.Snapshot, carries func(model.InvocationEnvelope) bool) error {
+	packets, err := intake.all()
 	if err != nil {
 		return err
 	}
-	for _, packet := range intake {
-		if _, reviewed := after.Review(reduce.ReviewKey{Project: project.ID, CommandID: packet.CommandID}); reviewed {
+	for _, packet := range packets {
+		if _, reviewed := after.Review(reduce.ReviewKey{Project: intake.project.ID, CommandID: packet.CommandID}); reviewed {
 			continue
 		}
 		for _, raw := range packet.Events {
@@ -122,6 +122,54 @@ func gatePendingIntake(project store.Project, after reduce.Snapshot, carries fun
 		}
 	}
 	return nil
+}
+
+// pendingIntake is the retained intake one admission's pending checks read:
+// every packet listed in the inbox, read and fully verified by store.ReadIntake
+// (owner-only real files, packet.json decoded and matched to its location,
+// every blob hashed against its name, the request digest recomputed over
+// author, events and the complete blob inventory). Any failure refuses the
+// admission exactly as a per-check read did.
+//
+// It is read at most once per admission proposal, lazily: the first proof or
+// UNKNOWN-outcome seal that needs it reads it, and every later check in the
+// same proposal reuses that read, or its error. An admission with neither
+// reads nothing. gateProofs creates it and it dies with that call, so no
+// verification is ever reused across commands or across proposals.
+//
+// Observation boundary: the inventory is the inbox as listed and read when the
+// first check asked, which is after the proposal replayed and its artifacts
+// were materialized, and inside the admission lock on a real admission (a dry
+// run holds no lock). The lock serializes admissions; it does not stop
+// capture. A packet published to intake after that read is seen by no check in
+// this admission, where before a later check could have seen it. That is the
+// boundary every check already had: a packet published after the last check
+// and before publication was never seen. Pending intake is an admission-time
+// "not yet", never a validity rule, so where the boundary falls cannot change
+// what the ledger means.
+type pendingIntake struct {
+	project store.Project
+	read    bool
+	packets []model.Packet
+	err     error
+}
+
+// scanIntake is the one full verified intake read behind a pendingIntake.
+// Tests wrap it to count reads.
+var scanIntake = func(project store.Project) ([]model.Packet, error) {
+	return store.ReadIntake(project, nil)
+}
+
+func newPendingIntake(project store.Project) *pendingIntake {
+	return &pendingIntake{project: project}
+}
+
+func (p *pendingIntake) all() ([]model.Packet, error) {
+	if !p.read {
+		p.read = true
+		p.packets, p.err = scanIntake(p.project)
+	}
+	return p.packets, p.err
 }
 
 func invocationEnvelope(event model.TypedEvent) *model.InvocationEnvelope {

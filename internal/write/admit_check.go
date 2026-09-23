@@ -105,7 +105,7 @@ func (d *dryRun) preserver() func(string, string, []byte) error {
 // one member's refusal does not hide the next: gateProofFamily over a proof
 // naming only that member (its member-level refusals), and the member's own
 // verdict and instrument validation from the same functions gateProofFamily calls.
-func (d *dryRun) proofMembers(ctx context.Context, project store.Project, after reduce.Snapshot, e *model.ProofAdmit) {
+func (d *dryRun) proofMembers(ctx context.Context, project store.Project, after reduce.Snapshot, intake *pendingIntake, e *model.ProofAdmit) {
 	if d == nil {
 		return
 	}
@@ -114,7 +114,7 @@ func (d *dryRun) proofMembers(ctx context.Context, project store.Project, after 
 	for i, member := range e.Evidence {
 		alone := *e
 		alone.Evidence = []model.ObservationDisposition{member}
-		if err := gateProofFamily(ctx, project, after, &alone); err != nil {
+		if err := gateProofFamily(ctx, project, after, intake, &alone); err != nil {
 			var fault *model.Fault
 			if errors.As(err, &fault) && strings.HasPrefix(fault.Path, "evidence[0]") {
 				moved := *fault
