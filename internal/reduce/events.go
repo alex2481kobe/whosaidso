@@ -140,6 +140,9 @@ func (s *state) invocationStart(b model.Bundle, idx int, o Origin, e *model.Invo
 	if err := s.checkInvocationConfig(b, idx, e.Envelope); err != nil {
 		return err
 	}
+	if err := s.checkStartFrozen(b, idx, e.Envelope); err != nil {
+		return err
+	}
 	s.invocations[key] = Invocation{Key: key, Attempt: owner, Start: e.Envelope, Started: o}
 	return nil
 }
@@ -222,6 +225,9 @@ func (s *state) criterionFix(b model.Bundle, idx int, o Origin, e *model.Criteri
 	}
 	if _, ok := s.criteria[key]; ok {
 		return faultAt(CodeDuplicateRecord, b.Sequence, idx, "revision", "criterion revision already fixed")
+	}
+	if err := s.checkPacketAuthor(b, idx, e.Author, "author"); err != nil {
+		return err
 	}
 	s.criteria[key] = Criterion{Key: key, Fix: *e, Origin: o, RecordedAt: b.RecordedAt.UTC()}
 	return nil

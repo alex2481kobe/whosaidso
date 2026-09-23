@@ -3,7 +3,7 @@ package write
 // U12 operations the gate enables — claim/instrument revision, trust withdrawal,
 // criterion fixing, invocation start/seal, proof, task closure, decision
 // open/revise/dispose and correction — and the post-replay checks that need
-// artifact bytes, ledger times or pending intake live here. Supersession and
+// artifact bytes or pending intake live here. Supersession and
 // artifact disposal rules live in gate_supersede.go; review stays disabled; the
 // admission transaction itself does not live here. Proof family evaluation
 // lives in gate_family.go.
@@ -12,7 +12,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"time"
 
 	"datum/internal/model"
 	"datum/internal/reduce"
@@ -49,19 +48,12 @@ func gateProofOperation(event model.TypedEvent, author model.Actor) (*model.Prov
 	case *model.TrustWithdraw, *model.Correction, *model.InvocationStart:
 		// Withdrawal and correction only remove support, attributed to the
 		// packet author in the review. Invocation facts are checked by the
-		// reducer, by criterion freezing and by artifact resolution.
+		// reducer, including criterion freezing, and by artifact resolution.
 		return nil, nil
-	case *model.CriterionFix:
-		if e.Author != author {
-			return nil, admissionFault("attribution-mismatch", "author", "criterion author must match the immutable packet author")
-		}
-		return nil, nil
-	case *model.ProofAdmit:
-		// A named judgment is the packet's own identified author, never a name
-		// the author writes in for someone else, and never unknown attribution.
-		if !model.SameActor(e.Judgment.Actor, author) {
-			return nil, admissionFault("attribution-mismatch", "judgment.actor", "proof judgment must be the identified packet author")
-		}
+	case *model.CriterionFix, *model.ProofAdmit:
+		// The criterion author and the proof judgment must be the identified
+		// packet author. The reducer checks that from the review's recorded
+		// authors, on admission and replay alike (reduce/packet_author.go).
 		return nil, nil
 	}
 	return nil, admissionFault("unavailable-until-integrated", "event.type", string(event.EventType())+" is not enabled by the admission gate")
@@ -172,9 +164,10 @@ func gateWalkArtifacts(value reflect.Value, out *[]model.ArtifactRef) {
 	}
 }
 
-// gateProofs runs after the proposal replays and its artifacts resolve. before
-// is the admitted prefix; after includes this admission set.
-func gateProofs(ctx context.Context, project store.Project, prefix []model.Bundle, before, after reduce.Snapshot, packets []model.Packet) error {
+// gateProofs runs after the proposal replays and its artifacts resolve. after
+// includes this admission set. Criterion freezing is the reducer's, for every
+// start (reduce/freeze.go).
+func gateProofs(ctx context.Context, project store.Project, after reduce.Snapshot, packets []model.Packet) error {
 	for _, packet := range packets {
 		for _, raw := range packet.Events {
 			event, err := model.DecodeEvent(raw)
@@ -182,10 +175,6 @@ func gateProofs(ctx context.Context, project store.Project, prefix []model.Bundl
 				return err
 			}
 			switch e := event.(type) {
-			case *model.InvocationStart:
-				if err := gateCriterionFrozen(prefix, before, project.ID, e.Envelope, packet.CapturedAt); err != nil {
-					return err
-				}
 			case *model.InvocationSeal:
 				if err := gatePendingRealSeal(project, after, e.Envelope); err != nil {
 					return err
@@ -203,40 +192,6 @@ func gateProofs(ctx context.Context, project store.Project, prefix []model.Bundl
 	}
 	return nil
 }
-
-// gateCriterionFrozen: a run may name a criterion only if that criterion was
-// admitted in an earlier bundle recorded before the run started, and a run
-// cannot start after intake captured it. So criterion admission < started_at
-// <= captured_at: the capture time, stamped by intake and recorded in the
-// ledger by review.admit, bounds any start the author writes. Ledger order
-// alone is not enough, because one admission set can order a late criterion
-// first; started_at alone is not enough, because the author writes it.
-func gateCriterionFrozen(prefix []model.Bundle, before reduce.Snapshot, project model.ProjectID, env model.InvocationEnvelope, captured time.Time) error {
-	if env.StartedAt.After(captured) {
-		return admissionFault("start-after-capture", "envelope.started_at",
-			fmt.Sprintf("the run claims to start at %s, after it was captured at %s", stamp(env.StartedAt), stamp(captured)))
-	}
-	if env.CriterionRef.State != model.Known || env.CriterionRef.Value == nil {
-		return nil
-	}
-	ref := *env.CriterionRef.Value
-	criterion, ok := before.Criterion(ref)
-	if ref.Claim.Project != project || !ok {
-		return admissionFault("criterion-not-frozen", "envelope.criterion_ref", "the criterion was not admitted here before this admission set")
-	}
-	for _, bundle := range prefix {
-		if bundle.Sequence == criterion.Origin.Sequence {
-			if !bundle.RecordedAt.Before(env.StartedAt) {
-				return admissionFault("criterion-not-frozen", "envelope.criterion_ref",
-					fmt.Sprintf("criterion admitted at %s, not before the run started at %s", stamp(bundle.RecordedAt), stamp(env.StartedAt)))
-			}
-			return nil
-		}
-	}
-	return admissionFault("criterion-not-frozen", "envelope.criterion_ref", "the criterion's admitting bundle is not in the prefix")
-}
-
-func stamp(t time.Time) string { return t.UTC().Format("2006-01-02T15:04:05.999999999Z07:00") }
 
 // gateCloseAuthority: a closure cites a named authority whose exact words are an
 // admitted or bundled source.intake spoken by that actor about this revision.

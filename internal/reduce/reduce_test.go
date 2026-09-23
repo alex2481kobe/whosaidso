@@ -150,6 +150,8 @@ type ledgerBuilder struct {
 	seq     uint64
 	prev    model.ID
 	out     []model.Bundle
+	// bare skips attributeFixture, for fixtures that test missing attribution.
+	bare bool
 }
 
 func newLedger() *ledgerBuilder { return &ledgerBuilder{project: testProject} }
@@ -157,6 +159,10 @@ func newLedger() *ledgerBuilder { return &ledgerBuilder{project: testProject} }
 func (l *ledgerBuilder) add(t *testing.T, events ...model.TypedEvent) model.Bundle {
 	t.Helper()
 	l.seq++
+	packet := model.PacketRef{CommandID: newID(fmt.Sprintf("PKT%d", l.seq)), Digest: newDigest(fmt.Sprintf("packet-%d", l.seq))}
+	if !l.bare {
+		events = attributeFixture(l.seq, events)
+	}
 	raw := make([]model.Event, 0, len(events))
 	for _, e := range events {
 		enc, err := model.EncodeEvent(e)
@@ -174,11 +180,8 @@ func (l *ledgerBuilder) add(t *testing.T, events ...model.TypedEvent) model.Bund
 		RequestDigest: newDigest(fmt.Sprintf("request-%d", l.seq)),
 		Admitter:      model.Actor{ID: "coordinator"},
 		RecordedAt:    baseTime.Add(time.Duration(l.seq) * time.Minute),
-		Packets: []model.PacketRef{{
-			CommandID: newID(fmt.Sprintf("PKT%d", l.seq)),
-			Digest:    newDigest(fmt.Sprintf("packet-%d", l.seq)),
-		}},
-		Events: raw,
+		Packets:       []model.PacketRef{packet},
+		Events:        raw,
 	}
 	l.prev = b.CommandID
 	l.out = append(l.out, b)
@@ -186,6 +189,50 @@ func (l *ledgerBuilder) add(t *testing.T, events ...model.TypedEvent) model.Bund
 }
 
 func (l *ledgerBuilder) bundles() []model.Bundle { return l.out }
+
+// attributeFixture gives a bundle that carries a start, criterion fix or
+// proof and no review the attribution admission writes: an accepted review
+// with one packet per event, authored by the actor that event names (the
+// criterion author, the proof judgment, otherwise "coordinator"), each
+// captured a minute after the latest start. Tests of the attribution rules
+// themselves build their own reviews and so bypass this default.
+func attributeFixture(seq uint64, events []model.TypedEvent) []model.TypedEvent {
+	var latest time.Time
+	needed := false
+	for _, e := range events {
+		switch e := e.(type) {
+		case *model.ReviewAdmit:
+			return events
+		case *model.InvocationStart:
+			needed = true
+			if e.Envelope.StartedAt.After(latest) {
+				latest = e.Envelope.StartedAt
+			}
+		case *model.CriterionFix, *model.ProofAdmit:
+			needed = true
+		}
+	}
+	if !needed {
+		return events
+	}
+	review := &model.ReviewAdmit{Outcome: "accepted", Actor: model.Actor{ID: "coordinator"}, Reason: "fixture admission",
+		Authors: map[model.ID]model.Actor{}, CapturedAt: map[model.ID]time.Time{}}
+	for i, e := range events {
+		packet := newID(fmt.Sprintf("PKT%dE%d", seq, i))
+		author := model.Actor{ID: "coordinator"}
+		switch e := e.(type) {
+		case *model.CriterionFix:
+			author = e.Author
+		case *model.ProofAdmit:
+			author = e.Judgment.Actor
+		}
+		review.Packets = append(review.Packets, model.PacketRef{CommandID: packet, Digest: newDigest(string(packet))})
+		review.EventPackets = append(review.EventPackets, packet)
+		review.Authors[packet] = author
+		review.CapturedAt[packet] = latest.Add(time.Minute)
+	}
+	return append(append([]model.TypedEvent{}, events...), review)
+}
 
 // ---- assertions -----------------------------------------------------------
 

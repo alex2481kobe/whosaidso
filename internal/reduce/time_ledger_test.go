@@ -30,11 +30,18 @@ func TestInvocationTimestampIsUTCThroughLedgerPublication(t *testing.T) {
 	project := store.Project{ID: testProject, Root: root, Ledger: filepath.Join(root, "record", "events")}
 	l, env, _ := sealStart(t)
 	env.StartedAt = time.Date(2026, 9, 22, 12, 0, 0, 0, time.FixedZone("fixture", 37*60))
+	// This one bundle also fixes the claim, so the run names no criterion:
+	// freezing is tested in freeze_test.go, UTC publication here.
+	env.CriterionRef = proofUnknown[model.CriterionRef]()
 	instant := env.StartedAt
 	// Reuse only the prerequisite events, never the in-memory snapshot.
 	events := []model.Event{}
 	for _, b := range l.out[:3] {
-		events = append(events, b.Events...)
+		for _, e := range b.Events {
+			if e.Type != "review.admit" { // this bundle's own review attributes them
+				events = append(events, e)
+			}
+		}
 	}
 	for _, event := range []model.TypedEvent{&model.InvocationStart{Envelope: env}, sealProof(env, 0)} {
 		raw, err := model.EncodeEvent(event)
@@ -49,7 +56,7 @@ func TestInvocationTimestampIsUTCThroughLedgerPublication(t *testing.T) {
 	// Exercise packet encoding/decoding as well as bundle encoding/decoding.
 	packetBytes, err := model.Encode(model.Packet{
 		Version: model.WireVersion, Project: project.ID, CommandID: newID("PKT1"),
-		RequestDigest: newDigest("zone packet"), Author: model.Actor{ID: "runner"},
+		RequestDigest: newDigest("zone packet"), Author: model.Actor{ID: "lane-a"}, // it carries lane-a's criterion
 		CapturedAt: env.StartedAt, Events: events,
 	})
 	if err != nil {
@@ -81,9 +88,22 @@ func TestInvocationTimestampIsUTCThroughLedgerPublication(t *testing.T) {
 			if err != nil {
 				return model.Bundle{}, err
 			}
+			// The review attributes every event to the packet. Its capture
+			// time is the fixture's, not this machine's clock, so the start
+			// stays bounded by it whenever the test runs.
+			carried := make([]model.ID, len(packet.Events))
+			for i := range carried {
+				carried[i] = packetRef.CommandID
+			}
+			review, err := model.EncodeEvent(&model.ReviewAdmit{Packets: []model.PacketRef{packetRef}, Outcome: "accepted",
+				Actor: model.Actor{ID: "reviewer"}, Reason: "zone publication", EventPackets: carried, Authors: map[model.ID]model.Actor{packetRef.CommandID: packet.Author},
+				CapturedAt: map[model.ID]time.Time{packetRef.CommandID: instant.Add(time.Minute).UTC()}})
+			if err != nil {
+				return model.Bundle{}, err
+			}
 			proposal := model.Bundle{Admitter: model.Actor{ID: "reviewer"},
 				Packets: []model.PacketRef{packetRef},
-				Events:  packet.Events}
+				Events:  append(append([]model.Event{}, packet.Events...), review)}
 			check := proposal
 			check.Version, check.Project = model.WireVersion, project.ID
 			check.CommandID, check.RequestDigest = newID("CMD1"), newDigest("zone admission")

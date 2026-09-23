@@ -16,7 +16,10 @@ import (
 	"datum/internal/store"
 )
 
-var presetStart = time.Date(2026, 9, 22, 8, 0, 0, 0, time.UTC)
+// presetStart follows the clock: store.Transact stamps each fixture bundle
+// with the wall clock, and a run must start after its criterion's bundle was
+// recorded (reduce/freeze.go).
+var presetStart = time.Now().UTC().Truncate(time.Second).Add(time.Hour)
 
 func known[T any](v T) model.Availability[T] {
 	return model.Availability[T]{State: model.Known, Value: &v}
@@ -96,7 +99,7 @@ func authority() model.Authority {
 func presetWorld(t *testing.T, p store.Project) {
 	t.Helper()
 	readyControl(t, p)
-	appendEvents(t, p, 101,
+	appendEvents(t, p, 101, admitted(101,
 		&model.InstrumentDeclare{ID: testID(10), Provenance: prov("lane-a"), Spec: instrumentSpec(true)},
 		&model.InstrumentDeclare{ID: testID(11), Provenance: prov("lane-a"), Spec: instrumentSpec(false)},
 		&model.ClaimAssert{ID: testID(20), Provenance: prov("lane-e"), Spec: claimSpec("VERIFIED")},
@@ -104,21 +107,46 @@ func presetWorld(t *testing.T, p store.Project) {
 		&model.ClaimAssert{ID: testID(22), Provenance: prov("lane-e"), Spec: claimSpec()},
 		criterionFix(21), criterionFix(22),
 		&model.DecisionOpen{ID: testID(30), Provenance: prov("lane-c"), Spec: decisionSpec()},
-		&model.DecisionOpen{ID: testID(31), Provenance: prov("lane-c"), Spec: decisionSpec()})
+		&model.DecisionOpen{ID: testID(31), Provenance: prov("lane-c"), Spec: decisionSpec()})...)
 	appendEvents(t, p, 102, &model.TaskStart{Task: testRef(1, 1), AttemptID: testID(70), Actor: model.Actor{ID: "worker"}})
 	inside := envelope(50, 70, 10, 21, gitInput("internal/query/query.go"))
 	outside := envelope(51, 70, 10, 22, gitInput("internal/query/query.go"), gitInput("internal/reduce/task.go"))
 	unsealed := envelope(52, 70, 11, 0, testArtifact())
-	appendEvents(t, p, 103, &model.InvocationStart{Envelope: inside}, &model.InvocationStart{Envelope: outside},
-		&model.InvocationStart{Envelope: unsealed})
+	starts := []model.TypedEvent{&model.InvocationStart{Envelope: inside}, &model.InvocationStart{Envelope: outside},
+		&model.InvocationStart{Envelope: unsealed}}
+	appendEvents(t, p, 103, admitted(103, starts...)...)
 	appendEvents(t, p, 104, seal(inside, 1, 2*time.Hour), seal(outside, 0, 3*time.Second))
-	appendEvents(t, p, 105,
+	appendEvents(t, p, 105, admitted(105,
 		&model.ProofAdmit{Claim: testRef(22, 1), CriterionRef: criterionRef(22),
 			Evidence: []model.ObservationDisposition{{InvocationRef: model.InvocationRef{Project: projectID, InvocationID: testID(51)},
 				Disposition: "supports", Reason: "all cases pass"}},
 			Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "reviewer"}, Reason: "the criterion holds"}},
 		&model.DecisionDispose{Decision: testRef(31, 1), Disposition: "approved", Quote: "yes, BLOCKED wins",
-			Scope: testScope(), Authority: authority()})
+			Scope: testScope(), Authority: authority()})...)
+}
+
+// admitted appends admission's review to events: one packet per event,
+// authored by the actor the event names (the criterion author, the proof
+// judgment, otherwise lane-a) and captured a minute after presetStart, so the
+// reducer can check authorship and freezing from the ledger.
+func admitted(n int, events ...model.TypedEvent) []model.TypedEvent {
+	review := &model.ReviewAdmit{Outcome: "accepted", Actor: model.Actor{ID: "reviewer"}, Reason: "fixture admission",
+		Authors: map[model.ID]model.Actor{}, CapturedAt: map[model.ID]time.Time{}}
+	for i, e := range events {
+		packet := testID(n*100 + i)
+		author := model.Actor{ID: "lane-a"}
+		switch e := e.(type) {
+		case *model.CriterionFix:
+			author = e.Author
+		case *model.ProofAdmit:
+			author = e.Judgment.Actor
+		}
+		review.Packets = append(review.Packets, model.PacketRef{CommandID: packet, Digest: model.HashBytes([]byte(packet))})
+		review.EventPackets = append(review.EventPackets, packet)
+		review.Authors[packet] = author
+		review.CapturedAt[packet] = presetStart.Add(time.Minute).UTC()
+	}
+	return append(events, review)
 }
 
 func presetAnswer(t *testing.T, p store.Project, r Request) Answer {

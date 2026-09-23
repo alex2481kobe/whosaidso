@@ -41,14 +41,17 @@ func (s *state) requireKind(b model.Bundle, idx int, ref model.RecordRef, kind m
 
 // proofAdmit checks applicability recoverable from the ledger: each listed
 // member by its family class, support, and closure over the whole family
-// (proof_family.go). Evaluation of artifact bytes, pending intake and the
-// judgment's attribution remain admission gate work.
+// (proof_family.go), and that the judgment is the packet author's
+// (packet_author.go). Evaluation of artifact bytes and pending intake remain
+// admission gate work.
 func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 	if err := s.requireKind(b, idx, e.Claim, model.Claim, "claim"); err != nil {
 		return err
 	}
+	if err := s.checkPacketAuthor(b, idx, e.Judgment.Actor, "judgment.actor"); err != nil {
+		return err
+	}
 	supported := false
-	criterion := s.criteria[criterionKey(e.CriterionRef)]
 	listed := map[InvocationKey]string{}
 	for i, member := range e.Evidence {
 		key := invocationKey(member.InvocationRef)
@@ -68,9 +71,6 @@ func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 				return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "a run under an earlier criterion revision can only be dispositioned inapplicable or inconclusive")
 			}
 			continue
-		}
-		if !criterion.Origin.before(inv.Started) {
-			return faultAt(CodeInvalidTransition, b.Sequence, idx, "criterion_ref", "criterion was not fixed before the invocation start")
 		}
 		if member.Disposition == "contradicts" {
 			return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "contradicting evidence is unresolved")

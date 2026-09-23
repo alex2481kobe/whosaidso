@@ -111,11 +111,11 @@ func proposeAdmission(ctx context.Context, project store.Project, request AdmitR
 	if err != nil {
 		return model.Bundle{}, "", err
 	}
-	proposal, err := admissionProposal(ctx, project, request, digest, prefix, snapshot, packets, lockedRefs)
+	proposal, err := admissionProposal(ctx, project, request, digest, snapshot, packets, lockedRefs)
 	return proposal, digest, err
 }
 
-func admissionProposal(ctx context.Context, project store.Project, request AdmitRequest, digest model.Digest, prefix []model.Bundle, snapshot reduce.Snapshot, packets []model.Packet, lockedRefs []model.PacketRef) (model.Bundle, error) {
+func admissionProposal(ctx context.Context, project store.Project, request AdmitRequest, digest model.Digest, snapshot reduce.Snapshot, packets []model.Packet, lockedRefs []model.PacketRef) (model.Bundle, error) {
 	proposal := model.Bundle{Admitter: request.Admitter, Packets: lockedRefs, Events: []model.Event{}}
 	var eventPackets []model.ID
 	if request.Outcome == "accepted" {
@@ -157,7 +157,7 @@ func admissionProposal(ctx context.Context, project store.Project, request Admit
 		if err := materializeAdmission(ctx, project, packets); err != nil {
 			return model.Bundle{}, err
 		}
-		if err := gateProofs(ctx, project, prefix, snapshot, after, packets); err != nil {
+		if err := gateProofs(ctx, project, after, packets); err != nil {
 			return model.Bundle{}, err
 		}
 		if err := gateQuotes(ctx, project, packets); err != nil {

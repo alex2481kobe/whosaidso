@@ -124,8 +124,9 @@ func TestProofFamilyClosureCoversLaterEventsInTheSameBundle(t *testing.T) {
 	// A rejected run recorded later in the same bundle cannot be skipped either.
 	l, claim, late = setup()
 	packet := model.PacketRef{CommandID: newID("PKR9"), Digest: model.HashBytes([]byte("late rejected packet"))}
-	l.add(t, admitProof(claim, newID("RNA1")), &model.ReviewAdmit{Packets: []model.PacketRef{packet}, Outcome: "rejected", Actor: model.Actor{ID: "reviewer"}, Reason: "not canonical",
-		Invocations: []model.ReviewedInvocation{{Packet: packet.CommandID, Event: "invocation.start", InvocationID: late.InvocationID, CriterionRef: late.CriterionRef, EnvelopeDigest: model.HashBytes([]byte("start"))}}})
+	judged := attributeFixture(99, []model.TypedEvent{admitProof(claim, newID("RNA1"))})
+	l.add(t, append(judged, &model.ReviewAdmit{Packets: []model.PacketRef{packet}, Outcome: "rejected", Actor: model.Actor{ID: "reviewer"}, Reason: "not canonical",
+		Invocations: []model.ReviewedInvocation{{Packet: packet.CommandID, Event: "invocation.start", InvocationID: late.InvocationID, CriterionRef: late.CriterionRef, EnvelopeDigest: model.HashBytes([]byte("start"))}}})...)
 	wantBoth(t, l, CodeRejectedFamilyMember)
 }
 
