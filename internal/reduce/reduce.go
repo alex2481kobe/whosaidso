@@ -44,6 +44,7 @@ type state struct {
 	sources      map[SourceKey]Source
 	commands     map[model.ID]uint64
 	events       map[Origin]model.TypedEvent
+	log          eventLog // events' origins in ledger order, by type
 
 	reverseRecord     map[RecordKey][]Referrer
 	reverseCriterion  map[CriterionKey][]Referrer
@@ -107,6 +108,7 @@ func (s *state) clone() *state {
 		sources:           copyMap(s.sources),
 		commands:          copyMap(s.commands),
 		events:            copyMap(s.events),
+		log:               s.log.fork(),
 		reverseRecord:     copyMap(s.reverseRecord),
 		reverseCriterion:  copyMap(s.reverseCriterion),
 		reverseInvocation: copyMap(s.reverseInvocation),
@@ -231,7 +233,9 @@ func (s *state) apply(b model.Bundle) error {
 		if err := s.route(b, i, typed); err != nil {
 			return err
 		}
-		s.events[Origin{Sequence: b.Sequence, EventIndex: i}] = typed
+		origin := Origin{Sequence: b.Sequence, EventIndex: i}
+		s.events[origin] = typed
+		s.log.add(origin, typed)
 		s.recordReferrers(b, i, typed)
 	}
 	s.commands[b.CommandID] = b.Sequence

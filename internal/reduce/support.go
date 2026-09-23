@@ -5,8 +5,6 @@ package reduce
 // This file stays below 200 lines because support answers and their history form a complete responsibility.
 
 import (
-	"sort"
-
 	"datum/internal/model"
 )
 
@@ -52,20 +50,11 @@ func (s SupportFacts) Current() Truth {
 	return truthAnd(s.EvidenceAvailable, s.ActiveTrust, s.ApplicableScope, s.CorrectionFree)
 }
 
-func (s *state) eventOrder() []Origin {
-	out := make([]Origin, 0, len(s.events))
-	for o := range s.events {
-		out = append(out, o)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].before(out[j]) })
-	return out
-}
-
 func (s Snapshot) Corrections() []AdmittedCorrection { return deepCopySlice(s.corrections()) }
 
 func (s Snapshot) corrections() []AdmittedCorrection {
 	out := []AdmittedCorrection{}
-	for _, o := range s.inner().eventOrder() {
+	for _, o := range s.inner().log.corrections {
 		if e, ok := s.inner().events[o].(*model.Correction); ok {
 			out = append(out, AdmittedCorrection{Correction: *e, Origin: o})
 		}
@@ -77,7 +66,7 @@ func (s Snapshot) Supersessions() []Supersession { return deepCopySlice(s.supers
 
 func (s Snapshot) supersessions() []Supersession {
 	out := []Supersession{}
-	for _, o := range s.inner().eventOrder() {
+	for _, o := range s.inner().log.supersessions {
 		if e, ok := s.inner().events[o].(*model.Supersede); ok {
 			out = append(out, Supersession{Supersede: *e, Origin: o})
 		}
@@ -89,7 +78,7 @@ func (s Snapshot) TrustWithdrawals() []TrustWithdrawal { return deepCopySlice(s.
 
 func (s Snapshot) trustWithdrawals() []TrustWithdrawal {
 	out := []TrustWithdrawal{}
-	for _, o := range s.inner().eventOrder() {
+	for _, o := range s.inner().log.withdrawals {
 		if e, ok := s.inner().events[o].(*model.TrustWithdraw); ok {
 			out = append(out, TrustWithdrawal{Withdrawal: *e, Origin: o})
 		}
@@ -101,7 +90,7 @@ func (s Snapshot) ArtifactDisposals() []ArtifactDisposal { return deepCopySlice(
 
 func (s Snapshot) artifactDisposals() []ArtifactDisposal {
 	out := []ArtifactDisposal{}
-	for _, o := range s.inner().eventOrder() {
+	for _, o := range s.inner().log.disposals {
 		if e, ok := s.inner().events[o].(*model.ArtifactDispose); ok {
 			out = append(out, ArtifactDisposal{Disposal: *e, Origin: o})
 		}
@@ -132,13 +121,13 @@ func (s Snapshot) support(ref model.RecordRef, context ...SupportContext) (Suppo
 	switch rec.Kind {
 	case model.Claim, model.Decision:
 		established := false
-		for _, event := range s.inner().events {
-			switch e := event.(type) {
-			case *model.ProofAdmit:
-				established = established || (rec.Kind == model.Claim && e.Claim == ref)
-			case *model.DecisionDispose:
-				established = established || (rec.Kind == model.Decision && e.Decision == ref)
-			}
+		for _, o := range s.inner().log.proofs {
+			e := s.inner().events[o].(*model.ProofAdmit)
+			established = established || (rec.Kind == model.Claim && e.Claim == ref)
+		}
+		for _, o := range s.inner().log.decisionDisposals {
+			e := s.inner().events[o].(*model.DecisionDispose)
+			established = established || (rec.Kind == model.Decision && e.Decision == ref)
 		}
 		if !established {
 			facts.ApplicableScope = TruthFalse

@@ -163,7 +163,7 @@ func (s *state) disposalSeeds(e *model.ArtifactDispose) []supportNode {
 	for _, loss := range e.SupportLoss {
 		seeds = append(seeds, recordNode(loss.Target))
 	}
-	for _, o := range s.eventOrder() {
+	for _, o := range s.log.all {
 		event := s.events[o]
 		owners := eventOwners(s.project, event)
 		if len(owners) == 0 {
@@ -194,7 +194,7 @@ func citesDisposed(event model.TypedEvent, e *model.ArtifactDispose) bool {
 // even when multiple paths or a proof/criterion cycle reach the same target.
 func (s *state) supportLosses(target supportNode) []SupportLossFact {
 	out := []SupportLossFact{}
-	for _, o := range s.eventOrder() {
+	for _, o := range s.log.losses {
 		event := s.events[o]
 		var seeds []supportNode
 		switch e := event.(type) {
@@ -265,7 +265,7 @@ type ArtifactCitation struct {
 // that costs.
 func (s Snapshot) DisposalCitations(e model.ArtifactDispose) []ArtifactCitation {
 	out := []ArtifactCitation{}
-	for _, o := range s.inner().eventOrder() {
+	for _, o := range s.inner().log.all {
 		if event := s.inner().events[o]; citesDisposed(event, &e) {
 			out = append(out, ArtifactCitation{Origin: o, Type: event.EventType()})
 		}
