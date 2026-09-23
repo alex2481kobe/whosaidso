@@ -125,9 +125,11 @@ func TestSelfAdmissionMalformedActorIsUnknown(t *testing.T) {
 }
 
 // Datum's own bundles 1-4 were admitted before packet authors were recorded.
-// The R18.2 migration gave each an explicit unknown author and dropped the
-// "true" bundles 3 and 4 used to store, so all four read UNKNOWN.
-func TestReviewSelfAdmissionCommittedHistoryIsUnknown(t *testing.T) {
+// The R18.2 migration recorded each packet's author from its intake bytes,
+// verified against the digest the bundle holds, and dropped the "true" that
+// bundles 3 and 4 used to store. Self-admission is computed from that author
+// and the admitter: TRUE, never read from the stored field or the prose.
+func TestReviewSelfAdmissionCommittedHistoryIsComputed(t *testing.T) {
 	paths, err := filepath.Glob("../../.datum/events/*.json")
 	if err != nil || len(paths) < 4 {
 		t.Fatalf("committed history missing: %v %v", paths, err)
@@ -150,11 +152,11 @@ func TestReviewSelfAdmissionCommittedHistoryIsUnknown(t *testing.T) {
 		t.Fatalf("committed reviews in bundles 1-4 missing: %+v", reviews)
 	}
 	for _, review := range reviews {
-		if review.Author.ID != "" || review.Author.UnknownReason != "not recorded at admission (before R10.1)" {
-			t.Fatalf("control: bundles 1-4 must record an explicit unknown author: %+v", review.Author)
+		if review.Author != (model.Actor{ID: "coordinator"}) || review.Actor != review.Author {
+			t.Fatalf("control: bundles 1-4 record their verified author, who also admitted them: %+v", review)
 		}
-		if review.SelfAdmission != model.SelfAdmissionUnknown {
-			t.Fatalf("committed review without a known author must read unknown: %+v", review)
+		if review.SelfAdmission != model.SelfAdmissionTrue {
+			t.Fatalf("the same known author and admitter must read true: %+v", review)
 		}
 	}
 }
@@ -193,8 +195,8 @@ func TestReviewSelfAdmissionCommittedSequenceOneReplay(t *testing.T) {
 		t.Fatal("committed history did not replay")
 	}
 	all := s.Reviews()
-	if len(all) != 1 || all[0].SelfAdmission != model.SelfAdmissionUnknown {
-		t.Fatalf("committed review with an unknown author must read unknown: %+v", all)
+	if len(all) != 1 || all[0].SelfAdmission != model.SelfAdmissionTrue || all[0].Author.ID != "coordinator" {
+		t.Fatalf("committed review must read true from its recorded author: %+v", all)
 	}
 	for _, raw := range bundle.Events {
 		if raw.Type != "review.admit" {

@@ -94,6 +94,7 @@ func recProof() *model.ProofAdmit {
 			Actor:  recActor("owner"),
 			Reason: "the applicable family is complete and nothing contradicts it",
 		},
+		Verdict: model.VerdictSupports, // R18.2: every proof states its verdict.
 	}
 }
 
@@ -212,6 +213,9 @@ func evAll() []model.TypedEvent {
 			Packets: []model.PacketRef{{CommandID: recID(94), Digest: recDigest('a')}},
 			Outcome: "correction-requested", Actor: recActor("coordinator"),
 			Reason: "the packet cites a revision that was never admitted",
+			// R18.2: every review carries authors, captured_at and event_packets.
+			Authors:    map[model.ID]model.Actor{recID(94): recActor("lane")},
+			CapturedAt: map[model.ID]model.Availability[time.Time]{recID(94): {State: model.Unknown, Reason: "not recorded"}}, EventPackets: []model.ID{},
 		},
 		&model.ArtifactDispose{
 			Artifact:         recContent(recDigest('b'), 2048),

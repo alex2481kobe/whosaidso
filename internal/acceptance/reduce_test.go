@@ -127,14 +127,16 @@ func laneEReduceReview(t *testing.T, admitter model.Actor, refs []model.PacketRe
 	t.Helper()
 	events := []model.Event{}
 	authors := map[model.ID]model.Actor{}
-	captured := map[model.ID]time.Time{}
+	// R18.2: a capture time is an Availability, known here.
+	captured := map[model.ID]model.Availability[time.Time]{}
 	eventPackets := []model.ID{}
 	for _, p := range packets {
 		events = append(events, p.Events...)
 		for range p.Events {
 			eventPackets = append(eventPackets, p.CommandID)
 		}
-		authors[p.CommandID], captured[p.CommandID] = p.Author, p.CapturedAt.UTC()
+		at := p.CapturedAt.UTC()
+		authors[p.CommandID], captured[p.CommandID] = p.Author, model.Availability[time.Time]{State: model.Known, Value: &at}
 	}
 	review, err := model.EncodeEvent(&model.ReviewAdmit{Packets: refs, Outcome: "accepted", Actor: admitter,
 		Reason: "the fixture packets were independently checked", Authors: authors, CapturedAt: captured, EventPackets: eventPackets})

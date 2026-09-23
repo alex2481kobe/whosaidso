@@ -198,7 +198,10 @@ func TestReadVerifyPendingCannotIgnoreAReplayedReviewMissingFromEnvelopePackets(
 			}
 			review := func(ref model.PacketRef) *model.ReviewAdmit {
 				return &model.ReviewAdmit{Packets: []model.PacketRef{ref}, Outcome: outcome,
-					Actor: model.Actor{ID: "reviewer"}, Reason: "explicit canonical disposition"}
+					Actor: model.Actor{ID: "reviewer"}, Reason: "explicit canonical disposition",
+					// R18.2: every review carries authors, captured_at and event_packets.
+					Authors:    map[model.ID]model.Actor{ref.CommandID: {ID: "author"}},
+					CapturedAt: map[model.ID]model.Availability[time.Time]{ref.CommandID: {State: model.Unknown, Reason: "not recorded"}}, EventPackets: []model.ID{}}
 			}
 			control := capture(2)
 			readVerifyAppend(t, p, 101, []model.PacketRef{control}, review(control))

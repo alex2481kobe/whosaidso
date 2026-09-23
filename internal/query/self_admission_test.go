@@ -151,7 +151,7 @@ func TestSelfAdmissionFilterValidationAndEmptyAnswers(t *testing.T) {
 	}
 }
 
-func TestSelfAdmissionRealLedgerRemainsUnknown(t *testing.T) {
+func TestSelfAdmissionRealLedgerIsComputedFromRecordedAuthors(t *testing.T) {
 	root, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)
@@ -160,55 +160,45 @@ func TestSelfAdmissionRealLedgerRemainsUnknown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := view_(t, p, ViewRequest{View: "history", SelfAdmitted: model.SelfAdmissionUnknown}).(*HistoryAnswer)
+	a := view_(t, p, ViewRequest{View: "history", SelfAdmitted: model.SelfAdmissionTrue}).(*HistoryAnswer)
 	// Deliberately no assertion on the watermark or the review COUNT. This
 	// test reads the repository's own live ledger, which is the strongest
-	// regression evidence available here: real bytes, committed, written by
-	// an earlier version of the code. It is also append-only, so pinning its
-	// size or head position makes every legitimate record a test failure.
-	// The first version asserted sequence == 2 and exactly two reviews, and
-	// broke the moment two instruments were declared.
+	// regression evidence available here: real bytes, committed. It is also
+	// append-only, so pinning its size or head position makes every
+	// legitimate record a test failure.
 	//
-	// Inventory, not invariant, in a repository whose own rule is the
-	// opposite. What matters is that a review whose author was never
-	// recorded (bundles 1-4, explicit unknowns since the R18.2 migration)
-	// reports UNKNOWN and is never inferred from the prose in its reason.
-	if len(a.Reviews) == 0 {
-		t.Fatalf("the live ledger must still contain reviews with unrecorded authors: %+v", a)
-	}
+	// Sequences 1-4 were admitted before packet authors were recorded; the
+	// R18.2 migration recorded each author from the intake packet whose bytes
+	// hash to the digest the bundle holds. Their author is the admitter, so
+	// under C39 (computed from the recorded author and the admitter) they read
+	// TRUE, and the reason prose that also says so is kept but never read.
 	found, early := false, 0
 	for _, r := range a.Reviews {
-		if r.SelfAdmission != "UNKNOWN" {
-			t.Fatalf("unknown filter selected a classified review: %+v", r)
+		if r.SelfAdmission != "true" {
+			t.Fatalf("true filter selected another state: %+v", r)
 		}
 		if r.Origin.Sequence == 1 {
-			found = strings.Contains(r.Reason, "Self-admitted: true.")
+			found = strings.Contains(r.Reason, "Self-admitted: true.") && r.Author.ID == "coordinator"
 		}
 		if r.Origin.Sequence <= 4 {
 			early++
 		}
 	}
 	if !found {
-		t.Fatal("lost original first-bundle self-admission prose")
+		t.Fatal("lost the first bundle's recorded author or its original prose")
 	}
 	// Sequences 1-4 each dispositioned one packet and are fixed history.
 	if early != 4 {
-		t.Fatalf("the four committed reviews without recorded authors must all select as unknown, got %d", early)
+		t.Fatalf("the four committed reviews with verified authors must all select as true, got %d", early)
 	}
-	// The same inventory-versus-invariant correction as above, and it
-	// survives growth: a later review that records its packet authors may
-	// genuinely read true or false. Sequences 1-4 record their packet authors
-	// as explicit unknowns, so under C39 (self-admission is computed from the
-	// recorded author and the admitter, step 7) none of them can be classified
-	// either way, and no later record can move them.
-	for _, state := range []model.SelfAdmissionState{"true", "false"} {
+	for _, state := range []model.SelfAdmissionState{"false", "unknown"} {
 		selected := view_(t, p, ViewRequest{View: "history", SelfAdmitted: state}).(*HistoryAnswer)
 		if selected.Watermark != a.Watermark {
 			t.Fatalf("classified read failed for %s: %+v", state, selected)
 		}
 		for _, r := range selected.Reviews {
 			if r.Origin.Sequence <= 4 {
-				t.Fatalf("a review without a recorded author was classified as %s, which can only have come from its prose or its stored field: %+v", state, r)
+				t.Fatalf("a committed review with a verified author was classified as %s: %+v", state, r)
 			}
 		}
 	}

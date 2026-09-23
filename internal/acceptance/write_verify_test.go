@@ -63,7 +63,7 @@ func TestWriteVerifyUTF8CannotRewriteLedgerAuthorship(t *testing.T) {
 			got := prefix[len(prefix)-1]
 			review := recMustDecodeReview(t, got.Events[len(got.Events)-1])
 			if field == "admitter" {
-				t.Errorf("expected refusal of unrepresentable admitter %q; fresh ledger contains %q and self_admission=%q for author %q. Admission rewrites actor identity after computing attribution, so even its self-admission audit contradicts its stored actor", r.Admitter.ID, got.Admitter.ID, review.SelfAdmission[packet.CommandID], author.ID)
+				t.Errorf("expected refusal of unrepresentable admitter %q; fresh ledger contains %q and recorded author %q for author %q. Admission rewrites actor identity after computing attribution, so even its recorded author contradicts its stored actor", r.Admitter.ID, got.Admitter.ID, review.Authors[packet.CommandID].ID, author.ID) // R18.2: self_admission is no longer stored; the recorded author is.
 			} else {
 				t.Errorf("expected refusal of unrepresentable authored review reason %q; fresh ledger contains %q. Checking UTF-8 after JSON encoding acknowledges different review text than was authored", r.Reason, review.Reason)
 			}

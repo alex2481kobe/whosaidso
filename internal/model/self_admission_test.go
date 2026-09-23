@@ -82,9 +82,9 @@ func TestReviewStoredSelfAdmissionIsRefused(t *testing.T) {
 }
 
 // Bundle 1 of Datum's own ledger, as the R18.2 migration left it: its author
-// and capture time are explicit unknowns with the migration's reason, and its
-// reason prose is untouched.
-func TestReviewCommittedSequenceOneIsExplicitlyUnknown(t *testing.T) {
+// and capture time come from the intake packet whose bytes hash to the digest
+// the bundle records, and its reason prose is untouched.
+func TestReviewCommittedSequenceOneRecordsItsVerifiedAuthor(t *testing.T) {
 	// Read the actual committed history, not a recreated fixture or a prose guess.
 	data, err := os.ReadFile("../../.datum/events/00000001-01M3408ER2RFD597S5KPXMYP4P.json")
 	if err != nil {
@@ -94,7 +94,6 @@ func TestReviewCommittedSequenceOneIsExplicitlyUnknown(t *testing.T) {
 	if err != nil || bundle.Sequence != 1 {
 		t.Fatalf("committed genesis must decode: %+v, %v", bundle, err)
 	}
-	const why = "not recorded at admission (before R10.1)"
 	count := 0
 	for _, raw := range bundle.Events {
 		e, err := DecodeEvent(raw)
@@ -107,11 +106,12 @@ func TestReviewCommittedSequenceOneIsExplicitlyUnknown(t *testing.T) {
 		}
 		count++
 		packet := review.Packets[0].CommandID
-		if a := review.Authors[packet]; a.ID != "" || a.UnknownReason != why {
-			t.Fatalf("committed author is not an explicit unknown: %+v", a)
+		if a := review.Authors[packet]; a != (Actor{ID: "coordinator"}) {
+			t.Fatalf("committed author is not the verified intake author: %+v", a)
 		}
-		if c := review.CapturedAt[packet]; c.State != Unknown || c.Reason != why {
-			t.Fatalf("committed capture time is not an explicit unknown: %+v", c)
+		want := time.Date(2026, 9, 22, 7, 28, 26, 222920000, time.UTC)
+		if c := review.CapturedAt[packet]; c.State != Known || c.Value == nil || !c.Value.Equal(want) {
+			t.Fatalf("committed capture time is not the verified intake stamp: %+v", c)
 		}
 		if !strings.Contains(review.Reason, "Self-admitted: true.") {
 			t.Fatalf("historical reason changed: %q", review.Reason)
