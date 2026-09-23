@@ -149,3 +149,47 @@ func TestPresetAbsentRecordIsWatermarkedUnknownAndBadRequestsFail(t *testing.T) 
 		}
 	}
 }
+
+// NOW raises every reason owed on a BLOCKED task itself, with its waiting
+// actor, and leaves computed prerequisites (owed on another record) to TODO.
+func TestNowRaisesBlockedWorkOwedByAnActor(t *testing.T) {
+	p := testProject(t)
+	readyControl(t, p)
+	waiting := testTask(6)
+	waiting.Spec.Prerequisites = []model.Prerequisite{{Kind: "task-success", Target: testRef(3, 1), WaiverPolicy: "forbid"}}
+	appendEvents(t, p, 101, testTask(2), testTask(3), testTask(5), waiting,
+		&model.BlockerHold{Task: testRef(2, 1), BlockerID: testID(80), Reason: model.BlockerResume,
+			Actor: model.Actor{ID: "owner"}, Criterion: "resume is authorized"},
+		&model.BlockerHold{Task: testRef(6, 1), BlockerID: testID(81), Reason: model.BlockerPrerequisite,
+			Actor: model.Actor{ID: "infra"}, Criterion: "the build machine is back"},
+		&model.TaskStart{Task: testRef(5, 1), AttemptID: testID(71), Actor: model.Actor{ID: "worker"}})
+	appendEvents(t, p, 102, &model.AttemptTerminal{Task: testRef(5, 1), AttemptID: testID(71), Outcome: model.AttemptSuccess,
+		Reason: "done", NextAction: "owner accepts or rejects", DeliveryRefs: []model.ArtifactRef{testArtifact()}})
+	control := presetAnswer(t, p, Request{Command: "todo"})
+	if len(*control.Preset.Blocked) != 2 || len(*control.Preset.AwaitingAcceptance) != 1 {
+		t.Fatalf("control: todo must hold the held and the prerequisite-blocked task, and one awaiting acceptance, got %+v", control.Preset)
+	}
+	a := presetAnswer(t, p, Request{Command: "now"})
+	assertHonestRendering(t, a)
+	owed := map[model.ID]Attention{}
+	for _, note := range a.Preset.Attention {
+		if note.Kind == "task-blocked-owed" {
+			owed[note.Ref.RecordID] = note
+		}
+	}
+	if len(owed) != 3 || len(a.Preset.Attention) != 3 {
+		t.Fatalf("NOW must raise exactly the two holds and the task awaiting acceptance, got %+v", a.Preset.Attention)
+	}
+	held, accept := owed[testID(2)], owed[testID(5)]
+	if held.WaitingActor != (model.Actor{ID: "owner"}) || !strings.Contains(held.Reason, "resume hold "+string(testID(80))) || held.Ref != testRef(2, 1) {
+		t.Fatalf("the hold must name its kind, id and waiting actor, got %+v", held)
+	}
+	if accept.WaitingActor != (model.Actor{ID: "acceptance-owner"}) || !strings.HasPrefix(accept.Reason, reduce.ReasonAwaitingAcceptance+": ") {
+		t.Fatalf("awaiting acceptance must name the task's next actor, got %+v", accept)
+	}
+	// Task 6 has an explicit prerequisite-kind hold and a computed unmet
+	// prerequisite; only the hold is owed on the task itself.
+	if gated := owed[testID(6)]; gated.WaitingActor != (model.Actor{ID: "infra"}) || !strings.Contains(gated.Reason, "hold "+string(testID(81))) {
+		t.Fatalf("a hold of kind prerequisite is still a hold owed by its actor, and the computed prerequisite stays in TODO; got %+v", gated)
+	}
+}

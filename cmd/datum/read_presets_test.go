@@ -57,3 +57,22 @@ func TestReadCLIPresetsLimitAndContinueObservation(t *testing.T) {
 		t.Fatal("continue wrote a file; it must write no handoff record")
 	}
 }
+
+// --brief is a second rendering of the same answer: concise, watermarked, and
+// never combined with --json. The default text stays the full outline.
+func TestReadCLIBriefIsConciseAndExclusiveWithJSON(t *testing.T) {
+	root, data := cliFixture(t)
+	cliControl(t, root, data)
+	out := readProcess(t, root, nil, "todo", "--brief")
+	want := []byte("ready: 1\n  TASK " + string(cliID(1)) + " rev 1 READY next lane\n    exercise the CLI\n")
+	if !bytes.Contains(out, want) || !bytes.HasPrefix(out, []byte("todo test/cli KNOWN | watermark sequence 1 ")) || bytes.Contains(out, []byte(`"fact"`)) {
+		t.Fatalf("todo --brief must open with its watermark and give one block per record, got\n%s", out)
+	}
+	if outline := readProcess(t, root, nil, "todo"); !bytes.HasPrefix(outline, []byte("answer:\n")) {
+		t.Fatalf("the default text must stay the full outline, got\n%s", outline)
+	}
+	var output bytes.Buffer
+	if err := readCLI(context.Background(), []string{"todo", "--json", "--brief"}, root, &output, io.Discard); err == nil || output.Len() != 0 {
+		t.Fatalf("--json with --brief must be refused without an answer, got %s, %v", output.Bytes(), err)
+	}
+}

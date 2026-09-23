@@ -52,7 +52,7 @@ datum
 |   |-- model          wire vocabulary every other package shares: identities, references, packets and bundles, plus the strict encode/decode boundary
 |   |      14 files, tested -- leaf
 |   |-- query          selects admitted facts before either output format renders them
-|   |      9 files, tested -- uses model, reduce, store
+|   |      11 files, tested -- uses model, reduce, store
 |   |-- reduce         folds admitted bundles into the state every Datum answer is read from
 |   |      19 files, tested -- uses model
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
@@ -106,20 +106,49 @@ datum handback --attempt-id ULID --outcome OUTCOME \
     [--hold-id ULID --hold-reason REASON --hold-actor ID --hold-criterion TEXT]
 ```
 
-`success` closes the ATTEMPT, not the task obligation; with no acceptance or
-delivery witness the task lands in the awaiting-acceptance queue. `stopped`,
-`refused`, `no-reading`, `measurement-impossible`, `runner-died` and
-`harness-broken` leave the task open. `out-of-scope` needs a bundled
-reassignment, and `blocked-mid-task` needs its hold in the same transaction.
+What each outcome means. Only `success` says the work got done, and it closes
+the attempt, not the task. Every other outcome leaves the task open.
 
-Reading. Text and JSON render one structure, so the two surfaces cannot
-disagree, and every answer carries the ledger watermark it was read at.
+- `success`: the work is done. With no acceptance or delivery witness the task
+  waits in the awaiting-acceptance queue until someone with authority closes it.
+- `stopped`: interrupted before finishing. Say why and the exact unfinished
+  step; the task waits on a resume or reconciliation.
+- `refused`: the instrument or tool declined to measure. Name the refusal and
+  its cause. A refusal is not a passing measurement.
+- `no-reading`: no reading was obtained (not run, not kept, invalid or
+  unreachable). Say why and what would get one. Never a fake zero.
+- `measurement-impossible`: this cannot be measured here, because a capability
+  or mechanism is missing. Name it. A local limit is not universal impossibility.
+- `runner-died`: the process doing the work died. A known exit or signal is
+  recorded; if the observer died too, the outcome is UNKNOWN until reconciled
+  (`--reconciliation-owed`).
+- `harness-broken`: the producer or setup failed, not the work under test. Keep
+  the partial output and diagnostic; only the inference without a valid
+  observation is blocked.
+- `out-of-scope`: finishing needs action outside the task's scope. The owed work
+  is kept and reassignment proposed; authority is never widened automatically.
+- `blocked-mid-task`: work cannot go on until something else happens. The
+  receipt and its hold (`--hold-*`) are admitted together, atomically.
+
+Reading. Every answer carries the ledger watermark it was read at. The default
+text is a complete outline of the same answer `--json` exports, so the two
+cannot disagree. `--brief` prints one short block per record instead: kind, id,
+revision, status, why it is in this view and who acts next. Every value it
+shows is read from that JSON; long text is cut and marked with `…`.
 
 ```
-datum show [--json] [RECORD_ID]
-datum history [--json] [RECORD_ID]
-datum intake pending [--json]
+datum show [--json|--brief] [RECORD_ID]
+datum history [--json|--brief] [RECORD_ID]
+datum intake pending [--json|--brief]
+datum now|todo|state|instruments [--json|--brief]
 ```
+
+`now` is what is moving or owed right now: IN FLIGHT tasks and their runs,
+OPEN decisions, and under attention every hold, acceptance or reconciliation a
+BLOCKED task is waiting on, with the actor it waits on. `todo` holds the full
+blocked, awaiting-acceptance and READY queues, plus intake. `intake pending`
+lists packets not yet accepted: unreviewed ones, and rejected or
+correction-requested ones with the review that dispositioned them.
 
 Before disposing of an artifact, `datum disposal-loss --digest SHA256` prints
 the `support_loss` targets an `artifact.dispose` of those bytes must record,

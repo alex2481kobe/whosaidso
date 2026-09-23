@@ -131,8 +131,33 @@ func nowPreset(s reduce.Snapshot) *Preset {
 	live, notes := runs(s, func(inv reduce.Invocation) bool {
 		return ids[reduce.Ident{Project: inv.Attempt.Project, ID: inv.Attempt.Task}]
 	})
-	p.InFlight, p.Decisions, p.Runs, p.Attention = list(flying), openDecisions(s), list(live), notes
+	p.InFlight, p.Decisions, p.Runs = list(flying), openDecisions(s), list(live)
+	p.Attention = append(notes, owedNow(s)...)
 	return p
+}
+
+// owedNow is NOW's second half: a BLOCKED task waits on someone acting now,
+// the same way an OPEN decision does. Every reason owed on the task itself (an
+// open hold of any kind, awaiting acceptance, owed reconciliation) is raised
+// with its waiting actor, known or UNKNOWN. A computed unmet prerequisite is
+// not: what it waits on is another record, which is listed in its own right.
+// The full blocked record stays in TODO; this names it so NOW cannot read empty.
+func owedNow(s reduce.Snapshot) []Attention {
+	out := []Attention{}
+	for _, r := range tasksWith(s, func(r Record) bool { return r.Task.Status == reduce.StatusBlocked }) {
+		for _, reason := range r.Task.Reasons {
+			if reason.Kind == reduce.ReasonPrerequisite && reason.BlockerID == "" {
+				continue
+			}
+			why := reason.Kind + ": " + reason.Detail
+			if reason.BlockerID != "" {
+				why = fmt.Sprintf("%s hold %s: %s", reason.Kind, reason.BlockerID, reason.Detail)
+			}
+			out = append(out, Attention{Kind: "task-blocked-owed", Ref: asRef(r.Fact.Key), Label: label(r.Fact.Task.Intent),
+				Reason: why, WaitingActor: actor(reason.Actor)})
+		}
+	}
+	return out
 }
 
 func hasReason(r Record, kind string) bool {
@@ -179,11 +204,11 @@ func closureAttention(c Closure, p *Preset) {
 		for _, r := range cycle {
 			parts = append(parts, fmt.Sprintf("%s@%d", r.RecordID, r.Revision))
 		}
-		p.Attention = append(p.Attention, Attention{"closure-cycle", c.Root, "mandatory closure", strings.Join(parts, " -> ")})
+		p.Attention = append(p.Attention, Attention{Kind: "closure-cycle", Ref: c.Root, Label: "mandatory closure", Reason: strings.Join(parts, " -> ")})
 	}
 	for _, n := range append(append([]ClosureNode{}, c.Mandatory...), c.Optional...) {
 		if n.Unresolved != nil {
-			p.Attention = append(p.Attention, Attention{"unresolved-link", n.Ref, "unresolved " + n.Via[0].Relation, n.Unresolved.Reason})
+			p.Attention = append(p.Attention, Attention{Kind: "unresolved-link", Ref: n.Ref, Label: "unresolved " + n.Via[0].Relation, Reason: n.Unresolved.Reason})
 		}
 	}
 }
@@ -226,8 +251,8 @@ func preset(project store.Project, s reduce.Snapshot, prefix []model.Bundle, req
 		closureAttention(c.Closure, p)
 		for _, v := range c.Runs {
 			if v.Scope.WithinTaskScope == reduce.TruthFalse {
-				p.Attention = append(p.Attention, Attention{"run-outside-task-scope", asRef(root.Key), "run " + string(v.Invocation),
-					"inputs outside declared source_paths: " + strings.Join(v.Scope.Outside, ", ")})
+				p.Attention = append(p.Attention, Attention{Kind: "run-outside-task-scope", Ref: asRef(root.Key), Label: "run " + string(v.Invocation),
+					Reason: "inputs outside declared source_paths: " + strings.Join(v.Scope.Outside, ", ")})
 			}
 		}
 	}
