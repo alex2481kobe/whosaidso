@@ -49,6 +49,10 @@ type state struct {
 	reverseCriterion  map[CriterionKey][]Referrer
 	reverseInvocation map[InvocationKey][]Referrer
 	reverseBlocker    map[BlockerKey][]Referrer
+
+	// bundle is the candidate bundle's inventory while it is applied, nil
+	// otherwise. clone never copies it.
+	bundle *bundleFacts
 }
 
 func newState() *state {
@@ -204,16 +208,14 @@ func (s *state) apply(b model.Bundle) error {
 	if err := s.checkEnvelope(b); err != nil {
 		return err
 	}
+	facts, err := indexBundle(b)
+	if err != nil {
+		return err
+	}
 	s.project = b.Project
-	for i, raw := range b.Events {
-		typed, err := model.DecodeEvent(raw)
-		if err != nil {
-			// Keep the model's own diagnostic and add where in the ledger it is.
-			if f, ok := err.(*model.Fault); ok {
-				return faultAt(f.Code, b.Sequence, i, f.Path, f.Detail)
-			}
-			return faultAt(CodeInvalidField, b.Sequence, i, "bundle.events", err.Error())
-		}
+	s.bundle = facts
+	defer func() { s.bundle = nil }()
+	for i, typed := range facts.events {
 		if err := s.checkSubject(b, i, typed); err != nil {
 			return err
 		}

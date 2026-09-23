@@ -56,7 +56,11 @@ func TestR10EarlierRevisionRunsStayInTheFamily(t *testing.T) {
 			}
 			l.add(t, proof)
 			_, err := Replay(l.out)
-			if f := wantFault(t, err, CodeInvalidTransition); f.Path != "evidence" {
+			code := CodeInvalidTransition
+			if disposition == "omitted" {
+				code = CodeIncompleteFamily
+			}
+			if f := wantFault(t, err, code); f.Path != "evidence" {
 				t.Fatalf("refused at %s, want evidence", f.Path)
 			}
 		})
@@ -99,7 +103,7 @@ func TestR10RejectedRunUnderAnEarlierRevisionStaysInTheFamily(t *testing.T) {
 	}
 	l, _ := build(true)
 	_, err := Replay(l.out)
-	wantFault(t, err, CodeInvalidTransition)
+	wantFault(t, err, CodeRejectedFamilyMember)
 	l, claim := build(false)
 	wantClaim(t, mustReplay(t, l.out), claim, StatusProven)
 }

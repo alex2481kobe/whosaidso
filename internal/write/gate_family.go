@@ -1,11 +1,13 @@
 package write
 
-// Proof admission's evaluation-family checks live here: closure over admitted
-// and pending invocations carrying the criterion or an earlier revision of it, per-member dispositions
-// against the member's own computed verdict, criterion satisfaction, and
-// re-resolution of each supporting instrument's validation artifact. Rejected
-// members recorded in the ledger live in gate_rejected.go. Enabling operations,
-// criterion freezing and the transaction do not.
+// Proof admission's artifact evaluation lives here: closure over pending,
+// unreviewed intake carrying the criterion or an earlier revision of it, each
+// exact-revision member's disposition against its own computed verdict,
+// criterion satisfaction, and re-resolution of each supporting instrument's
+// validation artifact. Family membership, ledger closure, rejected members and
+// earlier revisions are decided once, by the reducer's proof family checker,
+// when the proposal replays. Enabling operations, criterion freezing and the
+// transaction do not live here.
 
 import (
 	"context"
@@ -23,47 +25,24 @@ func gateProofFamily(ctx context.Context, project store.Project, after reduce.Sn
 		return admissionFault("unknown-reference", "criterion_ref", "proof names no admitted criterion")
 	}
 	// The family includes runs under earlier revisions of this criterion: a new
-	// revision cannot erase known counterevidence.
+	// revision cannot erase known counterevidence. The ledger's closure was
+	// decided when the proposal replayed; unreviewed intake is outside it.
 	carries := func(env model.InvocationEnvelope) bool {
 		member, _ := reduce.CriterionFamily(env.CriterionRef, e.CriterionRef)
 		return member
 	}
-	listed := map[model.InvocationRef]bool{}
-	for _, member := range e.Evidence {
-		listed[member.InvocationRef] = true
-	}
-	// Every admitted member, including ones this same set orders after the proof.
-	for _, inv := range after.Invocations() {
-		if !carries(inv.Start) {
-			continue
-		}
-		if inv.Seal == nil {
-			return admissionFault("pending-reconciliation", "evidence", fmt.Sprintf("family member %s has no admitted seal", inv.Key.InvocationID))
-		}
-		if !listed[model.InvocationRef{Project: inv.Key.Project, InvocationID: inv.Key.InvocationID}] {
-			return admissionFault("incomplete-family", "evidence", fmt.Sprintf("proof omits sealed family member %s", inv.Key.InvocationID))
-		}
-	}
 	if err := gatePendingIntake(project, after, carries); err != nil {
-		return err
-	}
-	rejected, err := gateRejectedFamily(after, e, carries)
-	if err != nil {
 		return err
 	}
 	resolver := evidence.NewResolver(project.Root)
 	supports := []evidence.Observation{}
 	for i, member := range e.Evidence {
 		path := fmt.Sprintf("evidence[%d]", i)
-		if rejected[member.InvocationRef] {
-			continue // dispositioned in gateRejectedFamily, never support
-		}
-		inv, ok := after.Invocation(reduce.InvocationKey{Project: member.InvocationRef.Project, InvocationID: member.InvocationRef.InvocationID})
-		if !ok || inv.Seal == nil {
-			return admissionFault("pending-reconciliation", path, "member has no admitted seal")
-		}
-		if _, earlier := reduce.CriterionFamily(inv.Start.CriterionRef, e.CriterionRef); earlier {
-			continue // accounted for under the judgment, never evaluated or support
+		// Earlier-revision and rejected-only members are accounted for under the
+		// judgment by the reducer's rules, never evaluated or support.
+		inv, class := after.ProofMember(e.CriterionRef, member.InvocationRef)
+		if class != reduce.MemberExact {
+			continue
 		}
 		observation, err := resolver.Observe(ctx, criterion.Fix, *inv.Seal)
 		if err != nil {

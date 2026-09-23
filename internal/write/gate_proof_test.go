@@ -204,7 +204,7 @@ func TestProofRefusesUnresolvedCounterevidence(t *testing.T) {
 			if disposition == "omitted" {
 				delete(members, fail)
 			}
-			code := map[string]string{"contradicts": "invalid-transition", "omitted": "invalid-transition"}[disposition]
+			code := map[string]string{"contradicts": "invalid-transition", "omitted": "incomplete-family"}[disposition]
 			if code == "" {
 				code = "counterevidence-unresolved"
 			}

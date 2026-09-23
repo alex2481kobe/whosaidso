@@ -221,6 +221,11 @@ type Criterion struct {
 	Key    CriterionKey
 	Fix    model.CriterionFix
 	Origin Origin
+	// RecordedAt is when the bundle that fixed it was recorded: the ledger's
+	// own time, never an author's. During admission's validation replay the
+	// candidate bundle's time is synthetic, so only prior bundles' times are
+	// observations.
+	RecordedAt time.Time
 }
 
 // Referrer is one reverse edge: an admitted event that named a referent. U06

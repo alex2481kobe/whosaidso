@@ -60,9 +60,9 @@ func TestR10RejectedRunMustBeDispositionedNeverSupport(t *testing.T) {
 				_, err := Replay(l.out)
 				want := map[string]string{"omitted": "evidence"}[disposition]
 				if want == "" {
-					want = "evidence[1].invocation_ref"
+					want = "evidence[1].disposition"
 				}
-				if f := wantFault(t, err, CodeInvalidTransition); f.Path != want {
+				if f := wantFault(t, err, CodeRejectedFamilyMember); f.Path != want {
 					t.Fatalf("refused at %s, want %s: %v", f.Path, want, f)
 				}
 			})
