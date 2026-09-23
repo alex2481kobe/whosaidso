@@ -28,16 +28,18 @@ type templateBinds struct {
 
 // boundTemplate is one event's tree being filled, and what was filled.
 type boundTemplate struct {
-	c       *call
-	event   model.EventType
-	body    any
-	notes   []templateNote
-	filled  []string // "PATH: from WHAT", printed on stderr
-	blobs   []string // files whose bytes a capture must carry
-	author  model.Actor
-	bound   bool // a bind flag, --set or --pin was given: list what is left
-	project *store.Project
-	state   *store.State
+	c      *call
+	event  model.EventType
+	body   any
+	notes  []templateNote
+	filled []string // "PATH: from WHAT", printed on stderr
+	blobs  []string // files whose bytes a capture must carry
+	author model.Actor
+	bound  bool // a bind flag, --set or --pin was given: list what is left
+	// examples maps an output name to the local file holding its example bytes
+	examples map[string]string
+	project  *store.Project
+	state    *store.State
 }
 
 // templateBindEvents says which events each bind flag fills. A flag given
@@ -76,6 +78,7 @@ func templateVerb(fs *flag.FlagSet) func(*call) error {
 	fs.StringVar(&b.criterion, "criterion", "", "the criterion `ID`: its current revision (or the next, for criterion.fix)")
 	fs.StringVar(&b.attempt, "attempt", "", "the attempt `ID`: it and its task's reference")
 	fs.StringVar(&b.hold, "hold", "", "blocker.clear: the open hold's `ID`; its task is found")
+	fs.Var(&b.pins, "pin", "pin real bytes at a reference field: `NAME=PATH[@REV][#POINTER]`, content or git (repeatable)")
 	fs.Var(&b.sets, "set", "fill one field: `PATH=VALUE`, VALUE as JSON when it parses, else text (repeatable)")
 	actor := actorFlag(fs)
 	capture := fs.Bool("capture", false, "capture the filled event; refused while any placeholder remains")
@@ -135,6 +138,11 @@ func (t *boundTemplate) fill(b templateBinds) error {
 	}
 	if err := t.bindLedger(b); err != nil {
 		return err
+	}
+	for _, p := range b.pins {
+		if err := t.pin(p); err != nil {
+			return err
+		}
 	}
 	for _, s := range b.sets {
 		path, value, ok := strings.Cut(s, "=")

@@ -94,7 +94,11 @@ choice with one member, and with bind flags the exact references at their
 CURRENT revisions: --from copies a record's current spec into an amend or
 revise (change what changed), --task, --claim, --criterion and --attempt
 fill those references (a proof gets its criterion's whole family as
-evidence), --hold finds an open hold for blocker.clear. Judgment never:
+evidence), --hold finds an open hold for blocker.clear. --pin NAME=PATH
+builds a reference from real bytes: PATH (project-relative) is a content pin
+(digest, length, a media type the bytes pass), PATH@REV the committed object
+(full commit, object format), #POINTER a json-pointer selector, else whole;
+a pinned file travels with --capture as a blob. Judgment never:
 assertions, falsifiers, blind spots, reasons, dispositions, verdicts,
 acceptance and validation stay placeholders; fill them with --set PATH=VALUE
 (paths as the notes print them, e.g. evidence[0].disposition) or by editing.
