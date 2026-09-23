@@ -15,11 +15,14 @@ import (
 )
 
 // Attention is a fact the reader must not miss, surfaced first in a preset.
+// WaitingActor is set only when the fact is owed by someone: an Actor, or
+// Unknown when the ledger names nobody.
 type Attention struct {
-	Kind   string          `json:"kind"`
-	Ref    model.RecordRef `json:"ref"`
-	Label  string          `json:"label"`
-	Reason string          `json:"reason"`
+	Kind         string          `json:"kind"`
+	Ref          model.RecordRef `json:"ref"`
+	Label        string          `json:"label"`
+	Reason       string          `json:"reason"`
+	WaitingActor any             `json:"waiting_actor,omitempty"`
 }
 
 // Validation is KNOWN only when a validation ref/version was recorded. Anything
@@ -123,11 +126,11 @@ func instrumentView(s reduce.Snapshot, p reduce.InstrumentProjection) (Instrumen
 		ValidRange: spec.ValidRange, ImplementationRef: spec.ImplementationRef, Author: actor(rec.Provenance.Author)}
 	var notes []Attention
 	if v.Validation.State != "KNOWN" {
-		notes = append(notes, Attention{"instrument-validation-unknown", ref, v.Label, v.Validation.Reason})
+		notes = append(notes, Attention{Kind: "instrument-validation-unknown", Ref: ref, Label: v.Label, Reason: v.Validation.Reason})
 	}
 	// UNKNOWN trust that only follows from UNKNOWN validation is already said above.
 	if v.Trust == reduce.TruthFalse || v.Trust != reduce.TruthTrue && v.Validation.State == "KNOWN" {
-		notes = append(notes, Attention{"instrument-trust-not-active", ref, v.Label, fmt.Sprintf("active trust is %s", v.Trust)})
+		notes = append(notes, Attention{Kind: "instrument-trust-not-active", Ref: ref, Label: v.Label, Reason: fmt.Sprintf("active trust is %s", v.Trust)})
 	}
 	return v, notes
 }

@@ -14,15 +14,15 @@ import (
 	"datum/internal/store"
 )
 
-const readUsage = `datum show [--json] [RECORD_ID]
-datum history [--json] [RECORD_ID]
-datum history [--json] --self-admitted[=true|false|unknown]
-datum intake pending [--json]
-datum instruments|state|now [--json]
-datum todo [--json] [--limit N]
-datum context [--json] [--limit N] [RECORD_ID]
-datum continue [--json] [--limit N] TASK_ID
-datum disposal-loss [--json] --digest SHA256 [--git FORMAT:COMMIT:PATH]
+const readUsage = `datum show [--json|--brief] [RECORD_ID]
+datum history [--json|--brief] [RECORD_ID]
+datum history [--json|--brief] --self-admitted[=true|false|unknown]
+datum intake pending [--json|--brief]
+datum instruments|state|now [--json|--brief]
+datum todo [--json|--brief] [--limit N]
+datum context [--json|--brief] [--limit N] [RECORD_ID]
+datum continue [--json|--brief] [--limit N] TASK_ID
+datum disposal-loss [--json|--brief] --digest SHA256 [--git FORMAT:COMMIT:PATH]
 
 Show selects current admitted records. History selects admitted events in order.
 Pending includes rejected and correction-requested packets.
@@ -32,6 +32,13 @@ The bare flag selects true; false excludes unknown. Legacy facts remain UNKNOWN.
 This audit filter cannot be combined with a record ID.
 Every answer carries its ledger watermark. Flags precede the optional record ID.
 Output is generated on stdout; --json exports the same answer as text.
+--brief prints one short block per record: kind, id, revision, status, why it
+is in this view and who acts next. Every value it shows is read from the JSON
+export at a fixed path; long text is cut at its first line or 72 characters
+and marked with …. It is not lossless; the default outline and --json are.
+NOW lists IN FLIGHT work, its runs and OPEN decisions, and raises under
+attention every hold, acceptance or reconciliation a BLOCKED task is waiting
+on, with the actor it waits on. The full blocked record stays in TODO.
 INSTRUMENTS shows validation first; UNKNOWN validation is listed under attention.
 --limit cuts only optional results (READY tasks, context refs), never blockers,
 mandatory constraints, prerequisites, corrections or supersessions.
@@ -91,6 +98,7 @@ func readCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.W
 	flags.SetOutput(stderr)
 	flags.Usage = func() { fmt.Fprint(stderr, readUsage) }
 	jsonOutput := flags.Bool("json", false, "export the answer as JSON")
+	briefOutput := flags.Bool("brief", false, "print one short block per record instead of the full outline")
 	var selfAdmitted selfAdmissionFlag
 	limit := 0
 	if command == "todo" || command == "context" || command == "continue" {
@@ -109,6 +117,9 @@ func readCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.W
 			return nil
 		}
 		return err
+	}
+	if *jsonOutput && *briefOutput {
+		return fmt.Errorf("%s: --json and --brief are two renderings; choose one", command)
 	}
 	request := query.Request{Command: command, SelfAdmitted: model.SelfAdmissionState(selfAdmitted), Limit: limit}
 	if command == "disposal-loss" {
@@ -150,6 +161,9 @@ func readCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.W
 	}
 	if *jsonOutput {
 		return query.RenderJSON(stdout, answer)
+	}
+	if *briefOutput {
+		return query.RenderBrief(stdout, answer)
 	}
 	return query.RenderText(stdout, answer)
 }

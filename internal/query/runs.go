@@ -176,8 +176,8 @@ func runs(s reduce.Snapshot, keep func(reduce.Invocation) bool) ([]RunView, []At
 		v := runView(s, inv)
 		out = append(out, v)
 		if v.Scope.WithinTaskScope == reduce.TruthFalse {
-			notes = append(notes, Attention{"run-outside-task-scope", v.Task.(model.RecordRef), "run " + string(v.Invocation),
-				fmt.Sprintf("inputs outside declared source_paths: %s", strings.Join(v.Scope.Outside, ", "))})
+			notes = append(notes, Attention{Kind: "run-outside-task-scope", Ref: v.Task.(model.RecordRef), Label: "run " + string(v.Invocation),
+				Reason: fmt.Sprintf("inputs outside declared source_paths: %s", strings.Join(v.Scope.Outside, ", "))})
 		}
 	}
 	return out, notes
