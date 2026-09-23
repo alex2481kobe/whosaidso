@@ -96,9 +96,16 @@ type ObservationDisposition struct {
 	InvocationRef InvocationRef `json:"invocation_ref"`
 	Disposition   string        `json:"disposition"`
 	Reason        string        `json:"reason" semantic:"text"`
+	// CodeChange (R14.2) is the recorded fact that lets a failing run of the
+	// proof's own criterion revision be set aside as inapplicable: code under
+	// the claim's scope changed since the run's commit (code_change.go).
+	CodeChange *CodeChange `json:"code_change,omitempty"`
 }
 
 func (d ObservationDisposition) validate(p string) error {
+	if d.CodeChange != nil && d.Disposition != "inapplicable" {
+		return invalid(p+".code_change", "a code change only sets a run aside as inapplicable")
+	}
 	return oneOf(d.Disposition, p+".disposition", "supports", "contradicts", "inapplicable", "inconclusive")
 }
 

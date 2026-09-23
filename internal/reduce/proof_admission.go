@@ -97,10 +97,18 @@ func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 			refusal = s.countedMember(b, idx, e, inv)
 			counted = counted || refusal == nil
 		}
+		if refusal == nil && member.CodeChange != nil {
+			refusal = s.checkCodeChange(b, idx, i, e, inv, class)
+		}
 		if refusal != nil {
 			if err := s.refuseProof(refusal); err != nil {
 				return err
 			}
+		}
+	}
+	if err := s.checkCurrentCommit(b, idx, e); err != nil {
+		if err = s.refuseProof(err); err != nil {
+			return err
 		}
 	}
 	if !counted {

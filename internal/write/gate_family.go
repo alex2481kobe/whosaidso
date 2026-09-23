@@ -2,7 +2,8 @@ package write
 
 // Proof admission's artifact evaluation lives here: closure over pending,
 // unreviewed intake carrying the criterion or an earlier revision of it, each
-// exact-revision member's disposition against its own computed verdict,
+// exact-revision member's disposition against its own computed verdict (with
+// R14.2's git check of a recorded code change, gate_code_change.go),
 // criterion satisfaction, and re-resolution of each supporting instrument's
 // validation artifact. Family membership, ledger closure, rejected members and
 // earlier revisions are decided once, by the reducer's proof family checker,
@@ -44,6 +45,11 @@ func gateProofFamily(ctx context.Context, project store.Project, after reduce.Sn
 		if class != reduce.MemberExact {
 			continue
 		}
+		if member.CodeChange != nil {
+			if err := gateCodeChange(ctx, project, after, e.Claim, *member.CodeChange, path+".code_change"); err != nil {
+				return err
+			}
+		}
 		observation, err := resolver.Observe(ctx, criterion.Fix, *inv.Seal)
 		if err != nil {
 			return err
@@ -54,9 +60,11 @@ func gateProofFamily(ctx context.Context, project store.Project, after reduce.Sn
 		}
 		// FALSE is a computed counterexample. Only "contradicts" names it
 		// honestly; the reducer refuses it in a supports proof and counts it
-		// in a refutes proof. And "contradicts" names nothing else (R14.1):
-		// a run that does not fail the criterion cannot refute the claim.
-		if own.Verdict == evidence.False && member.Disposition != "contradicts" {
+		// in a refutes proof. R14.2: it may be set aside as inapplicable only
+		// beside a code change git verified above. And "contradicts" names
+		// nothing else (R14.1): a run that does not fail cannot refute.
+		setAside := member.Disposition == "inapplicable" && member.CodeChange != nil
+		if own.Verdict == evidence.False && member.Disposition != "contradicts" && !setAside {
 			return admissionFault("counterevidence-unresolved", path+".disposition", "member fails the criterion: "+own.Reason)
 		}
 		if own.Verdict != evidence.False && member.Disposition == "contradicts" {
