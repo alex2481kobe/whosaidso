@@ -237,7 +237,7 @@ func gateReference(snapshot reduce.Snapshot, ref model.Reference) (gateKey, bool
 // gateProposal replays the proposal onto the admitted prefix. Start rules
 // (current revision, READY with BLOCKED winning, one owner per attempt id) are
 // the reducer's, so admission and replay share one implementation.
-func gateProposal(base reduce.Snapshot, project model.ProjectID, command model.ID, digest model.Digest, proposal model.Bundle) (reduce.Snapshot, error) {
+func gateProposal(base reduce.Snapshot, project model.ProjectID, command model.ID, digest model.Digest, proposal model.Bundle, dry *dryRun) (reduce.Snapshot, error) {
 	// Validation only: Transact assigns the real envelope to the proposal.
 	validation := proposal
 	validation.Version = model.WireVersion
@@ -247,5 +247,13 @@ func gateProposal(base reduce.Snapshot, project model.ProjectID, command model.I
 	validation.Sequence = base.Watermark().Sequence + 1
 	validation.Predecessor = base.Watermark().CommandID
 	validation.RecordedAt = time.Unix(0, 0).UTC()
-	return reduce.Apply(base, validation)
+	if dry == nil {
+		after, err := reduce.Apply(base, validation)
+		return after, unwritten(err, validation.Sequence)
+	}
+	after, refusals, err := reduce.ApplyCollectingProofRefusals(base, validation)
+	for _, refusal := range refusals {
+		dry.note("replay", unwritten(refusal, validation.Sequence))
+	}
+	return after, unwritten(err, validation.Sequence)
 }

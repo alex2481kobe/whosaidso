@@ -167,7 +167,9 @@ func gateWalkArtifacts(value reflect.Value, out *[]model.ArtifactRef) {
 // gateProofs runs after the proposal replays and its artifacts resolve. after
 // includes this admission set. Criterion freezing is the reducer's, for every
 // start (reduce/freeze.go).
-func gateProofs(ctx context.Context, project store.Project, after reduce.Snapshot, packets []model.Packet) error {
+// A dry run records each event's refusal and checks the next event too, and
+// asks each proof member's own questions as well (dryProofMembers).
+func gateProofs(ctx context.Context, project store.Project, after reduce.Snapshot, packets []model.Packet, dry *dryRun) error {
 	for _, packet := range packets {
 		for _, raw := range packet.Events {
 			event, err := model.DecodeEvent(raw)
@@ -176,17 +178,15 @@ func gateProofs(ctx context.Context, project store.Project, after reduce.Snapsho
 			}
 			switch e := event.(type) {
 			case *model.InvocationSeal:
-				if err := gatePendingRealSeal(project, after, e.Envelope); err != nil {
-					return err
-				}
+				err = gatePendingRealSeal(project, after, e.Envelope)
 			case *model.ProofAdmit:
-				if err := gateProofFamily(ctx, project, after, e); err != nil {
-					return err
-				}
+				err = gateProofFamily(ctx, project, after, e)
+				dry.proofMembers(ctx, project, after, e)
 			case *model.TaskClose:
-				if err := gateClosureEffective(after, e); err != nil {
-					return err
-				}
+				err = gateClosureEffective(after, e)
+			}
+			if err := dry.note("proofs", err); err != nil {
+				return err
 			}
 		}
 	}
