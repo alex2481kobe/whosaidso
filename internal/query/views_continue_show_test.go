@@ -153,7 +153,7 @@ func TestViewRequestsOutsideTheirViewAreRefused(t *testing.T) {
 	if _, err := ReadView(p, ViewRequest{View: "todo"}); err != nil {
 		t.Fatalf("control: plain todo must succeed: %v", err)
 	}
-	stale := func(reduce.Snapshot) []StaleClaim { return nil }
+	stale := richStale()
 	for _, r := range []ViewRequest{{View: "now"}, {View: "todo", ID: testID(1)}, {View: "continue"}, {View: "show", ID: testID(1), Kind: "task"},
 		{View: "show", Kind: "tasks"}, {View: "todo", Kind: "task"}, {View: "show", Limit: 2}, {View: "todo", Limit: -1},
 		{View: "show", Observed: richObservation()}, {View: "todo", Stale: stale}, {View: "todo", SelfAdmitted: model.SelfAdmissionTrue},

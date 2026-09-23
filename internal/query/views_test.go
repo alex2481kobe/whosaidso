@@ -104,7 +104,7 @@ func assertViewHonest(t *testing.T, a ViewAnswer) string {
 }
 
 func allViewRequests() []ViewRequest {
-	out := []ViewRequest{{View: "todo"}, {View: "todo", Limit: 1}, {View: "show"}, {View: "show", Stale: richStale},
+	out := []ViewRequest{{View: "todo"}, {View: "todo", Limit: 1}, {View: "show"}, {View: "show", Stale: richStale()},
 		{View: "show", ID: testID(999)}, {View: "continue", ID: testID(999)}, {View: "history"}, {View: "history", ID: testID(1)},
 		{View: "history", SelfAdmitted: model.SelfAdmissionTrue}}
 	for kind := range viewKinds {

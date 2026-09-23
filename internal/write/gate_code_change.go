@@ -4,8 +4,9 @@ package write
 // only when git, asked for the files under the claim's scope that differ
 // between its two commits, answers exactly the recorded paths. The ledger
 // half (the run's head, the scope, the current commit) is the reducer's and
-// was checked when the proposal replayed; the read of stale claims lives in
-// stale_claims.go.
+// was checked when the proposal replayed. Git is asked in the home repository
+// (project.Root), the ledger's; the read of stale claims, which asks the
+// invoking checkout, lives in internal/query/stale.go.
 
 import (
 	"context"
