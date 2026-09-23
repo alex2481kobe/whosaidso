@@ -132,7 +132,13 @@ func DecodeEvent(raw Event) (TypedEvent, error) {
 	if err = checkJSONShape(tree, reflect.TypeOf(event), "event.data"); err != nil {
 		return nil, err
 	}
-	if err = strictUnmarshal(raw.Data, event, "event.data"); err != nil {
+	// strictUnmarshal without its second ordered parse: tree already is
+	// parseOrdered(raw.Data), and its duplicate-key and trailing-content
+	// refusals already ran above. UTF-8 is still checked in the same order.
+	if err = refuseInvalidUTF8Bytes(raw.Data, "event.data"); err != nil {
+		return nil, err
+	}
+	if err = strictDecodeParsed(raw.Data, tree, event, "event.data"); err != nil {
 		return nil, err
 	}
 	if err = validateValue(reflect.ValueOf(event), "event.data"); err != nil {

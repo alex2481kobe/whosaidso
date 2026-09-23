@@ -102,28 +102,37 @@ func openDecisions(s reduce.Snapshot) *[]DecisionView {
 	return list(open)
 }
 
-func tasksWith(s reduce.Snapshot, keep func(Record) bool) []Record {
-	out := []Record{}
+// taskBuckets holds every current task, described once per query and filed
+// under its status, each bucket in currentOf's record order. with hands out a
+// fresh slice, so no two answer sections share a backing array; no query reads
+// one bucket into two sections, so no described record gains a second owner.
+type taskBuckets map[reduce.TaskStatus][]Record
+
+func describeTasks(s reduce.Snapshot) taskBuckets {
+	out := taskBuckets{}
 	for _, fact := range currentOf(s, model.Task) {
-		if r := describe(s, fact); keep(r) {
-			out = append(out, r)
-		}
+		r := describe(s, fact)
+		out[r.Task.Status] = append(out[r.Task.Status], r)
 	}
 	return out
 }
 
-func statePreset(s reduce.Snapshot) *Preset {
+func (b taskBuckets) with(status reduce.TaskStatus) []Record {
+	return append([]Record{}, b[status]...)
+}
+
+func statePreset(s reduce.Snapshot, tasks taskBuckets) *Preset {
 	p := &Preset{Attention: []Attention{}}
 	claimsAndRulings(s, p)
-	p.Closed = list(tasksWith(s, func(r Record) bool { return r.Task.Status == reduce.StatusClosed }))
+	p.Closed = list(tasks.with(reduce.StatusClosed))
 	all, notes := runs(s, func(reduce.Invocation) bool { return true })
 	p.Runs, p.Attention = list(all), append(p.Attention, notes...)
 	return p
 }
 
-func nowPreset(s reduce.Snapshot) *Preset {
+func nowPreset(s reduce.Snapshot, tasks taskBuckets) *Preset {
 	p := &Preset{Attention: []Attention{}}
-	flying := tasksWith(s, func(r Record) bool { return r.Task.Status == reduce.StatusInFlight })
+	flying := tasks.with(reduce.StatusInFlight)
 	ids := map[reduce.Ident]bool{}
 	for _, r := range flying {
 		ids[reduce.Ident{Project: r.Fact.Key.Project, ID: r.Fact.Key.ID}] = true
@@ -132,7 +141,7 @@ func nowPreset(s reduce.Snapshot) *Preset {
 		return ids[reduce.Ident{Project: inv.Attempt.Project, ID: inv.Attempt.Task}]
 	})
 	p.InFlight, p.Decisions, p.Runs = list(flying), openDecisions(s), list(live)
-	p.Attention = append(notes, owedNow(s)...)
+	p.Attention = append(notes, owedNow(tasks)...)
 	return p
 }
 
@@ -142,9 +151,9 @@ func nowPreset(s reduce.Snapshot) *Preset {
 // with its waiting actor, known or UNKNOWN. A computed unmet prerequisite is
 // not: what it waits on is another record, which is listed in its own right.
 // The full blocked record stays in TODO; this names it so NOW cannot read empty.
-func owedNow(s reduce.Snapshot) []Attention {
+func owedNow(tasks taskBuckets) []Attention {
 	out := []Attention{}
-	for _, r := range tasksWith(s, func(r Record) bool { return r.Task.Status == reduce.StatusBlocked }) {
+	for _, r := range tasks.with(reduce.StatusBlocked) {
 		for _, reason := range r.Task.Reasons {
 			if reason.Kind == reduce.ReasonPrerequisite && reason.BlockerID == "" {
 				continue
@@ -171,8 +180,8 @@ func hasReason(r Record, kind string) bool {
 
 // todoInto never limits blocked work, awaiting acceptance or open decisions;
 // the limit cuts only READY tasks, and says how many it cut.
-func todoInto(s reduce.Snapshot, p *Preset, limit int) {
-	blocked := tasksWith(s, func(r Record) bool { return r.Task.Status == reduce.StatusBlocked })
+func todoInto(s reduce.Snapshot, tasks taskBuckets, p *Preset, limit int) {
+	blocked := tasks.with(reduce.StatusBlocked)
 	awaiting, other := []Record{}, []Record{}
 	for _, r := range blocked {
 		if hasReason(r, reduce.ReasonAwaitingAcceptance) {
@@ -186,7 +195,7 @@ func todoInto(s reduce.Snapshot, p *Preset, limit int) {
 			other = append(other, r)
 		}
 	}
-	ready := tasksWith(s, func(r Record) bool { return r.Task.Status == reduce.StatusReady })
+	ready := tasks.with(reduce.StatusReady)
 	report := &LimitReport{Requested: "none", Offered: len(ready)}
 	if limit > 0 {
 		report.Requested = limit
@@ -219,15 +228,15 @@ func preset(project store.Project, s reduce.Snapshot, prefix []model.Bundle, req
 	case "instruments":
 		instrumentsInto(s, p)
 	case "state":
-		p = statePreset(s)
+		p = statePreset(s, describeTasks(s))
 	case "now":
-		p = nowPreset(s)
+		p = nowPreset(s, describeTasks(s))
 	case "todo":
 		var err error
 		if a.Intake, err = pending(project, s, prefix); err != nil {
 			return err
 		}
-		todoInto(s, p, request.Limit)
+		todoInto(s, describeTasks(s), p, request.Limit)
 	case "disposal-loss":
 		p.Disposal = disposalLoss(s, *request.Disposal)
 	case "context":
@@ -246,7 +255,8 @@ func preset(project store.Project, s reduce.Snapshot, prefix []model.Bundle, req
 			return fmt.Errorf("continue requires a TASK; %s is a %s", request.ID, root.Kind)
 		}
 		a.Records = append(a.Records, describe(s, root))
-		c := continuation(s, root, request, nowPreset(s), statePreset(s))
+		tasks := describeTasks(s)
+		c := continuation(s, root, request, nowPreset(s, tasks), statePreset(s, tasks))
 		p.Continue = &c
 		closureAttention(c.Closure, p)
 		for _, v := range c.Runs {

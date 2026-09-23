@@ -26,7 +26,7 @@ const (
 // replacement (the same coverage query/closure.go reads).
 func (s *state) supersededBy(ref model.RecordRef) []model.RecordRef {
 	out := []model.RecordRef{}
-	for _, o := range s.eventOrder() {
+	for _, o := range s.log.supersessions {
 		e, ok := s.events[o].(*model.Supersede)
 		if ok && ident(e.Prior) == ident(ref) && ref.Revision <= e.Prior.Revision && e.Replacement != ref {
 			out = append(out, e.Replacement)
@@ -38,8 +38,8 @@ func (s *state) supersededBy(ref model.RecordRef) []model.RecordRef {
 // rulingAffected: an owner ruling is an admitted decision.dispose, and a
 // supersession affects every ruled revision it covers.
 func (s *state) rulingAffected(prior model.RecordRef) bool {
-	for _, event := range s.events {
-		e, ok := event.(*model.DecisionDispose)
+	for _, o := range s.log.decisionDisposals {
+		e, ok := s.events[o].(*model.DecisionDispose)
 		if ok && ident(e.Decision) == ident(prior) && e.Decision.Revision <= prior.Revision {
 			return true
 		}

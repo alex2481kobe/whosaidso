@@ -102,7 +102,7 @@ func (s *state) memberClass(criterion model.CriterionRef, key InvocationKey) (In
 // candidate bundle's, in ledger order. Reviews already applied from the
 // candidate bundle come from its inventory, not twice.
 func (s *state) rejectedFacts() []RejectedFact {
-	reviews := make([]Review, 0, len(s.reviews))
+	var reviews []Review // usually none are rejected; never size for all reviews
 	for _, r := range s.reviews {
 		if r.Outcome != "accepted" && (s.bundle == nil || r.Origin.Sequence <= s.watermark.Sequence) {
 			reviews = append(reviews, r)

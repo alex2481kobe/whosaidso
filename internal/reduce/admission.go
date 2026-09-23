@@ -162,27 +162,29 @@ func (s *state) checkExpectations(b model.Bundle, idx int, e model.TypedEvent) e
 	return nil
 }
 
-// checkReferences resolves every same-project reference the model walker finds.
+// checkReferences resolves every same-project reference the model walker finds
+// and returns them, schema-validated, for recordReferrers: the walk and its
+// schema validation run once per admitted event.
 // Cross-project links are exempt by design: they resolve on read and may dangle,
 // and reporting an unresolved one is not the same as treating it as absent.
-func (s *state) checkReferences(b model.Bundle, idx int, e model.TypedEvent) error {
+func (s *state) checkReferences(b model.Bundle, idx int, e model.TypedEvent) ([]model.Reference, error) {
 	refs, err := model.SameProjectReferences(e, b.Project)
 	if err != nil {
 		if f, ok := err.(*model.Fault); ok {
-			return faultAt(f.Code, b.Sequence, idx, f.Path, f.Detail)
+			return nil, faultAt(f.Code, b.Sequence, idx, f.Path, f.Detail)
 		}
-		return faultAt(CodeInvalidField, b.Sequence, idx, "event", err.Error())
+		return nil, faultAt(CodeInvalidField, b.Sequence, idx, "event", err.Error())
 	}
 	for _, r := range refs {
 		switch {
 		case r.Record != nil:
 			if _, ok := s.records[recordKey(*r.Record)]; !ok {
-				return faultAt(CodeUnknownReference, b.Sequence, idx, r.Path,
+				return nil, faultAt(CodeUnknownReference, b.Sequence, idx, r.Path,
 					fmt.Sprintf("no admitted revision %d of %s", r.Record.Revision, r.Record.RecordID))
 			}
 		case r.Criterion != nil:
 			if _, ok := s.criteria[criterionKey(*r.Criterion)]; !ok {
-				return faultAt(CodeUnknownReference, b.Sequence, idx, r.Path,
+				return nil, faultAt(CodeUnknownReference, b.Sequence, idx, r.Path,
 					fmt.Sprintf("no admitted criterion %s revision %d", r.Criterion.CriterionID, r.Criterion.Revision))
 			}
 		case r.Invocation != nil:
@@ -192,24 +194,22 @@ func (s *state) checkReferences(b model.Bundle, idx int, e model.TypedEvent) err
 				if _, proof := e.(*model.ProofAdmit); proof && s.rejectedRecorded(invocationKey(*r.Invocation)) {
 					continue
 				}
-				return faultAt(CodeUnknownReference, b.Sequence, idx, r.Path,
+				return nil, faultAt(CodeUnknownReference, b.Sequence, idx, r.Path,
 					fmt.Sprintf("no admitted invocation %s", r.Invocation.InvocationID))
 			}
 		case r.Blocker != nil:
 			if _, ok := s.blockers[blockerKey(*r.Blocker)]; !ok {
-				return faultAt(CodeUnknownReference, b.Sequence, idx, r.Path,
+				return nil, faultAt(CodeUnknownReference, b.Sequence, idx, r.Path,
 					fmt.Sprintf("no admitted blocker %s", r.Blocker.BlockerID))
 			}
 		}
 	}
-	return nil
+	return refs, nil
 }
 
-func (s *state) recordReferrers(b model.Bundle, idx int, e model.TypedEvent) {
-	refs, err := model.SameProjectReferences(e, b.Project)
-	if err != nil {
-		return // already refused upstream, unreachable in a valid apply
-	}
+// recordReferrers indexes the references checkReferences returned for this
+// same event; it never walks the event a second time.
+func (s *state) recordReferrers(b model.Bundle, idx int, e model.TypedEvent, refs []model.Reference) {
 	r := Referrer{Origin: Origin{Sequence: b.Sequence, EventIndex: idx}, Type: e.EventType()}
 	for _, ref := range refs {
 		r.Path = ref.Path

@@ -114,7 +114,7 @@ func (s Snapshot) claimAt(ref model.RecordRef) (ClaimProjection, bool) {
 			p.Status = StatusMeasured
 		}
 	}
-	for _, o := range s.inner().eventOrder() {
+	for _, o := range s.inner().log.proofs {
 		if e, ok := s.inner().events[o].(*model.ProofAdmit); ok && e.Claim == ref {
 			p.Proofs = append(p.Proofs, ProofAdmission{Admission: *e, Origin: o})
 			p.Status = StatusProven
@@ -154,7 +154,7 @@ func (s Snapshot) decisionAt(ref model.RecordRef) (DecisionProjection, bool) {
 		return DecisionProjection{}, false
 	}
 	p := DecisionProjection{Decision: rec.Key, Spec: rec.Decision, Status: StatusOpen}
-	for _, o := range s.inner().eventOrder() {
+	for _, o := range s.inner().log.decisionDisposals {
 		if e, ok := s.inner().events[o].(*model.DecisionDispose); ok && e.Decision == ref {
 			p.Dispositions = append(p.Dispositions, DecisionDisposition{Disposition: *e, Origin: o, Author: s.inner().eventAuthor(o)})
 			p.Status = StatusDecided

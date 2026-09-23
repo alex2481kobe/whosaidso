@@ -44,6 +44,7 @@ type state struct {
 	sources      map[SourceKey]Source
 	commands     map[model.ID]uint64
 	events       map[Origin]model.TypedEvent
+	log          eventLog // events' origins in ledger order, by type
 
 	reverseRecord     map[RecordKey][]Referrer
 	reverseCriterion  map[CriterionKey][]Referrer
@@ -88,8 +89,22 @@ func copyMap[K comparable, V any](m map[K]V) map[K]V {
 	return out
 }
 
+// copyReferrers forks a reverse-reference map. Each list is capped at its
+// length, so the fork's first append to it reallocates (copy on write) and
+// never writes into a backing array the source snapshot, or a sibling fork,
+// still reads.
+func copyReferrers[K comparable](m map[K][]Referrer) map[K][]Referrer {
+	out := make(map[K][]Referrer, len(m))
+	for k, v := range m {
+		out[k] = v[:len(v):len(v)]
+	}
+	return out
+}
+
 // clone is what keeps Apply pure. Values in these maps are replaced, never
 // mutated in place, so a shallow copy of each map is a real fork of the state.
+// The two appended-to structures, reverse references and the event log, are
+// forked with their capacity capped, which makes their appends copy on write.
 func (s *state) clone() *state {
 	return &state{
 		project:           s.project,
@@ -107,22 +122,21 @@ func (s *state) clone() *state {
 		sources:           copyMap(s.sources),
 		commands:          copyMap(s.commands),
 		events:            copyMap(s.events),
-		reverseRecord:     copyMap(s.reverseRecord),
-		reverseCriterion:  copyMap(s.reverseCriterion),
-		reverseInvocation: copyMap(s.reverseInvocation),
-		reverseBlocker:    copyMap(s.reverseBlocker),
+		log:               s.log.fork(),
+		reverseRecord:     copyReferrers(s.reverseRecord),
+		reverseCriterion:  copyReferrers(s.reverseCriterion),
+		reverseInvocation: copyReferrers(s.reverseInvocation),
+		reverseBlocker:    copyReferrers(s.reverseBlocker),
 	}
 }
 
-// addReferrer copies before extending. Appending in place would write into a
-// backing array a cloned snapshot still points at, so one fork would silently
-// alter another - the exact class of bug this package exists to prevent.
+// addReferrer appends, amortized. That is safe only because every list this
+// state shares with another was capped by copyReferrers: a replay owns its
+// lists exclusively, and a fork's first append to a shared list reallocates.
+// Without the cap one fork would silently alter another - the exact class of
+// bug this package exists to prevent.
 func addReferrer[K comparable](m map[K][]Referrer, k K, r Referrer) {
-	cur := m[k]
-	next := make([]Referrer, len(cur)+1)
-	copy(next, cur)
-	next[len(cur)] = r
-	m[k] = next
+	m[k] = append(m[k], r)
 }
 
 // Replay folds a complete ledger prefix from empty. A corrupt or conflicting
@@ -225,14 +239,17 @@ func (s *state) apply(b model.Bundle) error {
 		if err := s.checkExpectations(b, i, typed); err != nil {
 			return err
 		}
-		if err := s.checkReferences(b, i, typed); err != nil {
+		refs, err := s.checkReferences(b, i, typed)
+		if err != nil {
 			return err
 		}
 		if err := s.route(b, i, typed); err != nil {
 			return err
 		}
-		s.events[Origin{Sequence: b.Sequence, EventIndex: i}] = typed
-		s.recordReferrers(b, i, typed)
+		origin := Origin{Sequence: b.Sequence, EventIndex: i}
+		s.events[origin] = typed
+		s.log.add(origin, typed)
+		s.recordReferrers(b, i, typed, refs)
 	}
 	s.commands[b.CommandID] = b.Sequence
 	s.watermark = Watermark{
