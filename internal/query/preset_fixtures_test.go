@@ -16,7 +16,10 @@ import (
 	"datum/internal/store"
 )
 
-var presetStart = time.Date(2026, 9, 22, 8, 0, 0, 0, time.UTC)
+// presetStart follows the clock: store.Transact stamps each fixture bundle
+// with the wall clock, and a run must start after its criterion's bundle was
+// recorded (reduce/freeze.go).
+var presetStart = time.Now().UTC().Truncate(time.Second).Add(time.Hour)
 
 func known[T any](v T) model.Availability[T] {
 	return model.Availability[T]{State: model.Known, Value: &v}
@@ -109,8 +112,9 @@ func presetWorld(t *testing.T, p store.Project) {
 	inside := envelope(50, 70, 10, 21, gitInput("internal/query/query.go"))
 	outside := envelope(51, 70, 10, 22, gitInput("internal/query/query.go"), gitInput("internal/reduce/task.go"))
 	unsealed := envelope(52, 70, 11, 0, testArtifact())
-	appendEvents(t, p, 103, &model.InvocationStart{Envelope: inside}, &model.InvocationStart{Envelope: outside},
-		&model.InvocationStart{Envelope: unsealed})
+	starts := []model.TypedEvent{&model.InvocationStart{Envelope: inside}, &model.InvocationStart{Envelope: outside},
+		&model.InvocationStart{Envelope: unsealed}}
+	appendEvents(t, p, 103, append(starts, capturedReview(testID(203), len(starts), presetStart.Add(time.Minute)))...)
 	appendEvents(t, p, 104, seal(inside, 1, 2*time.Hour), seal(outside, 0, 3*time.Second))
 	appendEvents(t, p, 105,
 		&model.ProofAdmit{Claim: testRef(22, 1), CriterionRef: criterionRef(22),
@@ -119,6 +123,17 @@ func presetWorld(t *testing.T, p store.Project) {
 			Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "reviewer"}, Reason: "the criterion holds"}},
 		&model.DecisionDispose{Decision: testRef(31, 1), Disposition: "approved", Quote: "yes, BLOCKED wins",
 			Scope: testScope(), Authority: authority()})
+}
+
+// capturedReview is admission's review of one packet carrying the n events
+// before it, with the capture time intake stamped on that packet.
+func capturedReview(packet model.ID, n int, captured time.Time) *model.ReviewAdmit {
+	carried := make([]model.ID, n)
+	for i := range carried {
+		carried[i] = packet
+	}
+	return &model.ReviewAdmit{Packets: []model.PacketRef{{CommandID: packet, Digest: model.HashBytes([]byte(packet))}}, Outcome: "accepted",
+		Actor: model.Actor{ID: "reviewer"}, Reason: "fixture admission", EventPackets: carried, CapturedAt: map[model.ID]time.Time{packet: captured.UTC()}}
 }
 
 func presetAnswer(t *testing.T, p store.Project, r Request) Answer {

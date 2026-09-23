@@ -266,7 +266,28 @@ func TestRunCommandFailureDoesNotEndAttempt(t *testing.T) {
 	if !ok || beforeTask.Status != reduce.StatusInFlight {
 		t.Fatal("good control lacks live attempt")
 	}
-	bundle.Events = append(bundle.Events, events...)
+	// Admission's review attributes the run's events to their packets and
+	// records intake's capture stamps, which bound the start (reduce/freeze.go).
+	packets, err := store.ReadIntake(project, []model.ID{result.StartPacket.CommandID, result.SealPacket.CommandID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	carried := make([]model.ID, len(bundle.Events))
+	for i := range carried {
+		carried[i] = runTestID(11)
+	}
+	refs, captured := []model.PacketRef{{CommandID: runTestID(11), Digest: model.HashBytes([]byte("fixture prefix"))}}, map[model.ID]time.Time{runTestID(11): time.Now().UTC()}
+	for _, packet := range packets {
+		carried = append(carried, packet.CommandID)
+		refs = append(refs, model.PacketRef{CommandID: packet.CommandID, Digest: packet.RequestDigest})
+		captured[packet.CommandID] = packet.CapturedAt
+	}
+	review, err := model.EncodeEvent(&model.ReviewAdmit{Packets: refs, Outcome: "accepted", Actor: model.Actor{ID: "coordinator"},
+		Reason: "fixture admission", EventPackets: carried, CapturedAt: captured})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle.Events = append(append(bundle.Events, events...), review)
 	after, err := reduce.Replay([]model.Bundle{bundle})
 	if err != nil {
 		t.Fatal(err)

@@ -48,7 +48,6 @@ func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 		return err
 	}
 	supported := false
-	criterion := s.criteria[criterionKey(e.CriterionRef)]
 	listed := map[InvocationKey]string{}
 	for i, member := range e.Evidence {
 		key := invocationKey(member.InvocationRef)
@@ -68,9 +67,6 @@ func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 				return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "a run under an earlier criterion revision can only be dispositioned inapplicable or inconclusive")
 			}
 			continue
-		}
-		if !criterion.Origin.before(inv.Started) {
-			return faultAt(CodeInvalidTransition, b.Sequence, idx, "criterion_ref", "criterion was not fixed before the invocation start")
 		}
 		if member.Disposition == "contradicts" {
 			return faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "contradicting evidence is unresolved")

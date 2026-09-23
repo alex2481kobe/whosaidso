@@ -140,6 +140,9 @@ func (s *state) invocationStart(b model.Bundle, idx int, o Origin, e *model.Invo
 	if err := s.checkInvocationConfig(b, idx, e.Envelope); err != nil {
 		return err
 	}
+	if err := s.checkStartFrozen(b, idx, e.Envelope); err != nil {
+		return err
+	}
 	s.invocations[key] = Invocation{Key: key, Attempt: owner, Start: e.Envelope, Started: o}
 	return nil
 }

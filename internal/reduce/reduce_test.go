@@ -150,6 +150,8 @@ type ledgerBuilder struct {
 	seq     uint64
 	prev    model.ID
 	out     []model.Bundle
+	// bare skips captureStarts, for fixtures that test missing attribution.
+	bare bool
 }
 
 func newLedger() *ledgerBuilder { return &ledgerBuilder{project: testProject} }
@@ -157,6 +159,10 @@ func newLedger() *ledgerBuilder { return &ledgerBuilder{project: testProject} }
 func (l *ledgerBuilder) add(t *testing.T, events ...model.TypedEvent) model.Bundle {
 	t.Helper()
 	l.seq++
+	packet := model.PacketRef{CommandID: newID(fmt.Sprintf("PKT%d", l.seq)), Digest: newDigest(fmt.Sprintf("packet-%d", l.seq))}
+	if !l.bare {
+		events = captureStarts(packet, events)
+	}
 	raw := make([]model.Event, 0, len(events))
 	for _, e := range events {
 		enc, err := model.EncodeEvent(e)
@@ -174,11 +180,8 @@ func (l *ledgerBuilder) add(t *testing.T, events ...model.TypedEvent) model.Bund
 		RequestDigest: newDigest(fmt.Sprintf("request-%d", l.seq)),
 		Admitter:      model.Actor{ID: "coordinator"},
 		RecordedAt:    baseTime.Add(time.Duration(l.seq) * time.Minute),
-		Packets: []model.PacketRef{{
-			CommandID: newID(fmt.Sprintf("PKT%d", l.seq)),
-			Digest:    newDigest(fmt.Sprintf("packet-%d", l.seq)),
-		}},
-		Events: raw,
+		Packets:       []model.PacketRef{packet},
+		Events:        raw,
 	}
 	l.prev = b.CommandID
 	l.out = append(l.out, b)
@@ -186,6 +189,34 @@ func (l *ledgerBuilder) add(t *testing.T, events ...model.TypedEvent) model.Bund
 }
 
 func (l *ledgerBuilder) bundles() []model.Bundle { return l.out }
+
+// captureStarts gives a bundle that carries an invocation.start and no review
+// the attribution admission writes: an accepted review naming its one packet
+// for every event, captured a minute after the latest start. Tests of the
+// freezing rule itself build their own reviews and so bypass this default.
+func captureStarts(packet model.PacketRef, events []model.TypedEvent) []model.TypedEvent {
+	var latest time.Time
+	for _, e := range events {
+		switch e := e.(type) {
+		case *model.ReviewAdmit:
+			return events
+		case *model.InvocationStart:
+			if e.Envelope.StartedAt.After(latest) {
+				latest = e.Envelope.StartedAt
+			}
+		}
+	}
+	if latest.IsZero() {
+		return events
+	}
+	carried := make([]model.ID, len(events))
+	for i := range carried {
+		carried[i] = packet.CommandID
+	}
+	return append(append([]model.TypedEvent{}, events...), &model.ReviewAdmit{Packets: []model.PacketRef{packet}, Outcome: "accepted",
+		Actor: model.Actor{ID: "coordinator"}, Reason: "fixture capture", EventPackets: carried,
+		CapturedAt: map[model.ID]time.Time{packet.CommandID: latest.Add(time.Minute)}})
+}
 
 // ---- assertions -----------------------------------------------------------
 
