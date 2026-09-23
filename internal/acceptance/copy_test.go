@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
 	"datum/internal/reduce"
 )
 
 func TestCopySnapshotNestedMapsAndPointersRemainDetached(t *testing.T) {
-	before, first := outsideProofControl(t)
+	before, prefix := outsideProofControl(t)
+	first := prefix[len(prefix)-1]
 	after, err := reduce.Apply(before, laneEReduceBundle(t, first, laneEReduceCreate(2, laneEReduceSpec(1))))
 	if err != nil {
 		t.Fatalf("control independent snapshot fork must apply: %v", err)
@@ -39,10 +39,13 @@ func TestCopySnapshotTimeLocationCannotRewriteAdmittedTimestamp(t *testing.T) {
 	// UTC, EncodeEvent writes the instant as UTC, and decoding refuses any other
 	// offset. The test now asserts the invariant that closes the hole instead.
 	events, env, proof := outsideProofFixture()
-	// A non-hour offset avoids Go's shared fixed-zone cache.
-	env.StartedAt = time.Date(2026, 9, 22, 12, 0, 0, 0, time.FixedZone("fixture", 37*60))
-	first := laneEReduceBundle(t, model.Bundle{}, append(events, &model.InvocationStart{Envelope: env}, outsideProofSeal(env), proof)...)
-	before := laneEReduceReplay(t, first)
+	// A non-hour offset avoids Go's shared fixed-zone cache. The instant is
+	// the fixture's 12:01:10 UTC, after the criterion's bundle (review round-2
+	// consolidation, step 1).
+	env.StartedAt = time.Date(2026, 9, 22, 12, 38, 10, 0, time.FixedZone("fixture", 37*60))
+	setup := outsideProofSetup(t, events, true)
+	first := outsideProofRun(t, setup, env, outsideProofEncode(t, proof))
+	before := laneEReduceReplay(t, setup, first)
 	p, ok := before.ClaimAt(proof.Claim)
 	if !ok || p.Status != reduce.StatusProven {
 		t.Fatalf("control non-hour timestamp must establish PROVEN before testing isolation: %+v", p)

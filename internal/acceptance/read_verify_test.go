@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"datum/internal/model"
 	"datum/internal/query"
@@ -74,6 +75,48 @@ func readVerifyReady(t *testing.T, p store.Project) {
 	}
 }
 
+// readVerifyAdmitted captures each group as a real intake packet, then
+// publishes the groups with the accepted review write.Admit records: packet
+// authors, the capture stamps intake assigned, and each event's packet.
+// review round-2 consolidation, step 1.
+func readVerifyAdmitted(t *testing.T, p store.Project, n int, groups ...model.Packet) reduce.Snapshot {
+	t.Helper()
+	ids := make([]model.ID, 0, len(groups))
+	for _, g := range groups {
+		if _, err := store.WriteIntake(context.Background(), p, store.IntakeRequest{CommandID: g.CommandID, Author: g.Author, Events: g.Events}); err != nil {
+			t.Fatalf("control capture of packet %s must succeed: %v", g.CommandID, err)
+		}
+		ids = append(ids, g.CommandID)
+	}
+	verified, err := store.ReadVerifiedIntake(p, ids)
+	if err != nil || len(verified) != len(ids) {
+		t.Fatalf("control captured packets must read back verified: %v", err)
+	}
+	packets, refs := make([]model.Packet, len(verified)), make([]model.PacketRef, len(verified))
+	for i, v := range verified {
+		packets[i], refs[i] = v.Packet, v.Ref
+	}
+	var events []model.TypedEvent
+	for _, raw := range laneEReduceReview(t, model.Actor{ID: "reviewer"}, refs, packets) {
+		e, err := model.DecodeEvent(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		events = append(events, e)
+	}
+	return readVerifyAppend(t, p, n, refs, events...)
+}
+
+// readVerifyAfter is a wall-clock instant strictly after t: the store stamps
+// real capture and recording times, so the run's times must follow them.
+func readVerifyAfter(t time.Time) time.Time {
+	now := time.Now().UTC()
+	for !now.After(t) {
+		now = time.Now().UTC()
+	}
+	return now
+}
+
 func readVerifyTypes(a query.Answer) []model.EventType {
 	types := make([]model.EventType, 0, len(a.History))
 	for _, event := range a.History {
@@ -85,7 +128,26 @@ func readVerifyTypes(a query.Answer) []model.EventType {
 func TestReadVerifyClaimHistoryIncludesReceiptsExplicitlyNamingItsCriterion(t *testing.T) {
 	p := readVerifyProject(t)
 	events, env, proof := outsideProofFixture()
-	s := readVerifyAppend(t, p, 100, []model.PacketRef{}, append(events, &model.InvocationStart{Envelope: env}, outsideProofSeal(env), proof)...)
+	// The criterion is admitted a bundle before the run; the run starts after
+	// that bundle is recorded, and each packet is captured after what it holds.
+	var records, starts []model.TypedEvent
+	for _, e := range events {
+		if _, ok := e.(*model.TaskStart); ok {
+			starts = append(starts, e)
+		} else {
+			records = append(records, e)
+		}
+	}
+	readVerifyAdmitted(t, p, 100, laneEReducePacket(t, 2201, "lane-e", time.Time{}, records...), laneEReducePacket(t, 2202, "runner", time.Time{}, starts...))
+	prefix, err := store.ReadPrefix(p)
+	if err != nil || len(prefix) == 0 {
+		t.Fatalf("control criterion bundle must be published: %v", err)
+	}
+	env.StartedAt = readVerifyAfter(prefix[len(prefix)-1].RecordedAt)
+	seal := outsideProofSeal(env)
+	seal.Envelope.ObservedAt = laneEEvidenceKnown(readVerifyAfter(env.StartedAt))
+	s := readVerifyAdmitted(t, p, 101, laneEReducePacket(t, 2203, "runner", time.Time{}, &model.InvocationStart{Envelope: env}),
+		laneEReducePacket(t, 2204, "runner", time.Time{}, seal), laneEReducePacket(t, 2205, "reviewer", time.Time{}, proof))
 	claim, ok := s.ClaimAt(proof.Claim)
 	if !ok || claim.Status != reduce.StatusProven || len(claim.Observations) != 1 {
 		t.Fatalf("control admitted start, seal and proof must establish a PROVEN claim with one observation, got %+v", claim)
@@ -94,8 +156,8 @@ func TestReadVerifyClaimHistoryIncludesReceiptsExplicitlyNamingItsCriterion(t *t
 	// task or the explicitly named instrument. No artifact resolution is needed.
 	for _, id := range []model.ID{laneEReduceID(1), env.InstrumentRef.RecordID} {
 		a := readVerifyAnswer(t, p, "history", id)
-		if !strings.Contains(fmt.Sprint(readVerifyTypes(a)), "invocation.start invocation.seal") || a.Watermark.Sequence != 1 {
-			t.Fatalf("control task/instrument history must include both admitted receipts at watermark 1, got %v", readVerifyTypes(a))
+		if !strings.Contains(fmt.Sprint(readVerifyTypes(a)), "invocation.start invocation.seal") || a.Watermark.Sequence != s.Watermark().Sequence {
+			t.Fatalf("control task/instrument history must include both admitted receipts at the ledger head %d, got %v at %d", s.Watermark().Sequence, readVerifyTypes(a), a.Watermark.Sequence)
 		}
 	}
 	refs := s.CriterionReferrers(*env.CriterionRef.Value)

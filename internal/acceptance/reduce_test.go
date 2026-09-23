@@ -102,6 +102,69 @@ func laneEReduceBundle(t *testing.T, previous model.Bundle, events ...model.Type
 	return b
 }
 
+// laneEReducePacket is one intake packet as the store captures it: an author
+// and the capture instant intake stamps. review round-2 consolidation, step 1.
+func laneEReducePacket(t *testing.T, n int, author string, captured time.Time, events ...model.TypedEvent) model.Packet {
+	t.Helper()
+	p := model.Packet{Version: model.WireVersion, Project: laneEReduceProject, CommandID: laneEReduceID(n),
+		RequestDigest: model.HashBytes([]byte(fmt.Sprintf("packet-%d", n))), Author: model.Actor{ID: author},
+		CapturedAt: captured.UTC(), Events: []model.Event{}}
+	for _, payload := range events {
+		raw, err := model.EncodeEvent(payload)
+		if err != nil {
+			t.Fatalf("fixture %s must pass the strict event codec: %v", payload.EventType(), err)
+		}
+		p.Events = append(p.Events, raw)
+	}
+	return p
+}
+
+// laneEReduceReview returns the packets' events followed by the accepted
+// review.admit write.Admit records for them: packet authors, capture stamps
+// and the packet of every event, so replay can check attribution and
+// chronology from the ledger alone. review round-2 consolidation, step 1.
+func laneEReduceReview(t *testing.T, admitter model.Actor, refs []model.PacketRef, packets []model.Packet) []model.Event {
+	t.Helper()
+	events := []model.Event{}
+	authors := map[model.ID]model.Actor{}
+	captured := map[model.ID]time.Time{}
+	eventPackets := []model.ID{}
+	for _, p := range packets {
+		events = append(events, p.Events...)
+		for range p.Events {
+			eventPackets = append(eventPackets, p.CommandID)
+		}
+		authors[p.CommandID], captured[p.CommandID] = p.Author, p.CapturedAt.UTC()
+	}
+	review, err := model.EncodeEvent(&model.ReviewAdmit{Packets: refs, Outcome: "accepted", Actor: admitter,
+		Reason: "the fixture packets were independently checked", Authors: authors, CapturedAt: captured, EventPackets: eventPackets})
+	if err != nil {
+		t.Fatalf("fixture review.admit must pass the strict event codec: %v", err)
+	}
+	return append(events, review)
+}
+
+// laneEReduceAdmitted is laneEReduceBundle in the shape admission publishes:
+// the bundle binds its packets by digest and ends in their accepted review.
+// Every packet is captured before the bundle is recorded. review round-2
+// consolidation, step 1.
+func laneEReduceAdmitted(t *testing.T, previous model.Bundle, packets ...model.Packet) model.Bundle {
+	t.Helper()
+	b := laneEReduceBundle(t, previous)
+	for _, p := range packets {
+		if !p.CapturedAt.Before(b.RecordedAt) {
+			t.Fatalf("fixture packet %s captured at %s cannot be admitted by a bundle recorded at %s", p.CommandID, p.CapturedAt, b.RecordedAt)
+		}
+		data, err := model.Encode(p)
+		if err != nil {
+			t.Fatalf("fixture packet must encode: %v", err)
+		}
+		b.Packets = append(b.Packets, model.PacketRef{CommandID: p.CommandID, Digest: model.HashBytes(data)})
+	}
+	b.Events = laneEReduceReview(t, b.Admitter, b.Packets, packets)
+	return b
+}
+
 func laneEReduceReplay(t *testing.T, bundles ...model.Bundle) reduce.Snapshot {
 	t.Helper()
 	s, err := reduce.Replay(bundles)
@@ -364,15 +427,20 @@ func laneEReduceInvocation(attempt, invocation int) *model.InvocationStart {
 }
 
 func TestReducerAttemptIDReuseCannotSilentlyReassignInvocationOwnership(t *testing.T) {
-	first := laneEReduceBundle(t, model.Bundle{}, laneEReduceCreate(1, laneEReduceSpec(1)), laneEReduceCreate(2, laneEReduceSpec(1)),
-		&model.TaskStart{Task: laneEReduceRef(1, 1), Actor: model.Actor{ID: "worker-a"}, AttemptID: laneEReduceID(70)}, laneEReduceInvocation(70, 81))
+	// Each start travels in its worker's packet, captured after it started, so
+	// the invocations carry the capture stamps replay freezes them against.
+	captured := recWhen.Add(time.Hour)
+	first := laneEReduceAdmitted(t, model.Bundle{},
+		laneEReducePacket(t, 2001, "lane-e", captured, laneEReduceCreate(1, laneEReduceSpec(1)), laneEReduceCreate(2, laneEReduceSpec(1))),
+		laneEReducePacket(t, 2002, "worker-a", captured,
+			&model.TaskStart{Task: laneEReduceRef(1, 1), Actor: model.Actor{ID: "worker-a"}, AttemptID: laneEReduceID(70)}, laneEReduceInvocation(70, 81)))
 	before := laneEReduceReplay(t, first)
 	original, ok := before.Invocation(reduce.InvocationKey{Project: laneEReduceProject, InvocationID: laneEReduceID(81)})
 	if !ok || original.Attempt.Task != laneEReduceID(1) {
 		t.Fatalf("control invocation must belong to task 1, got %+v", original.Attempt)
 	}
-	unique := laneEReduceBundle(t, first,
-		&model.TaskStart{Task: laneEReduceRef(2, 1), Actor: model.Actor{ID: "worker-b"}, AttemptID: laneEReduceID(71)}, laneEReduceInvocation(71, 82))
+	unique := laneEReduceAdmitted(t, first, laneEReducePacket(t, 2003, "worker-b", captured,
+		&model.TaskStart{Task: laneEReduceRef(2, 1), Actor: model.Actor{ID: "worker-b"}, AttemptID: laneEReduceID(71)}, laneEReduceInvocation(71, 82)))
 	control, err := reduce.Apply(before, unique)
 	if err != nil {
 		t.Fatalf("control distinct attempt identity must be accepted: %v", err)
@@ -381,8 +449,8 @@ func TestReducerAttemptIDReuseCannotSilentlyReassignInvocationOwnership(t *testi
 	if !ok || other.Attempt.Task != laneEReduceID(2) {
 		t.Fatalf("control unique second attempt must resolve to task 2, got %+v", other.Attempt)
 	}
-	reused := laneEReduceBundle(t, first,
-		&model.TaskStart{Task: laneEReduceRef(2, 1), Actor: model.Actor{ID: "worker-b"}, AttemptID: laneEReduceID(70)}, laneEReduceInvocation(70, 82))
+	reused := laneEReduceAdmitted(t, first, laneEReducePacket(t, 2004, "worker-b", captured,
+		&model.TaskStart{Task: laneEReduceRef(2, 1), Actor: model.Actor{ID: "worker-b"}, AttemptID: laneEReduceID(70)}, laneEReduceInvocation(70, 82)))
 	after, err := reduce.Apply(before, reused)
 	if err != nil {
 		if !reflect.DeepEqual(after, reduce.Snapshot{}) {
