@@ -1,19 +1,17 @@
 package main
 
-// This file holds the `datum template` verb: its bind flags, --set, and
-// --capture, which hands the filled event to capture's own path (captureCLI,
-// captureAndAdmit) so the gate stays the judge. Datum fills only what has one
+// This file holds the `datum template` verb: its bind flags and --set.
+// Printing and --capture, which hands the event to capture's own path so the
+// gate stays the judge, live in template_capture.go. Datum fills only what has one
 // computable answer: references and current revisions (template_ledger.go),
 // pins (template_pin.go), the project id, the packet author where the gate
 // requires it, and a choice with one member. Judgment stays a placeholder,
 // and capture refuses while any placeholder remains.
 
 import (
-	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"strings"
 
 	"datum/internal/model"
@@ -252,85 +250,6 @@ func (t *boundTemplate) onlyChoices(node any) any {
 		}
 	}
 	return node
-}
-
-// print writes the event on stdout, and on stderr the notes, what was filled
-// and every placeholder still left to the author.
-func (t *boundTemplate) print() error {
-	data, err := renderTemplate(t.event, t.body)
-	if err != nil {
-		return err
-	}
-	if _, err := t.c.stdout.Write(data); err != nil {
-		return err
-	}
-	var b strings.Builder
-	b.WriteString(renderTemplateNotes(t.event, t.notes))
-	for _, f := range t.filled {
-		fmt.Fprintf(&b, "filled   %s\n", f)
-	}
-	left := templatePlaceholders(t.body, "")
-	if t.bound {
-		for _, path := range left {
-			fmt.Fprintf(&b, "yours    %s\n", path)
-		}
-	}
-	fmt.Fprintf(&b, "left     %d placeholder(s) for you to fill; --capture refuses while any remains\n", len(left))
-	for _, blob := range t.blobs {
-		fmt.Fprintf(&b, "blob     capture it with --blob %s\n", blob)
-	}
-	_, err = io.WriteString(t.c.stderr, b.String())
-	return err
-}
-
-// capture drops optional keys nobody filled, refuses while a placeholder
-// remains, then captures (and with --admit admits) through capture's path.
-func (t *boundTemplate) capture(admit bool, reason string) error {
-	for _, n := range t.notes {
-		if n.Kind == "optional" {
-			t.body = templateDropUnfilled(t.body, n.Path)
-		}
-	}
-	if left := templatePlaceholders(t.body, ""); len(left) > 0 {
-		return fmt.Errorf("template %s: capture refused: %d placeholder(s) unfilled: %s; fill them with --set PATH=VALUE, or print the template and edit it",
-			t.event, len(left), strings.Join(left, ", "))
-	}
-	data, err := renderTemplate(t.event, t.body)
-	if err != nil {
-		return err
-	}
-	open := t.c.checkout
-	if admit {
-		open = t.c.project
-	}
-	project, err := open()
-	if err != nil {
-		return err
-	}
-	ref, count, err := captureCLI(t.c.ctx, project, "", t.author, "-", t.blobs, bytes.NewReader(data))
-	if err != nil {
-		return err
-	}
-	// The ids this event created, so the next command can name them.
-	for _, n := range t.notes {
-		if n.Kind != "minted" || t.putPaths[templatePath(n.Path)] {
-			continue // a bind flag or --set replaced the minted id
-		}
-		steps := make([]templateStep, len(n.Path))
-		for i, part := range n.Path {
-			steps[i] = templateStep{key: part, index: -1}
-			if part == "0" {
-				steps[i] = templateStep{index: 0}
-			}
-		}
-		if id, ok := templateGet(t.body, steps); ok {
-			fmt.Fprintf(t.c.stderr, "minted   %s = %v\n", templatePath(n.Path), id)
-		}
-	}
-	if admit {
-		return captureAndAdmit(t.c.ctx, project, t.c.stdout, false, ref, count, "", t.author, reason)
-	}
-	return printResult(t.c.stdout, false, ref, captureAck(ref, count))
 }
 
 func containsEvent(events []model.EventType, e model.EventType) bool {
