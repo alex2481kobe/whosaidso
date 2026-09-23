@@ -62,8 +62,10 @@ datum
 |   `-- write          joins immutable capture to canonical state through one admission gate
 |          17 files, tested -- uses evidence, model, reduce, store
 `-- tools/
-    `-- archtree       instrument that reports how this module's packages fit together
-           5 files, tested -- leaf
+    |-- archtree       instrument that reports how this module's packages fit together
+    |      5 files, tested -- leaf
+    `-- benchreport    instrument that restates go test -bench output as readings a Datum criterion can select
+           3 files, tested -- leaf
 ```
 <!-- archtree:end -->
 
