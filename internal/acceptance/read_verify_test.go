@@ -280,13 +280,17 @@ func TestReadVerifyAuthoredValuesSurviveTextFromTheAdmittedLedger(t *testing.T) 
 		a.Records = open
 		return a
 	}
+	// Changed with the brief becoming the default text: complete strings are asserted in --json and --full; the brief is held to the brief's agreement rule.
 	for _, command := range []string{"show", "history", "open tasks"} {
 		a := answer(command)
-		var exported, rendered bytes.Buffer
+		var exported, rendered, brief bytes.Buffer
 		if err := query.RenderJSON(&exported, a); err != nil {
 			t.Fatal(err)
 		}
 		if err := query.RenderText(&rendered, a); err != nil {
+			t.Fatal(err)
+		}
+		if err := query.RenderBrief(&brief, a); err != nil {
 			t.Fatal(err)
 		}
 		for _, value := range values {
@@ -295,16 +299,37 @@ func TestReadVerifyAuthoredValuesSurviveTextFromTheAdmittedLedger(t *testing.T) 
 				t.Fatal(err)
 			}
 			if !bytes.Contains(exported.Bytes(), literal) || !bytes.Contains(rendered.Bytes(), literal) {
-				t.Errorf("%s must retain the complete authored JSON string in both formats at watermark %d; missing literal of %d bytes (truncation or escape changes would change the answer)", command, a.Watermark.Sequence, len(literal))
+				t.Errorf("%s must retain the complete authored JSON string in --json and --full at watermark %d; missing literal of %d bytes (truncation or escape changes would change the answer)", command, a.Watermark.Sequence, len(literal))
 			}
 		}
-		if a.Watermark.Sequence != 4 || !strings.Contains(rendered.String(), `"sequence": 4`) {
-			t.Fatalf("%s must retain watermark 4 in both formats, got %+v", command, a.Watermark)
+		flowBriefAgrees(t, command, exported.Bytes(), flowDecode(t, exported.Bytes()), brief.String())
+		if command != "history" {
+			// The brief shows each authored intent, whole or as a marked prefix of that same value.
+			_, facts, err := query.BriefOf(exported.Bytes())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, value := range values {
+				literal, _ := json.Marshal(value)
+				shown := false
+				for _, f := range facts {
+					shown = shown || f.Value == string(literal)
+				}
+				if !shown {
+					t.Errorf("%s brief must show every authored intent from its JSON leaf; missing one of %d bytes", command, len(literal))
+				}
+			}
+		}
+		if a.Watermark.Sequence != 4 || !strings.Contains(rendered.String(), `"sequence": 4`) || !strings.Contains(brief.String(), "watermark sequence 4 ") {
+			t.Fatalf("%s must retain watermark 4 in every format, got %+v", command, a.Watermark)
 		}
 		for repetition := 0; repetition < 5; repetition++ {
-			var again bytes.Buffer
+			var again, againBrief bytes.Buffer
 			if err := query.RenderText(&again, answer(command)); err != nil || !bytes.Equal(again.Bytes(), rendered.Bytes()) {
 				t.Fatalf("%s changed across reads of one unchanged ledger: %v", command, err)
+			}
+			if err := query.RenderBrief(&againBrief, answer(command)); err != nil || !bytes.Equal(againBrief.Bytes(), brief.Bytes()) {
+				t.Fatalf("%s brief changed across reads of one unchanged ledger: %v", command, err)
 			}
 		}
 	}

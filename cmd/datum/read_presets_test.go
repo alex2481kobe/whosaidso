@@ -58,21 +58,26 @@ func TestReadCLIPresetsLimitAndContinueObservation(t *testing.T) {
 	}
 }
 
-// --brief is a second rendering of the same answer: concise, watermarked, and
-// never combined with --json. The default text stays the full outline.
-func TestReadCLIBriefIsConciseAndExclusiveWithJSON(t *testing.T) {
+// The brief is the default text: concise and watermarked. --brief names it;
+// --full is the complete outline; any two renderings together are refused.
+func TestReadCLIBriefIsTheDefaultAndExclusive(t *testing.T) {
 	root, data := cliFixture(t)
 	cliControl(t, root, data)
-	out := readProcess(t, root, nil, "todo", "--brief")
+	out := readProcess(t, root, nil, "todo")
 	want := []byte("ready: 1\n  TASK " + string(cliID(1)) + " rev 1 READY next lane\n    exercise the CLI\n")
 	if !bytes.Contains(out, want) || !bytes.HasPrefix(out, []byte("todo test/cli KNOWN | watermark sequence 1 ")) || bytes.Contains(out, []byte(`"fact"`)) {
-		t.Fatalf("todo --brief must open with its watermark and give one block per record, got\n%s", out)
+		t.Fatalf("todo must default to the brief, opening with its watermark and one block per record, got\n%s", out)
 	}
-	if outline := readProcess(t, root, nil, "todo"); !bytes.HasPrefix(outline, []byte("answer:\n")) {
-		t.Fatalf("the default text must stay the full outline, got\n%s", outline)
+	if named := readProcess(t, root, nil, "todo", "--brief"); !bytes.Equal(named, out) {
+		t.Fatalf("--brief must name the default, got\n%s", named)
 	}
-	var output bytes.Buffer
-	if err := readCLI(context.Background(), []string{"todo", "--json", "--brief"}, root, &output, io.Discard); err == nil || output.Len() != 0 {
-		t.Fatalf("--json with --brief must be refused without an answer, got %s, %v", output.Bytes(), err)
+	if outline := readProcess(t, root, nil, "todo", "--full"); !bytes.HasPrefix(outline, []byte("answer:\n")) {
+		t.Fatalf("--full must print the complete outline, got\n%s", outline)
+	}
+	for _, pair := range [][]string{{"--json", "--brief"}, {"--json", "--full"}, {"--full", "--brief"}} {
+		var output bytes.Buffer
+		if err := readCLI(context.Background(), append([]string{"todo"}, pair...), root, &output, io.Discard); err == nil || output.Len() != 0 {
+			t.Fatalf("%v must be refused without an answer, got %s, %v", pair, output.Bytes(), err)
+		}
 	}
 }

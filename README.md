@@ -131,16 +131,17 @@ the attempt, not the task. Every other outcome leaves the task open.
   receipt and its hold (`--hold-*`) are admitted together, atomically.
 
 Reading. Every answer carries the ledger watermark it was read at. The default
-text is a complete outline of the same answer `--json` exports, so the two
-cannot disagree. `--brief` prints one short block per record instead: kind, id,
-revision, status, why it is in this view and who acts next. Every value it
-shows is read from that JSON; long text is cut and marked with `…`.
+text is the brief: one short block per record with kind, id, revision, status,
+why it is in this view and who acts next. Every value it shows is read from the
+answer `--json` exports; long text is cut and marked with `…`. Agents read
+`--json`, whose keys are all snake_case. `--full` prints a complete text outline
+of that same JSON, so the two cannot disagree.
 
 ```
-datum show [--json|--brief] [RECORD_ID]
-datum history [--json|--brief] [RECORD_ID]
-datum intake pending [--json|--brief]
-datum now|todo|state|instruments [--json|--brief]
+datum show [--json|--full] [RECORD_ID]
+datum history [--json|--full] [RECORD_ID]
+datum intake pending [--json|--full]
+datum now|todo|state|instruments [--json|--full]
 ```
 
 `now` is what is moving or owed right now: IN FLIGHT tasks and their runs,

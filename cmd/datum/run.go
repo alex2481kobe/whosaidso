@@ -10,10 +10,44 @@ import (
 	"datum/internal/reduce"
 	"datum/internal/store"
 	"datum/internal/write"
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"io"
+	"unicode/utf8"
 )
+
+// runOutput is what `datum run` prints: snake_case keys, and each tail as
+// readable text when its bytes are valid UTF-8, otherwise as base64 under a
+// _base64 key, so exactly one of the pair is present and a reader can tell.
+// StartPacket and SealPacket keep their Go-cased keys for now: an acceptance
+// test this lane does not own decodes them by field name.
+type runOutput struct {
+	Envelope         model.InvocationEnvelope `json:"envelope"`
+	StartPacket      model.PacketRef          `json:"StartPacket"`
+	SealPacket       model.PacketRef          `json:"SealPacket"`
+	ArtifactDir      string                   `json:"artifact_dir"`
+	StdoutTail       *string                  `json:"stdout_tail,omitempty"`
+	StdoutTailBase64 *string                  `json:"stdout_tail_base64,omitempty"`
+	StderrTail       *string                  `json:"stderr_tail,omitempty"`
+	StderrTailBase64 *string                  `json:"stderr_tail_base64,omitempty"`
+}
+
+func printedRun(r write.RunResult) runOutput {
+	out := runOutput{Envelope: r.Envelope, StartPacket: r.StartPacket, SealPacket: r.SealPacket, ArtifactDir: r.ArtifactDir}
+	out.StdoutTail, out.StdoutTailBase64 = tail(r.StdoutTail)
+	out.StderrTail, out.StderrTailBase64 = tail(r.StderrTail)
+	return out
+}
+
+func tail(b []byte) (text, encoded *string) {
+	if utf8.Valid(b) {
+		s := string(b)
+		return &s, nil
+	}
+	s := base64.StdEncoding.EncodeToString(b)
+	return nil, &s
+}
 
 // runCLI (run and reconcile) resolves the admitted instrument and criterion from a fresh replay,
 // then hands intent to write.Run. A failing measurement still prints its
@@ -86,7 +120,7 @@ func runCLI(ctx context.Context, args []string, cwd string, stdout, stderr io.Wr
 	}
 	result, runErr := write.Run(ctx, project, request)
 	if result.StartPacket.CommandID != "" {
-		encoded, err := model.Encode(result)
+		encoded, err := model.Encode(printedRun(result))
 		if err != nil {
 			return err
 		}

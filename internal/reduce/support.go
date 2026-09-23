@@ -12,26 +12,26 @@ import (
 
 // SupportLossFact identifies the cause even when it reached this record indirectly.
 type SupportLossFact struct {
-	Origin Origin
-	Type   model.EventType
+	Origin Origin          `json:"origin"`
+	Type   model.EventType `json:"type"`
 }
 
 // SupportContext contains read-time checks supplied by the caller. Evidence must
 // cover the complete support being quoted. Replay cannot establish available bytes
 // or decide whether a different real-world use falls inside authored scope.
 type SupportContext struct {
-	EvidenceAvailable Truth
-	ScopeApplicable   Truth
+	EvidenceAvailable Truth `json:"evidence_available"`
+	ScopeApplicable   Truth `json:"scope_applicable"`
 }
 
 // SupportFacts keeps independent reasons separate so loss of trust never rewrites
 // achievement or pretends that the underlying bytes disappeared.
 type SupportFacts struct {
-	EvidenceAvailable Truth
-	ActiveTrust       Truth
-	ApplicableScope   Truth
-	CorrectionFree    Truth
-	Losses            []SupportLossFact
+	EvidenceAvailable Truth             `json:"evidence_available"`
+	ActiveTrust       Truth             `json:"active_trust"`
+	ApplicableScope   Truth             `json:"applicable_scope"`
+	CorrectionFree    Truth             `json:"correction_free"`
+	Losses            []SupportLossFact `json:"losses"`
 }
 
 func truthAnd(values ...Truth) Truth {

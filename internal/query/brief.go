@@ -2,7 +2,7 @@ package query
 
 // The brief: a concise text reading of one Answer, one short block per record.
 // It is built from the answer's own JSON export, never from the Go values, so
-// it cannot show a fact the JSON lacks. Every value it prints is a briefFact
+// it cannot show a fact the JSON lacks. Every value it prints is a BriefFact
 // carrying the JSON path it was read from; agreement with --json is defined
 // and tested on those facts (brief_test.go). Section layout lives in
 // brief_sections.go; this file holds the path cursor and the line writer.
@@ -17,10 +17,10 @@ import (
 	"unicode/utf8"
 )
 
-// briefFact is one shown value. Path uses the JSON-quoted key and [i] index
+// BriefFact is one shown value. Path uses the JSON-quoted key and [i] index
 // encoding of the export. Value is the JSON leaf, or for a count the length of
 // the array at Path. Prefix marks a string shown truncated, never altered.
-type briefFact struct {
+type BriefFact struct {
 	Path    []string
 	Value   string
 	Count   bool
@@ -66,7 +66,7 @@ func (c cur) text() string { s, _ := c.v.(string); return s }
 
 type briefWriter struct {
 	out   strings.Builder
-	facts []briefFact
+	facts []BriefFact
 }
 
 // line writes one line. A string piece is literal layout; a cur piece is a
@@ -88,7 +88,7 @@ func (b *briefWriter) line(indent int, pieces ...any) {
 		case count:
 			xs, _ := p.v.([]any)
 			n := strconv.Itoa(len(xs))
-			b.facts = append(b.facts, briefFact{Path: p.path, Value: n, Count: true, Display: n})
+			b.facts = append(b.facts, BriefFact{Path: p.path, Value: n, Count: true, Display: n})
 			b.out.WriteString(n)
 		}
 	}
@@ -125,7 +125,7 @@ func (b *briefWriter) fact(c cur, truncate bool) string {
 	} else {
 		truncate = false
 	}
-	b.facts = append(b.facts, briefFact{Path: c.path, Value: string(encoded), Prefix: truncate, Display: display})
+	b.facts = append(b.facts, BriefFact{Path: c.path, Value: string(encoded), Prefix: truncate, Display: display})
 	return display
 }
 
@@ -161,7 +161,22 @@ func brief(answer Answer) (*briefWriter, error) {
 	if err := RenderJSON(&encoded, answer); err != nil {
 		return nil, err
 	}
-	decoder := json.NewDecoder(&encoded)
+	return briefOf(encoded.Bytes())
+}
+
+// BriefOf renders the brief of an answer's JSON export and returns the facts
+// it shows, each with the path it was read from, so a caller holding only the
+// export can check the text against it.
+func BriefOf(exported []byte) (string, []BriefFact, error) {
+	b, err := briefOf(exported)
+	if err != nil {
+		return "", nil, err
+	}
+	return b.out.String(), b.facts, nil
+}
+
+func briefOf(exported []byte) (*briefWriter, error) {
+	decoder := json.NewDecoder(bytes.NewReader(exported))
 	decoder.UseNumber()
 	var value any
 	if err := decoder.Decode(&value); err != nil {
@@ -170,7 +185,7 @@ func brief(answer Answer) (*briefWriter, error) {
 	b := &briefWriter{}
 	root := cur{v: value}
 	briefHeader(b, root)
-	briefBody(b, root, answer.Command)
+	briefBody(b, root, root.at("command").text())
 	b.line(0, "full detail: add --json")
 	return b, nil
 }

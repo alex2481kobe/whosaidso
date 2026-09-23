@@ -27,60 +27,60 @@ const (
 // These facts retain the complete admitted payload and its ledger location.
 // Their payloads follow Record's read-only ownership convention.
 type ProofAdmission struct {
-	Admission model.ProofAdmit
-	Origin    Origin
+	Admission model.ProofAdmit `json:"admission"`
+	Origin    Origin           `json:"origin"`
 }
 
 type DecisionDisposition struct {
-	Disposition model.DecisionDispose
-	Origin      Origin
-	Author      PacketAuthor // who wrote the packet, beside the authority and quote
+	Disposition model.DecisionDispose `json:"disposition"`
+	Origin      Origin                `json:"origin"`
+	Author      PacketAuthor          `json:"author"` // who wrote the packet, beside the authority and quote
 }
 
 type TrustWithdrawal struct {
-	Withdrawal model.TrustWithdraw
-	Origin     Origin
+	Withdrawal model.TrustWithdraw `json:"withdrawal"`
+	Origin     Origin              `json:"origin"`
 }
 
 type Supersession struct {
-	Supersede model.Supersede
-	Origin    Origin
+	Supersede model.Supersede `json:"supersede"`
+	Origin    Origin          `json:"origin"`
 }
 
 type AdmittedCorrection struct {
-	Correction model.Correction
-	Origin     Origin
+	Correction model.Correction `json:"correction"`
+	Origin     Origin           `json:"origin"`
 }
 
 type ArtifactDisposal struct {
-	Disposal model.ArtifactDispose
-	Origin   Origin
+	Disposal model.ArtifactDispose `json:"disposal"`
+	Origin   Origin                `json:"origin"`
 }
 
 type ClaimProjection struct {
-	Claim        RecordKey
-	Spec         *model.ClaimSpec
-	Status       ClaimStatus
-	Observations []Invocation
-	Proofs       []ProofAdmission
-	Support      SupportFacts
+	Claim        RecordKey        `json:"claim"`
+	Spec         *model.ClaimSpec `json:"spec"`
+	Status       ClaimStatus      `json:"status"`
+	Observations []Invocation     `json:"observations"`
+	Proofs       []ProofAdmission `json:"proofs"`
+	Support      SupportFacts     `json:"support"`
 }
 
 type DecisionProjection struct {
-	Decision     RecordKey
-	Spec         *model.DecisionSpec
-	Status       DecisionStatus
-	Dispositions []DecisionDisposition
-	Support      SupportFacts
+	Decision     RecordKey             `json:"decision"`
+	Spec         *model.DecisionSpec   `json:"spec"`
+	Status       DecisionStatus        `json:"status"`
+	Dispositions []DecisionDisposition `json:"dispositions"`
+	Support      SupportFacts          `json:"support"`
 }
 
 // InstrumentProjection deliberately has no Status. Versioned validation and
 // withdrawals are facts, not a tenth meaning of status.
 type InstrumentProjection struct {
-	Instrument  RecordKey
-	Spec        *model.InstrumentSpec
-	Withdrawals []TrustWithdrawal
-	Support     SupportFacts
+	Instrument  RecordKey             `json:"instrument"`
+	Spec        *model.InstrumentSpec `json:"spec"`
+	Withdrawals []TrustWithdrawal     `json:"withdrawals"`
+	Support     SupportFacts          `json:"support"`
 }
 
 func asRef(k RecordKey) model.RecordRef {

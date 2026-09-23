@@ -39,9 +39,11 @@ type Answer struct {
 
 // Review exposes the projected per-packet fact, including legacy UNKNOWN.
 // The embedded review preserves its identity, disposition, reason and origin.
+// This SelfAdmission shadows the embedded one under the same key, so exactly
+// one self_admission is exported: this rendered state.
 type Review struct {
 	reduce.Review
-	SelfAdmission string `json:"SelfAdmission"`
+	SelfAdmission string `json:"self_admission"`
 }
 
 func describeReview(review reduce.Review) Review {

@@ -98,7 +98,7 @@ func TestFreshProcessesExplainAdmittedDatumConstructionTaskAndSource(t *testing.
 	if record.Fact.Task.Intent != task.Spec.Intent || record.Fact.Provenance.SourceRefs[0].Content.SHA256 != artifact.Content.SHA256 || len(record.Sources) != 1 || record.Sources[0].Intake.Speaker.ID != "requesting-owner" {
 		t.Fatalf("fresh read must retain U09 intent, source hash and original speaker separately from author/reviewer, got %+v", record)
 	}
-	text := readProcess(t, root, nil, "show", string(task.ID))
+	text := readProcess(t, root, nil, "show", "--full", string(task.ID))
 	if !bytes.Contains(text, []byte(task.Spec.Intent)) || !bytes.Contains(text, []byte(artifact.Content.SHA256)) || !bytes.Contains(text, []byte("watermark")) {
 		t.Fatalf("text must explain the same obligation, source and watermark as JSON, got %s", text)
 	}
@@ -238,7 +238,7 @@ func TestReadCLISelfAdmissionAudit(t *testing.T) {
 		if err := query.RenderText(&rendered, a); err != nil {
 			t.Fatal(err)
 		}
-		if output := readProcess(t, root, nil, "history", tc.flag); !bytes.Equal(output, rendered.Bytes()) {
+		if output := readProcess(t, root, nil, "history", "--full", tc.flag); !bytes.Equal(output, rendered.Bytes()) {
 			t.Fatalf("CLI formats disagree: %s versus %s", output, rendered.Bytes())
 		}
 	}
@@ -274,7 +274,7 @@ func TestFreshProcessInstrumentsOnThisRepositoryShowUnknownValidation(t *testing
 		}
 	}
 	text := readProcess(t, root, nil, "instruments")
-	if !bytes.Contains(text, []byte(`"attention":`)) || bytes.Index(text, []byte(`"attention":`)) > bytes.Index(text, []byte(`"instruments":`)) {
+	if !bytes.Contains(text, []byte("\nattention")) || bytes.Index(text, []byte("\nattention")) > bytes.Index(text, []byte("\ninstruments")) {
 		t.Fatalf("text must list attention before the instrument details, got %s", text)
 	}
 }

@@ -27,7 +27,7 @@ func disposalWorld(t *testing.T) (string, model.ArtifactRef, []model.RecordRef) 
 		t.Fatal(err)
 	}
 	var run struct {
-		Envelope    model.InvocationEnvelope `json:"Envelope"`
+		Envelope    model.InvocationEnvelope `json:"envelope"`
 		StartPacket model.PacketRef          `json:"StartPacket"`
 		SealPacket  model.PacketRef          `json:"SealPacket"`
 	}
@@ -99,7 +99,7 @@ func TestCLIDisposalLossListIsExactlyWhatAdmissionRequires(t *testing.T) {
 			}
 		}
 	}
-	if !strings.Contains(string(text), `"watermark"`) || answer.Watermark.Sequence == 0 || answer.Preset == nil || answer.Preset.Disposal == nil {
+	if !strings.Contains(string(text), "watermark sequence") || answer.Watermark.Sequence == 0 || answer.Preset == nil || answer.Preset.Disposal == nil {
 		t.Fatalf("disposal-loss must answer with a watermark and a disposal section: %+v", answer)
 	}
 	listed := answer.Preset.Disposal.SupportLoss

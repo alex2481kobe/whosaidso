@@ -35,10 +35,10 @@ func TestCLIShowAndHistoryNameTheRulingsPacketAuthor(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	show := string(readProcess(t, root, nil, "show", string(decision)))
+	show := string(readProcess(t, root, nil, "show", "--full", string(decision)))
 	// The record's own fact (decision.open, by lane) and its disposition (by
 	// agent-sol, recording the owner's words) each name their packet.
-	for _, want := range []string{`"Packet": "` + string(cliID(20)) + `"`, `"id": "agent-sol"`, `"Packet": "` + string(cliID(22)) + `"`, `"quote": "ship revision one"`} {
+	for _, want := range []string{`"packet": "` + string(cliID(20)) + `"`, `"id": "agent-sol"`, `"packet": "` + string(cliID(22)) + `"`, `"quote": "ship revision one"`} {
 		if !strings.Contains(show, want) {
 			t.Fatalf("datum show lacks %s beside the authority and quote:\n%s", want, show)
 		}
