@@ -2,8 +2,8 @@ package query
 
 // Cost of the views: show ID reads one record and never builds the project
 // (an allocation test that fails if it grows with the ledger), and a
-// benchmark of every new view beside the old reads it replaces, on the 1k
-// benchmark fixture (DATUM_VIEWS_1K_ROOT; see views_coverage_test.go).
+// benchmark of every view on the 1k benchmark fixture (DATUM_VIEWS_1K_ROOT;
+// see views_worlds_test.go).
 
 import (
 	"os"
@@ -48,7 +48,7 @@ func TestShowOneNeverBuildsTheWholeProject(t *testing.T) {
 	t.Logf("show ID allocations: %v with 17 records, %v with 317; bare show %v -> %v", small, large, smallBare, largeBare)
 }
 
-func BenchmarkViewsAgainstOldReads(b *testing.B) {
+func BenchmarkViews(b *testing.B) {
 	w, ok := thousandFixture(b)
 	if !ok {
 		b.Skip("set DATUM_VIEWS_1K_ROOT to a retained DATUM_BENCH_ROOT holding n1000")
@@ -65,26 +65,6 @@ func BenchmarkViewsAgainstOldReads(b *testing.B) {
 			b.Fatal(err)
 		}
 		source = loaded
-	}
-	old := func(r Request) func() error {
-		return func() error {
-			if source != nil {
-				a, err := ReadFrom(w.project, r, source)
-				if err != nil {
-					return err
-				}
-				return RenderJSON(discard{}, a)
-			}
-			project, err := store.Discover(w.project.Root)
-			if err != nil {
-				return err
-			}
-			a, err := Read(project, r)
-			if err != nil {
-				return err
-			}
-			return RenderJSON(discard{}, a)
-		}
 	}
 	fresh := func(r ViewRequest) func() error {
 		return func() error {
@@ -110,20 +90,11 @@ func BenchmarkViewsAgainstOldReads(b *testing.B) {
 		name string
 		run  func() error
 	}{
-		{"OldTodo", old(Request{Command: "todo"})},
-		{"OldNow", old(Request{Command: "now"})},
-		{"OldIntakePending", old(Request{Command: "intake pending"})},
 		{"NewTodo", fresh(ViewRequest{View: "todo"})},
-		{"OldContinue", old(Request{Command: "continue", ID: w.task, Observed: w.observed})},
 		{"NewContinue", fresh(ViewRequest{View: "continue", ID: w.task, Observed: w.observed})},
-		{"OldContextClaim", old(Request{Command: "context", ID: w.nonTasks[0]})},
 		{"NewContinueClaim", fresh(ViewRequest{View: "continue", ID: w.nonTasks[0], Observed: w.observed})},
-		{"OldShow", old(Request{Command: "show"})},
-		{"OldState", old(Request{Command: "state"})},
 		{"NewShow", fresh(ViewRequest{View: "show"})},
-		{"OldInstruments", old(Request{Command: "instruments"})},
 		{"NewShowKindInstrument", fresh(ViewRequest{View: "show", Kind: "instrument"})},
-		{"OldShowOne", old(Request{Command: "show", ID: w.task})},
 		{"NewShowOne", fresh(ViewRequest{View: "show", ID: w.task})},
 	}
 	for _, c := range cases {

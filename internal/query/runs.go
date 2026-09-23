@@ -166,22 +166,6 @@ func scopeCheck(sourcePaths, paths []string, pathless bool, reason string) Scope
 	return c
 }
 
-// runs selects invocations in the snapshot's stable order.
-func runs(s reduce.Snapshot, keep func(reduce.Invocation) bool) ([]RunView, []Attention) {
-	out, notes := []RunView{}, []Attention{}
-	for _, inv := range s.Invocations() {
-		if !keep(inv) {
-			continue
-		}
-		v := runView(s, inv)
-		out = append(out, v)
-		if note, outside := runAttention(v); outside {
-			notes = append(notes, note)
-		}
-	}
-	return out, notes
-}
-
 // runAttention raises a run whose recorded inputs left its task's scope.
 func runAttention(v RunView) (Attention, bool) {
 	if v.Scope.WithinTaskScope != reduce.TruthFalse {

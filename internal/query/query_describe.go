@@ -1,8 +1,8 @@
 package query
 
-// This file turns reduced facts into answer shapes: actors, records and the
-// history origins a record description needs. Selecting which facts to read,
-// and reading pending intake, stay in query.go.
+// This file turns reduced facts into answer shapes: actors, a revision's task
+// view, sources and the history origins of a record. Selecting which facts to
+// read is the views'; reading pending intake stays in query.go.
 
 import (
 	"datum/internal/model"
@@ -14,30 +14,6 @@ func actor(a model.Actor) any {
 		return Unknown{State: "UNKNOWN", Reason: a.UnknownReason}
 	}
 	return a
-}
-
-func describe(s reduce.Snapshot, fact reduce.Record) Record {
-	id := reduce.Ident{Project: fact.Key.Project, ID: fact.Key.ID}
-	r := Record{Fact: fact, Author: s.EventAuthor(fact.Origin)}
-	ref := model.RecordRef{Project: fact.Key.Project, RecordID: fact.Key.ID, Revision: fact.Key.Revision}
-	r.Task = taskOf(s, ref)
-	r.Supersessions = supersessionsOf(s, ref)
-	// No evidence bytes or real-world scope were checked by this read slice.
-	support, _ := s.Support(ref, reduce.SupportContext{EvidenceAvailable: reduce.TruthUnknown, ScopeApplicable: reduce.TruthUnknown})
-	if p, ok := s.Claim(id); ok {
-		p.Support = support
-		r.Claim, r.CurrentSupport = &p, support.Current()
-	}
-	if p, ok := s.Decision(id); ok {
-		p.Support = support
-		r.Decision, r.CurrentSupport = &p, support.Current()
-	}
-	if p, ok := s.Instrument(id); ok {
-		p.Support = support
-		r.Instrument, r.CurrentSupport = &p, support.Current()
-	}
-	r.Sources = sourcesIn(s.Sources(), id)
-	return r
 }
 
 // taskOf is the described revision's task view, so a closure node for an

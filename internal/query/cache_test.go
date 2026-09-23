@@ -30,16 +30,16 @@ func requireCachedParity(t *testing.T, p store.Project, state string, restored i
 		t.Fatalf("%s: restored %d bundles from the cache, want %d", state, loaded.Restored(), restored)
 	}
 	for _, r := range richRequests() {
-		want, err := ReadFrom(p, r, full)
+		want, err := ReadViewFrom(p, r, full)
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := Read(p, r)
+		got, err := ReadView(p, r)
 		if err != nil {
-			t.Fatalf("%s: %s: %v", state, r.Command, err)
+			t.Fatalf("%s: %s: %v", state, r.View, err)
 		}
 		if rendered(t, got) != rendered(t, want) {
-			t.Fatalf("%s: %s %s answers differently through the cache", state, r.Command, r.ID)
+			t.Fatalf("%s: %s %s answers differently through the cache", state, r.View, r.ID)
 		}
 	}
 }
@@ -51,7 +51,7 @@ func TestCachedReadsEqualFullReplayOnTheRichFixture(t *testing.T) {
 	if err := os.RemoveAll(p.CacheDir()); err != nil {
 		t.Fatal(err)
 	}
-	n := int(readAnswer(t, p, "show", "").Watermark.Sequence) // cold: rebuilds and publishes
+	n := int(view_(t, p, ViewRequest{View: "show"}).Header().Watermark.Sequence) // cold: rebuilds and publishes
 	requireCachedParity(t, p, "warm", n)
 	if err := os.Remove(image); err != nil {
 		t.Fatal(err)

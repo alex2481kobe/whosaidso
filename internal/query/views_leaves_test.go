@@ -1,9 +1,7 @@
 package query
 
-// JSON-leaf helpers for the view tests: export an answer, walk it by key and
-// index, visit every leaf with its path, and find list items by identity.
-// What is compared, and where each old section lives now, is in
-// views_coverage_test.go and views_sections_test.go.
+// JSON-leaf helpers for the view tests: export an answer and walk it by key
+// and index.
 
 import (
 	"bytes"
@@ -16,8 +14,6 @@ func exported(t testing.TB, v any) any {
 	var buf bytes.Buffer
 	var err error
 	switch a := v.(type) {
-	case Answer:
-		err = RenderJSON(&buf, a)
 	case ViewAnswer:
 		err = RenderViewJSON(&buf, a)
 	default:
@@ -58,12 +54,6 @@ func at(v any, steps ...any) (any, bool) {
 	return v, true
 }
 
-func items(v any, steps ...any) []any {
-	xs, _ := at(v, steps...)
-	list, _ := xs.([]any)
-	return list
-}
-
 func str(v any, steps ...any) string {
 	x, _ := at(v, steps...)
 	switch s := x.(type) {
@@ -75,44 +65,6 @@ func str(v any, steps ...any) string {
 	return ""
 }
 
-// eachLeaf visits every leaf and empty container with its path.
-func eachLeaf(v any, path []any, visit func([]any, any)) {
-	switch node := v.(type) {
-	case map[string]any:
-		if len(node) > 0 {
-			for k, child := range node {
-				eachLeaf(child, append(append([]any{}, path...), k), visit)
-			}
-			return
-		}
-	case []any:
-		if len(node) > 0 {
-			for i, child := range node {
-				eachLeaf(child, append(append([]any{}, path...), i), visit)
-			}
-			return
-		}
-	}
-	visit(path, v)
-}
-
-func encode(v any) string { b, _ := json.Marshal(v); return string(b) }
-
-func joinPath(prefix []any, rest []any) []any { return append(append([]any{}, prefix...), rest...) }
-
-// byKey finds the item of list whose value at steps equals want.
-func byKey(list []any, want string, steps ...any) (any, bool) {
-	for _, x := range list {
-		if str(x, steps...) == want {
-			return x, true
-		}
-	}
-	return nil, false
-}
-
 func factKey(v any, steps ...any) string {
 	return str(v, append(steps, "key", "id")...) + "@" + str(v, append(steps, "key", "revision")...)
 }
-
-// runIn finds a run body by invocation id in the new answer's run lists.
-func runIn(runs []any, id string) (any, bool) { return byKey(runs, id, "invocation") }

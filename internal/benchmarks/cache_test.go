@@ -82,16 +82,16 @@ func cachedParity(t *testing.T, f *fixture, state string, restored int) {
 	observed := query.Observation{ObservedAt: known(at), Head: unknown[model.GitHead](), Dirty: unknown[bool]()}
 	for _, c := range readCases(f) {
 		request := c.request
-		if request.Command == "continue" {
+		if request.View == "continue" {
 			request.Observed = &observed
 		}
-		want, err := query.ReadFrom(f.Project, request, full)
+		want, err := query.ReadViewFrom(f.Project, request, full)
 		must(t, err)
-		got, err := query.Read(f.Project, request)
+		got, err := query.ReadView(f.Project, request)
 		must(t, err)
 		var a, b bytes.Buffer
-		must(t, query.RenderJSON(&a, want))
-		must(t, query.RenderJSON(&b, got))
+		must(t, query.RenderViewJSON(&a, want))
+		must(t, query.RenderViewJSON(&b, got))
 		if !bytes.Equal(a.Bytes(), b.Bytes()) {
 			t.Fatalf("%s: %s answers differently through the cache", state, c.name)
 		}

@@ -54,7 +54,7 @@ datum
 |   |-- model          wire vocabulary every other package shares: identities, references, packets and bundles, plus the strict encode/decode boundary
 |   |      15 files, tested -- leaf
 |   |-- query          selects admitted facts before either output format renders them
-|   |      18 files, tested -- uses model, reduce, store
+|   |      17 files, tested -- uses model, reduce, store
 |   |-- reduce         folds admitted bundles into the state every Datum answer is read from
 |   |      25 files, tested -- uses model
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory

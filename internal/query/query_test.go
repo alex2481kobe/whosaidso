@@ -22,7 +22,7 @@ func TestTaskRevisionHoldersAndUnknownNeverBorrowNearbyActors(t *testing.T) {
 		&model.TaskStart{Task: testRef(1, 2), AttemptID: testID(70), Actor: model.Actor{ID: "worker"}},
 		&model.BlockerHold{Task: testRef(1, 2), BlockerID: testID(80), Reason: model.BlockerPrerequisite,
 			Actor: model.Actor{UnknownReason: "external owner not named"}, Criterion: "external input arrives"})
-	a := readAnswer(t, p, "show", testID(1))
+	a := showOf(t, p, testID(1))
 	task := a.Records[0].Task
 	if task.Revision != 2 || task.Status != reduce.StatusInFlight || len(task.AttemptHolders) != 1 || task.AttemptHolders[0].Actor != (model.Actor{ID: "worker"}) {
 		t.Fatalf("expected revision 2 IN FLIGHT with worker holding the attempt, got %+v; task revision and holder are separate facts", task)
@@ -35,7 +35,7 @@ func TestTaskRevisionHoldersAndUnknownNeverBorrowNearbyActors(t *testing.T) {
 	}
 	appendEvents(t, p, 102, &model.AttemptTerminal{Task: testRef(1, 2), AttemptID: testID(70), Outcome: model.AttemptNoReading,
 		Reason: "no reading", NextAction: "wait for input", DeliveryRefs: []model.ArtifactRef{}})
-	task = readAnswer(t, p, "show", testID(1)).Records[0].Task
+	task = showOf(t, p, testID(1)).Records[0].Task
 	if task.Status != reduce.StatusBlocked || len(task.AttemptHolders) != 0 || len(task.Attempts) != 1 || len(task.Reasons) != 1 {
 		t.Fatalf("terminal attempt must retain its receipt but cease holding; remaining hold must explain BLOCKED, got %+v", task)
 	}
@@ -48,24 +48,24 @@ func TestPendingRetainsRejectionsCorrectionsAndMissingLocalPackets(t *testing.T)
 	for _, n := range []int{2, 3, 4, 5} {
 		refs = append(refs, capturePacket(t, p, n))
 	}
-	control := readAnswer(t, p, "intake pending", "")
-	if len(control.Intake) != 4 || control.Intake[0].Disposition != "pending" || control.Watermark.Sequence != 1 {
+	control := todoOf(t, p)
+	if len(control.IntakePending) != 4 || control.IntakePending[0].Disposition != "pending" || control.Watermark.Sequence != 1 {
 		t.Fatalf("control four captures must be pending without advancing ledger, got %+v", control)
 	}
 	for i, outcome := range []string{"accepted", "rejected", "correction-requested"} {
 		reviewPacket(t, p, 200+i, refs[i], outcome)
 	}
-	a := readAnswer(t, p, "intake pending", "")
-	if len(a.Intake) != 3 || a.Watermark.Sequence != 4 {
+	a := todoOf(t, p)
+	if len(a.IntakePending) != 3 || a.Watermark.Sequence != 4 {
 		t.Fatalf("expected rejected, correction-requested and unreviewed packets at sequence 4, got %+v", a)
 	}
 	for i, want := range []string{"rejected", "correction-requested", "pending"} {
-		if a.Intake[i].Disposition != want || a.Intake[i].Packet == nil {
-			t.Fatalf("packet %d must retain bytes and disposition %s, got %+v; review must not erase proposals", i, want, a.Intake[i])
+		if a.IntakePending[i].Disposition != want || a.IntakePending[i].Packet == nil {
+			t.Fatalf("packet %d must retain bytes and disposition %s, got %+v; review must not erase proposals", i, want, a.IntakePending[i])
 		}
 	}
-	if a.Intake[0].Review.Actor.ID != "reviewer" || a.Intake[0].Review.Reason == "" || a.Intake[0].Review.Packet != refs[1] {
-		t.Fatalf("rejection must explain who rejected which bytes and why, got %+v", a.Intake[0])
+	if a.IntakePending[0].Review.Actor.ID != "reviewer" || a.IntakePending[0].Review.Reason == "" || a.IntakePending[0].Review.Packet != refs[1] {
+		t.Fatalf("rejection must explain who rejected which bytes and why, got %+v", a.IntakePending[0])
 	}
 	dir, err := store.IntakeDir(p)
 	if err != nil {
@@ -74,9 +74,9 @@ func TestPendingRetainsRejectionsCorrectionsAndMissingLocalPackets(t *testing.T)
 	if err := os.RemoveAll(filepath.Join(dir, string(refs[1].CommandID))); err != nil {
 		t.Fatal(err)
 	}
-	a = readAnswer(t, p, "intake pending", "")
-	if len(a.Intake) != 3 || a.Intake[0].Disposition != "rejected" || a.Intake[0].Unavailable == nil || a.Intake[0].Unavailable.State != "UNKNOWN" || a.Intake[0].Packet != nil {
-		t.Fatalf("missing local intake must preserve the canonical rejection with UNKNOWN bytes, got %+v", a.Intake)
+	a = todoOf(t, p)
+	if len(a.IntakePending) != 3 || a.IntakePending[0].Disposition != "rejected" || a.IntakePending[0].Unavailable == nil || a.IntakePending[0].Unavailable.State != "UNKNOWN" || a.IntakePending[0].Packet != nil {
+		t.Fatalf("missing local intake must preserve the canonical rejection with UNKNOWN bytes, got %+v", a.IntakePending)
 	}
 }
 
@@ -105,20 +105,20 @@ func TestPendingHonorsReviewEventsWithoutEnvelopePackets(t *testing.T) {
 						}
 					}
 				}
-				a := readAnswer(t, p, "intake pending", "")
+				a := todoOf(t, p)
 				if a.Result != "KNOWN" || a.Watermark.Sequence != 2 {
 					t.Fatalf("expected successful review at watermark 2, got %+v", a)
 				}
 				if outcome == "accepted" {
-					if len(a.Intake) != 0 {
-						t.Fatalf("accepted packets must leave pending, got %+v", a.Intake)
+					if len(a.IntakePending) != 0 {
+						t.Fatalf("accepted packets must leave pending, got %+v", a.IntakePending)
 					}
 				} else {
-					if len(a.Intake) != 2 {
-						t.Fatalf("both reviews must survive missing=%t, got %+v", missing, a.Intake)
+					if len(a.IntakePending) != 2 {
+						t.Fatalf("both reviews must survive missing=%t, got %+v", missing, a.IntakePending)
 					}
 					for i, ref := range []model.PacketRef{first, second} {
-						packet := a.Intake[i]
+						packet := a.IntakePending[i]
 						if packet.CommandID != ref.CommandID || packet.Disposition != outcome || packet.Review == nil ||
 							packet.Review.Packet != ref || packet.Review.Outcome != outcome || packet.Review.Actor.ID != "reviewer" ||
 							packet.Review.Reason != "admitted event is authoritative" || packet.Review.Origin != (reduce.Origin{Sequence: 2, EventIndex: 0}) {
@@ -133,16 +133,7 @@ func TestPendingHonorsReviewEventsWithoutEnvelopePackets(t *testing.T) {
 						}
 					}
 				}
-				var exported, rendered bytes.Buffer
-				if err := RenderJSON(&exported, a); err != nil {
-					t.Fatal(err)
-				}
-				if err := RenderText(&rendered, a); err != nil {
-					t.Fatal(err)
-				}
-				if !reflect.DeepEqual(jsonLeaves(t, exported.Bytes()), textLeaves(t, rendered.String())) {
-					t.Fatal("text and JSON must preserve the same review facts")
-				}
+				assertViewHonest(t, a) // the brief shows only the answer's own review facts
 			}
 		})
 	}
@@ -154,15 +145,14 @@ func TestClaimAndMissingRecordDoNotGainGuessedAnswers(t *testing.T) {
 	appendEvents(t, p, 101, &model.ClaimAssert{ID: testID(2), Provenance: testTask(1).Provenance,
 		Spec: model.ClaimSpec{Assertion: "U09 may omit a read-time fact", Falsifier: "compare the export with the admitted ledger",
 			Scope: testScope(), ExternalRefs: []model.ExternalReference{}}})
-	a := readAnswer(t, p, "show", testID(2))
-	claim := a.Records[0].Claim
+	claim := showOf(t, p, testID(2)).Records[0].Claim
 	if claim.Status != reduce.StatusUnmeasured || claim.Support.EvidenceAvailable != reduce.TruthUnknown || claim.Support.ApplicableScope != reduce.TruthFalse {
 		t.Fatalf("a new finding must remain an UNMEASURED CLAIM with unknown evidence and no established support, got %+v", claim)
 	}
-	for _, command := range []string{"show", "history"} {
-		a = readAnswer(t, p, command, testID(99))
-		if a.Result != "UNKNOWN" || a.Reason == "" || a.Watermark.Sequence != 2 || len(a.Records)+len(a.History) != 0 {
-			t.Fatalf("absent record must answer UNKNOWN with reason and current watermark, got %+v; nearby records cannot fill it", a)
+	show, history := showOf(t, p, testID(99)), historyOf(t, p, testID(99))
+	for _, h := range []ViewHeader{show.ViewHeader, history.ViewHeader} {
+		if h.Result != "UNKNOWN" || h.Reason == "" || h.Watermark.Sequence != 2 || len(show.Records)+len(history.Events)+len(history.Reviews) != 0 {
+			t.Fatalf("absent record must answer UNKNOWN with reason and current watermark, got %+v; nearby records cannot fill it", h)
 		}
 	}
 }
@@ -176,10 +166,10 @@ func TestDeletingGeneratedOutputChangesNeitherAnswerNorCanonicalBytes(t *testing
 		t.Fatal(err)
 	}
 	ledger, intake := treeBytes(t, p.Ledger), treeBytes(t, dir)
-	for _, command := range []string{"show", "history", "intake pending"} {
-		before := readAnswer(t, p, command, "")
+	for _, view := range []string{"show", "history", "todo"} {
+		before := view_(t, p, ViewRequest{View: view})
 		var rendered bytes.Buffer
-		if err := RenderText(&rendered, before); err != nil {
+		if err := RenderViewBrief(&rendered, before); err != nil {
 			t.Fatal(err)
 		}
 		path := filepath.Join(p.Root, "generated.txt")
@@ -189,17 +179,17 @@ func TestDeletingGeneratedOutputChangesNeitherAnswerNorCanonicalBytes(t *testing
 		if err := os.Remove(path); err != nil {
 			t.Fatal(err)
 		}
-		after := readAnswer(t, p, command, "")
+		after := view_(t, p, ViewRequest{View: view})
 		if !reflect.DeepEqual(before, after) || !reflect.DeepEqual(ledger, treeBytes(t, p.Ledger)) || !reflect.DeepEqual(intake, treeBytes(t, dir)) {
-			t.Fatalf("%s changed after deleting generated output; the answer and canonical bytes must be identical", command)
+			t.Fatalf("%s changed after deleting generated output; the answer and canonical bytes must be identical", view)
 		}
 	}
 }
 
 func TestEmptyAndCorruptReadsAreDifferent(t *testing.T) {
 	p := testProject(t)
-	for _, command := range []string{"show", "history", "intake pending"} {
-		a := readAnswer(t, p, command, "")
+	for _, view := range []string{"show", "history", "todo"} {
+		a := view_(t, p, ViewRequest{View: view}).Header()
 		if a.Result != "KNOWN" || a.Watermark.Sequence != 0 || a.Watermark.Head.(Unknown).State != "UNKNOWN" {
 			t.Fatalf("empty control must have known empty inventory and UNKNOWN head, got %+v", a)
 		}
@@ -211,7 +201,7 @@ func TestEmptyAndCorruptReadsAreDifferent(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(p.Ledger, "broken"), []byte("not a bundle"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Read(p, Request{Command: "show"}); err == nil {
+	if _, err := ReadView(p, ViewRequest{View: "show"}); err == nil {
 		t.Fatal("expected corrupt ledger error, got success; a partial answer would hide canonical state")
 	}
 }

@@ -24,21 +24,25 @@ import (
 
 type readCase struct {
 	name    string
-	request query.Request
+	request query.ViewRequest
 }
 
+// Names are kept from the pre-view commands so the recorded trail stays
+// comparable. Where a command was removed (R19), its name now measures the
+// view that answers the same question; the comment says which.
 func readCases(f *fixture) []readCase {
 	return []readCase{
-		{"Show", query.Request{Command: "show"}},
-		{"ShowOne", query.Request{Command: "show", ID: f.Task.RecordID}},
-		{"HistoryOne", query.Request{Command: "history", ID: f.Task.RecordID}},
-		{"Todo", query.Request{Command: "todo"}},
-		{"IntakePending", query.Request{Command: "intake pending"}},
-		{"Now", query.Request{Command: "now"}},
-		{"Context", query.Request{Command: "context"}},
-		{"ContextOne", query.Request{Command: "context", ID: f.Task.RecordID}},
-		{"Continue", query.Request{Command: "continue", ID: f.Task.RecordID}},
-		{"Instruments", query.Request{Command: "instruments"}},
+		{"Show", query.ViewRequest{View: "show"}},
+		{"ShowOne", query.ViewRequest{View: "show", ID: f.Task.RecordID}},
+		{"HistoryOne", query.ViewRequest{View: "history", ID: f.Task.RecordID}},
+		{"Todo", query.ViewRequest{View: "todo"}},
+		{"IntakePending", query.ViewRequest{View: "todo"}},                       // intake pending is a todo section now
+		{"Now", query.ViewRequest{View: "todo"}},                                 // what is in flight: todo answers it now
+		{"Context", query.ViewRequest{View: "show"}},                             // claims and rulings: bare show answers them now
+		{"ContextOne", query.ViewRequest{View: "continue", ID: f.Task.RecordID}}, // one record's closure: continue ID
+		{"Continue", query.ViewRequest{View: "continue", ID: f.Task.RecordID}},
+		{"Instruments", query.ViewRequest{View: "show", Kind: "instrument"}}, // show --kind instrument
+		{"History", query.ViewRequest{View: "history"}},
 	}
 }
 
@@ -83,7 +87,7 @@ func BenchmarkCommands(b *testing.B) {
 			must(b, err)
 			for _, c := range readCases(f) {
 				b.Run(c.name, func(b *testing.B) {
-					var answer query.Answer
+					var answer query.ViewAnswer
 					var size byteCounter
 					b.ReportAllocs()
 					b.ResetTimer()
@@ -92,20 +96,20 @@ func BenchmarkCommands(b *testing.B) {
 							project, err := store.Discover(f.Project.Root)
 							must(b, err)
 							request := c.request
-							if request.Command == "continue" {
+							if request.View == "continue" {
 								o := observe(project.Root)
 								request.Observed = &o
 							}
-							answer, err = query.Read(project, request)
+							answer, err = query.ReadView(project, request)
 							must(b, err)
 							size = 0
-							must(b, query.RenderJSON(&size, answer))
+							must(b, query.RenderViewJSON(&size, answer))
 						}
 					})
 					b.StopTimer()
 					b.ReportMetric(float64(size), "json-B/op")
 					var textSize byteCounter
-					must(b, query.RenderText(&textSize, answer))
+					must(b, query.RenderViewBrief(&textSize, answer)) // the brief, the CLI's text answer
 					b.ReportMetric(float64(textSize), "text-B/op")
 				})
 			}

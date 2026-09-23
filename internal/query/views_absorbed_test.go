@@ -1,7 +1,9 @@
 package query
 
-// Routing tests for INSTRUMENTS, STATE, NOW and TODO over a fixture ledger.
-// Run, closure, continue, provider and real-ledger tests have their own files.
+// What the removed INSTRUMENTS, STATE, NOW and TODO reads guaranteed, asserted
+// in the views that absorbed them (R19): show --kind instrument, show --kind
+// claim and decision, and todo. Run, closure, continue and real-ledger tests
+// have their own files.
 
 import (
 	"strings"
@@ -15,9 +17,12 @@ func TestInstrumentsShowEveryFieldAndUnknownValidationFirst(t *testing.T) {
 	p := testProject(t)
 	presetWorld(t, p)
 	appendEvents(t, p, 106, &model.TrustWithdraw{Instrument: testRef(10, 1), Scope: testScope(), RevalidationCondition: "rerun the known-answer suite"})
-	a := presetAnswer(t, p, Request{Command: "instruments"})
-	assertHonestRendering(t, a)
-	views := *a.Preset.Instruments
+	a := view_(t, p, ViewRequest{View: "show", Kind: "instrument"}).(*ShowAnswer)
+	assertViewHonest(t, a)
+	views := []InstrumentView{}
+	for _, d := range a.Records {
+		views = append(views, *d.Instrument)
+	}
 	if len(views) != 2 || views[0].Ref != testRef(10, 1) || views[1].Ref != testRef(11, 1) {
 		t.Fatalf("expected both current instruments in identity order, got %+v", views)
 	}
@@ -36,23 +41,30 @@ func TestInstrumentsShowEveryFieldAndUnknownValidationFirst(t *testing.T) {
 		t.Fatalf("withdrawn trust must read FALSE and unvalidated trust UNKNOWN, got %s/%s", good.Trust, bad.Trust)
 	}
 	kinds := map[string]model.RecordRef{}
-	for _, note := range a.Preset.Attention {
+	for _, note := range a.Attention {
 		kinds[note.Kind] = note.Ref
 	}
-	if kinds["instrument-validation-unknown"] != testRef(11, 1) || kinds["instrument-trust-not-active"] != testRef(10, 1) || len(a.Preset.Attention) != 2 {
-		t.Fatalf("UNKNOWN validation and withdrawn trust must each be raised under attention, got %+v", a.Preset.Attention)
+	if kinds["instrument-validation-unknown"] != testRef(11, 1) || kinds["instrument-trust-not-active"] != testRef(10, 1) || len(a.Attention) != 2 {
+		t.Fatalf("UNKNOWN validation and withdrawn trust must each be raised under attention, got %+v", a.Attention)
 	}
 }
 
 func TestClaimsNeverReadAsEstablishedShortOfProof(t *testing.T) {
 	p := testProject(t)
 	presetWorld(t, p)
-	for _, command := range []string{"state", "context"} {
-		a := presetAnswer(t, p, Request{Command: command})
-		assertHonestRendering(t, a)
-		claims := *a.Preset.Claims
+	{
+		a := view_(t, p, ViewRequest{View: "show", Kind: "claim"}).(*ShowAnswer)
+		assertViewHonest(t, a)
+		claims, observed := []ClaimView{}, [][]model.ID{}
+		for _, d := range a.Records {
+			claims, observed = append(claims, d.Claim.ClaimView), append(observed, d.Claim.Observations)
+		}
+		runs := map[model.ID]RunDetail{}
+		for _, r := range *a.Runs {
+			runs[r.Invocation] = r
+		}
 		if len(claims) != 3 {
-			t.Fatalf("%s must list every claim at every status, got %d", command, len(claims))
+			t.Fatalf("show --kind claim must list every claim at every status, got %d", len(claims))
 		}
 		unmeasured, measured, proven := claims[0], claims[1], claims[2]
 		if unmeasured.Status != reduce.StatusUnmeasured || len(unmeasured.ExternalRefs) != 1 || unmeasured.ExternalRefs[0].Tag != "VERIFIED" {
@@ -64,42 +76,47 @@ func TestClaimsNeverReadAsEstablishedShortOfProof(t *testing.T) {
 				t.Fatalf("%s claim must read as not established and name what is missing, got %+v", c.Status, c)
 			}
 		}
-		if unmeasured.Missing[0] != "local observation" || len(unmeasured.Observations) != 0 {
+		if unmeasured.Missing[0] != "local observation" || len(observed[0]) != 0 {
 			t.Fatalf("an UNMEASURED claim must name the missing local observation, got %+v", unmeasured.Missing)
 		}
-		if measured.Status != reduce.StatusMeasured || len(measured.Observations) != 1 || measured.Observations[0].Outcome.(model.ProcessOutcome).ExitCode == nil {
+		if measured.Status != reduce.StatusMeasured || len(observed[1]) != 1 || runs[observed[1][0]].Outcome.(model.ProcessOutcome).ExitCode == nil {
 			t.Fatalf("a failed completed run is still an observation of a MEASURED claim, got %+v", measured)
 		}
 		if proven.Status != reduce.StatusProven || len(proven.Missing) != 0 || len(proven.Proofs) != 1 || strings.Contains(proven.Standing, "not established") ||
 			!strings.Contains(proven.Standing, "revision 1") {
 			t.Fatalf("PROVEN must name its exact revision and keep current support separate, got %+v", proven)
 		}
-		decided := *a.Preset.Decisions
-		if len(decided) != 1 || decided[0].Status != reduce.StatusDecided || len(decided[0].Rulings) != 1 ||
+		decided := []DecisionView{}
+		for _, d := range view_(t, p, ViewRequest{View: "show", Kind: "decision"}).(*ShowAnswer).Records {
+			if d.Decision.Status == reduce.StatusDecided {
+				decided = append(decided, *d.Decision)
+			}
+		}
+		if len(decided) != 1 || len(decided[0].Rulings) != 1 ||
 			decided[0].Rulings[0].Disposition.Quote != "yes, BLOCKED wins" || decided[0].Authorizes != "" {
-			t.Fatalf("%s must show only DECIDED decisions with their quoted ruling, got %+v", command, decided)
+			t.Fatalf("show --kind decision must show the DECIDED decision with its quoted ruling, got %+v", decided)
 		}
 	}
 }
 
-func TestNowShowsInFlightWorkOpenDecisionsAndItsRuns(t *testing.T) {
+func TestTodoShowsInFlightWorkOpenDecisionsAndItsRuns(t *testing.T) {
 	p := testProject(t)
 	presetWorld(t, p)
-	a := presetAnswer(t, p, Request{Command: "now"})
-	assertHonestRendering(t, a)
-	flying, open := *a.Preset.InFlight, *a.Preset.Decisions
+	a := todoOf(t, p)
+	assertViewHonest(t, a)
+	flying, open := a.InFlight, a.OpenDecisions
 	if len(flying) != 1 || flying[0].Task.Status != reduce.StatusInFlight || flying[0].Task.AttemptHolders[0].Actor != (model.Actor{ID: "worker"}) {
-		t.Fatalf("NOW must show the IN FLIGHT task and its admitted holder, got %+v", flying)
+		t.Fatalf("todo must show the IN FLIGHT task and its admitted holder, got %+v", flying)
 	}
-	if len(open) != 1 || open[0].Ref != testRef(30, 1) || open[0].Authorizes == "" || open[0].WaitingActor != (model.Actor{ID: "owner"}) {
-		t.Fatalf("NOW must show the OPEN decision, its waiting actor, and that it authorises nothing, got %+v", open)
+	if len(open) != 1 || open[0].Ref != testRef(30, 1) || open[0].Decision.Authorizes == "" || open[0].Decision.WaitingActor != (model.Actor{ID: "owner"}) {
+		t.Fatalf("todo must show the OPEN decision, its waiting actor, and that it authorises nothing, got %+v", open)
 	}
-	if len(*a.Preset.Runs) != 3 {
-		t.Fatalf("NOW must show every run of in-flight work, got %d", len(*a.Preset.Runs))
+	if len(*flying[0].Runs) != 3 {
+		t.Fatalf("todo must show every run of in-flight work, got %d", len(*flying[0].Runs))
 	}
-	state := presetAnswer(t, p, Request{Command: "state"})
-	if len(*state.Preset.Closed) != 0 || len(*state.Preset.Runs) != 3 {
-		t.Fatalf("STATE must list closed tasks and every run, got %+v", state.Preset)
+	show := view_(t, p, ViewRequest{View: "show"}).(*ShowAnswer)
+	if show.Summary.Tasks == nil || (*show.Summary.Tasks)["CLOSED"] != 0 || len(*show.Runs) != 3 {
+		t.Fatalf("bare show must count closed tasks and list every run, got %+v", show.Summary)
 	}
 }
 
@@ -114,45 +131,40 @@ func TestTodoLimitNeverHidesABlocker(t *testing.T) {
 	appendEvents(t, p, 102, &model.AttemptTerminal{Task: testRef(5, 1), AttemptID: testID(71), Outcome: model.AttemptSuccess,
 		Reason: "done", NextAction: "owner accepts or rejects", DeliveryRefs: []model.ArtifactRef{testArtifact()}})
 	for _, limit := range []int{0, 1, 2} {
-		a := presetAnswer(t, p, Request{Command: "todo", Limit: limit})
-		assertHonestRendering(t, a)
-		blocked, awaiting, ready := *a.Preset.Blocked, *a.Preset.AwaitingAcceptance, *a.Preset.Ready
+		a := view_(t, p, ViewRequest{View: "todo", Limit: limit}).(*TodoAnswer)
+		assertViewHonest(t, a)
+		blocked, awaiting, ready := a.Blocked, a.AwaitingAcceptance, a.Ready
 		if len(blocked) != 1 || blocked[0].Fact.Key.ID != testID(2) || len(blocked[0].Task.Blockers) != 1 {
 			t.Fatalf("limit %d hid the blocked task or its typed blocker: %+v", limit, blocked)
 		}
-		if len(awaiting) != 1 || awaiting[0].Fact.Key.ID != testID(5) || len(*a.Preset.Decisions) != 1 {
+		if len(awaiting) != 1 || awaiting[0].Fact.Key.ID != testID(5) || len(a.OpenDecisions) != 1 {
 			t.Fatalf("limit %d hid the awaiting-acceptance queue or the open decision", limit)
 		}
 		want := 3
 		if limit > 0 && limit < 3 {
 			want = limit
 		}
-		if len(ready) != want || a.Preset.Limit.Offered != 3 || a.Preset.Limit.Omitted != 3-want {
-			t.Fatalf("limit %d must cut only READY work and say how much, got %d kept, report %+v", limit, len(ready), a.Preset.Limit)
+		if report := a.Omitted["ready"]; len(ready) != want || report.Offered != 3 || report.Omitted != 3-want {
+			t.Fatalf("limit %d must cut only READY work and say how much, got %d kept, report %+v", limit, len(ready), report)
 		}
 	}
 }
 
-func TestPresetAbsentRecordIsWatermarkedUnknownAndBadRequestsFail(t *testing.T) {
+func TestAbsentRecordIsAWatermarkedUnknown(t *testing.T) {
 	p := testProject(t)
 	presetWorld(t, p)
-	for _, command := range []string{"context", "continue"} {
-		a, err := Read(p, Request{Command: command, ID: testID(999)})
-		if err != nil || a.Result != "UNKNOWN" || a.Reason == "" || a.Watermark.Sequence != 6 {
-			t.Fatalf("%s of an absent record must be a watermarked UNKNOWN success, got %+v, %v", command, a, err)
-		}
-	}
-	for _, bad := range []Request{{Command: "continue"}, {Command: "instruments", Limit: 1}, {Command: "todo", Limit: -1},
-		{Command: "now", ID: testID(1)}, {Command: "continue", ID: testID(20)}, {Command: "state", Observed: &Observation{}}} {
-		if _, err := Read(p, bad); err == nil {
-			t.Fatalf("request %+v must be refused", bad)
+	for _, view := range []string{"show", "continue", "history"} {
+		a, err := ReadView(p, ViewRequest{View: view, ID: testID(999)})
+		if err != nil || a.Header().Result != "UNKNOWN" || a.Header().Reason == "" || a.Header().Watermark.Sequence != 6 {
+			t.Fatalf("%s of an absent record must be a watermarked UNKNOWN success, got %+v, %v", view, a, err)
 		}
 	}
 }
 
-// NOW raises every reason owed on a BLOCKED task itself, with its waiting
-// actor, and leaves computed prerequisites (owed on another record) to TODO.
-func TestNowRaisesBlockedWorkOwedByAnActor(t *testing.T) {
+// todo raises every reason owed on a BLOCKED task itself, with its waiting
+// actor, and leaves computed prerequisites (owed on another record) to the
+// blocked section.
+func TestTodoRaisesBlockedWorkOwedByAnActor(t *testing.T) {
 	p := testProject(t)
 	readyControl(t, p)
 	waiting := testTask(6)
@@ -165,20 +177,19 @@ func TestNowRaisesBlockedWorkOwedByAnActor(t *testing.T) {
 		&model.TaskStart{Task: testRef(5, 1), AttemptID: testID(71), Actor: model.Actor{ID: "worker"}})
 	appendEvents(t, p, 102, &model.AttemptTerminal{Task: testRef(5, 1), AttemptID: testID(71), Outcome: model.AttemptSuccess,
 		Reason: "done", NextAction: "owner accepts or rejects", DeliveryRefs: []model.ArtifactRef{testArtifact()}})
-	control := presetAnswer(t, p, Request{Command: "todo"})
-	if len(*control.Preset.Blocked) != 2 || len(*control.Preset.AwaitingAcceptance) != 1 {
-		t.Fatalf("control: todo must hold the held and the prerequisite-blocked task, and one awaiting acceptance, got %+v", control.Preset)
+	a := todoOf(t, p)
+	if len(a.Blocked) != 2 || len(a.AwaitingAcceptance) != 1 {
+		t.Fatalf("control: todo must hold the held and the prerequisite-blocked task, and one awaiting acceptance, got %+v", a)
 	}
-	a := presetAnswer(t, p, Request{Command: "now"})
-	assertHonestRendering(t, a)
+	assertViewHonest(t, a)
 	owed := map[model.ID]Attention{}
-	for _, note := range a.Preset.Attention {
+	for _, note := range a.Attention {
 		if note.Kind == "task-blocked-owed" {
 			owed[note.Ref.RecordID] = note
 		}
 	}
-	if len(owed) != 3 || len(a.Preset.Attention) != 3 {
-		t.Fatalf("NOW must raise exactly the two holds and the task awaiting acceptance, got %+v", a.Preset.Attention)
+	if len(owed) != 3 || len(a.Attention) != 3 {
+		t.Fatalf("todo must raise exactly the two holds and the task awaiting acceptance, got %+v", a.Attention)
 	}
 	held, accept := owed[testID(2)], owed[testID(5)]
 	if held.WaitingActor != (model.Actor{ID: "owner"}) || !strings.Contains(held.Reason, "resume hold "+string(testID(80))) || held.Ref != testRef(2, 1) {

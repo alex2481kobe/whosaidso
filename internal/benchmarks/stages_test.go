@@ -84,17 +84,16 @@ func TestOutputLimits(t *testing.T) {
 	}
 	f := getFixture(t, 10000)
 	t.Logf("fixture: bundles=%d events=%d ledger_bytes=%d intake_packets=%d blob_bytes=%d", f.Bundles, f.Events, f.LedgerBytes, f.IntakePackets, f.BlobBytes)
-	for _, request := range []query.Request{
-		{Command: "todo", Limit: 1},
-		{Command: "context", Limit: 1},
-		{Command: "continue", ID: f.Task.RecordID, Limit: 1},
+	for _, request := range []query.ViewRequest{
+		{View: "todo", Limit: 1},
+		{View: "continue", ID: f.Task.RecordID, Limit: 1},
 	} {
-		a, err := query.Read(f.Project, request)
+		a, err := query.ReadView(f.Project, request)
 		must(t, err)
 		var jsonSize, textSize byteCounter
-		must(t, query.RenderJSON(&jsonSize, a))
-		must(t, query.RenderText(&textSize, a))
-		t.Logf("%s limit=%d json_bytes=%d text_bytes=%d", request.Command, request.Limit, jsonSize, textSize)
+		must(t, query.RenderViewJSON(&jsonSize, a))
+		must(t, query.RenderViewBrief(&textSize, a))
+		t.Logf("%s limit=%d json_bytes=%d text_bytes=%d", request.View, request.Limit, jsonSize, textSize)
 	}
 }
 

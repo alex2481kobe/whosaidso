@@ -76,24 +76,21 @@ func tamper(t *testing.T, path string) {
 
 func readsFail(t *testing.T, p store.Project, want string) {
 	t.Helper()
-	for _, command := range []string{"todo", "intake pending"} {
-		_, err := Read(p, Request{Command: command})
-		if err == nil || !strings.Contains(err.Error(), want) {
-			t.Errorf("%s must refuse with %q, got %v", command, want, err)
-		}
+	// Intake pending is a todo section (R19): todo is the read that presents it.
+	_, err := ReadView(p, ViewRequest{View: "todo"})
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("todo must refuse with %q, got %v", want, err)
 	}
 }
 
 func TestReadIntakeGuaranteePerPacket(t *testing.T) {
 	t.Run("control", func(t *testing.T) {
 		p, _ := intakeTrio(t)
-		for _, command := range []string{"todo", "intake pending"} {
-			a := readAnswer(t, p, command, "")
-			if len(a.Intake) != 2 || a.Intake[0].Disposition != "rejected" || a.Intake[1].Disposition != "pending" ||
-				a.Intake[0].Packet == nil || a.Intake[1].Packet == nil || a.Intake[0].Review == nil ||
-				a.Intake[0].Packet.CommandID != testID(1001) || a.Intake[1].Packet.CommandID != testID(1002) {
-				t.Fatalf("%s must present the rejected packet with its disposition and the pending one, both decoded, and drop the accepted one: %+v", command, a.Intake)
-			}
+		intake := todoOf(t, p).IntakePending
+		if len(intake) != 2 || intake[0].Disposition != "rejected" || intake[1].Disposition != "pending" ||
+			intake[0].Packet == nil || intake[1].Packet == nil || intake[0].Review == nil ||
+			intake[0].Packet.CommandID != testID(1001) || intake[1].Packet.CommandID != testID(1002) {
+			t.Fatalf("todo must present the rejected packet with its disposition and the pending one, both decoded, and drop the accepted one: %+v", intake)
 		}
 	})
 	// Presented packets: full verification, blobs included.
@@ -162,11 +159,9 @@ func TestReadIntakeGuaranteePerPacket(t *testing.T) {
 	t.Run("accepted blob tampered is left to full verification", func(t *testing.T) {
 		p, trio := intakeTrio(t)
 		tamper(t, trio["accepted"].blob)
-		for _, command := range []string{"todo", "intake pending"} {
-			a := readAnswer(t, p, command, "")
-			if len(a.Intake) != 2 || a.Intake[0].CommandID == testID(1000) || a.Intake[1].CommandID == testID(1000) {
-				t.Fatalf("%s must still drop the accepted packet, never present it: %+v", command, a.Intake)
-			}
+		intake := todoOf(t, p).IntakePending
+		if len(intake) != 2 || intake[0].CommandID == testID(1000) || intake[1].CommandID == testID(1000) {
+			t.Fatalf("todo must still drop the accepted packet, never present it: %+v", intake)
 		}
 		if _, err := store.ReadIntake(p, nil); err == nil || !strings.Contains(err.Error(), "blob bytes do not match their identity") {
 			t.Fatalf("full verification must still refuse the tampered accepted packet, got %v", err)

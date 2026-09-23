@@ -2,9 +2,11 @@ package query
 
 // Every JSON answer names its fields in snake_case. Agents read --json, so a
 // Go-cased key ("Author", "EventIndex") is a second spelling of the same
-// vocabulary they must learn. This file walks every read command's export on
-// one rich fixture. Keys that are data rather than field names (packet ids in
-// a review's authors map) are recognised by being ids, never by position.
+// vocabulary they must learn. This file walks every view's export on one rich
+// fixture. Keys that are data rather than field names are recognised by what
+// they are: packet ids in a review's authors map by being ids, and the status
+// values bare show's summary counts by (PROVEN, BLOCKED, "trust FALSE") by
+// being keys of summary's four count maps, which are keyed by value.
 
 import (
 	"bytes"
@@ -12,7 +14,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 	"unicode"
 
 	"datum/internal/model"
@@ -24,7 +25,11 @@ func upperKeys(v any, path string, out *[]string) {
 	switch x := v.(type) {
 	case map[string]any:
 		for key, child := range x {
-			if strings.IndexFunc(key, unicode.IsUpper) >= 0 && !model.ValidID(model.ID(key)) {
+			counted := false
+			for _, kind := range []string{"tasks", "claims", "decisions", "instruments"} {
+				counted = counted || strings.HasSuffix(path, "/summary/"+kind)
+			}
+			if strings.IndexFunc(key, unicode.IsUpper) >= 0 && !model.ValidID(model.ID(key)) && !counted {
 				*out = append(*out, path+"/"+key)
 			}
 			upperKeys(child, path+"/"+key, out)
@@ -62,24 +67,20 @@ func richWorld(t *testing.T, p store.Project) {
 func TestEveryJSONAnswerKeyIsSnakeCase(t *testing.T) {
 	p := testProject(t)
 	richWorld(t, p)
-	at := presetStart.Add(3 * time.Hour)
-	requests := []Request{{Command: "show"}, {Command: "show", ID: testID(1)}, {Command: "show", ID: testID(999)}, {Command: "history"},
-		{Command: "history", ID: testID(31)}, {Command: "history", SelfAdmitted: model.SelfAdmissionUnknown}, {Command: "intake pending"},
-		{Command: "instruments"}, {Command: "state"}, {Command: "now"}, {Command: "todo"}, {Command: "context"}, {Command: "context", ID: testID(1)},
-		{Command: "continue", ID: testID(1), Observed: &Observation{ObservedAt: model.Availability[time.Time]{State: model.Known, Value: &at},
-			Head: notKnown[model.GitHead]("not a git checkout"), Dirty: notKnown[bool]("not a git checkout")}}}
+	requests := append(richRequests(), ViewRequest{View: "show", Kind: "decision"}, ViewRequest{View: "show", Kind: "task"},
+		ViewRequest{View: "show", Stale: richStale}, ViewRequest{View: "continue", ID: testID(10)})
 	// Control: the fixture really carries the facts whose keys were Go-cased.
-	show, history := readAnswer(t, p, "show", ""), readAnswer(t, p, "history", "")
-	if len(show.Records) < 10 || len(history.Reviews) == 0 || len(readAnswer(t, p, "intake pending", "").Intake) != 2 {
+	show, history := view_(t, p, ViewRequest{View: "show"}).(*ShowAnswer), historyOf(t, p, "")
+	if len(show.Records) < 10 || len(history.Reviews) == 0 || len(todoOf(t, p).IntakePending) != 2 {
 		t.Fatalf("control: the rich fixture must hold records, reviews and intake, got %d records, %d reviews", len(show.Records), len(history.Reviews))
 	}
 	for _, r := range requests {
-		a, err := Read(p, r)
+		a, err := ReadView(p, r)
 		if err != nil {
-			t.Fatalf("control %s read must succeed: %v", r.Command, err)
+			t.Fatalf("control %s view must succeed: %v", r.View, err)
 		}
 		var exported bytes.Buffer
-		if err := RenderJSON(&exported, a); err != nil {
+		if err := RenderViewJSON(&exported, a); err != nil {
 			t.Fatal(err)
 		}
 		var v any
@@ -87,14 +88,14 @@ func TestEveryJSONAnswerKeyIsSnakeCase(t *testing.T) {
 			t.Fatal(err)
 		}
 		var upper []string
-		upperKeys(v, r.Command, &upper)
+		upperKeys(v, r.View, &upper)
 		if len(upper) > 0 {
 			sort.Strings(upper)
-			t.Errorf("%s %s exports %d keys with an uppercase letter; every field is snake_case: %s", r.Command, r.ID, len(upper), strings.Join(upper[:min(len(upper), 8)], ", "))
+			t.Errorf("%s %s exports %d keys with an uppercase letter; every field is snake_case: %s", r.View, r.ID, len(upper), strings.Join(upper[:min(len(upper), 8)], ", "))
 		}
 		root, _ := v.(map[string]any)
 		reviews, _ := root["reviews"].([]any)
-		intake, _ := root["intake"].([]any)
+		intake, _ := root["intake_pending"].([]any)
 		for _, packet := range intake {
 			if review := packet.(map[string]any)["review"]; review != nil {
 				reviews = append(reviews, review)
@@ -108,7 +109,7 @@ func TestEveryJSONAnswerKeyIsSnakeCase(t *testing.T) {
 				}
 			}
 			if len(self) != 1 || self[0] != "self_admission" {
-				t.Errorf("%s: a review must export exactly one self_admission key, got %v", r.Command, self)
+				t.Errorf("%s: a review must export exactly one self_admission key, got %v", r.View, self)
 			}
 		}
 	}

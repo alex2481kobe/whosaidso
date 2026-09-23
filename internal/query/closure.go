@@ -86,31 +86,6 @@ func locate(s reduce.Snapshot, n *ClosureNode) (reduce.Record, bool) {
 
 func locateOnly(s reduce.Snapshot, n *ClosureNode) { locate(s, n) }
 
-// resolve fills the view for an exact revision, or says why it cannot.
-func resolve(s reduce.Snapshot, n *ClosureNode) {
-	rec, ok := locate(s, n)
-	if !ok {
-		return
-	}
-	n.Corrections = correctionsOf(s, n.Ref)
-	switch rec.Kind {
-	case model.Task:
-		n.Task = describe(s, rec).Task
-	case model.Claim:
-		p, _ := s.ClaimAt(n.Ref)
-		v := claimView(s, p)
-		n.Claim = &v
-	case model.Decision:
-		p, _ := s.DecisionAt(n.Ref)
-		v := decisionView(s, p)
-		n.Decision = &v
-	case model.Instrument:
-		p, _ := s.InstrumentAt(n.Ref)
-		v, _ := instrumentView(s, p)
-		n.Instrument = &v
-	}
-}
-
 // edges are the authored mandatory links, then admitted supersessions and
 // corrections, in ledger order. cycles counts only for authored dependency
 // and supersession chains; a correction naming two records links them both ways.
@@ -180,12 +155,6 @@ func cyclePath(stack []model.RecordRef, back model.RecordRef) []model.RecordRef 
 		}
 	}
 	return []model.RecordRef{back}
-}
-
-// closure expands everything mandatory from root, then offers optional topic
-// refs, and only then applies limit (0 = none) to resolved optional nodes.
-func closure(s reduce.Snapshot, root model.RecordRef, limit int) Closure {
-	return closureWith(s, root, limit, resolve)
 }
 
 // closureWith is closure with the per-node fill chosen by the caller.

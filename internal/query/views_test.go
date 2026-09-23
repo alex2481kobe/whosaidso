@@ -63,12 +63,6 @@ func viewsWorld(t *testing.T, p store.Project) {
 var viewsNonTasks = []model.ID{testID(2), testID(5), testID(6), testID(8), testID(9), testID(14), testID(15), testID(10), testID(11), testID(20),
 	testID(21), testID(22), testID(30), testID(31), testID(32), testID(33)}
 
-func TestEveryOldSectionIsInItsNewHomeWithEveryTaskShape(t *testing.T) {
-	p := testProject(t)
-	viewsWorld(t, p)
-	checkSectionCoverage(t, coverageWorld{project: p, task: testID(1), nonTasks: viewsNonTasks, observed: richObservation(), stale: richStale})
-}
-
 func view_(t *testing.T, p store.Project, r ViewRequest) ViewAnswer {
 	t.Helper()
 	a, err := ReadView(p, r)

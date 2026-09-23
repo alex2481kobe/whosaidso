@@ -11,9 +11,9 @@ import (
 func TestHistoryPreservesRevisionsOrderSourcesAndIncomingReferences(t *testing.T) {
 	p := testProject(t)
 	readyControl(t, p)
-	control := readAnswer(t, p, "history", testID(1))
-	if len(control.History) != 1 || control.History[0].Event.Type != "task.create" {
-		t.Fatalf("control task history must contain its creation, got %+v", control.History)
+	control := historyOf(t, p, testID(1))
+	if len(control.Events) != 1 || control.Events[0].Event.Type != "task.create" {
+		t.Fatalf("control task history must contain its creation, got %+v", control.Events)
 	}
 	spec := testTask(1).Spec
 	spec.Intent = "Build U09 with explicit JSON export"
@@ -25,28 +25,28 @@ func TestHistoryPreservesRevisionsOrderSourcesAndIncomingReferences(t *testing.T
 			Length: 3, Speaker: model.Actor{UnknownReason: "speaker was not identified"}, Referents: []model.RecordRef{testRef(1, 1)}},
 		dependent, testTask(3),
 		&model.TaskStart{Task: testRef(1, 2), AttemptID: testID(70), Actor: model.Actor{ID: "worker"}})
-	a := readAnswer(t, p, "history", testID(1))
+	a := historyOf(t, p, testID(1))
 	types := []model.EventType{}
-	for _, event := range a.History {
+	for _, event := range a.Events {
 		types = append(types, event.Event.Type)
 	}
 	want := []model.EventType{"task.create", "task.amend", "source.intake", "task.create", "task.start"}
-	if !reflect.DeepEqual(types, want) || a.History[4].Origin != (reduce.Origin{Sequence: 2, EventIndex: 4}) {
-		t.Fatalf("history must retain creation, amendment, explicit source, incoming reference and start in ledger order, excluding unrelated task 3; got %+v", a.History)
+	if !reflect.DeepEqual(types, want) || a.Events[4].Origin != (reduce.Origin{Sequence: 2, EventIndex: 4}) {
+		t.Fatalf("history must retain creation, amendment, explicit source, incoming reference and start in ledger order, excluding unrelated task 3; got %+v", a.Events)
 	}
-	if a.History[0].CommandID != testID(100) || a.History[0].Admitter.ID != "reviewer" || a.Watermark.Sequence != 2 {
+	if a.Events[0].CommandID != testID(100) || a.Events[0].Admitter.ID != "reviewer" || a.Watermark.Sequence != 2 {
 		t.Fatalf("history event origins must be distinct from the query watermark, got %+v", a)
 	}
-	show := readAnswer(t, p, "show", testID(1))
+	show := showOf(t, p, testID(1))
 	if show.Records[0].Fact.Key.Revision != 2 || len(show.Records[0].Sources) != 1 || show.Records[0].Sources[0].Intake.Speaker.ID != "" {
 		t.Fatalf("current task must show revision 2 and its explicit source with unknown speaker, got %+v", show.Records)
 	}
-	if got := readAnswer(t, p, "show", testID(3)); len(got.Records[0].Sources) != 0 {
+	if got := showOf(t, p, testID(3)); len(got.Records[0].Sources) != 0 {
 		t.Fatalf("unrelated task must not borrow the neighboring source, got %+v", got.Records[0].Sources)
 	}
-	all := readAnswer(t, p, "history", "")
-	if len(all.History) != 6 {
-		t.Fatalf("unfiltered history must retain every admitted event, got %d", len(all.History))
+	all := historyOf(t, p, "")
+	if len(all.Events) != 6 {
+		t.Fatalf("unfiltered history must retain every admitted event, got %d", len(all.Events))
 	}
 }
 
@@ -58,11 +58,11 @@ func TestUnknownPrerequisiteAndUnknownAttemptHolderRemainExplicit(t *testing.T) 
 		Project: "another/project", RecordID: testID(1), Revision: 1}, WaiverPolicy: "forbid"}}
 	appendEvents(t, p, 101, dependent, &model.TaskStart{Task: testRef(1, 1), AttemptID: testID(70),
 		Actor: model.Actor{UnknownReason: "holder attribution was not supplied"}})
-	blocked := readAnswer(t, p, "show", testID(2)).Records[0].Task
+	blocked := showOf(t, p, testID(2)).Records[0].Task
 	if blocked.Status != reduce.StatusBlocked || blocked.Prerequisites[0].Truth != reduce.TruthUnknown || blocked.Reasons[0].Actor.ID != "" || blocked.Reasons[0].Actor.UnknownReason == "" {
 		t.Fatalf("cross-project dependency must remain BLOCKED/UNKNOWN without borrowing this project's actor, got %+v", blocked)
 	}
-	holder := readAnswer(t, p, "show", testID(1)).Records[0].Task.AttemptHolders[0].Actor
+	holder := showOf(t, p, testID(1)).Records[0].Task.AttemptHolders[0].Actor
 	if holder != (Unknown{"UNKNOWN", "holder attribution was not supplied"}) {
 		t.Fatalf("unknown attempt holder must not become the expected next actor, got %+v", holder)
 	}

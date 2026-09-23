@@ -61,18 +61,22 @@ func appendEvents(t *testing.T, project store.Project, n int, events ...model.Ty
 	}
 	return bundle
 }
-func readAnswer(t *testing.T, p store.Project, command string, id model.ID) Answer {
+func showOf(t *testing.T, p store.Project, id model.ID) *ShowAnswer {
 	t.Helper()
-	a, err := Read(p, Request{Command: command, ID: id})
-	if err != nil {
-		t.Fatalf("control %s read must succeed at its admitted prefix: %v", command, err)
-	}
-	return a
+	return view_(t, p, ViewRequest{View: "show", ID: id}).(*ShowAnswer)
+}
+func historyOf(t *testing.T, p store.Project, id model.ID) *HistoryAnswer {
+	t.Helper()
+	return view_(t, p, ViewRequest{View: "history", ID: id}).(*HistoryAnswer)
+}
+func todoOf(t *testing.T, p store.Project) *TodoAnswer {
+	t.Helper()
+	return view_(t, p, ViewRequest{View: "todo"}).(*TodoAnswer)
 }
 func readyControl(t *testing.T, p store.Project) {
 	t.Helper()
 	appendEvents(t, p, 100, testTask(1))
-	a := readAnswer(t, p, "show", testID(1))
+	a := showOf(t, p, testID(1))
 	if len(a.Records) != 1 || a.Records[0].Task.Status != reduce.StatusReady || a.Watermark.Sequence != 1 {
 		t.Fatalf("control admitted task must read READY at sequence 1, got %+v", a)
 	}
