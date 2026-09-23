@@ -57,7 +57,7 @@ type checkMember struct {
 func checkVerb(mode string) func(*flag.FlagSet) func(*call) error {
 	return func(fs *flag.FlagSet) func(*call) error {
 		jsonOutput := jsonFlag(fs)
-		var eventsPath, blob, output, digest, git string
+		var eventsPath, blob, output, digest, git, family, criterion string
 		var packets blobPaths
 		var actor func(*call) model.Actor
 		switch mode {
@@ -69,6 +69,8 @@ func checkVerb(mode string) func(*flag.FlagSet) func(*call) error {
 			fs.StringVar(&eventsPath, "events", "", "a JSON event array, dry-run as one uncaptured packet: a `FILE`, or - for stdin")
 			actor = actorFlag(fs)
 			fs.Var(&packets, "packet", "a captured packet `ID` to admit with the events (repeatable)")
+			fs.StringVar(&family, "family", "", "instead: the proof family of this claim `ID`'s current criterion, and a proof skeleton")
+			fs.StringVar(&criterion, "criterion", "", "--family: the criterion `ID`, when the claim has several")
 		case "disposal":
 			fs.StringVar(&digest, "digest", "", "the `SHA256` of the artifact a disposal would name (required)")
 			fs.StringVar(&git, "git", "", "the disposal's git pin, as `FORMAT:COMMIT:PATH`, when it names one")
@@ -77,7 +79,12 @@ func checkVerb(mode string) func(*flag.FlagSet) func(*call) error {
 			if err := noPositionals(c, "check "+mode); err != nil {
 				return err
 			}
-			if mode == "criterion" && eventsPath == "" || mode == "admission" && eventsPath == "" && len(packets) == 0 {
+			switch {
+			case family != "" && (eventsPath != "" || len(packets) > 0):
+				return usageError("datum check admission: --family lists a family; it takes no --events or --packet")
+			case criterion != "" && family == "":
+				return usageError("datum check admission: --criterion belongs to --family")
+			case mode == "criterion" && eventsPath == "" || mode == "admission" && family == "" && eventsPath == "" && len(packets) == 0:
 				return usageError("datum check %s needs --events", mode)
 			}
 			project, err := c.project()
@@ -101,6 +108,14 @@ func checkVerb(mode string) func(*flag.FlagSet) func(*call) error {
 				}
 				answer, header, text = a, &a.checkHeader, a.text
 			case "admission":
+				if family != "" {
+					a, err := familyCheck(c, project, family, criterion, actor(c))
+					if err != nil {
+						return err
+					}
+					answer, header, text = a, &a.checkHeader, a.text
+					break
+				}
 				a, err := admissionCheck(c.ctx, project, events, packets, actor(c))
 				if err != nil {
 					return err
@@ -123,7 +138,7 @@ func checkVerb(mode string) func(*flag.FlagSet) func(*call) error {
 				return err
 			}
 			switch header.Result {
-			case string(evidence.False), "would-refuse":
+			case string(evidence.False), "would-refuse", "family-mismatch":
 				return &exitError{code: 1}
 			case string(evidence.Unknown):
 				return &exitError{code: 3}

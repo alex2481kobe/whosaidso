@@ -49,6 +49,9 @@ func (t *boundTemplate) pin(spec string) error {
 	var ref model.ArtifactRef
 	var from string
 	var data []byte
+	if _, example := t.examples[path]; example && rev != "" {
+		return usageError("datum template: --pin %s: %s is an example output, which has no commit", name, path)
+	}
 	if rev != "" {
 		if ref, err = gitPin(t, root, path, rev); err != nil {
 			return err

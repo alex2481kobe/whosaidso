@@ -108,6 +108,9 @@ prerequisites (task.amend).
 	{"proof", "criterion first, the whole family, a verdict", `1. Fix the criterion (criterion.fix) and admit it in an EARLIER bundle than
    any run it judges; freezing is checked against Datum's capture stamp, not
    the started_at you write. Dry-run it first: datum check criterion.
+   datum template criterion.fix --claim C --example stdout=FILE
+   --pin expression.result_selector=stdout#/PTR pins an example run output
+   (an example, never an observation); the unit, target and the rest are yours.
 2. Run: datum run --attempt-id A --instrument I --claim C --claim-revision N
    --criterion-id K --criterion-revision N -- ARGV. ARGV runs without a
    shell (need a pipeline? -- sh -c '...'). One run carries one criterion.
@@ -115,8 +118,12 @@ prerequisites (task.amend).
    criterion's locator path resolves. Admit the start and seal.
 3. Prove: proof.admit lists the whole family, every run of the criterion
    including rejected runs and earlier revisions, each with a disposition,
-   and states verdict: supports or refutes. Dry-run it with
-   datum check admission --events proof.json, then capture and admit it.
+   and states verdict: supports or refutes. datum check admission --family C
+   lists that family as the gate counts it, with each run's criterion
+   verdict, and prints a proof skeleton (datum template proof.admit --claim C
+   fills the same); each disposition, reason, the judgment and the verdict
+   are yours. Dry-run it with datum check admission --events proof.json,
+   then capture and admit it.
 PROVEN needs a validated instrument (R9). A FAILING member can only be
 contradicts, or inapplicable with a code_change git verifies over the
 claim's scope (R14.2). Record a failing criterion with a refutes proof: the
@@ -131,11 +138,15 @@ An observer that died before sealing: datum reconcile --invocation-id ID
   datum check admission --events ev.json [--packet ID ...]
       admission dry run at watermark W: full gate, evidence and authority
       checks; result may change if the ledger moves
+  datum check admission --family CLAIM [--criterion ID]
+      proof family at watermark W, confirmed by an admission dry run;
+      dispositions, reasons, judgment and verdict were NOT chosen
   datum check disposal --digest SHA256 [--git FORMAT:COMMIT:PATH]
       disposal-loss preview at watermark W: admission recomputes and stays
       the authority; reasons are yours to write
 Each prints that scope first. None writes anything. Exit status: 0 TRUE or
-would-admit, 1 FALSE or would-refuse, 3 UNKNOWN. A TRUE criterion preview
+would-admit (or a listed family), 1 FALSE, would-refuse or a family the
+gate disagrees with, 3 UNKNOWN. A TRUE criterion preview
 is not an admission. Datum never deletes bytes (R11.1): an artifact.dispose
 records the loss, and check disposal lists what it must account for.
 `},

@@ -81,7 +81,12 @@ one completed run produced the candidate. Writes nothing. Exit 0 TRUE,
 through the admission gate at this watermark and collects every refusal the
 gate's stages allow, with each proof member's criterion verdict and its
 instrument's validation. The events packet carries no blobs. Writes nothing.
-Exit 0 would-admit, 1 would-refuse.
+Exit 0 would-admit, 1 would-refuse. --family CLAIM instead lists every run a
+proof of the claim's current criterion must name (earlier revisions and
+rejected runs included), confirms the list through the same dry run, shows
+each run's criterion verdict, and prints a proof skeleton whose
+dispositions, reasons, judgment and verdict stay placeholders. Exit 1 when
+the gate disagrees with the list.
 `, define: checkVerb("admission")},
 		{name: "check disposal", summary: "list what an artifact.dispose must record", detail: `Prints the support_loss targets an artifact.dispose of exactly this identity
 must record at this watermark, and the admitted events citing it. Give --git
@@ -98,7 +103,9 @@ evidence), --hold finds an open hold for blocker.clear. --pin NAME=PATH
 builds a reference from real bytes: PATH (project-relative) is a content pin
 (digest, length, a media type the bytes pass), PATH@REV the committed object
 (full commit, object format), #POINTER a json-pointer selector, else whole;
-a pinned file travels with --capture as a blob. Judgment never:
+a pinned file travels with --capture as a blob. --example OUTPUT=FILE lets
+--pin NAME=OUTPUT pin FILE's bytes under a run output's name, for a
+criterion's example (never an observation). Judgment never:
 assertions, falsifiers, blind spots, reasons, dispositions, verdicts,
 acceptance and validation stay placeholders; fill them with --set PATH=VALUE
 (paths as the notes print them, e.g. evidence[0].disposition) or by editing.

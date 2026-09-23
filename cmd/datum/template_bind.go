@@ -78,6 +78,7 @@ func templateVerb(fs *flag.FlagSet) func(*call) error {
 	fs.StringVar(&b.criterion, "criterion", "", "the criterion `ID`: its current revision (or the next, for criterion.fix)")
 	fs.StringVar(&b.attempt, "attempt", "", "the attempt `ID`: it and its task's reference")
 	fs.StringVar(&b.hold, "hold", "", "blocker.clear: the open hold's `ID`; its task is found")
+	fs.Var(&b.examples, "example", "a run output's example bytes: `OUTPUT=FILE`; --pin NAME=OUTPUT pins them under that output name (repeatable)")
 	fs.Var(&b.pins, "pin", "pin real bytes at a reference field: `NAME=PATH[@REV][#POINTER]`, content or git (repeatable)")
 	fs.Var(&b.sets, "set", "fill one field: `PATH=VALUE`, VALUE as JSON when it parses, else text (repeatable)")
 	actor := actorFlag(fs)
@@ -139,9 +140,26 @@ func (t *boundTemplate) fill(b templateBinds) error {
 	if err := t.bindLedger(b); err != nil {
 		return err
 	}
+	t.examples = map[string]string{}
+	for _, e := range b.examples {
+		output, file, ok := strings.Cut(e, "=")
+		if !ok || output == "" || file == "" {
+			return usageError("datum template: --example takes OUTPUT=FILE, got %q", e)
+		}
+		t.examples[output] = file
+	}
+	pinned := map[string]bool{}
 	for _, p := range b.pins {
 		if err := t.pin(p); err != nil {
 			return err
+		}
+		_, target, _ := strings.Cut(p, "=")
+		target, _, _ = strings.Cut(target, "#")
+		pinned[target] = true
+	}
+	for output := range t.examples {
+		if !pinned[output] {
+			return usageError("datum template: --example %s is pinned nowhere; pin it with --pin NAME=%s", output, output)
 		}
 	}
 	for _, s := range b.sets {

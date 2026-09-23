@@ -302,3 +302,11 @@ func allPlaceholders(node any) bool {
 	}
 	return false
 }
+
+// MarshalJSON writes the object in its own key order, for a tree placed in a
+// JSON answer (check admission --family's proof skeleton).
+func (o templateObject) MarshalJSON() ([]byte, error) {
+	var b bytes.Buffer
+	writeTemplateJSON(&b, o)
+	return b.Bytes(), nil
+}
