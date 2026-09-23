@@ -123,15 +123,14 @@ func (j ResponsibleJudgment) validate(p string) error {
 
 // ProofAdmit supplies U06/U12 the family and responsible judgment, not a writable
 // PROVEN. Family completeness, timing and unresolved contradiction are gate checks.
-// Verdict (R14.1) says which way the judgment goes: supports or refutes. The
-// admission gate requires it on every new proof; a proof admitted before R14.1
-// has none and reads as supports, which is the only verdict it could carry.
+// Verdict (R14.1) says which way the judgment goes: supports or refutes. Every
+// proof states it.
 type ProofAdmit struct {
 	Claim        RecordRef                `json:"claim"`
 	CriterionRef CriterionRef             `json:"criterion_ref"`
 	Evidence     []ObservationDisposition `json:"evidence"`
 	Judgment     ResponsibleJudgment      `json:"judgment"`
-	Verdict      string                   `json:"verdict,omitempty" semantic:"text"`
+	Verdict      string                   `json:"verdict" semantic:"text"`
 }
 
 // Proof verdicts (R14.1). Status stays projected from them, never written.
@@ -141,14 +140,11 @@ const (
 )
 
 // Refutes reports whether the proof's judgment is that the criterion failed.
-// An absent verdict is a legacy supports proof.
 func (e ProofAdmit) Refutes() bool { return e.Verdict == VerdictRefutes }
 
 func (e ProofAdmit) validate(p string) error {
-	if e.Verdict != "" {
-		if err := oneOf(e.Verdict, p+".verdict", "supports", "refutes"); err != nil {
-			return err
-		}
+	if err := oneOf(e.Verdict, p+".verdict", "supports", "refutes"); err != nil {
+		return err
 	}
 	if e.Claim != e.CriterionRef.Claim {
 		return invalid(p+".criterion_ref", "criterion must name the same exact assertion")
@@ -180,30 +176,27 @@ type ReviewAdmit struct {
 	Outcome string      `json:"outcome"`
 	Actor   Actor       `json:"actor"`
 	Reason  string      `json:"reason" semantic:"text"`
-	// SelfAdmission is a legacy stored author/admitter comparison. Admission no
-	// longer writes it and replay never consults it: the answer is computed from
-	// Authors and Actor (C39). It is still decoded and validated so committed
-	// history replays byte for byte: when present, every reviewed packet must
-	// have exactly one explicit state.
-	SelfAdmission map[ID]SelfAdmissionState `json:"self_admission,omitempty"`
 	// Invocations (R10.3) records, on a rejected or correction-requested review,
 	// each invocation.start/seal its packets carried: extracted facts, never the
 	// packet. A refused run stays a ledger-visible criterion family member, so
 	// proof validity never depends on which machine's intake holds its bytes.
 	Invocations []ReviewedInvocation `json:"invocations,omitempty"`
-	// Authors (R10.1 revised) binds each packet command ID to the Actor the
-	// packet was captured with, so who wrote an admitted act is in the ledger,
-	// not only in local intake. Omission is legacy and projects as unknown.
-	Authors map[ID]Actor `json:"authors,omitempty"`
-	// CapturedAt binds each packet command ID to the time Datum's intake
-	// stamped when it captured the packet; no author-facing input sets it.
-	// "Criterion frozen before the run" is decided against it, so the check
-	// replays from the ledger. Omission is legacy and projects as unknown.
-	CapturedAt map[ID]time.Time `json:"captured_at,omitempty"`
-	// EventPackets names, on an accepted review, the packet of each bundle
-	// event before this one, in bundle order. Admission orders packets by
-	// dependency, so the ledger cannot otherwise attribute an event to a packet.
-	EventPackets []ID `json:"event_packets,omitempty"`
+	// Authors (R10.1 revised) binds each reviewed packet's command ID to the
+	// Actor the packet was captured with, so who wrote an admitted act is in the
+	// ledger, not only in local intake. It covers every reviewed packet; an
+	// author nobody recorded is an unknown Actor with its reason.
+	Authors map[ID]Actor `json:"authors"`
+	// CapturedAt binds each reviewed packet's command ID to the time Datum's
+	// intake stamped when it captured the packet; no author-facing input sets
+	// it. "Criterion frozen before the run" is decided against it, so the check
+	// replays from the ledger. It covers every reviewed packet; a time nobody
+	// recorded is unknown with its reason.
+	CapturedAt map[ID]Availability[time.Time] `json:"captured_at"`
+	// EventPackets names the packet of each bundle event before this review,
+	// in bundle order: empty when no event precedes it. Admission orders
+	// packets by dependency, so the ledger cannot otherwise attribute an event
+	// to a packet.
+	EventPackets []ID `json:"event_packets"`
 }
 
 // ReviewedInvocation is one invocation event of a packet that was not accepted.
@@ -227,8 +220,9 @@ func EnvelopeDigest(env InvocationEnvelope) (Digest, error) {
 	return HashBytes(data), nil
 }
 
-// SelfAdmissionState records identity equality, not permission to admit.
-// Unknown means at least one actor was unknown, or a legacy review omitted it.
+// SelfAdmissionState records identity equality, not permission to admit. It
+// is projected from a review's recorded author and admitter, never stored.
+// Unknown means at least one actor was unknown.
 type SelfAdmissionState string
 
 const (
@@ -236,10 +230,6 @@ const (
 	SelfAdmissionFalse   SelfAdmissionState = "false"
 	SelfAdmissionUnknown SelfAdmissionState = "unknown"
 )
-
-func (s SelfAdmissionState) validate(p string) error {
-	return oneOf(string(s), p, "true", "false", "unknown")
-}
 
 func (e ReviewAdmit) validate(p string) error {
 	if len(e.Packets) == 0 {
@@ -252,20 +242,7 @@ func (e ReviewAdmit) validate(p string) error {
 		}
 		seen[r.CommandID] = true
 	}
-	if e.SelfAdmission != nil {
-		if len(e.SelfAdmission) != len(e.Packets) {
-			return invalid(p+".self_admission", "must cover exactly the reviewed packets")
-		}
-		for id, state := range e.SelfAdmission {
-			if !seen[id] {
-				return invalid(p+".self_admission", "names an unreviewed packet")
-			}
-			if Blank(e.Actor.ID) && state != SelfAdmissionUnknown {
-				return invalid(p+".self_admission", "an unknown admitter requires an unknown comparison")
-			}
-		}
-	}
-	if e.Authors != nil && len(e.Authors) != len(e.Packets) {
+	if len(e.Authors) != len(e.Packets) {
 		return invalid(p+".authors", "must cover exactly the reviewed packets")
 	}
 	// Each author Actor is checked by the schema walk like every other Actor.
@@ -274,7 +251,7 @@ func (e ReviewAdmit) validate(p string) error {
 			return invalid(p+".authors", "names an unreviewed packet")
 		}
 	}
-	if e.CapturedAt != nil && len(e.CapturedAt) != len(e.Packets) {
+	if len(e.CapturedAt) != len(e.Packets) {
 		return invalid(p+".captured_at", "must cover exactly the reviewed packets")
 	}
 	for id := range e.CapturedAt {

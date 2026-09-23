@@ -46,7 +46,7 @@ cannot see uncommitted changes.
 `, define: viewVerb("show")},
 		{name: "history", args: "[RECORD_ID]", summary: "admitted events in order, and per-packet reviews", detail: `With an ID: every revision and every event or run that names it. Without:
 every event and every per-packet review. --self-admitted cannot be combined
-with an ID; false excludes unknown, and legacy facts stay UNKNOWN.
+with an ID; false excludes unknown, and an unknown author stays UNKNOWN.
 `, define: viewVerb("history")},
 		{name: "capture", summary: "write a packet to immutable intake; publishes nothing", detail: `Reads a JSON array of typed events (datum template makes one). A
 source.intake is captured with its original bytes, from its reference or

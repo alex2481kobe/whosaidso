@@ -87,9 +87,11 @@ func TestPendingHonorsReviewEventsWithoutEnvelopePackets(t *testing.T) {
 			readyControl(t, p)
 			first, second := capturePacket(t, p, 2), capturePacket(t, p, 3)
 			// Reverse event order to check that packet output still sorts by ID.
+			refs := []model.PacketRef{second, first}
 			bundle := appendEvents(t, p, 101, &model.ReviewAdmit{
-				Packets: []model.PacketRef{second, first}, Outcome: outcome,
-				Actor: model.Actor{ID: "reviewer"}, Reason: "admitted event is authoritative"})
+				Packets: refs, Outcome: outcome,
+				Actor: model.Actor{ID: "reviewer"}, Reason: "admitted event is authoritative",
+				Authors: authoredBy("lane-a", refs), CapturedAt: uncaptured(refs), EventPackets: []model.ID{}})
 			if len(bundle.Packets) != 0 {
 				t.Fatal("fixture must omit envelope packet references")
 			}

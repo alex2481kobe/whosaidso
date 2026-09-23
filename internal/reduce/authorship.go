@@ -12,8 +12,9 @@ import (
 )
 
 // PacketAuthor is the packet an admitted event came from and the Actor that
-// packet was captured with. When the ledger does not say, Packet is omitted or
-// Author is an unknown Actor with its reason: never a guess from nearby facts.
+// packet was captured with. When the ledger does not attribute the event,
+// Packet is omitted and Author is an unknown Actor with its reason; an author
+// the review recorded as unknown stays unknown: never a guess from nearby facts.
 // The omitempty keeps an unattributed event from rendering a blank packet id.
 // Author is exported as "actor", so a record's author reads author.actor, not
 // author.author.
@@ -22,19 +23,7 @@ type PacketAuthor struct {
 	Author model.Actor `json:"actor"`
 }
 
-const (
-	unrecordedAuthor   = "the review that dispositioned this packet did not record its author"
-	unattributedAuthor = "the ledger does not attribute this event to a reviewed packet"
-)
-
-// reviewAuthor is one packet's recorded author, or an explicit unknown when a
-// legacy review omitted the whole map (validation forbids partial maps).
-func reviewAuthor(e *model.ReviewAdmit, packet model.ID) model.Actor {
-	if author, ok := e.Authors[packet]; ok {
-		return author
-	}
-	return model.Actor{UnknownReason: unrecordedAuthor}
-}
+const unattributedAuthor = "the ledger does not attribute this event to a reviewed packet"
 
 // attributeEvents binds each bundle event before an accepted review to the
 // packet that carried it. indexBundle has already checked the list covers
@@ -60,8 +49,7 @@ func (s Snapshot) EventAuthor(o Origin) PacketAuthor {
 
 // selfAdmission compares a packet's recorded author with the actor that
 // admitted it: TRUE only for the same known actor, FALSE for two distinct
-// known actors, UNKNOWN otherwise. Two unknown actors never match, and a
-// legacy stored comparison is never consulted.
+// known actors, UNKNOWN otherwise. Two unknown actors never match.
 func selfAdmission(author, admitter model.Actor) model.SelfAdmissionState {
 	switch {
 	case model.SameActor(author, admitter):

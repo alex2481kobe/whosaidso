@@ -85,7 +85,7 @@ func TestUnknownPacketAuthorIsRecordedAsUnknown(t *testing.T) {
 			if got := review.Authors[packet.CommandID]; got != f.author {
 				t.Fatalf("recorded author = %+v, want the captured unknown actor %+v", got, f.author)
 			}
-			if outcome != "accepted" && review.EventPackets != nil {
+			if outcome != "accepted" && (review.EventPackets == nil || len(review.EventPackets) != 0) {
 				t.Fatalf("a %s review attributed events it did not admit: %v", outcome, review.EventPackets)
 			}
 			r, _ := f.snapshot().Review(reduce.ReviewKey{Project: f.project.ID, CommandID: packet.CommandID})

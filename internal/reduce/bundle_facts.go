@@ -80,22 +80,21 @@ func first(m map[InvocationKey]int, k InvocationKey, i int) {
 }
 
 // indexReview records one review's attribution, authors, capture stamps and rejected
-// facts. An event_packets list must cover exactly the events before the
-// review, because a shorter or longer one would attribute an event to the
-// wrong author.
+// facts. An accepted review's event_packets must cover exactly the events
+// before it, because a shorter or longer list would attribute an event to the
+// wrong author; any other review's list is empty (model validation). A capture time the review records as unknown is not indexed,
+// so a start it carried is refused as uncaptured, never given a time.
 func (f *bundleFacts) indexReview(b model.Bundle, idx int, e *model.ReviewAdmit) error {
-	if e.EventPackets != nil {
-		if len(e.EventPackets) != idx {
-			return faultAt(CodeInvalidTransition, b.Sequence, idx, "event_packets",
-				fmt.Sprintf("names %d events but the review follows %d", len(e.EventPackets), idx))
-		}
-		for i, packet := range e.EventPackets {
-			f.packetOf[i] = packet
-		}
+	if e.Outcome == "accepted" && len(e.EventPackets) != idx {
+		return faultAt(CodeInvalidTransition, b.Sequence, idx, "event_packets",
+			fmt.Sprintf("names %d events but the review follows %d", len(e.EventPackets), idx))
+	}
+	for i, packet := range e.EventPackets {
+		f.packetOf[i] = packet
 	}
 	for packet, at := range e.CapturedAt {
-		if _, ok := f.captured[packet]; !ok {
-			f.captured[packet] = at.UTC()
+		if _, ok := f.captured[packet]; !ok && at.State == model.Known {
+			f.captured[packet] = at.Value.UTC()
 		}
 	}
 	for packet, author := range e.Authors {

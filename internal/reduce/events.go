@@ -246,9 +246,8 @@ func (s *state) reviewAdmit(b model.Bundle, idx int, o Origin, e *model.ReviewAd
 				invocations = append(invocations, inv)
 			}
 		}
-		// A stored self_admission (legacy) is decoded but never consulted:
-		// the answer is computed from the recorded author and the admitter.
-		author := reviewAuthor(e, p.CommandID)
+		// Validation makes authors cover exactly the reviewed packets.
+		author := e.Authors[p.CommandID]
 		s.reviews[key] = Review{Key: key, Packet: p, Outcome: e.Outcome, Actor: e.Actor, Reason: e.Reason, Origin: o,
 			SelfAdmission: selfAdmission(author, e.Actor), Invocations: invocations, Author: author}
 	}

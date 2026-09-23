@@ -44,6 +44,7 @@ func outsideProofFixture() ([]model.TypedEvent, model.InvocationEnvelope, *model
 	proof := &model.ProofAdmit{Claim: c.Claim, CriterionRef: *env.CriterionRef.Value,
 		Evidence: []model.ObservationDisposition{{InvocationRef: model.InvocationRef{Project: laneEReduceProject, InvocationID: env.InvocationID}, Disposition: "supports", Reason: "both measured poses satisfy the threshold"}},
 		Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "reviewer"}, Reason: "the complete fixture family satisfies its frozen criterion"},
+		Verdict:  model.VerdictSupports, // R18.2: every proof states its verdict.
 	}
 	return events, env, proof
 }

@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"datum/internal/evidence"
 	"datum/internal/model"
@@ -324,7 +325,9 @@ func TestAdmissionOnlyFirstGateOperations(t *testing.T) {
 			case "decision":
 				event = &model.DecisionOpen{ID: f.id(), Provenance: control.Provenance, Spec: model.DecisionSpec{Question: "may this be enabled", Options: []string{"yes", "no"}, WaitingActor: model.Actor{ID: "owner"}, Scope: control.Spec.Scope}}
 			case "review":
-				event = &model.ReviewAdmit{Packets: []model.PacketRef{{CommandID: f.id(), Digest: model.Digest(strings.Repeat("a", 64))}}, Outcome: "accepted", Actor: model.Actor{ID: "owner"}, Reason: "a packet cannot mint another admission"}
+				id := f.id()
+				event = &model.ReviewAdmit{Packets: []model.PacketRef{{CommandID: id, Digest: model.Digest(strings.Repeat("a", 64))}}, Outcome: "accepted", Actor: model.Actor{ID: "owner"}, Reason: "a packet cannot mint another admission",
+					Authors: map[model.ID]model.Actor{id: {ID: "owner"}}, CapturedAt: map[model.ID]model.Availability[time.Time]{id: {State: model.Unknown, Reason: "not recorded"}}, EventPackets: []model.ID{}}
 			}
 			f.refuse(f.request(f.capture(nil, f.task(), event)), "unavailable-until-integrated")
 		})

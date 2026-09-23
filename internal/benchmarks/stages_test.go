@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"datum/internal/model"
 	"datum/internal/query"
@@ -124,7 +125,9 @@ func TestFixtureMutations(t *testing.T) {
 				raw, e := model.DecodeEvent(copyOf[3].Events[1])
 				must(t, e)
 				review := raw.(*model.ReviewAdmit)
-				review.CapturedAt = nil
+				for packet := range review.CapturedAt {
+					review.CapturedAt[packet] = model.Availability[time.Time]{State: model.Unknown, Reason: "mutation: capture time unrecorded"}
+				}
 				copyOf[3].Events[1], e = model.EncodeEvent(review)
 				must(t, e)
 			}

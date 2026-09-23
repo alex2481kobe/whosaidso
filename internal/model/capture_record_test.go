@@ -13,7 +13,8 @@ import (
 func capturedReview() *ReviewAdmit {
 	e := authoredReview()
 	at := time.Date(2026, 9, 22, 20, 46, 24, 567286000, time.UTC)
-	e.CapturedAt = map[ID]time.Time{schemaID(1): at, schemaID(2): at.Add(time.Second), schemaID(3): at.Add(2 * time.Second)}
+	later, last := at.Add(time.Second), at.Add(2*time.Second)
+	e.CapturedAt = map[ID]Availability[time.Time]{schemaID(1): {State: Known, Value: &at}, schemaID(2): {State: Known, Value: &later}, schemaID(3): {State: Known, Value: &last}}
 	return e
 }
 
@@ -34,13 +35,20 @@ func TestReviewCapturedAtInvalidSchema(t *testing.T) {
 		name string
 		edit func(*ReviewAdmit)
 	}{
-		{"empty map", func(e *ReviewAdmit) { e.CapturedAt = map[ID]time.Time{} }},
+		{"omitted", func(e *ReviewAdmit) { e.CapturedAt = nil }},
+		{"empty map", func(e *ReviewAdmit) { e.CapturedAt = map[ID]Availability[time.Time]{} }},
 		{"missing packet", func(e *ReviewAdmit) { delete(e.CapturedAt, schemaID(2)) }},
 		{"wrong packet", func(e *ReviewAdmit) {
+			now := time.Now().UTC()
 			delete(e.CapturedAt, schemaID(2))
-			e.CapturedAt[schemaID(4)] = time.Now().UTC()
+			e.CapturedAt[schemaID(4)] = Availability[time.Time]{State: Known, Value: &now}
 		}},
-		{"zero time", func(e *ReviewAdmit) { e.CapturedAt[schemaID(1)] = time.Time{} }},
+		{"zero time", func(e *ReviewAdmit) {
+			var zero time.Time
+			e.CapturedAt[schemaID(1)] = Availability[time.Time]{State: Known, Value: &zero}
+		}},
+		{"known without a time", func(e *ReviewAdmit) { e.CapturedAt[schemaID(1)] = Availability[time.Time]{State: Known} }},
+		{"unknown without a reason", func(e *ReviewAdmit) { e.CapturedAt[schemaID(1)] = Availability[time.Time]{State: Unknown} }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := capturedReview()

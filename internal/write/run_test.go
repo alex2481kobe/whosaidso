@@ -276,14 +276,19 @@ func TestRunCommandFailureDoesNotEndAttempt(t *testing.T) {
 	for i := range carried {
 		carried[i] = runTestID(11)
 	}
-	refs, captured := []model.PacketRef{{CommandID: runTestID(11), Digest: model.HashBytes([]byte("fixture prefix"))}}, map[model.ID]time.Time{runTestID(11): time.Now().UTC()}
+	now := time.Now().UTC()
+	refs := []model.PacketRef{{CommandID: runTestID(11), Digest: model.HashBytes([]byte("fixture prefix"))}}
+	captured := map[model.ID]model.Availability[time.Time]{runTestID(11): {State: model.Known, Value: &now}}
+	authors := map[model.ID]model.Actor{runTestID(11): {ID: "coordinator"}}
 	for _, packet := range packets {
+		at := packet.CapturedAt
 		carried = append(carried, packet.CommandID)
 		refs = append(refs, model.PacketRef{CommandID: packet.CommandID, Digest: packet.RequestDigest})
-		captured[packet.CommandID] = packet.CapturedAt
+		captured[packet.CommandID] = model.Availability[time.Time]{State: model.Known, Value: &at}
+		authors[packet.CommandID] = packet.Author
 	}
 	review, err := model.EncodeEvent(&model.ReviewAdmit{Packets: refs, Outcome: "accepted", Actor: model.Actor{ID: "coordinator"},
-		Reason: "fixture admission", EventPackets: carried, CapturedAt: captured})
+		Reason: "fixture admission", EventPackets: carried, CapturedAt: captured, Authors: authors})
 	if err != nil {
 		t.Fatal(err)
 	}

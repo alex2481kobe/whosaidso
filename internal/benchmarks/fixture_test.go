@@ -139,7 +139,7 @@ func (f *fixture) append(blobs [][]byte, events ...model.TypedEvent) {
 		review, err := model.EncodeEvent(&model.ReviewAdmit{Packets: []model.PacketRef{ref},
 			Outcome: "accepted", Actor: reviewer, Reason: request.Reason,
 			Authors:    map[model.ID]model.Actor{packet.CommandID: author},
-			CapturedAt: map[model.ID]time.Time{packet.CommandID: packet.CapturedAt}, EventPackets: attribution})
+			CapturedAt: map[model.ID]model.Availability[time.Time]{packet.CommandID: known(packet.CapturedAt)}, EventPackets: attribution})
 		must(f.t, err)
 		// Use the same request identity shape as write.admissionDigest.
 		identity, err := model.Encode(struct {

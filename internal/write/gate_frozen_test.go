@@ -57,7 +57,7 @@ func TestCriterionFrozenAgainstCapture(t *testing.T) {
 				t.Fatal(err)
 			}
 			review := event.(*model.ReviewAdmit)
-			if got := review.CapturedAt[start.CommandID]; !got.Equal(packets[0].CapturedAt) || len(review.CapturedAt) != 1 {
+			if got := review.CapturedAt[start.CommandID]; got.State != model.Known || !got.Value.Equal(packets[0].CapturedAt) || len(review.CapturedAt) != 1 {
 				t.Fatalf("review recorded capture %v, intake stamped %v", review.CapturedAt, packets[0].CapturedAt)
 			}
 		})

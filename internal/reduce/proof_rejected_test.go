@@ -8,6 +8,7 @@ package reduce
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"datum/internal/model"
 )
@@ -28,6 +29,7 @@ func rejectedLedger(t *testing.T, outcome string, criterion model.CriterionRef) 
 	}
 	packet := model.PacketRef{CommandID: newID("PKR0"), Digest: model.HashBytes([]byte("rejected packet"))}
 	l.add(t, &model.ReviewAdmit{Packets: []model.PacketRef{packet}, Outcome: outcome, Actor: model.Actor{ID: "reviewer"}, Reason: "not canonical",
+		Authors: map[model.ID]model.Actor{packet.CommandID: {ID: "lane-a"}}, CapturedAt: map[model.ID]model.Availability[time.Time]{packet.CommandID: knownAt(baseTime)}, EventPackets: []model.ID{},
 		Invocations: []model.ReviewedInvocation{
 			{Packet: packet.CommandID, Event: "invocation.start", InvocationID: newID("RNR0"), CriterionRef: proofKnown(criterion), EnvelopeDigest: model.HashBytes([]byte("start"))},
 			{Packet: packet.CommandID, Event: "invocation.seal", InvocationID: newID("RNR0"), CriterionRef: proofKnown(criterion), EnvelopeDigest: model.HashBytes([]byte("seal"))},
@@ -97,6 +99,7 @@ func TestR10AcceptedReviewIsNeverARejectedRecord(t *testing.T) {
 	// An accepted review carrying invocation facts does not even validate.
 	packet := model.PacketRef{CommandID: newID("PKA0"), Digest: model.HashBytes([]byte("accepted packet"))}
 	_, err := model.EncodeEvent(&model.ReviewAdmit{Packets: []model.PacketRef{packet}, Outcome: "accepted", Actor: model.Actor{ID: "reviewer"}, Reason: "canonical",
+		Authors: map[model.ID]model.Actor{packet.CommandID: {ID: "lane-a"}}, CapturedAt: map[model.ID]model.Availability[time.Time]{packet.CommandID: knownAt(baseTime)}, EventPackets: []model.ID{},
 		Invocations: []model.ReviewedInvocation{{Packet: packet.CommandID, Event: "invocation.start", InvocationID: newID("RNA9"), CriterionRef: proofKnown(proofCriterion(claim)), EnvelopeDigest: model.HashBytes([]byte("x"))}}})
 	if f, ok := err.(*model.Fault); !ok || !strings.HasSuffix(f.Path, ".invocations") {
 		t.Fatalf("an accepted review recorded rejected-run facts: %v", err)

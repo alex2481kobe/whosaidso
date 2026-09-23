@@ -186,6 +186,28 @@ func fillTemplate(t *testing.T, eventType model.EventType, choices map[string]st
 	return filled
 }
 
+// unattributedReview empties a filled review.admit's event_packets unless it
+// is accepted: every review carries the list (R18.2), and only an accepted
+// review has events before it to attribute. A template skeleton always holds
+// one placeholder entry.
+func unattributedReview(t *testing.T, filled []byte) []byte {
+	t.Helper()
+	var tree []map[string]any
+	if err := json.Unmarshal(filled, &tree); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := tree[0]["data"].(map[string]any)
+	if tree[0]["type"] != "review.admit" || data["outcome"] == "accepted" {
+		return filled
+	}
+	data["event_packets"] = []any{}
+	out, err := json.Marshal(tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
 func decodeTemplate(data []byte) error {
 	events, err := model.DecodeEvents(data)
 	if err != nil {
@@ -238,7 +260,7 @@ func TestEveryChoiceMemberDecodesSomewhere(t *testing.T) {
 					if works[id] {
 						break
 					}
-					works[id] = decodeTemplate(fillTemplate(t, event.EventType(), map[string]string{loc.path: member}, keep)) == nil
+					works[id] = decodeTemplate(unattributedReview(t, fillTemplate(t, event.EventType(), map[string]string{loc.path: member}, keep))) == nil
 				}
 			}
 		}
@@ -459,16 +481,9 @@ func cliTree(t *testing.T, root string) string {
 	return strings.Join(lines, "\n")
 }
 
-// A key the model decodes when absent but admission requires reads
-// "required", never "optional"; the table entry must name a real omitempty
-// field, or it is a note about nothing.
-func TestTemplateRequiredKeysAreNotOptional(t *testing.T) {
-	for field, why := range templateRequired {
-		f, ok := field.owner.FieldByName(field.field)
-		if !ok || !strings.Contains(f.Tag.Get("json"), ",omitempty") || why == "" {
-			t.Errorf("%s.%s: a required entry must name an omitempty field and say why", field.owner, field.field)
-		}
-	}
+// R18.2: the model requires a proof's verdict, so the template never offers
+// to omit it, while a truly optional key still reads optional.
+func TestTemplateVerdictIsNotOptional(t *testing.T) {
 	_, notes, err := buildTemplate("proof.admit")
 	if err != nil {
 		t.Fatal(err)
@@ -477,11 +492,11 @@ func TestTemplateRequiredKeysAreNotOptional(t *testing.T) {
 	for _, n := range notes {
 		kinds[templatePath(n.Path)] = n.Kind
 	}
-	if kinds["verdict"] != "required" || kinds["evidence[0].code_change"] != "optional" {
-		t.Fatalf("verdict must read required and a truly optional key optional: %v", kinds)
+	if _, noted := kinds["verdict"]; noted || kinds["evidence[0].code_change"] != "optional" {
+		t.Fatalf("verdict must carry no optional note and a truly optional key must: %v", kinds)
 	}
-	if text := renderTemplateNotes("proof.admit", notes); !strings.Contains(text, "required verdict: required at admission") || strings.Contains(text, "optional verdict") {
-		t.Fatalf("the notes misstate verdict:\n%s", text)
+	if text := renderTemplateNotes("proof.admit", notes); strings.Contains(text, "optional verdict") {
+		t.Fatalf("the notes offer to omit verdict:\n%s", text)
 	}
 }
 

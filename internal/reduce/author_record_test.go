@@ -4,7 +4,9 @@ package reduce
 // Admission writing them is tested in internal/write/author_record_test.go.
 
 import (
+	"encoding/json"
 	"testing"
+	"time"
 
 	"datum/internal/model"
 )
@@ -15,7 +17,8 @@ func authoredDispose(t *testing.T, l *ledgerBuilder, d model.RecordRef, eventPac
 	t.Helper()
 	packet := newID("PKTD")
 	review := &model.ReviewAdmit{Packets: []model.PacketRef{{CommandID: packet, Digest: newDigest("dispose")}}, Outcome: "accepted",
-		Actor: model.Actor{ID: "coordinator"}, Reason: "reviewed", Authors: map[model.ID]model.Actor{packet: {ID: "lane-c2"}}, EventPackets: eventPackets}
+		Actor: model.Actor{ID: "coordinator"}, Reason: "reviewed", Authors: map[model.ID]model.Actor{packet: {ID: "lane-c2"}},
+		CapturedAt: map[model.ID]model.Availability[time.Time]{packet: knownAt(baseTime)}, EventPackets: eventPackets}
 	if eventPackets == nil {
 		review.EventPackets = []model.ID{packet}
 	}
@@ -39,25 +42,56 @@ func TestDispositionCarriesItsRecordedPacketAuthor(t *testing.T) {
 	}
 }
 
-func TestLegacyReviewProjectsAuthorsAsUnknown(t *testing.T) {
-	l := proofLedger(t, true)
+// R18.2: authors, captured_at and event_packets are required on every review;
+// an omitted one is refused, never read as unknown. An author recorded as
+// unknown stays unknown and is never replaced by the admitter or provenance.
+func TestReviewWithoutRequiredFieldsIsRefused(t *testing.T) {
 	d := ref(newID("DCSA"), 1)
-	open := l.add(t, &model.DecisionOpen{ID: d.RecordID, Provenance: provenance("author"), Spec: decisionSpec()})
 	packet := newID("PKTG")
-	l.add(t, &model.DecisionDispose{Decision: d, Disposition: "approved", Quote: "ship it", Scope: testScope(), Authority: rulingAuthority("owner")},
-		&model.ReviewAdmit{Packets: []model.PacketRef{{CommandID: packet, Digest: newDigest("legacy")}}, Outcome: "accepted", Actor: model.Actor{ID: "coordinator"}, Reason: "legacy"})
+	build := func(omit string) (*ledgerBuilder, model.Bundle) {
+		l := proofLedger(t, true)
+		l.add(t, &model.DecisionOpen{ID: d.RecordID, Provenance: provenance("author"), Spec: decisionSpec()})
+		before := len(l.out)
+		review := &model.ReviewAdmit{Packets: []model.PacketRef{{CommandID: packet, Digest: newDigest("unknown")}}, Outcome: "accepted",
+			Actor: model.Actor{ID: "coordinator"}, Reason: "reviewed",
+			Authors:      map[model.ID]model.Actor{packet: {UnknownReason: "not recorded at admission (before R10.1)"}},
+			CapturedAt:   map[model.ID]model.Availability[time.Time]{packet: {State: model.Unknown, Reason: "not recorded at admission (before R10.1)"}},
+			EventPackets: []model.ID{packet}}
+		dispose := &model.DecisionDispose{Decision: d, Disposition: "approved", Quote: "ship it", Scope: testScope(), Authority: rulingAuthority("owner")}
+		b := l.add(t, dispose, review)
+		if omit != "" {
+			raw := &l.out[before].Events[1]
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(raw.Data, &fields); err != nil {
+				t.Fatal(err)
+			}
+			delete(fields, omit)
+			data, err := json.Marshal(fields)
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw.Data = data
+		}
+		return l, b
+	}
+	l, b := build("")
 	s := mustReplay(t, l.out)
 	p, _ := s.DecisionAt(d)
-	if got := p.Dispositions[0].Author; got.Packet != "" || got.Author.ID != "" || got.Author.UnknownReason != unattributedAuthor {
-		t.Fatalf("legacy disposition author guessed: %+v", got)
+	if got := p.Dispositions[0].Author; got.Packet != packet || got.Author.ID != "" || got.Author.UnknownReason != "not recorded at admission (before R10.1)" {
+		t.Fatalf("control: an explicit unknown author must project unknown with its reason: %+v", got)
 	}
 	r, _ := s.Review(ReviewKey{Project: testProject, CommandID: packet})
-	if r.Author.ID != "" || r.Author.UnknownReason != unrecordedAuthor {
-		t.Fatalf("legacy review author guessed: %+v", r.Author)
+	if r.Author.ID != "" || r.SelfAdmission != model.SelfAdmissionUnknown {
+		t.Fatalf("control: the admitter stood in for an unknown author: %+v", r)
 	}
-	// Neither the admitter nor the provenance author stands in for a packet author.
-	if got := s.EventAuthor(Origin{Sequence: open.Sequence, EventIndex: 0}); got.Author.ID != "" {
-		t.Fatalf("an event without a recording review was attributed: %+v", got)
+	if got := s.EventAuthor(Origin{Sequence: b.Sequence, EventIndex: 1}); got.Author.ID != "" {
+		t.Fatalf("the review event itself was attributed: %+v", got)
+	}
+	for _, omit := range []string{"authors", "captured_at", "event_packets"} {
+		l, _ := build(omit)
+		if _, err := Replay(l.out); err == nil {
+			t.Fatalf("a review without %s replayed", omit)
+		}
 	}
 }
 

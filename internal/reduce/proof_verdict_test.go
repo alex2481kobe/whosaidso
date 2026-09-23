@@ -3,7 +3,7 @@ package reduce
 // R14.1 proof verdicts through Replay and Apply alike: a refutation lists the
 // contradicting runs of the current criterion revision, counts nothing as
 // support, projects REFUTED, and a later supports proof under a new revision
-// proves the claim again. A proof with no verdict is a legacy supports proof.
+// proves the claim again. A proof with no verdict is refused.
 // Whether a member really fails its criterion is artifact evaluation, tested
 // in internal/write.
 
@@ -43,15 +43,32 @@ func TestR141RefutationProjectsRefutedAndEstablishesNothing(t *testing.T) {
 	}
 }
 
-func TestR141LegacyProofWithoutVerdictReadsAsSupports(t *testing.T) {
+// R18.2: a proof without a verdict is refused, never read as supports: the
+// event cannot be encoded, and bytes that omit it do not replay.
+func TestR141ProofWithoutVerdictIsRefused(t *testing.T) {
 	l, claim, failed, _ := familyLedger(t, true)
-	legacy := admitProof(claim, newID("RNA1"))
-	legacy.Evidence = append(legacy.Evidence, member(failed.InvocationID, "inconclusive"))
-	if legacy.Verdict != "" {
-		t.Fatal("control: the fixture proof must carry no verdict")
+	proof := admitProof(claim, newID("RNA1"))
+	proof.Evidence = append(proof.Evidence, member(failed.InvocationID, "inconclusive"))
+	l.add(t, proof)
+	wantClaim(t, wantBoth(t, l, ""), claim, StatusProven) // control: the same proof with its verdict proves
+	proof.Verdict = ""
+	if _, err := model.EncodeEvent(proof); err == nil {
+		t.Fatal("a proof without a verdict encoded")
 	}
-	l.add(t, legacy)
-	wantClaim(t, wantBoth(t, l, ""), claim, StatusProven)
+	last := &l.out[len(l.out)-1]
+	for i := range last.Events {
+		if last.Events[i].Type != "proof.admit" {
+			continue
+		}
+		data := strings.Replace(string(last.Events[i].Data), `,"verdict":"supports"`, "", 1)
+		if data == string(last.Events[i].Data) {
+			t.Fatalf("control: the encoded proof carries no verdict to strip: %s", data)
+		}
+		last.Events[i].Data = []byte(data)
+	}
+	if _, err := Replay(l.out); err == nil {
+		t.Fatal("a proof without a verdict replayed")
+	}
 }
 
 func TestR141RefutationRefusals(t *testing.T) {
