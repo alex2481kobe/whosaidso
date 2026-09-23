@@ -85,17 +85,18 @@ func Reconcile(ctx context.Context, project store.Project, r ReconcileRequest) (
 // shut the real observation out as already sealed. Reconcile checks this when
 // it captures; the gate repeats it because the real seal can arrive later and
 // an UNKNOWN seal can be captured by hand. Packets reviewed in this admission
-// set are not pending.
-func gatePendingRealSeal(project store.Project, after reduce.Snapshot, env model.InvocationEnvelope) error {
+// set are not pending. The intake read is the admission's one shared
+// inventory (pendingIntake, gate_family.go).
+func gatePendingRealSeal(intake *pendingIntake, after reduce.Snapshot, env model.InvocationEnvelope) error {
 	if env.Outcome.State != model.Unknown {
 		return nil
 	}
-	intake, err := store.ReadIntake(project, nil)
+	packets, err := intake.all()
 	if err != nil {
 		return err
 	}
-	for _, packet := range intake {
-		if _, reviewed := after.Review(reduce.ReviewKey{Project: project.ID, CommandID: packet.CommandID}); reviewed {
+	for _, packet := range packets {
+		if _, reviewed := after.Review(reduce.ReviewKey{Project: intake.project.ID, CommandID: packet.CommandID}); reviewed {
 			continue
 		}
 		for _, raw := range packet.Events {

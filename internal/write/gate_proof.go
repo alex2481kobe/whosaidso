@@ -170,6 +170,8 @@ func gateWalkArtifacts(value reflect.Value, out *[]model.ArtifactRef) {
 // A dry run records each event's refusal and checks the next event too, and
 // asks each proof member's own questions as well (dryProofMembers).
 func gateProofs(ctx context.Context, project store.Project, after reduce.Snapshot, packets []model.Packet, dry *dryRun) error {
+	// One intake inventory for every check below, read only if one needs it.
+	intake := newPendingIntake(project)
 	for _, packet := range packets {
 		for _, raw := range packet.Events {
 			event, err := model.DecodeEvent(raw)
@@ -178,10 +180,10 @@ func gateProofs(ctx context.Context, project store.Project, after reduce.Snapsho
 			}
 			switch e := event.(type) {
 			case *model.InvocationSeal:
-				err = gatePendingRealSeal(project, after, e.Envelope)
+				err = gatePendingRealSeal(intake, after, e.Envelope)
 			case *model.ProofAdmit:
-				err = gateProofFamily(ctx, project, after, e)
-				dry.proofMembers(ctx, project, after, e)
+				err = gateProofFamily(ctx, project, after, intake, e)
+				dry.proofMembers(ctx, project, after, intake, e)
 			case *model.TaskClose:
 				err = gateClosureEffective(after, e)
 			}
