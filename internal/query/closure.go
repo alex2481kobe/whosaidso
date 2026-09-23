@@ -48,6 +48,7 @@ type Closure struct {
 
 type walker struct {
 	s     reduce.Snapshot
+	fill  func(reduce.Snapshot, *ClosureNode) // resolve, or locate when the caller describes nodes itself
 	nodes map[model.RecordRef]*ClosureNode
 	order []model.RecordRef
 	state map[model.RecordRef]int // 1 on the DFS stack, 2 finished
@@ -61,24 +62,36 @@ func (w *walker) node(from model.RecordRef, relation string, to model.RecordRef)
 		n = &ClosureNode{Ref: to, Via: []Edge{}, Corrections: []reduce.AdmittedCorrection{}}
 		w.nodes[to] = n
 		w.order = append(w.order, to)
-		resolve(w.s, n)
+		w.fill(w.s, n)
 	}
 	n.Via = append(n.Via, Edge{From: from, Relation: relation})
 	return n, !seen
 }
 
-// resolve fills the view for an exact revision, or says why it cannot.
-func resolve(s reduce.Snapshot, n *ClosureNode) {
+// locate finds the exact revision and its current revision, or says why it
+// cannot; it builds no view.
+func locate(s reduce.Snapshot, n *ClosureNode) (reduce.Record, bool) {
 	if n.Ref.Project != s.Project() {
 		n.Unresolved = &Unknown{"UNKNOWN", fmt.Sprintf("cross-project reference to %s is resolved on read, and that ledger is not read here", n.Ref.Project)}
-		return
+		return reduce.Record{}, false
 	}
 	rec, ok := s.Record(n.Ref)
 	if !ok {
 		n.Unresolved = &Unknown{"UNKNOWN", "no admitted record at this exact revision"}
-		return
+		return reduce.Record{}, false
 	}
 	n.Current, _ = s.CurrentRevision(reduce.Ident{Project: n.Ref.Project, ID: n.Ref.RecordID})
+	return rec, true
+}
+
+func locateOnly(s reduce.Snapshot, n *ClosureNode) { locate(s, n) }
+
+// resolve fills the view for an exact revision, or says why it cannot.
+func resolve(s reduce.Snapshot, n *ClosureNode) {
+	rec, ok := locate(s, n)
+	if !ok {
+		return
+	}
 	n.Corrections = correctionsOf(s, n.Ref)
 	switch rec.Kind {
 	case model.Task:
@@ -172,8 +185,13 @@ func cyclePath(stack []model.RecordRef, back model.RecordRef) []model.RecordRef 
 // closure expands everything mandatory from root, then offers optional topic
 // refs, and only then applies limit (0 = none) to resolved optional nodes.
 func closure(s reduce.Snapshot, root model.RecordRef, limit int) Closure {
+	return closureWith(s, root, limit, resolve)
+}
+
+// closureWith is closure with the per-node fill chosen by the caller.
+func closureWith(s reduce.Snapshot, root model.RecordRef, limit int, fill func(reduce.Snapshot, *ClosureNode)) Closure {
 	c := Closure{Root: root, Mandatory: []ClosureNode{}, Cycles: [][]model.RecordRef{}, Optional: []ClosureNode{}}
-	w := &walker{s: s, nodes: map[model.RecordRef]*ClosureNode{}, state: map[model.RecordRef]int{}, out: &c}
+	w := &walker{s: s, fill: fill, nodes: map[model.RecordRef]*ClosureNode{}, state: map[model.RecordRef]int{}, out: &c}
 	w.visit(root)
 	for _, ref := range w.order {
 		c.Mandatory = append(c.Mandatory, *w.nodes[ref])
@@ -197,7 +215,7 @@ func closure(s reduce.Snapshot, root model.RecordRef, limit int) Closure {
 		}
 		offered[ref] = true
 		n := ClosureNode{Ref: ref, Via: []Edge{{From: root, Relation: "context"}}, Corrections: []reduce.AdmittedCorrection{}}
-		resolve(s, &n)
+		fill(s, &n)
 		c.Limit.Offered++
 		if n.Unresolved == nil && limit > 0 && kept >= limit {
 			c.Limit.Omitted++

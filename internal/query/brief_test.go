@@ -59,28 +59,35 @@ func assertBriefAgrees(t *testing.T, a Answer) string {
 	if err := RenderBrief(&again, a); err != nil || again.String() != text.String() {
 		t.Fatalf("%s brief must render deterministically", a.Command)
 	}
-	decoder := json.NewDecoder(&exported)
+	b, err := brief(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkBriefFacts(t, a.Command, exported.Bytes(), text.String(), b.facts, a.Watermark.Sequence)
+	return text.String()
+}
+
+// checkBriefFacts is the agreement rule above over one export and its brief.
+func checkBriefFacts(t *testing.T, name string, exported []byte, text string, facts []BriefFact, sequence uint64) {
+	t.Helper()
+	decoder := json.NewDecoder(bytes.NewReader(exported))
 	decoder.UseNumber()
 	var root any
 	if err := decoder.Decode(&root); err != nil {
 		t.Fatal(err)
 	}
-	b, err := brief(a)
-	if err != nil {
-		t.Fatal(err)
+	if len(facts) == 0 || strings.Contains(text, "UNKNOWN(absent)") {
+		t.Fatalf("%s brief shows no facts or reads a path the JSON lacks:\n%s", name, text)
 	}
-	if len(b.facts) == 0 || strings.Contains(text.String(), "UNKNOWN(absent)") {
-		t.Fatalf("%s brief shows no facts or reads a path the JSON lacks:\n%s", a.Command, text.String())
-	}
-	for _, f := range b.facts {
+	for _, f := range facts {
 		where := strings.Join(f.Path, "/")
 		v, ok := jsonAt(t, root, f.Path)
 		if !ok {
-			t.Fatalf("%s brief shows %s from %s, which the JSON does not have", a.Command, f.Display, where)
+			t.Fatalf("%s brief shows %s from %s, which the JSON does not have", name, f.Display, where)
 		}
 		if f.Count {
 			if xs, isList := v.([]any); !isList || strconv.Itoa(len(xs)) != f.Display {
-				t.Fatalf("%s brief counts %s at %s, JSON has %v", a.Command, f.Display, where, v)
+				t.Fatalf("%s brief counts %s at %s, JSON has %v", name, f.Display, where, v)
 			}
 			continue
 		}
@@ -90,7 +97,7 @@ func assertBriefAgrees(t *testing.T, a Answer) string {
 		if isString && strings.HasPrefix(shown, `"`) {
 			unquoted := strings.TrimSuffix(shown, "…")
 			if err := json.Unmarshal([]byte(unquoted), &shown); err != nil {
-				t.Fatalf("%s brief quoted %q at %s undecodably", a.Command, f.Display, where)
+				t.Fatalf("%s brief quoted %q at %s undecodably", name, f.Display, where)
 			}
 			if f.Prefix {
 				shown += "…"
@@ -98,18 +105,17 @@ func assertBriefAgrees(t *testing.T, a Answer) string {
 		}
 		switch {
 		case f.Prefix && (!isString || !strings.HasSuffix(shown, "…") || !strings.HasPrefix(s, strings.TrimSuffix(shown, "…")) || s == strings.TrimSuffix(shown, "…")):
-			t.Fatalf("%s brief shows %q at %s as a cut of %s, but it is not a strict prefix", a.Command, f.Display, where, leaf)
+			t.Fatalf("%s brief shows %q at %s as a cut of %s, but it is not a strict prefix", name, f.Display, where, leaf)
 		case !f.Prefix && isString && shown != s, !f.Prefix && !isString && shown != string(leaf):
-			t.Fatalf("%s brief shows %q at %s, JSON has %s", a.Command, f.Display, where, leaf)
+			t.Fatalf("%s brief shows %q at %s, JSON has %s", name, f.Display, where, leaf)
 		}
-		if !strings.Contains(text.String(), f.Display) {
-			t.Fatalf("%s brief recorded %q but did not print it", a.Command, f.Display)
+		if !strings.Contains(text, f.Display) {
+			t.Fatalf("%s brief recorded %q but did not print it", name, f.Display)
 		}
 	}
-	if !strings.Contains(strings.SplitN(text.String(), "\n", 2)[0], "watermark sequence "+strconv.FormatUint(a.Watermark.Sequence, 10)) {
-		t.Fatalf("%s brief must open with its watermark, got %q", a.Command, text.String())
+	if !strings.Contains(strings.SplitN(text, "\n", 2)[0], "watermark sequence "+strconv.FormatUint(sequence, 10)) {
+		t.Fatalf("%s brief must open with its watermark, got %q", name, text)
 	}
-	return text.String()
 }
 
 func TestBriefAgreesWithJSONOnEveryPreset(t *testing.T) {

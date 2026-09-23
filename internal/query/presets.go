@@ -157,17 +157,23 @@ func nowPreset(s reduce.Snapshot, tasks taskBuckets) *Preset {
 func owedNow(tasks taskBuckets) []Attention {
 	out := []Attention{}
 	for _, r := range tasks.with(reduce.StatusBlocked) {
-		for _, reason := range r.Task.Reasons {
-			if reason.Kind == reduce.ReasonPrerequisite && reason.BlockerID == "" {
-				continue
-			}
-			why := reason.Kind + ": " + reason.Detail
-			if reason.BlockerID != "" {
-				why = fmt.Sprintf("%s hold %s: %s", reason.Kind, reason.BlockerID, reason.Detail)
-			}
-			out = append(out, Attention{Kind: "task-blocked-owed", Ref: asRef(r.Fact.Key), Label: label(r.Fact.Task.Intent),
-				Reason: why, WaitingActor: actor(reason.Actor)})
+		out = append(out, owedBy(asRef(r.Fact.Key), label(r.Fact.Task.Intent), r.Task.Reasons)...)
+	}
+	return out
+}
+
+// owedBy raises one blocked task's owed reasons, as owedNow describes.
+func owedBy(ref model.RecordRef, name string, reasons []reduce.BlockedReason) []Attention {
+	out := []Attention{}
+	for _, reason := range reasons {
+		if reason.Kind == reduce.ReasonPrerequisite && reason.BlockerID == "" {
+			continue
 		}
+		why := reason.Kind + ": " + reason.Detail
+		if reason.BlockerID != "" {
+			why = fmt.Sprintf("%s hold %s: %s", reason.Kind, reason.BlockerID, reason.Detail)
+		}
+		out = append(out, Attention{Kind: "task-blocked-owed", Ref: ref, Label: name, Reason: why, WaitingActor: actor(reason.Actor)})
 	}
 	return out
 }
@@ -211,18 +217,25 @@ func todoInto(s reduce.Snapshot, tasks taskBuckets, p *Preset, limit int) {
 }
 
 func closureAttention(c Closure, p *Preset) {
+	p.Attention = append(p.Attention, closureNotes(c)...)
+}
+
+// closureNotes raises every cycle and every unresolved link, mandatory or optional.
+func closureNotes(c Closure) []Attention {
+	out := []Attention{}
 	for _, cycle := range c.Cycles {
 		parts := []string{}
 		for _, r := range cycle {
 			parts = append(parts, fmt.Sprintf("%s@%d", r.RecordID, r.Revision))
 		}
-		p.Attention = append(p.Attention, Attention{Kind: "closure-cycle", Ref: c.Root, Label: "mandatory closure", Reason: strings.Join(parts, " -> ")})
+		out = append(out, Attention{Kind: "closure-cycle", Ref: c.Root, Label: "mandatory closure", Reason: strings.Join(parts, " -> ")})
 	}
 	for _, n := range append(append([]ClosureNode{}, c.Mandatory...), c.Optional...) {
 		if n.Unresolved != nil {
-			p.Attention = append(p.Attention, Attention{Kind: "unresolved-link", Ref: n.Ref, Label: "unresolved " + n.Via[0].Relation, Reason: n.Unresolved.Reason})
+			out = append(out, Attention{Kind: "unresolved-link", Ref: n.Ref, Label: "unresolved " + n.Via[0].Relation, Reason: n.Unresolved.Reason})
 		}
 	}
+	return out
 }
 
 func preset(project store.Project, s reduce.Snapshot, request Request, a *Answer) error {

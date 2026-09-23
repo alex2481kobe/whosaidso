@@ -18,24 +18,9 @@ func actor(a model.Actor) any {
 
 func describe(s reduce.Snapshot, fact reduce.Record) Record {
 	id := reduce.Ident{Project: fact.Key.Project, ID: fact.Key.ID}
-	r := Record{Fact: fact, Author: s.EventAuthor(fact.Origin), Sources: []reduce.Source{}}
+	r := Record{Fact: fact, Author: s.EventAuthor(fact.Origin)}
 	ref := model.RecordRef{Project: fact.Key.Project, RecordID: fact.Key.ID, Revision: fact.Key.Revision}
-	// The task view is the described revision's, so a closure node for an
-	// exact older revision never shows the current revision's prerequisites.
-	if p, ok := s.TaskAt(ref); ok {
-		outcome := string(p.Outcome)
-		if outcome == "" {
-			outcome = "UNKNOWN"
-		}
-		r.Task = &Task{Revision: p.Task.Revision, Status: p.Status, Outcome: outcome, Closure: p.Closure,
-			Attempts: p.Attempts, AttemptHolders: []Holder{}, Blockers: p.Blockers, Prerequisites: p.Prerequisites,
-			Reasons: p.Reasons, WaitingActors: p.WaitingActors, ExpectedNextActor: actor(p.NextActor), CommitsDenied: p.CommitsDenied}
-		for _, attempt := range p.Attempts {
-			if attempt.Live() {
-				r.Task.AttemptHolders = append(r.Task.AttemptHolders, Holder{attempt.Key, actor(attempt.Actor)})
-			}
-		}
-	}
+	r.Task = taskOf(s, ref)
 	r.Supersessions = supersessionsOf(s, ref)
 	// No evidence bytes or real-world scope were checked by this read slice.
 	support, _ := s.Support(ref, reduce.SupportContext{EvidenceAvailable: reduce.TruthUnknown, ScopeApplicable: reduce.TruthUnknown})
@@ -51,15 +36,44 @@ func describe(s reduce.Snapshot, fact reduce.Record) Record {
 		p.Support = support
 		r.Instrument, r.CurrentSupport = &p, support.Current()
 	}
-	for _, source := range s.Sources() {
+	r.Sources = sourcesIn(s.Sources(), id)
+	return r
+}
+
+// taskOf is the described revision's task view, so a closure node for an
+// exact older revision never shows the current revision's prerequisites.
+func taskOf(s reduce.Snapshot, ref model.RecordRef) *Task {
+	p, ok := s.TaskAt(ref)
+	if !ok {
+		return nil
+	}
+	outcome := string(p.Outcome)
+	if outcome == "" {
+		outcome = "UNKNOWN"
+	}
+	t := &Task{Revision: p.Task.Revision, Status: p.Status, Outcome: outcome, Closure: p.Closure,
+		Attempts: p.Attempts, AttemptHolders: []Holder{}, Blockers: p.Blockers, Prerequisites: p.Prerequisites,
+		Reasons: p.Reasons, WaitingActors: p.WaitingActors, ExpectedNextActor: actor(p.NextActor), CommitsDenied: p.CommitsDenied}
+	for _, attempt := range p.Attempts {
+		if attempt.Live() {
+			t.AttemptHolders = append(t.AttemptHolders, Holder{attempt.Key, actor(attempt.Actor)})
+		}
+	}
+	return t
+}
+
+// sourcesIn lists every captured source naming the identity as a referent.
+func sourcesIn(all []reduce.Source, id reduce.Ident) []reduce.Source {
+	out := []reduce.Source{}
+	for _, source := range all {
 		for _, target := range source.Intake.Referents {
 			if target.Project == id.Project && target.RecordID == id.ID {
-				r.Sources = append(r.Sources, source)
+				out = append(out, source)
 				break
 			}
 		}
 	}
-	return r
+	return out
 }
 
 // History is all revisions plus events that explicitly reference those

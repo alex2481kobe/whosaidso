@@ -175,10 +175,18 @@ func runs(s reduce.Snapshot, keep func(reduce.Invocation) bool) ([]RunView, []At
 		}
 		v := runView(s, inv)
 		out = append(out, v)
-		if v.Scope.WithinTaskScope == reduce.TruthFalse {
-			notes = append(notes, Attention{Kind: "run-outside-task-scope", Ref: v.Task.(model.RecordRef), Label: "run " + string(v.Invocation),
-				Reason: fmt.Sprintf("inputs outside declared source_paths: %s", strings.Join(v.Scope.Outside, ", "))})
+		if note, outside := runAttention(v); outside {
+			notes = append(notes, note)
 		}
 	}
 	return out, notes
+}
+
+// runAttention raises a run whose recorded inputs left its task's scope.
+func runAttention(v RunView) (Attention, bool) {
+	if v.Scope.WithinTaskScope != reduce.TruthFalse {
+		return Attention{}, false
+	}
+	return Attention{Kind: "run-outside-task-scope", Ref: v.Task.(model.RecordRef), Label: "run " + string(v.Invocation),
+		Reason: fmt.Sprintf("inputs outside declared source_paths: %s", strings.Join(v.Scope.Outside, ", "))}, true
 }

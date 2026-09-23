@@ -117,13 +117,19 @@ func validation(v model.Availability[model.InstrumentValidation]) Validation {
 }
 
 func instrumentView(s reduce.Snapshot, p reduce.InstrumentProjection) (InstrumentView, []Attention) {
-	ref, spec := asRef(p.Instrument), p.Spec
+	ref := asRef(p.Instrument)
 	rec, _ := s.Record(ref)
+	return instrumentViewFrom(p, rec.Provenance.Author, readSupport(s, ref).ActiveTrust)
+}
+
+// instrumentViewFrom is instrumentView over facts the caller already read.
+func instrumentViewFrom(p reduce.InstrumentProjection, author model.Actor, trust reduce.Truth) (InstrumentView, []Attention) {
+	ref, spec := asRef(p.Instrument), p.Spec
 	v := InstrumentView{Ref: ref, Label: label(spec.QuestionAnswered), Validation: validation(spec.Validation),
-		Trust: readSupport(s, ref).ActiveTrust, Withdrawals: nonNil(p.Withdrawals),
+		Trust: trust, Withdrawals: nonNil(p.Withdrawals),
 		QuestionAnswered: spec.QuestionAnswered, BlindTo: spec.BlindTo, NotAnswered: spec.NotAnswered,
 		ConfigSurface: nonNil(spec.ConfigSurface), DangerousDefaults: nonNil(spec.DangerousDefaults),
-		ValidRange: spec.ValidRange, ImplementationRef: spec.ImplementationRef, Author: actor(rec.Provenance.Author)}
+		ValidRange: spec.ValidRange, ImplementationRef: spec.ImplementationRef, Author: actor(author)}
 	var notes []Attention
 	if v.Validation.State != "KNOWN" {
 		notes = append(notes, Attention{Kind: "instrument-validation-unknown", Ref: ref, Label: v.Label, Reason: v.Validation.Reason})
@@ -150,29 +156,43 @@ func standing(p reduce.ClaimProjection, current reduce.Truth) (string, []string)
 }
 
 func claimView(s reduce.Snapshot, p reduce.ClaimProjection) ClaimView {
-	ref, spec := asRef(p.Claim), p.Spec
+	ref := asRef(p.Claim)
 	rec, _ := s.Record(ref)
-	support := readSupport(s, ref)
-	v := ClaimView{Ref: ref, Label: label(spec.Assertion), Status: p.Status, Assertion: spec.Assertion,
-		Falsifier: spec.Falsifier, Scope: spec.Scope, ExternalRefs: nonNil(spec.ExternalRefs),
-		Author: actor(rec.Provenance.Author), Observations: []RunView{}, Proofs: nonNil(p.Proofs),
-		Support: support, CurrentSupport: support.Current(),
-		Supersessions: supersessionsOf(s, ref), Corrections: correctionsOf(s, ref)}
-	v.Standing, v.Missing = standing(p, v.CurrentSupport)
+	v := claimViewFrom(p, rec.Provenance.Author, readSupport(s, ref), supersessionsOf(s, ref), correctionsOf(s, ref))
 	for _, inv := range p.Observations {
 		v.Observations = append(v.Observations, runView(s, inv))
 	}
 	return v
 }
 
+// claimViewFrom is claimView over facts the caller already read, with no
+// observations: the caller decides how its answer carries runs.
+func claimViewFrom(p reduce.ClaimProjection, author model.Actor, support reduce.SupportFacts,
+	supersessions []reduce.Supersession, corrections []reduce.AdmittedCorrection) ClaimView {
+	spec := p.Spec
+	v := ClaimView{Ref: asRef(p.Claim), Label: label(spec.Assertion), Status: p.Status, Assertion: spec.Assertion,
+		Falsifier: spec.Falsifier, Scope: spec.Scope, ExternalRefs: nonNil(spec.ExternalRefs),
+		Author: actor(author), Observations: []RunView{}, Proofs: nonNil(p.Proofs),
+		Support: support, CurrentSupport: support.Current(),
+		Supersessions: supersessions, Corrections: corrections}
+	v.Standing, v.Missing = standing(p, v.CurrentSupport)
+	return v
+}
+
 func decisionView(s reduce.Snapshot, p reduce.DecisionProjection) DecisionView {
-	ref, spec := asRef(p.Decision), p.Spec
+	ref := asRef(p.Decision)
 	rec, _ := s.Record(ref)
-	v := DecisionView{Ref: ref, Label: label(spec.Question), Status: p.Status, Question: spec.Question,
+	return decisionViewFrom(p, rec.Provenance.Author, readSupport(s, ref).Current(), supersessionsOf(s, ref), correctionsOf(s, ref))
+}
+
+// decisionViewFrom is decisionView over facts the caller already read.
+func decisionViewFrom(p reduce.DecisionProjection, author model.Actor, current reduce.Truth,
+	supersessions []reduce.Supersession, corrections []reduce.AdmittedCorrection) DecisionView {
+	spec := p.Spec
+	v := DecisionView{Ref: asRef(p.Decision), Label: label(spec.Question), Status: p.Status, Question: spec.Question,
 		Options: nonNil(spec.Options), WaitingActor: actor(spec.WaitingActor), Scope: spec.Scope,
-		Author: actor(rec.Provenance.Author), Rulings: nonNil(p.Dispositions),
-		CurrentSupport: readSupport(s, ref).Current(),
-		Supersessions:  supersessionsOf(s, ref), Corrections: correctionsOf(s, ref)}
+		Author: actor(author), Rulings: nonNil(p.Dispositions), CurrentSupport: current,
+		Supersessions: supersessions, Corrections: corrections}
 	if p.Status == reduce.StatusOpen {
 		v.Authorizes = "nothing: an open decision authorises no work"
 	}
@@ -194,8 +214,12 @@ func same(a, b model.RecordRef) bool { return a.Project == b.Project && a.Record
 
 // supersessionsOf lists every supersession naming this record identity on either side.
 func supersessionsOf(s reduce.Snapshot, ref model.RecordRef) []reduce.Supersession {
+	return supersessionsIn(s.Supersessions(), ref)
+}
+
+func supersessionsIn(all []reduce.Supersession, ref model.RecordRef) []reduce.Supersession {
 	out := []reduce.Supersession{}
-	for _, e := range s.Supersessions() {
+	for _, e := range all {
 		if same(e.Supersede.Prior, ref) || same(e.Supersede.Replacement, ref) {
 			out = append(out, e)
 		}
@@ -205,8 +229,12 @@ func supersessionsOf(s reduce.Snapshot, ref model.RecordRef) []reduce.Supersessi
 
 // correctionsOf lists every correction whose typed target or affected revisions name this record.
 func correctionsOf(s reduce.Snapshot, ref model.RecordRef) []reduce.AdmittedCorrection {
+	return correctionsIn(s.Corrections(), ref)
+}
+
+func correctionsIn(all []reduce.AdmittedCorrection, ref model.RecordRef) []reduce.AdmittedCorrection {
 	out := []reduce.AdmittedCorrection{}
-	for _, c := range s.Corrections() {
+	for _, c := range all {
 		if len(correctionTouches(c.Correction, ref)) > 0 {
 			out = append(out, c)
 		}
