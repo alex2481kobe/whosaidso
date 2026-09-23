@@ -63,11 +63,13 @@ func disposalWorld(t *testing.T) (string, model.ArtifactRef, []model.RecordRef) 
 	return "", model.ArtifactRef{}, nil
 }
 
+// fileStamps fingerprints every file under root except the disposable
+// snapshot cache's image and its temporaries, which a read may refresh.
 func fileStamps(t *testing.T, root string) map[string]string {
 	t.Helper()
 	stamps := map[string]string{}
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
-		if err != nil || entry.IsDir() {
+		if err != nil || entry.IsDir() || cacheImagePath(path) {
 			return err
 		}
 		info, err := entry.Info()
@@ -161,4 +163,10 @@ func TestCLIDisposalLossCarriesTheGitPinItWasGiven(t *testing.T) {
 	if got == nil || *got != (model.GitPin{ObjectFormat: "sha1", Commit: commit, Path: "docs/a.md"}) {
 		t.Fatalf("disposal-loss planned for %+v, not the git pin it was given", got)
 	}
+}
+
+// cacheImagePath reports the snapshot cache's image or one of its temporaries.
+func cacheImagePath(path string) bool {
+	name := filepath.Base(path)
+	return filepath.Base(filepath.Dir(path)) == "cache" && (name == "snapshot" || strings.HasPrefix(name, ".snapshot-"))
 }

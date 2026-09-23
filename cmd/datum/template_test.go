@@ -440,8 +440,8 @@ func cliTree(t *testing.T, root string) string {
 	var lines []string
 	for _, dir := range []string{root, filepath.Join(os.Getenv("HOME"), ".datum")} {
 		filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return nil
+			if err != nil || cacheImagePath(path) || info.IsDir() && path == filepath.Join(root, ".datum", "cache") {
+				return nil // the disposable snapshot cache may be refreshed by any read
 			}
 			data := []byte{}
 			if !info.IsDir() {

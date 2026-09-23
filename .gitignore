@@ -16,3 +16,7 @@ coverage.*
 # OS / editor
 .DS_Store
 *.swp
+
+# Datum's disposable snapshot cache, rebuilt from the ledger whenever it is
+# missing, stale or damaged. Never a record.
+.datum/cache/

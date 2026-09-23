@@ -16,6 +16,18 @@ import (
 	"datum/internal/store"
 )
 
+// replayed is a Source over any prefix, so a test can hand ReadFrom one older
+// than the ledger's.
+type replayed struct {
+	snapshot reduce.Snapshot
+	bundles  []model.Bundle
+}
+
+func (r replayed) Snapshot() reduce.Snapshot        { return r.snapshot }
+func (r replayed) Bundles() ([]model.Bundle, error) { return r.bundles, nil }
+
+func replay(p store.Project) (Source, error) { return store.Replayed(p) }
+
 // countingSource records whether a view asked for raw bundles.
 type countingSource struct {
 	Source

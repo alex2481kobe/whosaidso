@@ -118,12 +118,14 @@ type Packet struct {
 
 // Read selects the immutable ledger prefix once. Intake is a separate visible
 // inventory, read afterwards; its dispositions are always relative to this
-// answer's watermark, never a later ledger read. No generated files are read.
+// answer's watermark, never a later ledger read. The only generated file read
+// is the snapshot cache, and only after every byte of the prefix it was folded
+// from is checked (store.Load); deleting it changes no answer.
 func Read(project store.Project, request Request) (Answer, error) {
 	if err := checkRequest(request); err != nil {
 		return Answer{}, err
 	}
-	source, err := replay(project)
+	source, err := store.Load(project)
 	if err != nil {
 		return Answer{}, err
 	}
