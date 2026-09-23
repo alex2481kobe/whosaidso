@@ -111,9 +111,12 @@ prerequisites (task.amend).
    datum template criterion.fix --claim C --example stdout=FILE
    --pin expression.result_selector=stdout#/PTR pins an example run output
    (an example, never an observation); the unit, target and the rest are yours.
-2. Run: datum run --attempt-id A --instrument I --claim C --claim-revision N
-   --criterion-id K --criterion-revision N -- ARGV. ARGV runs without a
-   shell (need a pipeline? -- sh -c '...'). One run carries one criterion.
+2. Run: datum run --attempt-id A --instrument I --claim C -- ARGV. Omitted
+   revisions (and the criterion, when the claim has one) resolve to the
+   current admitted ones; the run records and prints them. Name
+   --claim-revision or --criterion-revision only to pin an older one. ARGV
+   runs without a shell (need a pipeline? -- sh -c '...'). One run carries
+   one criterion.
    Its stdout is the output named stdout, in the run's own directory, where a
    criterion's locator path resolves. Admit the start and seal.
 3. Prove: proof.admit lists the whole family, every run of the criterion
@@ -144,11 +147,11 @@ An observer that died before sealing: datum reconcile --invocation-id ID
   datum check disposal --digest SHA256 [--git FORMAT:COMMIT:PATH]
       disposal-loss preview at watermark W: admission recomputes and stays
       the authority; reasons are yours to write
-Each prints that scope first. None writes anything. Exit status: 0 TRUE or
-would-admit (or a listed family), 1 FALSE, would-refuse or a family the
-gate disagrees with, 3 UNKNOWN. A TRUE criterion preview
-is not an admission. Datum never deletes bytes (R11.1): an artifact.dispose
-records the loss, and check disposal lists what it must account for.
+Each prints that scope first. None writes anything. Exit status: 0 TRUE,
+would-admit or a listed family; 1 FALSE, would-refuse or a family the gate
+disagrees with; 3 UNKNOWN. A TRUE criterion preview is not an admission.
+Datum never deletes bytes (R11.1): an artifact.dispose records the loss,
+and check disposal lists what it must account for.
 `},
 	{"stale", "re-measuring after a code change", `datum show --stale adds, per observed current claim, stale TRUE, FALSE or
 UNKNOWN with the reason: whether code under the claim's scope changed
@@ -184,7 +187,7 @@ to a scratch directory to rehearse without touching the real ones.
 - Tests read a fixed ledger prefix, never the live head; commit ledger
   bundles only after the full test run.
 - Quote shell variables. An error naming a flag as a value (--claim
-  --claim-revision) is word-splitting; in zsh a variable holding two ids is
+  --attempt-id) is word-splitting; in zsh a variable holding two ids is
   one argument, use an array.
 - Flags go before or after positional ids: datum show ID --json works.
 - Exit status: 0 ok, 1 refused or false, 2 usage, 3 UNKNOWN (check), 4

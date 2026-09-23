@@ -68,7 +68,14 @@ reassignment criterion and actor.
 		{name: "run", args: "-- ARGV", summary: "run a measurement; capture its start and seal", detail: `Runs ARGV in this checkout without a shell, and captures the start (before
 launch) and the seal as two packets; admit both, or pass --admit. The
 instrument and any criterion must already be admitted, the criterion in an
-earlier bundle. A failed run still prints its packets: it is evidence.
+earlier bundle. What of the criterion is omitted resolves once, before
+launch, to the current admitted one: the claim that alone carries
+--criterion-id, the claim's current revision, its one criterion, that
+criterion's highest revision there. A named revision is checked, never
+replaced; an omission with no single answer is refused with the candidates.
+The exact revisions are recorded, and printed on stderr when any was
+omitted; the acknowledgement prints the admit command for the packets. A
+failed run still prints its packets: it is evidence.
 `, define: runVerb},
 		{name: "reconcile", summary: "seal a run whose observer died, outcome UNKNOWN", detail: `Captures an UNKNOWN-outcome seal with no reading for an admitted, unsealed
 run. It needs an identified actor. Admit its packet with datum admit.
