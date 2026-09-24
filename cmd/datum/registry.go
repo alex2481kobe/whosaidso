@@ -30,8 +30,13 @@ func init() {
 			define: helpVerb},
 		{name: "todo", summary: "everything owed, in flight first", detail: `Sections: in flight (with each task's runs), awaiting acceptance (with its
 accepter, or anyone), blocked (typed reasons, who it waits on), ready (the
-only section --limit cuts), open decisions, intake pending (unreviewed,
-rejected and correction-requested packets with their review), attention.
+only section --limit cuts), open decisions, intake by what its review says
+is owed: unreviewed packets await review; correction-requested ones await
+their author's corrected packet; rejected ones owe nothing and are only
+counted (datum history lists their reviews), attention. --json keeps every
+packet not accepted in intake_pending, each with its disposition, and
+totals counts intake_unreviewed, intake_correction_requested and
+intake_rejected.
 `, define: viewVerb("todo")},
 		{name: "continue", args: "RECORD_ID", summary: "resume any record: detail, closure, what is owed", detail: `Any kind of record. A task adds its progress, every attempt, every run and
 what is owed, item by item for a plan. Every kind gets its mandatory closure

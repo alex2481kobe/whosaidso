@@ -117,11 +117,11 @@ func familyConfirm(ctx context.Context, project store.Project, ref model.Criteri
 	if err != nil {
 		return nil, nil, err
 	}
-	packet, err := write.UncapturedPacket(project, familyProbe, []model.Event{event})
+	packet, err := write.UncapturedPacket(project, familyProbe, []model.Event{event}, nil)
 	if err != nil {
 		return nil, nil, err
 	}
-	check, err := write.CheckAdmission(ctx, project, nil, []model.Packet{packet}, familyProbe)
+	check, err := write.CheckAdmission(ctx, project, nil, []write.Uncaptured{packet}, familyProbe)
 	if err != nil {
 		return nil, nil, err
 	}

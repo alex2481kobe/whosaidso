@@ -21,7 +21,8 @@ import (
 )
 
 // readContent finds a copy of the pinned bytes and verifies it. Locators are
-// tried in authored order, then the deterministic artifact store. A copy that
+// tried in authored order, then the deterministic artifact store (or the
+// Staged bytes standing in for its copy). A copy that
 // does not hash to the pin is not the artifact, so it is skipped and reported
 // rather than returned.
 func (r *Resolver) readContent(c model.ContentPin) ([]byte, Origin, string, error) {
@@ -37,7 +38,7 @@ func (r *Resolver) readContent(c model.ContentPin) ([]byte, Origin, string, erro
 
 	var notes []string
 	for _, cd := range cands {
-		b, err := r.readFile(cd.declared)
+		b, err := r.readCopy(cd.declared, cd.origin, c.SHA256)
 		if err != nil {
 			notes = append(notes, cd.declared+": "+err.Error())
 			continue
@@ -118,6 +119,19 @@ func (r *Resolver) maxBytes() int64 {
 		return DefaultMaxBytes
 	}
 	return r.MaxBytes
+}
+
+// readCopy reads one candidate copy. The store's copy of a staged digest is
+// the staged bytes, held to the same size limit as a file in the store.
+func (r *Resolver) readCopy(declared string, origin Origin, digest model.Digest) ([]byte, error) {
+	staged, ok := r.Staged[digest]
+	if !ok || origin != OriginArtifactStore {
+		return r.readFile(declared)
+	}
+	if int64(len(staged)) > r.maxBytes() {
+		return nil, fmt.Errorf("%d bytes exceeds the resolver limit of %d", len(staged), r.maxBytes())
+	}
+	return staged, nil
 }
 
 func (r *Resolver) readFile(rel string) ([]byte, error) {

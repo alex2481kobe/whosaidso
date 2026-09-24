@@ -173,7 +173,7 @@ func TestTodoFilesEachOwedTaskOnceInFlightFirst(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("todo sections = %v, want %v", got, want)
 	}
-	if a.Totals.Tasks != 7 || a.Totals.OpenDecisions != 3 || a.Totals.IntakePending != 2 || len(a.OpenDecisions) != 3 {
+	if a.Totals.Tasks != 7 || a.Totals.OpenDecisions != 3 || a.Totals.IntakeUnreviewed != 1 || a.Totals.IntakeRejected != 1 || a.Totals.IntakeCorrectionRequested != 0 || len(a.OpenDecisions) != 3 {
 		t.Fatalf("totals must count each task identity once: %+v", a.Totals)
 	}
 	if a.AwaitingAcceptance[0].Accepter != (model.Actor{ID: "owner"}) || a.AwaitingAcceptance[1].Accepter != "anyone" {

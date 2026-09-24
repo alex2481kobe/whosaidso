@@ -126,12 +126,12 @@ func TestCheckAdmissionOfAnUncapturedPacketCapturesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	packet, err := UncapturedPacket(w.f.project, w.f.author, []model.Event{event})
+	packet, err := UncapturedPacket(w.f.project, w.f.author, []model.Event{event}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	before := checkTree(t, w.f)
-	check, err := CheckAdmission(context.Background(), w.f.project, nil, []model.Packet{packet}, w.f.author)
+	check, err := CheckAdmission(context.Background(), w.f.project, nil, []Uncaptured{packet}, w.f.author)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,8 +173,8 @@ func TestRefusalNamesNoUnwrittenBundle(t *testing.T) {
 }
 
 // A run still in intake: admission would copy its captured output into the
-// artifact store before evaluating it. The dry run copies nothing, and says so
-// where that is why a reference did not resolve.
+// artifact store before evaluating it. The dry run copies nothing, and still
+// evaluates the run over those bytes, held in memory, as admission would.
 func TestCheckAdmissionWithPendingRunCopiesNoBlob(t *testing.T) {
 	w := newProofWorld(t, true)
 	// Bytes no earlier admission stored, so preserving them would show on disk.
@@ -192,8 +192,14 @@ func TestCheckAdmissionWithPendingRunCopiesNoBlob(t *testing.T) {
 	if after := checkTree(t, w.f); after != before {
 		t.Fatalf("the dry run preserved or published:\nbefore\n%s\nafter\n%s", before, after)
 	}
-	if len(check.Unpreserved) == 0 {
-		t.Fatalf("the pending run's output is what admission would preserve: %+v", check)
+	for _, m := range check.Members {
+		if m.Invocation == pass && m.Verdict != "TRUE" {
+			t.Fatalf("the pending run's own output must be read as admission reads it: %+v", m)
+		}
+	}
+	_, admitErr := Admit(context.Background(), w.f.project, w.f.request(start, seal, proof))
+	if admitErr == nil || len(check.Refusals) == 0 || check.Refusals[0].Err.Error() != admitErr.Error() {
+		t.Fatalf("the check's first refusal must be admission's %v: %+v", admitErr, check.Refusals)
 	}
 	counter := map[string]bool{}
 	for _, r := range check.Refusals {

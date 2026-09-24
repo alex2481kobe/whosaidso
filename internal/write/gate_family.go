@@ -20,7 +20,7 @@ import (
 	"datum/internal/store"
 )
 
-func gateProofFamily(ctx context.Context, project store.Project, after reduce.Snapshot, intake *pendingIntake, e *model.ProofAdmit) error {
+func gateProofFamily(ctx context.Context, project store.Project, after reduce.Snapshot, intake *pendingIntake, e *model.ProofAdmit, dry *dryRun) error {
 	criterion, ok := after.Criterion(e.CriterionRef)
 	if !ok {
 		return admissionFault("unknown-reference", "criterion_ref", "proof names no admitted criterion")
@@ -35,7 +35,7 @@ func gateProofFamily(ctx context.Context, project store.Project, after reduce.Sn
 	if err := gatePendingIntake(intake, after, carries); err != nil {
 		return err
 	}
-	resolver := evidence.NewResolverAt(project.Root, project.ArtifactDir())
+	resolver := dry.resolver(project)
 	supports := []evidence.Observation{}
 	for i, member := range e.Evidence {
 		path := fmt.Sprintf("evidence[%d]", i)
