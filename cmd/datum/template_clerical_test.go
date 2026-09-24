@@ -5,6 +5,7 @@ package main
 // drops the others nobody filled, an optional key the author left unfilled is
 // omitted (and --set PATH=null omits it on purpose), and a template handback
 // defaults commits_denied and reconciliation_owed to false as the verb does.
+// Also capture --events naming the ids its events create (item 65).
 
 import (
 	"encoding/json"
@@ -108,5 +109,41 @@ func TestHandbackAndCloseNeedOnlyJudgment(t *testing.T) {
 	boundCapture(t, f.root, close...)
 	if _, closed := boundSnapshot(t, f.root).Closure(reduce.Ident{Project: "test/cli", ID: f.task}); !closed {
 		t.Fatal("the close with its authority omitted must admit and close the task")
+	}
+}
+
+// capture --events names the ids its events create, every element of an
+// array included; a criterion.fix past revision 1 creates no id.
+func TestCaptureNamesTheIDsItsEventsCreate(t *testing.T) {
+	root, data := cliFixture(t)
+	_, errs, code := cliRun(t, root, data, "lane", "capture")
+	if code != 0 || !strings.Contains(errs, "new      task.create id = "+string(cliID(1))+"\n") ||
+		!strings.Contains(errs, "new      task.create spec.acceptance_criteria[0].id = "+string(cliID(2))+"\n") {
+		t.Fatalf("capture must name the task and criterion ids it creates: %d %q", code, errs)
+	}
+	two := []model.Event{{Type: "task.create", Data: json.RawMessage(`{"id":"A","spec":{"acceptance_criteria":[{"id":"B"},{"id":"C"}]}}`)}}
+	if got := strings.Join(createdIDs(two), "|"); got != "new      task.create id = A|new      task.create spec.acceptance_criteria[0].id = B|new      task.create spec.acceptance_criteria[1].id = C" {
+		t.Fatalf("every acceptance criterion's id is named: %s", got)
+	}
+	f := boundWorld(t)
+	printed, _, code := cliRun(t, f.root, nil, "lane", "template", "criterion.fix", "--criterion", string(f.criterion), "--set", "source_refs=[]")
+	if code != 0 {
+		t.Fatal("control: the revision-2 criterion prints")
+	}
+	if _, errs, code := cliRun(t, f.root, []byte(printed), "lane", "capture"); code != 0 || strings.Contains(errs, "new ") {
+		t.Fatalf("a later criterion revision reuses its id, so none is new: %d %q", code, errs)
+	}
+	printed, _, _ = cliRun(t, f.root, nil, "lane", "template", "criterion.fix", "--claim", string(f.claim))
+	tree, err := templateValue([]byte(printed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, _ := templateGet(tree, []templateStep{{index: 0}, {key: "data", index: -1}, {key: "criterion_id", index: -1}})
+	var events []model.Event
+	if err := json.Unmarshal([]byte(printed), &events); err != nil {
+		t.Fatal(err)
+	}
+	if got := createdIDs(events); len(got) != 1 || got[0] != fmt.Sprintf("new      criterion.fix criterion_id = %v", id) {
+		t.Fatalf("a revision-1 criterion's id is new: %v", got)
 	}
 }

@@ -111,6 +111,31 @@ func templateGet(node any, steps []templateStep) (any, bool) {
 	return node, true
 }
 
+// templateGetAll reads every value at path, an index 0 standing for every
+// element (as template notes print paths), as [concrete path, value] pairs.
+func templateGetAll(node any, steps []templateStep, at string) [][2]any {
+	if len(steps) == 0 {
+		return [][2]any{{at, node}}
+	}
+	s := steps[0]
+	var out [][2]any
+	switch n := node.(type) {
+	case templateObject:
+		for _, m := range n {
+			if s.index < 0 && m.key == s.key {
+				out = append(out, templateGetAll(m.value, steps[1:], joinStep(at, s))...)
+			}
+		}
+	case []any:
+		for i, v := range n {
+			if s.index == 0 || s.index == i {
+				out = append(out, templateGetAll(v, steps[1:], joinStep(at, templateStep{index: i}))...)
+			}
+		}
+	}
+	return out
+}
+
 func joinStep(at string, s templateStep) string {
 	if s.index >= 0 {
 		return fmt.Sprintf("%s[%d]", at, s.index)

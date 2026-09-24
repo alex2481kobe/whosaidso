@@ -66,10 +66,11 @@ func (t *boundTemplate) capture(admit bool, reason string) error {
 	if err != nil {
 		return err
 	}
-	ref, count, err := captureCLI(t.c.ctx, project, "", t.author, "-", t.blobs, bytes.NewReader(data))
+	ref, events, err := captureCLI(t.c.ctx, project, "", t.author, "-", t.blobs, bytes.NewReader(data))
 	if err != nil {
 		return err
 	}
+	count := len(events)
 	// The ids this event created, so the next command can name them.
 	for _, n := range t.notes {
 		if n.Kind != "minted" || t.putPaths[templatePath(n.Path)] {
