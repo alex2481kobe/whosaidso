@@ -39,9 +39,11 @@ type TodoTask struct {
 
 // TodoTotals counts each owed task identity once, whichever section holds it;
 // Ready counts every READY task, including any the limit omitted. The intake
-// counts split intake_pending by what the ledger's review says is owed: an
-// unreviewed packet awaits review, a correction-requested one awaits its
-// author's corrected packet, and a rejected one owes nothing.
+// counts split intake_pending by what the ledger's review says: an unreviewed
+// packet awaits review, a correction-requested one had a correction asked for
+// (the ledger does not link a corrected packet to the request, so whether one
+// answered it is UNKNOWN, never assumed owed or done), and a rejected one owes
+// nothing.
 type TodoTotals struct {
 	Tasks                     int `json:"tasks"`
 	InFlight                  int `json:"in_flight"`

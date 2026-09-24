@@ -158,6 +158,9 @@ type ledgerBuilder struct {
 	out     []model.Bundle
 	// bare skips attributeFixture, for fixtures that test missing attribution.
 	bare bool
+	// holders are the attempt actors seen so far, so a receipt's default
+	// packet author is its attempt's holder.
+	holders map[model.ID]model.Actor
 }
 
 func newLedger() *ledgerBuilder { return &ledgerBuilder{project: testProject} }
@@ -166,8 +169,19 @@ func (l *ledgerBuilder) add(t *testing.T, events ...model.TypedEvent) model.Bund
 	t.Helper()
 	l.seq++
 	packet := model.PacketRef{CommandID: newID(fmt.Sprintf("PKT%d", l.seq)), Digest: newDigest(fmt.Sprintf("packet-%d", l.seq))}
+	if l.holders == nil {
+		l.holders = map[model.ID]model.Actor{}
+	}
+	for _, e := range events {
+		switch e := e.(type) {
+		case *model.TaskStart:
+			l.holders[e.AttemptID] = e.Actor
+		case *model.TaskTakeover:
+			l.holders[e.AttemptID] = e.Actor
+		}
+	}
 	if !l.bare {
-		events = attributeFixture(l.seq, events)
+		events = attributeFixtureWith(l.seq, events, l.holders)
 	}
 	raw := make([]model.Event, 0, len(events))
 	for _, e := range events {
@@ -196,13 +210,18 @@ func (l *ledgerBuilder) add(t *testing.T, events ...model.TypedEvent) model.Bund
 
 func (l *ledgerBuilder) bundles() []model.Bundle { return l.out }
 
-// attributeFixture gives a bundle that carries a start, criterion fix or
-// proof and no review the attribution admission writes: an accepted review
-// with one packet per event, authored by the actor that event names (the
-// criterion author, the proof judgment, otherwise "coordinator"), each
-// captured a minute after the latest start. Tests of the attribution rules
-// themselves build their own reviews and so bypass this default.
+// attributeFixture gives a bundle that carries a start, criterion fix,
+// proof, takeover or receipt and no review the attribution admission writes:
+// an accepted review with one packet per event, authored by the actor that
+// event names (the criterion author, the proof judgment, the takeover actor,
+// the receipt's attempt holder, otherwise "coordinator"), each captured a
+// minute after the latest start. Tests of the attribution rules themselves
+// build their own reviews and so bypass this default.
 func attributeFixture(seq uint64, events []model.TypedEvent) []model.TypedEvent {
+	return attributeFixtureWith(seq, events, nil)
+}
+
+func attributeFixtureWith(seq uint64, events []model.TypedEvent, holders map[model.ID]model.Actor) []model.TypedEvent {
 	var latest time.Time
 	needed := false
 	for _, e := range events {
@@ -214,7 +233,7 @@ func attributeFixture(seq uint64, events []model.TypedEvent) []model.TypedEvent 
 			if e.Envelope.StartedAt.After(latest) {
 				latest = e.Envelope.StartedAt
 			}
-		case *model.CriterionFix, *model.ProofAdmit:
+		case *model.CriterionFix, *model.ProofAdmit, *model.TaskTakeover, *model.AttemptTerminal:
 			needed = true
 		}
 	}
@@ -231,6 +250,12 @@ func attributeFixture(seq uint64, events []model.TypedEvent) []model.TypedEvent 
 			author = e.Author
 		case *model.ProofAdmit:
 			author = e.Judgment.Actor
+		case *model.TaskTakeover:
+			author = e.Actor
+		case *model.AttemptTerminal:
+			if holder, ok := holders[e.AttemptID]; ok {
+				author = holder
+			}
 		}
 		review.Packets = append(review.Packets, model.PacketRef{CommandID: packet, Digest: newDigest(string(packet))})
 		review.EventPackets = append(review.EventPackets, packet)
@@ -932,7 +957,7 @@ func render(s Snapshot) string {
 	return b.String()
 }
 
-const goldenProjection = `watermark seq=12 bundles=12 events=12
+const goldenProjection = `watermark seq=12 bundles=12 events=14
 0000000000000000000000TSKA rev=1 CLOSED outcome=success live=0 attempts=1
 0000000000000000000000TSKB rev=1 READY live=0 attempts=0 [prereq 0 task-success=TRUE waived=false]
 0000000000000000000000TSKC rev=1 IN FLIGHT live=1 attempts=1

@@ -104,6 +104,25 @@ func readSupport(s reduce.Snapshot, ref model.RecordRef) reduce.SupportFacts {
 	return f
 }
 
+// unknownPremises names each support premise readSupport's answer leaves
+// UNKNOWN, with the reason, so an UNKNOWN current support never stands bare.
+func unknownPremises(f reduce.SupportFacts) []string {
+	out := []string{}
+	if f.EvidenceAvailable == reduce.TruthUnknown {
+		out = append(out, "evidence_available UNKNOWN: this read does not check the evidence bytes")
+	}
+	if f.ActiveTrust == reduce.TruthUnknown {
+		out = append(out, "active_trust UNKNOWN: the instrument's validation is not known")
+	}
+	if f.ApplicableScope == reduce.TruthUnknown {
+		out = append(out, "applicable_scope UNKNOWN: whether scope covers a use is not judged")
+	}
+	if f.CorrectionFree == reduce.TruthUnknown {
+		out = append(out, "correction_free UNKNOWN: whether a correction applies is not settled")
+	}
+	return out
+}
+
 func validation(v model.Availability[model.InstrumentValidation]) Validation {
 	if v.State == model.Known && v.Value != nil {
 		ref := v.Value.Ref

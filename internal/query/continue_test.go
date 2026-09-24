@@ -36,8 +36,8 @@ func TestContinueComposesTheBriefAndWritesNothing(t *testing.T) {
 	if _, ok := c.Progress.(Unknown); !ok {
 		t.Fatalf("absent progress must be UNKNOWN, got %+v", c.Progress)
 	}
-	appendEvents(t, p, 106, &model.AttemptTerminal{Task: testRef(1, 1), AttemptID: testID(70), Outcome: model.AttemptNoReading,
-		Reason: "instrument unvalidated", NextAction: "validate instrument 11", DeliveryRefs: []model.ArtifactRef{testArtifact()}})
+	appendEvents(t, p, 106, admittedAs(106, map[int]string{0: "worker"}, &model.AttemptTerminal{Task: testRef(1, 1), AttemptID: testID(70), Outcome: model.AttemptNoReading,
+		Reason: "instrument unvalidated", NextAction: "validate instrument 11", DeliveryRefs: []model.ArtifactRef{testArtifact()}})...)
 	at := presetStart.Add(3 * time.Hour)
 	dirty := true
 	head := model.GitHead{ObjectFormat: "sha1", Commit: strings.Repeat("b", 40)}

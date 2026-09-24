@@ -90,6 +90,8 @@ func bindHome(c *call, path string, jsonOutput bool) error {
 		text = fmt.Sprintf("%s is already bound to %s (%d bundles); nothing changed\n", a.ProjectID, a.HomeRoot, a.Bundles)
 	case store.ContinuityNew:
 		text = fmt.Sprintf("bound %s to %s (%d bundles)\n", a.ProjectID, a.HomeRoot, a.Bundles)
+	case store.ContinuityUnreadable:
+		text = fmt.Sprintf("bound %s to %s (%d bundles), replacing a registry entry that could not be read; no previous home was known, so continuity was not compared\n", a.ProjectID, a.HomeRoot, a.Bundles)
 	case store.ContinuityContinued:
 		text = fmt.Sprintf("moved %s from %s to %s; its %d bundles continue the old history\n", a.ProjectID, a.Previous, a.HomeRoot, a.Bundles)
 	default:

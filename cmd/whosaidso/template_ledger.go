@@ -241,6 +241,8 @@ func (t *boundTemplate) bindCriterionFix(claim, criterion model.ID) error {
 	if err != nil {
 		return err
 	}
+	// The filter stays what the author named for the whole enumeration: a
+	// criterion on two claims is ambiguous unless --claim chose one.
 	var latest *model.CriterionRef
 	for i, c := range criteria {
 		if criterion != "" && c.CriterionID == criterion && (claim == "" || c.Claim.RecordID == claim) {
@@ -250,8 +252,10 @@ func (t *boundTemplate) bindCriterionFix(claim, criterion model.ID) error {
 			if latest == nil || c.Claim.Revision > latest.Claim.Revision || c.Claim.Revision == latest.Claim.Revision && c.Revision > latest.Revision {
 				latest = &criteria[i]
 			}
-			claim = c.Claim.RecordID
 		}
+	}
+	if latest != nil {
+		claim = latest.Claim.RecordID
 	}
 	if criterion != "" && latest == nil {
 		return fmt.Errorf("template: criterion %s is not admitted%s", criterion, map[bool]string{true: " on claim " + string(claim)}[claim != ""])

@@ -99,6 +99,11 @@ func (s *state) takeover(b model.Bundle, idx int, o Origin, e *model.TaskTakeove
 	if _, ok := s.attemptOwner[Ident{Project: b.Project, ID: e.AttemptID}]; ok {
 		return faultAt(CodeDuplicateRecord, b.Sequence, idx, "attempt_id", "attempt already admitted")
 	}
+	// The new holder takes the attempt over in its own packet: nobody is made
+	// a holder by someone else's packet.
+	if err := s.checkPacketAuthor(b, idx, e.Actor, "actor"); err != nil {
+		return err
+	}
 	// Taking over a live attempt displaces its writer while the task is IN
 	// FLIGHT, where READY and BLOCKED do not apply. Once the prior attempt is
 	// terminal nobody is displaced: the takeover dispatches new work and meets
@@ -145,6 +150,12 @@ func (s *state) terminal(b model.Bundle, idx int, o Origin, e *model.AttemptTerm
 	if a.Terminal != nil {
 		return faultAt(CodeInvalidTransition, b.Sequence, idx, "attempt_id",
 			"the attempt already has a terminal receipt")
+	}
+	if err := s.checkReceiptAuthor(b, idx, a.Actor); err != nil {
+		return err
+	}
+	if err := s.checkHandbackHold(b, idx, e); err != nil {
+		return err
 	}
 	a.Terminal = &Terminal{
 		Outcome:            e.Outcome,

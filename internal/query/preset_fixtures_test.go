@@ -128,6 +128,12 @@ func presetWorld(t *testing.T, p store.Project) {
 // judgment, otherwise lane-a) and captured a minute after presetStart, so the
 // reducer can check authorship and freezing from the ledger.
 func admitted(n int, events ...model.TypedEvent) []model.TypedEvent {
+	return admittedAs(n, nil, events...)
+}
+
+// admittedAs is admitted with the packet author of event i set to as[i]: a
+// receipt is its attempt holder's own packet, so a fixture names that holder.
+func admittedAs(n int, as map[int]string, events ...model.TypedEvent) []model.TypedEvent {
 	review := &model.ReviewAdmit{Outcome: "accepted", Actor: model.Actor{ID: "reviewer"}, Reason: "fixture admission",
 		Authors: map[model.ID]model.Actor{}, CapturedAt: map[model.ID]model.Availability[time.Time]{}}
 	for i, e := range events {
@@ -138,6 +144,9 @@ func admitted(n int, events ...model.TypedEvent) []model.TypedEvent {
 			author = e.Author
 		case *model.ProofAdmit:
 			author = e.Judgment.Actor
+		}
+		if id, ok := as[i]; ok {
+			author = model.Actor{ID: id}
 		}
 		review.Packets = append(review.Packets, model.PacketRef{CommandID: packet, Digest: model.HashBytes([]byte(packet))})
 		review.EventPackets = append(review.EventPackets, packet)

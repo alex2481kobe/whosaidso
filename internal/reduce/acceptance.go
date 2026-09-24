@@ -1,10 +1,11 @@
 package reduce
 
 // Who may accept a task and who did (R15.1) lives here: a task that names an
-// accepter can be closed only by a packet that actor wrote, checked on Apply
+// accepter can be closed only by a packet that actor wrote, and its accepter
+// removed or changed only by a packet that actor wrote, checked on Apply
 // and Replay alike from the authors the bundle's review records; the closer
-// is projected from the ledger, and so is whether the closer also did the
-// work (self-accepted: visible, never blocking). Closure effect, witnesses and
+// is projected from the ledger, and so is whether the closer also wrote one
+// of its attempt receipts (closer_authored_receipt: visible, never blocking). Closure effect, witnesses and
 // task status stay in task.go and task_events.go.
 
 import (
@@ -34,10 +35,32 @@ func (s *state) checkAccepter(b model.Bundle, idx int, rec Record) error {
 	return nil
 }
 
-// selfAccepted compares the closer with the authors of the task's attempt
-// receipts, the actors who reported the work done or stopped. Two unknowns
-// never match, and a task with no receipt has no known doer.
-func (s *state) selfAccepted(closer model.Actor, attempts []Attempt) Truth {
+// checkAccepterChange refuses a task amendment that removes or replaces the
+// accepter the amended revision names, unless the packet carrying it was
+// written by that accepter. Otherwise whoever may amend could name someone
+// else, or no one, and then close the task past the one actor it waits on.
+// Naming an accepter where none was named, keeping the same one, and every
+// other change stay open to any author; the accepter still judges the result.
+func (s *state) checkAccepterChange(b model.Bundle, idx int, prior, next *model.TaskSpec) error {
+	if prior == nil || prior.Accepter == nil {
+		return nil
+	}
+	accepter := *prior.Accepter
+	if next != nil && next.Accepter != nil && model.SameActor(accepter, *next.Accepter) {
+		return nil
+	}
+	author, ok := s.bundle.packetAuthor(idx)
+	if !ok || !model.SameActor(accepter, author) {
+		return faultAt(CodeAccepterMismatch, b.Sequence, idx, "replacement.accepter",
+			fmt.Sprintf("the task names %s as its accepter; only a packet %s wrote can remove or change it", accepter.ID, accepter.ID))
+	}
+	return nil
+}
+
+// closerAuthoredReceipt compares the closer with the authors of the task's
+// attempt receipts, the holders who reported their attempt done or stopped.
+// Two unknowns never match, and a task with no receipt has no known author.
+func (s *state) closerAuthoredReceipt(closer model.Actor, attempts []Attempt) Truth {
 	if !knownActor(closer) {
 		return TruthUnknown
 	}

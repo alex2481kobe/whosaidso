@@ -221,7 +221,7 @@ func CheckAdmission(ctx context.Context, project store.Project, packetIDs []mode
 	var refs []model.PacketRef
 	if len(packetIDs) > 0 {
 		// ReadVerifiedIntake with no ids reads every packet; only named ones are wanted.
-		verified, err := store.ReadVerifiedIntake(project, packetIDs)
+		verified, err := store.ReadVerifiedIntake(project, packetSet(packetIDs))
 		if err != nil {
 			return AdmissionCheck{}, err
 		}

@@ -58,8 +58,8 @@ func richWorld(t *testing.T, p store.Project) {
 			AffectedRevisions: []model.RecordRef{testRef(20, 1)}, Reason: "wrong denominator", CorrectiveRef: testArtifact()},
 		&model.SourceIntake{SourceID: testID(50), SourceRef: testArtifact(), OriginalDigest: testArtifact().Content.SHA256,
 			Length: 3, Speaker: model.Actor{UnknownReason: "speaker was not identified"}, Referents: []model.RecordRef{testRef(1, 1)}})
-	appendEvents(t, p, 107, &model.AttemptTerminal{Task: testRef(1, 1), AttemptID: testID(70), Outcome: model.AttemptNoReading,
-		Reason: "instrument unvalidated", NextAction: "validate instrument 11", DeliveryRefs: []model.ArtifactRef{testArtifact()}})
+	appendEvents(t, p, 107, admittedAs(107, map[int]string{0: "worker"}, &model.AttemptTerminal{Task: testRef(1, 1), AttemptID: testID(70), Outcome: model.AttemptNoReading,
+		Reason: "instrument unvalidated", NextAction: "validate instrument 11", DeliveryRefs: []model.ArtifactRef{testArtifact()}})...)
 	reviewPacket(t, p, 108, capturePacket(t, p, 3), "rejected")
 	capturePacket(t, p, 4)
 }

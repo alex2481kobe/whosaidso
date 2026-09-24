@@ -52,7 +52,7 @@ func viewsWorld(t *testing.T, p store.Project) {
 		return &model.AttemptTerminal{Task: testRef(task, 1), AttemptID: testID(attempt), Outcome: model.AttemptSuccess, Reason: "done",
 			NextAction: "accept it", DeliveryRefs: []model.ArtifactRef{testArtifact()}}
 	}
-	appendEvents(t, p, 122, admitted(122, success(5, 75), success(6, 76), success(9, 79),
+	appendEvents(t, p, 122, admittedAs(122, map[int]string{0: "worker", 1: "worker"}, success(5, 75), success(6, 76), success(9, 79),
 		&model.BlockerHold{Task: testRef(6, 1), BlockerID: testID(86), Reason: model.BlockerResume, Actor: model.Actor{ID: "owner"},
 			Criterion: "the owner re-reads the delivery"})...)
 	appendEvents(t, p, 123, admitted(123, &model.TaskClose{Task: testRef(9, 1), Outcome: model.ClosureSuccess,

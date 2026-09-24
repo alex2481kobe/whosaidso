@@ -128,8 +128,8 @@ func TestTodoLimitNeverHidesABlocker(t *testing.T) {
 			Actor: model.Actor{ID: "owner"}, Criterion: "resume is authorized"},
 		&model.TaskStart{Task: testRef(5, 1), AttemptID: testID(71), Actor: model.Actor{ID: "worker"}},
 		&model.DecisionOpen{ID: testID(30), Provenance: prov("lane-c"), Spec: decisionSpec()})
-	appendEvents(t, p, 102, &model.AttemptTerminal{Task: testRef(5, 1), AttemptID: testID(71), Outcome: model.AttemptSuccess,
-		Reason: "done", NextAction: "owner accepts or rejects", DeliveryRefs: []model.ArtifactRef{testArtifact()}})
+	appendEvents(t, p, 102, admittedAs(102, map[int]string{0: "worker"}, &model.AttemptTerminal{Task: testRef(5, 1), AttemptID: testID(71), Outcome: model.AttemptSuccess,
+		Reason: "done", NextAction: "owner accepts or rejects", DeliveryRefs: []model.ArtifactRef{testArtifact()}})...)
 	for _, limit := range []int{0, 1, 2} {
 		a := view_(t, p, ViewRequest{View: "todo", Limit: limit}).(*TodoAnswer)
 		assertViewHonest(t, a)
@@ -175,8 +175,8 @@ func TestTodoRaisesBlockedWorkOwedByAnActor(t *testing.T) {
 		&model.BlockerHold{Task: testRef(6, 1), BlockerID: testID(81), Reason: model.BlockerPrerequisite,
 			Actor: model.Actor{ID: "infra"}, Criterion: "the build machine is back"},
 		&model.TaskStart{Task: testRef(5, 1), AttemptID: testID(71), Actor: model.Actor{ID: "worker"}})
-	appendEvents(t, p, 102, &model.AttemptTerminal{Task: testRef(5, 1), AttemptID: testID(71), Outcome: model.AttemptSuccess,
-		Reason: "done", NextAction: "owner accepts or rejects", DeliveryRefs: []model.ArtifactRef{testArtifact()}})
+	appendEvents(t, p, 102, admittedAs(102, map[int]string{0: "worker"}, &model.AttemptTerminal{Task: testRef(5, 1), AttemptID: testID(71), Outcome: model.AttemptSuccess,
+		Reason: "done", NextAction: "owner accepts or rejects", DeliveryRefs: []model.ArtifactRef{testArtifact()}})...)
 	a := todoOf(t, p)
 	if len(a.Blocked) != 2 || len(a.AwaitingAcceptance) != 1 {
 		t.Fatalf("control: todo must hold the held and the prerequisite-blocked task, and one awaiting acceptance, got %+v", a)

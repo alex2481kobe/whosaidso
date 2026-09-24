@@ -18,22 +18,25 @@ import (
 // Detail is one exact admitted revision. Exactly one of Task, Claim,
 // Decision or Instrument is set, by Fact.Kind.
 type Detail struct {
-	Ref             model.RecordRef             `json:"ref"`
-	Label           string                      `json:"label"`
-	CurrentRevision model.Revision              `json:"current_revision"`
-	Fact            reduce.Record               `json:"fact"`   // kind, spec, provenance, origin
-	Author          reduce.PacketAuthor         `json:"author"` // who wrote the packet that carried Fact
-	AdmittedBy      any                         `json:"admitted_by"`
-	SelfAdmitted    string                      `json:"self_admitted"` // true, false or UNKNOWN
-	Task            *Task                       `json:"task,omitempty"`
-	Claim           *ClaimDetail                `json:"claim,omitempty"`
-	Decision        *DecisionView               `json:"decision,omitempty"`
-	Instrument      *InstrumentView             `json:"instrument,omitempty"`
-	Support         *reduce.SupportFacts        `json:"support,omitempty"` // not for tasks
-	CurrentSupport  reduce.Truth                `json:"current_support,omitempty"`
-	Supersessions   []reduce.Supersession       `json:"supersessions"` // either side; the superseded record stays shown
-	Corrections     []reduce.AdmittedCorrection `json:"corrections"`
-	Sources         []reduce.Source             `json:"sources"`
+	Ref             model.RecordRef      `json:"ref"`
+	Label           string               `json:"label"`
+	CurrentRevision model.Revision       `json:"current_revision"`
+	Fact            reduce.Record        `json:"fact"`   // kind, spec, provenance, origin
+	Author          reduce.PacketAuthor  `json:"author"` // who wrote the packet that carried Fact
+	AdmittedBy      any                  `json:"admitted_by"`
+	SelfAdmitted    string               `json:"self_admitted"` // true, false or UNKNOWN
+	Task            *Task                `json:"task,omitempty"`
+	Claim           *ClaimDetail         `json:"claim,omitempty"`
+	Decision        *DecisionView        `json:"decision,omitempty"`
+	Instrument      *InstrumentView      `json:"instrument,omitempty"`
+	Support         *reduce.SupportFacts `json:"support,omitempty"` // not for tasks
+	CurrentSupport  reduce.Truth         `json:"current_support,omitempty"`
+	// SupportUnknownBecause says, for each premise that makes CurrentSupport
+	// UNKNOWN, why this read could not decide it; empty otherwise.
+	SupportUnknownBecause []string                    `json:"support_unknown_because,omitempty"`
+	Supersessions         []reduce.Supersession       `json:"supersessions"` // either side; the superseded record stays shown
+	Corrections           []reduce.AdmittedCorrection `json:"corrections"`
+	Sources               []reduce.Source             `json:"sources"`
 }
 
 // ClaimDetail is the claim view with its observations named by invocation id.
@@ -97,6 +100,9 @@ func (d *detailer) detail(fact reduce.Record) (Detail, []Attention) {
 	// No evidence bytes or real-world scope were checked by this read.
 	support := readSupport(s, ref)
 	v.Support, v.CurrentSupport = &support, support.Current()
+	if v.CurrentSupport == reduce.TruthUnknown {
+		v.SupportUnknownBecause = unknownPremises(support)
+	}
 	author := fact.Provenance.Author
 	switch fact.Kind {
 	case model.Claim:

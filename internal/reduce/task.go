@@ -165,7 +165,7 @@ func (s *state) taskRevision(key RecordKey) (TaskProjection, bool) {
 	if closed {
 		c := closure
 		c.Closer = s.eventAuthor(c.Origin)
-		c.SelfAccepted = s.selfAccepted(c.Closer.Author, p.Attempts)
+		c.CloserAuthoredReceipt = s.closerAuthoredReceipt(c.Closer.Author, p.Attempts)
 		p.Closure = &c
 	}
 

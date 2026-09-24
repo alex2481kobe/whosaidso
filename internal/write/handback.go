@@ -103,6 +103,8 @@ func Handback(ctx context.Context, project store.Project, r HandbackRequest) (mo
 // gateHandbacks runs under Admit's transaction lock after packet ordering. Only
 // clerical task revisions change in the proposal; immutable packets remain the
 // authored record and the bundle's packet digest binds their original bytes.
+// Who may write a receipt or take over, and the hold a stopped handback must
+// carry, are ledger rules the reducer applies (reduce/handback.go).
 func gateHandbacks(base reduce.Snapshot, packets []model.Packet) ([]model.Packet, error) {
 	attempts := map[model.ID]reduce.Attempt{}
 	revisions := map[reduce.Ident]model.Revision{}
@@ -112,10 +114,6 @@ func gateHandbacks(base reduce.Snapshot, packets []model.Packet) ([]model.Packet
 			attempts[attempt.Key.Attempt] = attempt
 		}
 	}
-	var terminals []*model.AttemptTerminal
-	var holds []*model.BlockerHold
-	cleared := map[gateKey]bool{}
-	amended := map[reduce.Ident]bool{}
 	// Original refs associate bundled holds with receipts, including a hold in
 	// a separate packet. Otherwise a mid-flight amendment would stale its hold.
 	originals := map[model.RecordRef]bool{}
@@ -142,22 +140,15 @@ func gateHandbacks(base reduce.Snapshot, packets []model.Packet) ([]model.Packet
 			case *model.TaskCreate:
 				revisions[reduce.Ident{Project: packet.Project, ID: e.ID}] = 1
 			case *model.TaskAmend:
-				who := reduce.Ident{Project: e.Target.Project, ID: e.Target.RecordID}
-				revisions[who], amended[who] = e.Target.Revision+1, true
+				revisions[reduce.Ident{Project: e.Target.Project, ID: e.Target.RecordID}] = e.Target.Revision + 1
 			case *model.TaskStart:
 				attempts[e.AttemptID] = reduce.Attempt{Key: reduce.AttemptKey{Project: e.Task.Project, Task: e.Task.RecordID, Attempt: e.AttemptID}, TaskRevision: e.Task.Revision, Actor: e.Actor}
 			case *model.TaskTakeover:
-				if !model.SameActor(e.Actor, packet.Author) {
-					return nil, admissionFault("attribution-mismatch", "actor", "takeover actor must match the packet author")
-				}
 				attempts[e.AttemptID] = reduce.Attempt{Key: reduce.AttemptKey{Project: e.Task.Project, Task: e.Task.RecordID, Attempt: e.AttemptID}, TaskRevision: e.Task.Revision, Actor: e.Actor}
 			case *model.AttemptTerminal:
 				a, ok := attempts[e.AttemptID]
 				if !ok || a.Key.Project != e.Task.Project || a.Key.Task != e.Task.RecordID {
 					return nil, admissionFault("unknown-reference", "attempt_id", "receipt must name its own task and attempt")
-				}
-				if !receiptAuthorAdmissible(a.Actor, packet.Author) {
-					return nil, admissionFault("attribution-mismatch", "author", "receipt must be authored by the attempt holder, or by a named author when the holder is unknown")
 				}
 				if e.Task.Revision != a.TaskRevision {
 					return nil, admissionFault("revision-conflict", "task", "receipt must carry the revision the attempt started against")
@@ -172,15 +163,11 @@ func gateHandbacks(base reduce.Snapshot, packets []model.Packet) ([]model.Packet
 				// events unchanged; this translation is the ruled exception.
 				current := revisions[reduce.Ident{Project: e.Task.Project, ID: e.Task.RecordID}]
 				rewrite, e.Task.Revision = current != e.Task.Revision, current
-				terminals = append(terminals, e)
 			case *model.BlockerHold:
 				if originals[e.Task] {
 					current := revisions[reduce.Ident{Project: e.Task.Project, ID: e.Task.RecordID}]
 					rewrite, e.Task.Revision = current != e.Task.Revision, current
 				}
-				holds = append(holds, e)
-			case *model.BlockerClear:
-				cleared[gateKey{Record: model.RecordRef{Project: e.Task.Project, RecordID: e.Task.RecordID}, Blocker: e.BlockerID}] = true
 			}
 			if rewrite {
 				packets[i].Events[j], err = model.EncodeEvent(event)
@@ -190,37 +177,5 @@ func gateHandbacks(base reduce.Snapshot, packets []model.Packet) ([]model.Packet
 			}
 		}
 	}
-	for _, terminal := range terminals {
-		if terminal.Outcome != model.AttemptBlockedMidTask && terminal.Outcome != model.AttemptOutOfScope {
-			continue // success/reconciliation queues are already derived by U05
-		}
-		who := reduce.Ident{Project: terminal.Task.Project, ID: terminal.Task.RecordID}
-		if terminal.Outcome == model.AttemptOutOfScope && amended[who] {
-			return nil, admissionFault("invalid-transition", "task.amend", "out-of-scope handback cannot amend its task scope in the same bundle")
-		}
-		found := false
-		for _, hold := range holds {
-			key := gateKey{Record: model.RecordRef{Project: hold.Task.Project, RecordID: hold.Task.RecordID}, Blocker: hold.BlockerID}
-			if hold.Task == terminal.Task && !cleared[key] && (terminal.Outcome != model.AttemptOutOfScope || hold.Reason == model.BlockerResume && !model.Blank(hold.Actor.ID)) {
-				found = true
-			}
-		}
-		if !found {
-			return nil, admissionFault("missing-hold", "attempt.terminal", "blocked-mid-task needs a bundled open hold; out-of-scope needs an authored resume/reassignment hold naming its actor")
-		}
-	}
 	return packets, nil
-}
-
-// receiptAuthorAdmissible: a known holder's attempt takes a receipt only from
-// that holder. When the holder is UNKNOWN, a receipt from a NAMED author is
-// admissible and stays attributed to that author through its packet: closing
-// an attempt requires no authority or judgment, so unknown attribution must
-// not make it unclosable (C782). Two unknowns never match, so an unknown
-// author cannot close an unknown holder's attempt.
-func receiptAuthorAdmissible(holder, author model.Actor) bool {
-	if model.Blank(holder.ID) {
-		return !model.Blank(author.ID) && model.Blank(author.UnknownReason)
-	}
-	return model.SameActor(holder, author)
 }

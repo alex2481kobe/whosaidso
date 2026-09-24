@@ -119,6 +119,11 @@ func (s *state) amend(b model.Bundle, idx int, o Origin, kind model.Kind, target
 	key := RecordKey{Project: b.Project, ID: target.RecordID, Revision: target.Revision + 1}
 	r := Record{Key: key, Kind: kind, Provenance: p, Origin: o}
 	fill(&r)
+	if kind == model.Task {
+		if err := s.checkAccepterChange(b, idx, prior.Task, r.Task); err != nil {
+			return err
+		}
+	}
 	s.records[key] = r
 	s.current[who] = key.Revision
 	if kind == model.Task {

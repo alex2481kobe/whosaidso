@@ -27,9 +27,12 @@ func taskOf(s reduce.Snapshot, ref model.RecordRef) *Task {
 	if outcome == "" {
 		outcome = "UNKNOWN"
 	}
-	t := &Task{Revision: p.Task.Revision, Status: p.Status, Outcome: outcome, Closure: p.Closure,
+	t := &Task{Revision: p.Task.Revision, Status: p.Status, Outcome: outcome,
 		Attempts: p.Attempts, AttemptHolders: []Holder{}, Blockers: p.Blockers, Prerequisites: p.Prerequisites,
 		Reasons: p.Reasons, WaitingActors: p.WaitingActors, ExpectedNextActor: actor(p.NextActor), CommitsDenied: p.CommitsDenied}
+	if p.Closure != nil {
+		t.Closure = &TaskClosure{Closure: p.Closure, AuthorityCited: p.Closure.Authority != nil}
+	}
 	for _, attempt := range p.Attempts {
 		if attempt.Live() {
 			t.AttemptHolders = append(t.AttemptHolders, Holder{attempt.Key, actor(attempt.Actor)})

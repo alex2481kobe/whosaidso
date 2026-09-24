@@ -44,11 +44,20 @@ type Unknown struct {
 	Reason string `json:"reason"`
 }
 
+// TaskClosure is a task's closure as the ledger records it, and whether it cites
+// an authority. The gate requires none for any non-success outcome, so a
+// waived closure without one excuses nothing anybody checked; that is shown,
+// never implied by the word.
+type TaskClosure struct {
+	*reduce.Closure
+	AuthorityCited bool `json:"authority_cited"`
+}
+
 type Task struct {
 	Revision          model.Revision              `json:"revision"`
 	Status            reduce.TaskStatus           `json:"status"`
 	Outcome           string                      `json:"outcome"`
-	Closure           *reduce.Closure             `json:"closure"`
+	Closure           *TaskClosure                `json:"closure"`
 	Attempts          []reduce.Attempt            `json:"attempts"`
 	AttemptHolders    []Holder                    `json:"attempt_holders"`
 	Blockers          []reduce.Blocker            `json:"blockers"`
