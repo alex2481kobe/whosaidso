@@ -87,6 +87,67 @@ func briefEvent(b *briefWriter, indent int, e cur) {
 	pieces := []any{"sequence", e.at("origin", "sequence"), "event", e.at("origin", "event_index"), e.at("event", "type"), "command", e.at("command_id")}
 	pieces = append(append(pieces, "admitted by"), who(e.at("admitter"))...)
 	b.line(indent, append(append(pieces, "author"), who(e.at("author", "actor"))...)...)
+	if am := e.at("amendment"); am.ok() {
+		briefAmendment(b, indent+1, am)
+	}
+}
+
+// briefAmendment is one amendment (revision_diff.go): the revision it made,
+// its bundle and packet, the review's actor and reason, then one summary line
+// per changed field. History and continue both print it.
+func briefAmendment(b *briefWriter, indent int, am cur) {
+	pieces := []any{"amendment: rev", am.at("revision", "revision"), "sequence", am.at("origin", "sequence")}
+	if packet := am.at("packet"); packet.ok() {
+		pieces = append(pieces, "packet", packet)
+	}
+	review := am.at("review")
+	if review.at("state").ok() {
+		b.line(indent, append(pieces, "review", review.at("state"))...)
+	} else {
+		b.line(indent, append(append(pieces, "reviewed by"), who(review.at("actor"))...)...)
+	}
+	b.line(indent+1, "reason:", prefix(review.at("reason")))
+	briefList(b, indent+1, "changes", am.at("changes"), briefChange)
+}
+
+// briefChange is one changed field: a number or truth value on one line
+// ("changed prerequisites[ID].target.revision 1 -> 2"), text on its own
+// before/after lines, and a structured value only by its path (--json has it).
+func briefChange(b *briefWriter, indent int, c cur) {
+	before, after := c.at("before"), c.at("after")
+	if !isText(before) && !isText(after) && !structured(before) && !structured(after) {
+		pieces := []any{c.at("change"), c.at("path")}
+		if before.ok() {
+			pieces = append(pieces, before)
+		}
+		if before.ok() && after.ok() {
+			pieces = append(pieces, "->")
+		}
+		if after.ok() {
+			pieces = append(pieces, after)
+		}
+		b.line(indent, pieces...)
+		return
+	}
+	b.line(indent, c.at("change"), c.at("path"))
+	for _, side := range []struct {
+		label string
+		value cur
+	}{{"before:", before}, {"after:", after}} {
+		if isText(side.value) {
+			b.line(indent+1, side.label, prefix(side.value))
+		}
+	}
+}
+
+func isText(c cur) bool { _, ok := c.v.(string); return ok }
+
+func structured(c cur) bool {
+	switch c.v.(type) {
+	case map[string]any, []any:
+		return true
+	}
+	return false
 }
 
 func briefReview(b *briefWriter, indent int, r cur) {

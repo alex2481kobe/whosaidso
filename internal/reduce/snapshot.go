@@ -73,6 +73,20 @@ func (s Snapshot) Records() []Record {
 	return deepCopySlice(s.inner().recordsSorted())
 }
 
+// Amended returns every admitted revision after the first, keyed by the
+// origin of the event that made it. Each replaced the revision before it,
+// which Record still answers: every revision is kept. A read accessor only;
+// no rule reads it.
+func (s Snapshot) Amended() map[Origin]Record {
+	out := map[Origin]Record{}
+	for _, r := range s.inner().records {
+		if r.Key.Revision > 1 {
+			out[r.Origin] = deepCopy(r)
+		}
+	}
+	return out
+}
+
 func (s *state) recordsSorted() []Record {
 	out := make([]Record, 0, len(s.records))
 	for _, r := range s.records {
