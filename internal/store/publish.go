@@ -180,6 +180,12 @@ func admitLocked(ctx context.Context, project Project, admission Admission, disk
 	if disk.beforeLock != nil {
 		disk.beforeLock()
 	}
+	// An invalid cache setting is refused before anything else, on every path:
+	// a retry that finds its bundle already published must not skip the check
+	// every read makes.
+	if _, err := cacheOff(); err != nil {
+		return zero, nil, err
+	}
 	lock, err := holdAdmissionLock(ctx, project.Ledger)
 	if err != nil {
 		return zero, nil, err

@@ -71,6 +71,9 @@ func amendmentOf(s reduce.Snapshot, r reduce.Record) (Amendment, bool) {
 	}
 	a := Amendment{Revision: asRef(r.Key), Origin: r.Origin, Changes: diffSpecs(specOf(prior), specOf(r)),
 		Review: unknown("the ledger does not attribute this amendment to a reviewed packet")}
+	// The sources a revision cites are part of what it changed: a new basis
+	// for an unchanged spec is still a change a reader must see.
+	diffValue("provenance.source_refs", decoded(prior.Provenance.SourceRefs), decoded(r.Provenance.SourceRefs), &a.Changes)
 	if packet := s.EventAuthor(r.Origin).Packet; packet != "" {
 		a.Packet = packet
 		if review, ok := s.Review(reduce.ReviewKey{Project: r.Key.Project, CommandID: packet}); ok {
