@@ -185,12 +185,12 @@ falsifier. The home's staging/ folder holds runs' outputs, not notes.
    --claim-revision or --criterion-revision only to pin an older one. ARGV
    runs without a shell (need a pipeline? -- sh -c '...'). One run carries
    one criterion.
-   Its stdout is the output named stdout, in the run's own directory, where a
-   criterion's locator path resolves. More outputs: write files under
+   Its stdout is the output named stdout; a criterion's locator path is the
+   name of the output it reads. More outputs: write files under
    $WHOSAIDSO_RUN_DIR and list them in the report at $WHOSAIDSO_RUN_REPORT,
      {"version":1,"outputs":[{"path":"result.json","media_type":"application/json"}],
       "config_effective":{"samples":{"type":"number","number":8}},"conditions_observed":{}}
-   and each is an output under its path, as stdout is. Paths are regular
+   and each is an output named by its path, as stdout is. Paths are regular
    files relative to the run dir, no symlinks or "..", each named once with a
    media_type (not stdout, stderr or producer.json). config_effective gives
    the instrument's config_surface knobs, conditions_observed the run's

@@ -78,12 +78,12 @@ func envelope(id, attempt, instrument, claim int, inputs ...model.ArtifactRef) m
 		ConditionsDeclared: map[string]model.Scalar{}, ConditionsObserved: notKnown[map[string]model.Availability[model.Scalar]]("not observed"),
 		Isolation: notKnown[model.Isolation]("not observed"), StartedAt: presetStart,
 		ObservedAt: notKnown[time.Time]("not yet observed"), Outcome: notKnown[model.ProcessOutcome]("not yet observed"),
-		OutputRefs: notKnown[[]model.ArtifactRef]("not yet observed"), Visual: notKnown[model.VisualObservation]("not visual")}
+		Outputs: notKnown[[]model.RunOutput]("not yet observed"), Visual: notKnown[model.VisualObservation]("not visual")}
 }
 func seal(env model.InvocationEnvelope, exit int, after time.Duration) *model.InvocationSeal {
 	env.ObservedAt = known(env.StartedAt.Add(after))
 	env.Outcome = known(model.ProcessOutcome{Kind: "exit", ExitCode: &exit})
-	env.OutputRefs = known([]model.ArtifactRef{testArtifact()})
+	env.Outputs = known([]model.RunOutput{{Name: "stdout", SHA256: model.HashBytes([]byte("U09")), Length: 3, MediaType: "text/plain"}})
 	return &model.InvocationSeal{StartRef: model.InvocationRef{Project: projectID, InvocationID: env.InvocationID}, Envelope: env}
 }
 func authority() model.Authority {

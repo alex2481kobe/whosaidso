@@ -111,7 +111,7 @@ func TestSealMayAddObservationsThatDifferFromDeclarations(t *testing.T) {
 	if *(*got.Seal.ConditionsObserved.Value)["seed"].Value.Number != "999" ||
 		*(*got.Seal.ConfigEffective.Value)["samples"].Value.Number != "99" ||
 		*got.Seal.Isolation.Value != model.IsolationClean || *got.Seal.Visual.Value.Seed.Value != "999" ||
-		*got.Seal.Outcome.Value.ExitCode != 7 || got.Seal.ObservedAt.State != model.Known || got.Seal.OutputRefs.State != model.Known {
+		*got.Seal.Outcome.Value.ExitCode != 7 || got.Seal.ObservedAt.State != model.Known || got.Seal.Outputs.State != model.Known {
 		t.Fatal("seal did not retain the run's observations")
 	}
 }

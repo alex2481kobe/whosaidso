@@ -70,13 +70,14 @@ func fileLimit(t *testing.T, example []byte, result, identity string, max int) m
 
 func itoa(n int) string { b, _ := json.Marshal(n); return string(b) }
 
-// evaluate writes stdout where write.Run puts a run's stdout and lets WhoSaidSo's
+// evaluate stores stdout as admission stores a run's stdout and lets WhoSaidSo's
 // resolver find, read and judge it.
 func evaluate(t *testing.T, c model.CriterionFix, stdout []byte) evidence.Evaluation {
 	t.Helper()
 	root := t.TempDir()
-	at := evidence.RunDir(critInvocation) + "/stdout"
-	full := filepath.Join(root, filepath.FromSlash(at))
+	// write.Run's stdout is the output named stdout; admission publishes its
+	// bytes to the store by digest, where Observe reads them.
+	full := filepath.Join(root, filepath.FromSlash(evidence.DefaultArtifactDir), string(model.HashBytes(stdout)))
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -86,9 +87,8 @@ func evaluate(t *testing.T, c model.CriterionFix, stdout []byte) evidence.Evalua
 	ref := model.CriterionRef{Claim: c.Claim, CriterionID: c.CriterionID, Revision: c.Revision}
 	exit := 0
 	outcome := model.ProcessOutcome{Kind: "exit", ExitCode: &exit}
-	out := stdoutPin(stdout, "")
-	out.Selector = model.Selector{Kind: "whole"}
-	out.Content.Locators = []model.Locator{{Path: at}}
+	pin := stdoutPin(stdout, "").Content
+	out := model.RunOutput{Name: "stdout", SHA256: pin.SHA256, Length: pin.Length, MediaType: pin.MediaType}
 	env := model.InvocationEnvelope{
 		InvocationID:            critInvocation,
 		AttemptID:               critAttempt,
@@ -98,7 +98,7 @@ func evaluate(t *testing.T, c model.CriterionFix, stdout []byte) evidence.Evalua
 		Argv:                    []string{"go", "run", "./tools/archtree"},
 		StartedAt:               time.Unix(1_700_000_000, 0).UTC(),
 		Outcome:                 model.Availability[model.ProcessOutcome]{State: model.Known, Value: &outcome},
-		OutputRefs:              model.Availability[[]model.ArtifactRef]{State: model.Known, Value: &[]model.ArtifactRef{out}},
+		Outputs:                 model.Availability[[]model.RunOutput]{State: model.Known, Value: &[]model.RunOutput{out}},
 	}
 	o, err := evidence.NewResolver(root).Observe(context.Background(), c, env)
 	if err != nil {

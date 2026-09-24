@@ -97,7 +97,7 @@ func (t *boundTemplate) pin(spec string) error {
 	pinned := evidence.ResolvedArtifact{Ref: ref, Bytes: data, SHA256: model.HashBytes(data), Length: uint64(len(data))}
 	// The pin is checked against the real thing before anyone reads it: git
 	// and on-disk content through the resolver admission uses. An example's
-	// locator names a run output that exists only in a run's directory, and a
+	// locator is the name of a run output inside a run, not a path, and a
 	// file outside the project has no locator, so their identity is the bytes
 	// just read, which travel with the capture.
 	if (!example && !outside) || rev != "" {

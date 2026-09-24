@@ -11,20 +11,18 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
 
-	"whosaidso/internal/evidence"
 	"whosaidso/internal/model"
 	"whosaidso/internal/store"
 )
 
 // ProducerReport is the version 1 JSON artifact written to WHOSAIDSO_RUN_REPORT.
 // WHOSAIDSO_RUN_DIR is a fresh staging directory for this invocation's output
-// files, outside the project; each output is named in the seal by its logical
-// path in the run's own directory, <artifacts>/runs/<invocation-id>/<path>.
+// files, outside the project; each output is named in the seal by its path
+// relative to that directory, which is its name inside the run.
 // Example: {"version":1,"config_effective":{"samples":{"type":"number",
 // "number":8}},"conditions_observed":{},"outputs":[{"path":"result.json",
 // "media_type":"application/json"}]}.
@@ -115,17 +113,16 @@ func runSeal(ctx context.Context, project store.Project, request RunRequest, env
 	ref, err := store.WriteIntake(ctx, project, store.IntakeRequest{
 		Author: request.Author, Blobs: readers,
 		BuildEvents: func(blobs []store.CapturedBlob) ([]model.Event, error) {
-			// Each locator is the output's logical name in the run's own
-			// directory (R9), not where staging put it: the bytes travel in
-			// this packet's blobs and are published once, by digest.
-			runDir := evidence.RunDirIn(project.ArtifactDir(), envelope.InvocationID)
-			refs := make([]model.ArtifactRef, len(blobs))
+			// Each output is its name inside this run and the bytes it held:
+			// they travel in this packet's blobs and are published once, by
+			// digest. Where the store keeps them is not part of the record.
+			outs := make([]model.RunOutput, len(blobs))
 			for i, blob := range blobs {
-				refs[i] = model.ArtifactRef{Kind: "content", Content: &model.ContentPin{SHA256: blob.SHA256, Length: blob.Length, MediaType: outputs[i].MediaType, Locators: []model.Locator{{Path: path.Join(runDir, outputs[i].Path)}}}, Selector: model.Selector{Kind: "whole"}}
+				outs[i] = model.RunOutput{Name: outputs[i].Path, SHA256: blob.SHA256, Length: blob.Length, MediaType: outputs[i].MediaType}
 			}
-			envelope.OutputRefs = runKnown(refs)
+			envelope.Outputs = runKnown(outs)
 			if streamErr != nil {
-				envelope.OutputRefs = model.Availability[[]model.ArtifactRef]{State: model.Unknown, Reason: "output capture was incomplete, captured bytes remain in this packet's blobs"}
+				envelope.Outputs = model.Availability[[]model.RunOutput]{State: model.Unknown, Reason: "output capture was incomplete, captured bytes remain in this packet's blobs"}
 			}
 			event, err := model.EncodeEvent(&model.InvocationSeal{StartRef: model.InvocationRef{Project: project.ID, InvocationID: envelope.InvocationID}, Envelope: envelope})
 			return []model.Event{event}, err

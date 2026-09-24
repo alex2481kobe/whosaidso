@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"whosaidso/internal/evidence"
 	"whosaidso/internal/model"
 	"whosaidso/internal/reduce"
 )
@@ -37,7 +36,7 @@ func TestDeadRunnerReconciledStopsBlockingWithoutAReading(t *testing.T) {
 	}
 	w.f.accept(ref)
 	inv, _ := w.f.snapshot().Invocation(reduce.InvocationKey{Project: dead.Project, InvocationID: dead.InvocationID})
-	if inv.Seal == nil || inv.Seal.Outcome.State != model.Unknown || inv.Seal.OutputRefs.State != model.Unknown || !strings.Contains(inv.Seal.Outcome.Reason, w.f.author.ID) {
+	if inv.Seal == nil || inv.Seal.Outcome.State != model.Unknown || inv.Seal.Outputs.State != model.Unknown || !strings.Contains(inv.Seal.Outcome.Reason, w.f.author.ID) {
 		t.Fatalf("reconciliation must record an attributed UNKNOWN terminal observation: %+v", inv.Seal)
 	}
 	// A reconciled run never supports: it produced nothing.
@@ -49,18 +48,18 @@ func TestDeadRunnerReconciledStopsBlockingWithoutAReading(t *testing.T) {
 }
 
 func TestReconciliationSealCannotCarryAReading(t *testing.T) {
-	for _, field := range []string{"output_refs", "observed_at", "config_effective", "conditions_observed", "unknown-author"} {
+	for _, field := range []string{"outputs", "observed_at", "config_effective", "conditions_observed", "unknown-author"} {
 		t.Run(field, func(t *testing.T) {
 			w, _, _, env := deadRun(t)
 			seal := proofSealed(env, proofPass)
 			seal.Envelope.Outcome = proofUnknown[model.ProcessOutcome]("observer died")
 			unknownMap := proofUnknown[map[string]model.Availability[model.Scalar]]("observer died")
-			seal.Envelope.ObservedAt, seal.Envelope.OutputRefs = proofUnknown[time.Time]("observer died"), proofUnknown[[]model.ArtifactRef]("observer died")
+			seal.Envelope.ObservedAt, seal.Envelope.Outputs = proofUnknown[time.Time]("observer died"), proofUnknown[[]model.RunOutput]("observer died")
 			seal.Envelope.ConfigEffective, seal.Envelope.ConditionsObserved = unknownMap, unknownMap
 			code := "reconciliation-reading"
 			switch field {
-			case "output_refs":
-				seal.Envelope.OutputRefs = proofKnown([]model.ArtifactRef{proofPin(proofPass, evidence.RunDir(env.InvocationID)+"/"+proofPath)})
+			case "outputs":
+				seal.Envelope.Outputs = proofKnown([]model.RunOutput{proofOutput(proofPass, proofPath)})
 			case "observed_at":
 				seal.Envelope.ObservedAt = proofKnown(env.StartedAt)
 			case "config_effective":

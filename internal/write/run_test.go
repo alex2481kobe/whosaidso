@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -186,14 +187,14 @@ func runTestPackets(t *testing.T, project store.Project, result RunResult) []mod
 	}
 	s := start.(*model.InvocationStart).Envelope
 	e := seal.(*model.InvocationSeal).Envelope
-	if s.Outcome.State != model.Unknown || s.ObservedAt.State != model.Unknown || s.OutputRefs.State != model.Unknown || s.ConfigEffective.State != model.Unknown || s.ConditionsObserved.State != model.Unknown || s.Visual.State != model.Unknown || s.Isolation.State != model.Unknown {
+	if s.Outcome.State != model.Unknown || s.ObservedAt.State != model.Unknown || s.Outputs.State != model.Unknown || s.ConfigEffective.State != model.Unknown || s.ConditionsObserved.State != model.Unknown || s.Visual.State != model.Unknown || s.Isolation.State != model.Unknown {
 		t.Fatal("start contains observations")
 	}
 	if !reflect.DeepEqual(e, result.Envelope) {
 		t.Fatal("returned envelope differs from durable seal")
 	}
 	e.ConfigEffective, e.ConditionsObserved, e.Visual, e.Isolation = s.ConfigEffective, s.ConditionsObserved, s.Visual, s.Isolation
-	e.Outcome, e.ObservedAt, e.OutputRefs = s.Outcome, s.ObservedAt, s.OutputRefs
+	e.Outcome, e.ObservedAt, e.Outputs = s.Outcome, s.ObservedAt, s.Outputs
 	if !reflect.DeepEqual(e, s) {
 		t.Fatal("seal changed immutable intent")
 	}
@@ -202,22 +203,22 @@ func runTestPackets(t *testing.T, project store.Project, result RunResult) []mod
 
 func runTestArtifact(t *testing.T, project store.Project, result RunResult, name string) []byte {
 	t.Helper()
-	if result.Envelope.OutputRefs.Value == nil {
+	if result.Envelope.Outputs.Value == nil {
 		t.Fatal("missing output refs")
 	}
-	for _, ref := range *result.Envelope.OutputRefs.Value {
-		if filepath.Base(ref.Content.Locators[0].Path) != name {
+	for _, out := range *result.Envelope.Outputs.Value {
+		if path.Base(out.Name) != name {
 			continue
 		}
 		inbox, err := store.IntakeDir(project)
 		if err != nil {
 			t.Fatal(err)
 		}
-		data, err := os.ReadFile(filepath.Join(inbox, string(result.SealPacket.CommandID), "blobs", string(ref.Content.SHA256)))
+		data, err := os.ReadFile(filepath.Join(inbox, string(result.SealPacket.CommandID), "blobs", string(out.SHA256)))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if uint64(len(data)) != ref.Content.Length || model.HashBytes(data) != ref.Content.SHA256 {
+		if uint64(len(data)) != out.Length || model.HashBytes(data) != out.SHA256 {
 			t.Fatal("seal pins different bytes")
 		}
 		return data
@@ -583,7 +584,7 @@ func TestRunKilledObserverLeavesDurableUnknown(t *testing.T) {
 		}
 		if start, ok := payload.(*model.InvocationStart); ok && start.Envelope.Argv[3] == "block" {
 			found = true
-			if start.Envelope.Outcome.State != model.Unknown || start.Envelope.ObservedAt.State != model.Unknown || start.Envelope.OutputRefs.State != model.Unknown {
+			if start.Envelope.Outcome.State != model.Unknown || start.Envelope.ObservedAt.State != model.Unknown || start.Envelope.Outputs.State != model.Unknown {
 				t.Fatal("dead observer claimed terminal knowledge")
 			}
 		}
@@ -637,7 +638,7 @@ func TestRunBoundedDrainAndNoAdmissionLock(t *testing.T) {
 		}
 		runTestOutcome(t, result.Envelope, "exit", code)
 		runTestPackets(t, project, result)
-		if result.Envelope.OutputRefs.State != model.Unknown {
+		if result.Envelope.Outputs.State != model.Unknown {
 			t.Fatal("truncated stream claimed complete capture")
 		}
 	}

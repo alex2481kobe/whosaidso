@@ -39,7 +39,7 @@ func (e InvocationStart) validate(p string) error {
 	}{
 		{"outcome", e.Envelope.Outcome.State},
 		{"observed_at", e.Envelope.ObservedAt.State},
-		{"output_refs", e.Envelope.OutputRefs.State},
+		{"outputs", e.Envelope.Outputs.State},
 		{"conditions_observed", e.Envelope.ConditionsObserved.State},
 		{"config_effective", e.Envelope.ConfigEffective.State},
 		{"isolation", e.Envelope.Isolation.State},

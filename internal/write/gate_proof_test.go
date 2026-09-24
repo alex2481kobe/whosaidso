@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"whosaidso/internal/evidence"
 	"whosaidso/internal/model"
 	"whosaidso/internal/reduce"
 	"whosaidso/internal/store"
@@ -49,6 +48,11 @@ func proofUnknown[T any](why string) model.Availability[T] {
 
 func proofPin(body, path string) model.ArtifactRef {
 	return model.ArtifactRef{Kind: "content", Content: &model.ContentPin{SHA256: model.HashBytes([]byte(body)), Length: uint64(len(body)), MediaType: "application/json", Locators: []model.Locator{{Path: path}}}, Selector: model.Selector{Kind: "whole"}}
+}
+
+// proofOutput is a run output named inside its run and pinned to body.
+func proofOutput(body, name string) model.RunOutput {
+	return model.RunOutput{Name: name, SHA256: model.HashBytes([]byte(body)), Length: uint64(len(body)), MediaType: "application/json"}
 }
 
 func proofPut(t *testing.T, root, path, body string) {
@@ -107,7 +111,7 @@ func (w *proofWorld) envelope(criterion model.CriterionRef) model.InvocationEnve
 		Argv:                    []string{"fixture-measurement"}, InputRefs: []model.ArtifactRef{}, ConfigRequested: map[string]model.Scalar{}, ConditionsDeclared: map[string]model.Scalar{},
 		ConfigEffective: proofUnknown[map[string]model.Availability[model.Scalar]]("not launched"), ConditionsObserved: proofUnknown[map[string]model.Availability[model.Scalar]]("not launched"),
 		Isolation: proofUnknown[model.Isolation]("not enforced"), StartedAt: time.Now().UTC(), ObservedAt: proofUnknown[time.Time]("not launched"),
-		Outcome: proofUnknown[model.ProcessOutcome]("not launched"), OutputRefs: proofUnknown[[]model.ArtifactRef]("not launched"), Visual: proofUnknown[model.VisualObservation]("numeric"),
+		Outcome: proofUnknown[model.ProcessOutcome]("not launched"), Outputs: proofUnknown[[]model.RunOutput]("not launched"), Visual: proofUnknown[model.VisualObservation]("numeric"),
 	}
 }
 
@@ -118,7 +122,7 @@ func proofSealed(env model.InvocationEnvelope, body string) *model.InvocationSea
 	}
 	env.ObservedAt = proofKnown(env.StartedAt.Add(time.Millisecond))
 	env.Outcome = proofKnown(model.ProcessOutcome{Kind: "exit", ExitCode: &exit})
-	env.OutputRefs = proofKnown([]model.ArtifactRef{proofPin(body, evidence.RunDir(env.InvocationID)+"/"+proofPath)})
+	env.Outputs = proofKnown([]model.RunOutput{proofOutput(body, proofPath)})
 	env.ConfigEffective = proofKnown(map[string]model.Availability[model.Scalar]{})
 	env.ConditionsObserved = proofKnown(map[string]model.Availability[model.Scalar]{})
 	return &model.InvocationSeal{StartRef: model.InvocationRef{Project: env.ExecutionSourceIdentity.Project, InvocationID: env.InvocationID}, Envelope: env}

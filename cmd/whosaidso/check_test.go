@@ -47,7 +47,7 @@ func checkCriterionEvents(t *testing.T, root string) string {
 	return ""
 }
 
-// checkSealedRun admits one run whose output in its own run directory is body.
+// checkSealedRun admits one run whose output out/result.json is body.
 func checkSealedRun(t *testing.T, root string, criterion model.CriterionRef, instrument model.RecordRef, attempt model.ID, body string, n int) model.InvocationRef {
 	t.Helper()
 	unknown := func(why string) model.Availability[map[string]model.Availability[model.Scalar]] {
@@ -58,15 +58,17 @@ func checkSealedRun(t *testing.T, root string, criterion model.CriterionRef, ins
 		Argv:                    []string{"/bin/sh", "tools/measure.sh"}, InputRefs: []model.ArtifactRef{}, ConfigRequested: map[string]model.Scalar{}, ConditionsDeclared: map[string]model.Scalar{},
 		ConfigEffective: unknown("not launched"), ConditionsObserved: unknown("not launched"), Isolation: model.Availability[model.Isolation]{State: model.Unknown, Reason: "not enforced"},
 		StartedAt: time.Now().UTC(), ObservedAt: model.Availability[time.Time]{State: model.Unknown, Reason: "not launched"}, Outcome: model.Availability[model.ProcessOutcome]{State: model.Unknown, Reason: "not launched"},
-		OutputRefs: model.Availability[[]model.ArtifactRef]{State: model.Unknown, Reason: "not launched"}, Visual: model.Availability[model.VisualObservation]{State: model.Unknown, Reason: "numeric"}}
+		Outputs: model.Availability[[]model.RunOutput]{State: model.Unknown, Reason: "not launched"}, Visual: model.Availability[model.VisualObservation]{State: model.Unknown, Reason: "numeric"}}
 	seal := env
 	exit := 0
 	seal.ObservedAt, seal.Outcome = e2eKnown(env.StartedAt.Add(time.Millisecond)), e2eKnown(model.ProcessOutcome{Kind: "exit", ExitCode: &exit})
-	output := ".whosaidso/artifacts/runs/" + string(env.InvocationID) + "/out/result.json"
-	proofWrite(t, root, output, body)
-	seal.OutputRefs = e2eKnown([]model.ArtifactRef{e2ePin(body, output, "application/json")})
+	// The seal carries its output's bytes as a blob, as whosaidso run does.
+	blob := filepath.Join(t.TempDir(), "result.json")
+	proofWrite(t, filepath.Dir(blob), "result.json", body)
+	seal.Outputs = e2eKnown([]model.RunOutput{e2eOutput(body, "out/result.json", "application/json")})
+	blobs := [][]string{nil, {"--blob", blob}}
 	for i, event := range []model.TypedEvent{&model.InvocationStart{Envelope: env}, &model.InvocationSeal{StartRef: model.InvocationRef{Project: "test/cli", InvocationID: env.InvocationID}, Envelope: seal}} {
-		if _, err := e2eInvoke(t, root, []model.TypedEvent{event}, "capture", "--command-id", string(cliID(n+1+i))); err != nil {
+		if _, err := e2eInvoke(t, root, []model.TypedEvent{event}, append([]string{"capture", "--command-id", string(cliID(n + 1 + i))}, blobs[i]...)...); err != nil {
 			t.Fatal(err)
 		}
 	}

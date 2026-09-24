@@ -31,6 +31,10 @@ func e2ePin(body, path, media string) model.ArtifactRef {
 	return model.ArtifactRef{Kind: "content", Content: &model.ContentPin{SHA256: model.HashBytes([]byte(body)), Length: uint64(len(body)), MediaType: media, Locators: []model.Locator{{Path: path}}}, Selector: model.Selector{Kind: "whole"}}
 }
 
+func e2eOutput(body, name, media string) model.RunOutput {
+	return model.RunOutput{Name: name, SHA256: model.HashBytes([]byte(body)), Length: uint64(len(body)), MediaType: media}
+}
+
 func e2eKnown[T any](v T) model.Availability[T] {
 	return model.Availability[T]{State: model.Known, Value: &v}
 }
@@ -147,8 +151,8 @@ func e2eStatus(t *testing.T, root string, claim model.RecordRef) reduce.ClaimSta
 // The whole path through the real CLI, one fresh process per step: capture and
 // admit the records, a frozen criterion and an attempt, `whosaidso run` a producer,
 // admit its start and seal (MEASURED), then capture and admit proof (PROVEN).
-// The criterion's contract path out/result.json resolves in this run's own
-// directory, .whosaidso/artifacts/runs/<invocation-id>/out/result.json (R8.3).
+// The criterion's contract path out/result.json names this run's output
+// out/result.json (R8.3).
 func TestCLIFreshProcessesRunToProven(t *testing.T) {
 	root, criterion, instrument, attempt := e2eWorld(t)
 	out, err := e2eInvoke(t, root, nil, "run", "--attempt-id", string(attempt), "--instrument", string(instrument.RecordID),
@@ -213,14 +217,14 @@ func TestCLIFreshProcessesCaptureAdmitProofToProven(t *testing.T) {
 		Argv:                    []string{"/bin/sh", "tools/measure.sh"}, InputRefs: []model.ArtifactRef{}, ConfigRequested: map[string]model.Scalar{}, ConditionsDeclared: map[string]model.Scalar{},
 		ConfigEffective: unknown("not launched"), ConditionsObserved: unknown("not launched"), Isolation: model.Availability[model.Isolation]{State: model.Unknown, Reason: "not enforced"},
 		StartedAt: time.Now().UTC(), ObservedAt: model.Availability[time.Time]{State: model.Unknown, Reason: "not launched"}, Outcome: model.Availability[model.ProcessOutcome]{State: model.Unknown, Reason: "not launched"},
-		OutputRefs: model.Availability[[]model.ArtifactRef]{State: model.Unknown, Reason: "not launched"}, Visual: model.Availability[model.VisualObservation]{State: model.Unknown, Reason: "numeric"}}
+		Outputs: model.Availability[[]model.RunOutput]{State: model.Unknown, Reason: "not launched"}, Visual: model.Availability[model.VisualObservation]{State: model.Unknown, Reason: "numeric"}}
 	seal := env
 	exit := 0
 	seal.ObservedAt, seal.Outcome = e2eKnown(env.StartedAt.Add(time.Millisecond)), e2eKnown(model.ProcessOutcome{Kind: "exit", ExitCode: &exit})
-	output := ".whosaidso/artifacts/runs/" + string(env.InvocationID) + "/out/result.json"
-	proofWrite(t, root, output, e2ePass)
-	seal.OutputRefs = e2eKnown([]model.ArtifactRef{e2ePin(e2ePass, output, "application/json")})
-	steps := [][]string{{"capture", "--command-id", string(cliID(701))}, {"capture", "--command-id", string(cliID(702))}}
+	blob := filepath.Join(t.TempDir(), "result.json")
+	proofWrite(t, filepath.Dir(blob), "result.json", e2ePass)
+	seal.Outputs = e2eKnown([]model.RunOutput{e2eOutput(e2ePass, "out/result.json", "application/json")})
+	steps := [][]string{{"capture", "--command-id", string(cliID(701))}, {"capture", "--command-id", string(cliID(702)), "--blob", blob}}
 	for i, event := range []model.TypedEvent{&model.InvocationStart{Envelope: env}, &model.InvocationSeal{StartRef: model.InvocationRef{Project: "test/cli", InvocationID: env.InvocationID}, Envelope: seal}} {
 		if _, err := e2eInvoke(t, root, []model.TypedEvent{event}, steps[i]...); err != nil {
 			t.Fatal(err)
@@ -325,7 +329,7 @@ func TestCLIFreshProcessesReconcileADeadRunner(t *testing.T) {
 		Argv:                    []string{"/bin/sh", "tools/measure.sh"}, InputRefs: []model.ArtifactRef{}, ConfigRequested: map[string]model.Scalar{}, ConditionsDeclared: map[string]model.Scalar{},
 		ConfigEffective: unknown(), ConditionsObserved: unknown(), Isolation: model.Availability[model.Isolation]{State: model.Unknown, Reason: "not enforced"},
 		StartedAt: time.Now().UTC(), ObservedAt: model.Availability[time.Time]{State: model.Unknown, Reason: "not launched"}, Outcome: model.Availability[model.ProcessOutcome]{State: model.Unknown, Reason: "not launched"},
-		OutputRefs: model.Availability[[]model.ArtifactRef]{State: model.Unknown, Reason: "not launched"}, Visual: model.Availability[model.VisualObservation]{State: model.Unknown, Reason: "numeric"}}
+		Outputs: model.Availability[[]model.RunOutput]{State: model.Unknown, Reason: "not launched"}, Visual: model.Availability[model.VisualObservation]{State: model.Unknown, Reason: "numeric"}}
 	if _, err := e2eInvoke(t, root, []model.TypedEvent{&model.InvocationStart{Envelope: env}}, "capture", "--command-id", string(cliID(801))); err != nil {
 		t.Fatal(err)
 	}
@@ -347,7 +351,7 @@ func TestCLIFreshProcessesReconcileADeadRunner(t *testing.T) {
 	prefix, _ := store.ReadPrefix(project)
 	snapshot, err := reduce.Replay(prefix)
 	inv, ok := snapshot.Invocation(reduce.InvocationKey{Project: "test/cli", InvocationID: env.InvocationID})
-	if err != nil || !ok || inv.Seal == nil || inv.Seal.Outcome.State != model.Unknown || inv.Seal.OutputRefs.State != model.Unknown || !strings.Contains(inv.Seal.Outcome.Reason, "lane") {
+	if err != nil || !ok || inv.Seal == nil || inv.Seal.Outcome.State != model.Unknown || inv.Seal.Outputs.State != model.Unknown || !strings.Contains(inv.Seal.Outcome.Reason, "lane") {
 		t.Fatalf("reconciliation seal missing or carrying a reading: %+v, %v", inv.Seal, err)
 	}
 	if status := e2eStatus(t, root, criterion.Claim); status != reduce.StatusUnmeasured {

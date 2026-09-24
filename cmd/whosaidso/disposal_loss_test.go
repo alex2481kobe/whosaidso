@@ -58,9 +58,9 @@ func disposalWorld(t *testing.T) (string, model.ArtifactRef, []model.RecordRef) 
 	if err := e2eAdmitOne(t, root, open(911, first), 914, 915, "lane"); err != nil {
 		t.Fatal(err)
 	}
-	for _, ref := range *run.Envelope.OutputRefs.Value {
-		if strings.HasSuffix(ref.Content.Locators[0].Path, "/out/result.json") {
-			return root, ref, []model.RecordRef{criterion.Claim, first, second}
+	for _, out := range *run.Envelope.Outputs.Value {
+		if out.Name == "out/result.json" {
+			return root, out.Ref(), []model.RecordRef{criterion.Claim, first, second}
 		}
 	}
 	t.Fatal("the run recorded no out/result.json output")
@@ -140,7 +140,7 @@ func TestCLIDisposalLossListIsExactlyWhatAdmissionRequires(t *testing.T) {
 		for _, ref := range refs {
 			loss = append(loss, model.SupportLoss{Target: ref, Reason: "its supporting run output is deleted"})
 		}
-		return &model.ArtifactDispose{Artifact: output, Digest: output.Content.SHA256, PreviousLocation: output.Content.Locators[0].Path, SupportLoss: loss, Authority: authority}
+		return &model.ArtifactDispose{Artifact: output, Digest: output.Content.SHA256, PreviousLocation: ".whosaidso/artifacts/" + string(output.Content.SHA256), SupportLoss: loss, Authority: authority}
 	}
 	// Every single omission is refused, so no entry the check prints is
 	// surplus the gate would not have asked for.

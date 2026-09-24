@@ -57,14 +57,14 @@ func proofEnvelope(claim model.RecordRef, id model.ID) model.InvocationEnvelope 
 		ConditionsDeclared: map[string]model.Scalar{}, ConditionsObserved: proofUnknown[map[string]model.Availability[model.Scalar]](),
 		Isolation: proofUnknown[model.Isolation](), StartedAt: baseTime.Add(time.Hour),
 		ObservedAt: proofUnknown[time.Time](), Outcome: proofUnknown[model.ProcessOutcome](),
-		OutputRefs: proofUnknown[[]model.ArtifactRef](), Visual: proofUnknown[model.VisualObservation](),
+		Outputs: proofUnknown[[]model.RunOutput](), Visual: proofUnknown[model.VisualObservation](),
 	}
 }
 
 func sealProof(env model.InvocationEnvelope, exit int) *model.InvocationSeal {
 	env.ObservedAt = proofKnown(env.StartedAt.Add(time.Second))
 	env.Outcome = proofKnown(model.ProcessOutcome{Kind: "exit", ExitCode: &exit})
-	env.OutputRefs = proofKnown([]model.ArtifactRef{blobRef("result")})
+	env.Outputs = proofKnown([]model.RunOutput{{Name: "result", SHA256: newDigest("result"), Length: 6, MediaType: "application/json"}})
 	return &model.InvocationSeal{StartRef: model.InvocationRef{Project: testProject, InvocationID: env.InvocationID}, Envelope: env}
 }
 
@@ -150,7 +150,7 @@ func TestU06FailedAndUnavailableObservations(t *testing.T) {
 			s.Envelope.Outcome = proofKnown(model.ProcessOutcome{Kind: "exit", ExitCode: &n})
 		}, StatusMeasured},
 		{"observer died", func(s *model.InvocationSeal) { s.Envelope.Outcome = proofUnknown[model.ProcessOutcome]() }, StatusUnmeasured},
-		{"no output known", func(s *model.InvocationSeal) { s.Envelope.OutputRefs = proofUnknown[[]model.ArtifactRef]() }, StatusUnmeasured},
+		{"no output known", func(s *model.InvocationSeal) { s.Envelope.Outputs = proofUnknown[[]model.RunOutput]() }, StatusUnmeasured},
 		{"spawn failed", func(s *model.InvocationSeal) {
 			d := "no executable"
 			s.Envelope.Outcome = proofKnown(model.ProcessOutcome{Kind: "spawn-failed", Diagnostic: &d})

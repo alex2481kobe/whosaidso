@@ -54,14 +54,14 @@ func schemaExpression() CriterionExpression {
 	return CriterionExpression{ResultSelector: schemaArtifact(), Unit: "cases", Population: Population{Identity: "all declared schema cases", Selector: schemaArtifact(), Denominator: "the complete fixture set"}, Operator: Equal, Target: schemaNumber("0"), Reducer: All}
 }
 func schemaEnvelope() InvocationEnvelope {
-	return InvocationEnvelope{InvocationID: schemaID(9), AttemptID: schemaID(10), InstrumentRef: schemaRef(11), CriterionRef: schemaKnown(schemaCriterionRef()), ExecutionSourceIdentity: ExecutionIdentity{Project: schemaProject, MachineID: schemaUnknown[ID](), SourceRefs: []ArtifactRef{schemaArtifact()}, Head: schemaUnknown[GitHead](), Dirty: schemaUnknown[bool]()}, Argv: []string{"go", "test", "./internal/model/"}, InputRefs: []ArtifactRef{schemaArtifact()}, ConfigRequested: map[string]Scalar{"sample_count": schemaNumber("0")}, ConfigEffective: schemaUnknown[map[string]Availability[Scalar]](), ConditionsDeclared: map[string]Scalar{}, ConditionsObserved: schemaUnknown[map[string]Availability[Scalar]](), Isolation: schemaUnknown[Isolation](), StartedAt: time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC), ObservedAt: schemaUnknown[time.Time](), Outcome: schemaUnknown[ProcessOutcome](), OutputRefs: schemaUnknown[[]ArtifactRef](), Visual: schemaUnknown[VisualObservation]()}
+	return InvocationEnvelope{InvocationID: schemaID(9), AttemptID: schemaID(10), InstrumentRef: schemaRef(11), CriterionRef: schemaKnown(schemaCriterionRef()), ExecutionSourceIdentity: ExecutionIdentity{Project: schemaProject, MachineID: schemaUnknown[ID](), SourceRefs: []ArtifactRef{schemaArtifact()}, Head: schemaUnknown[GitHead](), Dirty: schemaUnknown[bool]()}, Argv: []string{"go", "test", "./internal/model/"}, InputRefs: []ArtifactRef{schemaArtifact()}, ConfigRequested: map[string]Scalar{"sample_count": schemaNumber("0")}, ConfigEffective: schemaUnknown[map[string]Availability[Scalar]](), ConditionsDeclared: map[string]Scalar{}, ConditionsObserved: schemaUnknown[map[string]Availability[Scalar]](), Isolation: schemaUnknown[Isolation](), StartedAt: time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC), ObservedAt: schemaUnknown[time.Time](), Outcome: schemaUnknown[ProcessOutcome](), Outputs: schemaUnknown[[]RunOutput](), Visual: schemaUnknown[VisualObservation]()}
 }
 func ptr[T any](v T) *T { return &v }
 func schemaEvents() []TypedEvent {
 	seal := schemaEnvelope()
 	seal.ObservedAt = schemaKnown(seal.StartedAt.Add(time.Second))
 	seal.Outcome = schemaKnown(ProcessOutcome{Kind: "exit", ExitCode: ptr(0)})
-	seal.OutputRefs = schemaKnown([]ArtifactRef{schemaArtifact()})
+	seal.Outputs = schemaKnown([]RunOutput{{Name: "out/result.json", SHA256: HashBytes([]byte("result")), Length: 6, MediaType: "application/json"}})
 	seal.ConfigEffective = schemaKnown(map[string]Availability[Scalar]{"sample_count": schemaKnown(schemaNumber("0"))})
 	seal.ConditionsObserved = schemaKnown(map[string]Availability[Scalar]{})
 	return []TypedEvent{

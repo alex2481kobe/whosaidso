@@ -64,7 +64,7 @@ func Reconcile(ctx context.Context, project store.Project, r ReconcileRequest) (
 	env := inv.Start
 	env.Outcome = model.Availability[model.ProcessOutcome]{State: model.Unknown, Reason: why}
 	env.ObservedAt = model.Availability[time.Time]{State: model.Unknown, Reason: why}
-	env.OutputRefs = model.Availability[[]model.ArtifactRef]{State: model.Unknown, Reason: why}
+	env.Outputs = model.Availability[[]model.RunOutput]{State: model.Unknown, Reason: why}
 	env.ConfigEffective = model.Availability[map[string]model.Availability[model.Scalar]]{State: model.Unknown, Reason: why}
 	env.ConditionsObserved = model.Availability[map[string]model.Availability[model.Scalar]]{State: model.Unknown, Reason: why}
 	env.Isolation = model.Availability[model.Isolation]{State: model.Unknown, Reason: why}

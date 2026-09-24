@@ -11,10 +11,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	"whosaidso/internal/evidence"
 	"whosaidso/internal/model"
 	"whosaidso/internal/reduce"
 	"whosaidso/internal/store"
@@ -69,7 +67,7 @@ func copiesIn(t *testing.T, root string, data []byte) []string {
 func TestRunAdmitCommitsEachOutputOnce(t *testing.T) {
 	w := newProofWorld(t, true)
 	result, err := Run(context.Background(), w.f.project, runStorageRequest(t, w, runOwnBody, ""))
-	if err != nil || result.Envelope.OutputRefs.Value == nil {
+	if err != nil || result.Envelope.Outputs.Value == nil {
 		t.Fatalf("control: a real run must seal its outputs: %v", err)
 	}
 	if result.ArtifactDir != "" {
@@ -84,20 +82,17 @@ func TestRunAdmitCommitsEachOutputOnce(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(storeDir, "runs")); !os.IsNotExist(err) {
 		t.Fatalf("the committed store must hold no run directory: %v", err)
 	}
-	for _, ref := range *result.Envelope.OutputRefs.Value {
-		want := filepath.Join(storeDir, string(ref.Content.SHA256))
+	for _, out := range *result.Envelope.Outputs.Value {
+		want := filepath.Join(storeDir, string(out.SHA256))
 		data, err := os.ReadFile(want)
 		if err != nil {
-			t.Fatalf("output %s was not published by digest: %v", ref.Content.Locators[0].Path, err)
+			t.Fatalf("output %s was not published by digest: %v", out.Name, err)
 		}
 		if got := copiesIn(t, w.f.project.Root, data); len(got) != 1 || got[0] != want {
-			t.Fatalf("output %s must exist exactly once in project storage, at %s; found %v", ref.Content.Locators[0].Path, want, got)
-		}
-		if at := ref.Content.Locators[0].Path; !strings.HasPrefix(at, evidence.RunDirIn(w.f.project.ArtifactDir(), result.Envelope.InvocationID)+"/") {
-			t.Fatalf("an output keeps its logical name in its run's directory, got %s", at)
+			t.Fatalf("output %s must exist exactly once in project storage, at %s; found %v", out.Name, want, got)
 		}
 	}
-	// The logical names still bind the observation to this run's bytes.
+	// The output names still bind the observation to this run's bytes.
 	ref := model.InvocationRef{Project: w.f.project.ID, InvocationID: result.Envelope.InvocationID}
 	w.f.accept(w.f.capture(nil, w.proof(w.criterion, map[model.InvocationRef]string{ref: "supports"})))
 	if status := w.status(t); status != reduce.StatusProven {

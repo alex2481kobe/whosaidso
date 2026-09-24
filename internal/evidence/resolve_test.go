@@ -25,15 +25,11 @@ const resultArtifact = `{
 func observeFixture(t *testing.T) (*Resolver, model.CriterionFix, model.InvocationEnvelope) {
 	t.Helper()
 	root := t.TempDir()
-	out := RunDir(invocationA) + "/out/result.json"
-	writeFile(t, root, out, resultArtifact)
+	writeFile(t, root, storeCopy(resultArtifact), resultArtifact)
 
 	c := testCriterion(t)
 	env := testEnvelope(t, invocationA)
-	env.OutputRefs = model.Availability[[]model.ArtifactRef]{
-		State: model.Known,
-		Value: &[]model.ArtifactRef{contentRef(resultArtifact, "application/json", []string{out}, "whole", "")},
-	}
+	env.Outputs = knownOutputs(runOutput("out/result.json", resultArtifact, "application/json"))
 	return NewResolver(root), c, env
 }
 
@@ -61,7 +57,7 @@ func TestObserveReadsTheRunsOwnArtifact(t *testing.T) {
 
 	t.Run("a run with no observed outputs has no reading", func(t *testing.T) {
 		env := env
-		env.OutputRefs = model.Availability[[]model.ArtifactRef]{State: model.Unknown, Reason: "the observer was killed"}
+		env.Outputs = model.Availability[[]model.RunOutput]{State: model.Unknown, Reason: "the observer was killed"}
 		o, err := r.Observe(ctx, c, env)
 		if err != nil {
 			t.Fatal(err)
@@ -73,10 +69,7 @@ func TestObserveReadsTheRunsOwnArtifact(t *testing.T) {
 
 	t.Run("outputs that do not include the selected artifact", func(t *testing.T) {
 		env := env
-		env.OutputRefs = model.Availability[[]model.ArtifactRef]{
-			State: model.Known,
-			Value: &[]model.ArtifactRef{contentRef("other", "text/plain", []string{"out/log.txt"}, "whole", "")},
-		}
+		env.Outputs = knownOutputs(runOutput("out/log.txt", "other", "text/plain"))
 		o, err := r.Observe(ctx, c, env)
 		if err != nil {
 			t.Fatal(err)
@@ -158,11 +151,9 @@ func TestPinnedBytesDecideTheVerdict(t *testing.T) {
 
 	observe := func(t *testing.T, body string, sel model.Selector) Observation {
 		t.Helper()
-		out := RunDir(invocationA) + "/out/result.json"
-		writeFile(t, root, out, body)
+		writeFile(t, root, storeCopy(body), body)
 		env := testEnvelope(t, invocationA)
-		ref := contentRef(body, "application/json", []string{out}, sel.Kind, sel.Pointer)
-		env.OutputRefs = model.Availability[[]model.ArtifactRef]{State: model.Known, Value: &[]model.ArtifactRef{ref}}
+		env.Outputs = knownOutputs(runOutput("out/result.json", body, "application/json"))
 		o, err := r.Observe(ctx, c, env)
 		if err != nil {
 			t.Fatal(err)
@@ -190,11 +181,9 @@ func TestPinnedBytesDecideTheVerdict(t *testing.T) {
 		expr := c.Expression
 		expr.ResultSelector = contentRef(criterionExample, "application/json", []string{"out/result.json"}, "whole", "")
 		whole.Expression = expr
-		out := RunDir(invocationA) + "/out/result.json"
-		writeFile(t, root, out, resultArtifact)
+		writeFile(t, root, storeCopy(resultArtifact), resultArtifact)
 		env := testEnvelope(t, invocationA)
-		ref := contentRef(resultArtifact, "application/json", []string{out}, "whole", "")
-		env.OutputRefs = model.Availability[[]model.ArtifactRef]{State: model.Known, Value: &[]model.ArtifactRef{ref}}
+		env.Outputs = knownOutputs(runOutput("out/result.json", resultArtifact, "application/json"))
 		o, err := r.Observe(ctx, whole, env)
 		if err != nil {
 			t.Fatal(err)
@@ -206,10 +195,8 @@ func TestPinnedBytesDecideTheVerdict(t *testing.T) {
 
 	t.Run("bytes that no longer match the pin", func(t *testing.T) {
 		env := testEnvelope(t, invocationA)
-		out := RunDir(invocationA) + "/out/result.json"
-		ref := contentRef(resultArtifact, "application/json", []string{out}, "json-pointer", "/results")
-		env.OutputRefs = model.Availability[[]model.ArtifactRef]{State: model.Known, Value: &[]model.ArtifactRef{ref}}
-		writeFile(t, root, out, failing)
+		env.Outputs = knownOutputs(runOutput("out/result.json", resultArtifact, "application/json"))
+		writeFile(t, root, storeCopy(resultArtifact), failing)
 		o, err := r.Observe(ctx, c, env)
 		if err != nil {
 			t.Fatal(err)

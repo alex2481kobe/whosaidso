@@ -156,6 +156,10 @@ func gateWalkArtifacts(value reflect.Value, out *[]model.ArtifactRef) {
 		*out = append(*out, value.Interface().(model.ArtifactRef))
 		return
 	}
+	if value.Type() == reflect.TypeOf(model.RunOutput{}) {
+		*out = append(*out, value.Interface().(model.RunOutput).Ref())
+		return
+	}
 	switch value.Kind() {
 	case reflect.Struct:
 		for i := 0; i < value.NumField(); i++ {
@@ -253,7 +257,7 @@ func gateReconciliation(env model.InvocationEnvelope, author model.Actor) error 
 		name  string
 		state model.AvailabilityState
 	}{
-		{"observed_at", env.ObservedAt.State}, {"output_refs", env.OutputRefs.State}, {"config_effective", env.ConfigEffective.State},
+		{"observed_at", env.ObservedAt.State}, {"outputs", env.Outputs.State}, {"config_effective", env.ConfigEffective.State},
 		{"conditions_observed", env.ConditionsObserved.State}, {"isolation", env.Isolation.State}, {"visual", env.Visual.State},
 	} {
 		if f.state != model.Unknown {

@@ -6,6 +6,7 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+	"path"
 	"time"
 )
 
@@ -89,8 +90,55 @@ type InvocationEnvelope struct {
 	StartedAt               time.Time                                     `json:"started_at"`
 	ObservedAt              Availability[time.Time]                       `json:"observed_at"`
 	Outcome                 Availability[ProcessOutcome]                  `json:"outcome"`
-	OutputRefs              Availability[[]ArtifactRef]                   `json:"output_refs"`
+	Outputs                 Availability[[]RunOutput]                     `json:"outputs"`
 	Visual                  Availability[VisualObservation]               `json:"visual"`
+}
+
+// RunOutput is one file a run produced. Its identity is the invocation whose
+// envelope lists it, its name inside that run, and its bytes (digest, length,
+// media type). Where a copy is stored is not part of it: the configured
+// artifact store finds the bytes by digest, so moving or renaming that store
+// changes nothing a recorded run means. A criterion selector binds to Name.
+type RunOutput struct {
+	Name      string `json:"name"`
+	SHA256    Digest `json:"sha256"`
+	Length    uint64 `json:"length"`
+	MediaType string `json:"media_type"`
+}
+
+// Ref is the output's bytes as an artifact reference: a content pin with no
+// locator, since the store finds the bytes by digest and a name inside a run
+// is not a path anywhere. Whatever cites or disposes of artifacts sees a run
+// output through it.
+func (o RunOutput) Ref() ArtifactRef {
+	return ArtifactRef{Kind: "content", Selector: Selector{Kind: "whole"},
+		Content: &ContentPin{SHA256: o.SHA256, Length: o.Length, MediaType: o.MediaType, Locators: []Locator{}}}
+}
+
+func (o RunOutput) validate(p string) error {
+	if err := RunOutputName(o.Name, p+".name"); err != nil {
+		return err
+	}
+	if !ValidDigest(o.SHA256) {
+		return invalid(p+".sha256", "not lowercase sha-256 hex")
+	}
+	if Blank(o.MediaType) {
+		return invalid(p+".media_type", "empty media type")
+	}
+	return nil
+}
+
+// RunOutputName is the one rule for an output name, in a seal and in the
+// selector that reads it: a relative path in canonical form, so no two
+// spellings name one output and none leaves the run.
+func RunOutputName(name, p string) error {
+	if err := relativePath(name, p); err != nil {
+		return err
+	}
+	if path.Clean(name) != name {
+		return invalid(p, "an output name is a canonical relative path")
+	}
+	return nil
 }
 
 type Isolation string
@@ -251,6 +299,15 @@ func (e InvocationEnvelope) validate(p string) error {
 	}
 	if e.ObservedAt.State == Known && e.ObservedAt.Value != nil && e.ObservedAt.Value.Before(e.StartedAt) {
 		return invalid(p+".observed_at", "observation precedes start")
+	}
+	if e.Outputs.Value != nil {
+		names := map[string]bool{}
+		for i, o := range *e.Outputs.Value {
+			if names[o.Name] {
+				return invalid(fmt.Sprintf("%s.outputs[%d].name", p, i), "two outputs of one run share a name")
+			}
+			names[o.Name] = true
+		}
 	}
 	return nil
 }

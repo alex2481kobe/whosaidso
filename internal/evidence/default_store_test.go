@@ -2,7 +2,7 @@ package evidence
 
 // This file guards one rule of R13.1 at the source level: production outside
 // this package never reaches the default artifact store. Resolution tests
-// belong in resolve_test.go, run-directory tests in run_dir_test.go.
+// belong in resolve_test.go, run-output tests in output_name_test.go.
 
 import (
 	"os"
@@ -14,7 +14,7 @@ import (
 // A project's artifact store is derived from its configured ledger
 // (store.Project.ArtifactDir). The root-only constructors and the default
 // directory exist for callers that know no project; a production caller using
-// them would put blobs or run directories at a second, hard-coded location.
+// them would put blobs at a second, hard-coded location.
 func TestProductionNeverUsesTheDefaultArtifactStore(t *testing.T) {
 	repo := filepath.Join("..", "..")
 	var scanned int
@@ -33,7 +33,7 @@ func TestProductionNeverUsesTheDefaultArtifactStore(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		for _, use := range []string{"evidence.NewResolver(", "evidence.RunDir(", "evidence.DefaultArtifactDir", "evidence.RecordDir"} {
+		for _, use := range []string{"evidence.NewResolver(", "evidence.DefaultArtifactDir", "evidence.RecordDir"} {
 			if strings.Contains(string(data), use) {
 				t.Errorf("%s uses %s; production must use the project's ledger-derived store", path, use)
 			}

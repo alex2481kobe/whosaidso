@@ -23,10 +23,11 @@ import (
 )
 
 // snapshotFormat names the encoding. Change it with any change to codec.go or
-// to the field list below, or to the event format an image carries: /2 is the
-// R18.2 format, so an image of a pre-migration ledger is refused and rebuilt
-// (and the old ledger refused) rather than answering from old events.
-const snapshotFormat = "whosaidso-snapshot/2"
+// to the field list below, or to the event format an image carries: /3 is the
+// format whose run outputs are named inside their run, so an image of a
+// pre-migration ledger is refused and rebuilt (and the old ledger refused)
+// rather than answering from old events.
+const snapshotFormat = "whosaidso-snapshot/3"
 
 // persisted names every state field an image carries, in encoding order. The
 // transient ones (the candidate inventory and a dry run's refusal collector)

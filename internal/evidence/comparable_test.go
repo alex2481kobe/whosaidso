@@ -61,8 +61,8 @@ func TestExecutionIdentityDecidesComparability(t *testing.T) {
 
 	t.Run("control: the same source pinned from each run's own copy compares", func(t *testing.T) {
 		a, b := passing(invocationA), passing(invocationB)
-		a.Execution.SourceRefs = []model.ArtifactRef{contentRef("source", "text/plain", []string{RunDir(invocationA) + "/src.go"}, "whole", "")}
-		b.Execution.SourceRefs = []model.ArtifactRef{contentRef("source", "text/plain", []string{RunDir(invocationB) + "/src.go"}, "whole", "")}
+		a.Execution.SourceRefs = []model.ArtifactRef{contentRef("source", "text/plain", []string{"copies/" + string(invocationA) + "/src.go"}, "whole", "")}
+		b.Execution.SourceRefs = []model.ArtifactRef{contentRef("source", "text/plain", []string{"copies/" + string(invocationB) + "/src.go"}, "whole", "")}
 		wantBothOrders(t, c, a, b, True, "")
 	})
 
@@ -74,7 +74,7 @@ func TestExecutedSourceMustBeEstablishedEqual(t *testing.T) {
 	c := testCriterion(t)
 	otherHead := model.GitHead{ObjectFormat: "sha1", Commit: "2222222222222222222222222222222222222222"}
 	pin := func(id model.ID) []model.ArtifactRef {
-		return []model.ArtifactRef{contentRef("source", "text/plain", []string{RunDir(id) + "/src.go"}, "whole", "")}
+		return []model.ArtifactRef{contentRef("source", "text/plain", []string{"copies/" + string(id) + "/src.go"}, "whole", "")}
 	}
 	t.Run("control: equal known HEADs, both clean, compare", func(t *testing.T) {
 		wantBothOrders(t, c, passing(invocationA), passing(invocationB), True, "")
@@ -122,7 +122,7 @@ func TestExecutedSourceMustBeEstablishedEqual(t *testing.T) {
 
 func testVisual() model.VisualObservation {
 	n := func(s string) json.Number { return json.Number(s) }
-	transforms := contentRef(`{"joints":[]}`, "application/json", []string{RunDir(invocationA) + "/transforms.json"}, "whole", "")
+	transforms := contentRef(`{"joints":[]}`, "application/json", []string{"copies/" + string(invocationA) + "/transforms.json"}, "whole", "")
 	return model.VisualObservation{
 		Framing: knownOf(model.VisualFraming{
 			Subject: knownOf("left knee"), ProjectedBounds: unknownOf[model.ArtifactRef]("not measured"),
@@ -144,11 +144,11 @@ func TestVisualConditionsDecideComparability(t *testing.T) {
 		// Unknown sub-fields other than the one under test are set KNOWN here, so
 		// only the alteration decides.
 		f := *v.Framing.Value
-		f.ProjectedBounds = knownOf(contentRef("bounds", "text/plain", []string{RunDir(id) + "/bounds.txt"}, "whole", ""))
+		f.ProjectedBounds = knownOf(contentRef("bounds", "text/plain", []string{"copies/" + string(id) + "/bounds.txt"}, "whole", ""))
 		v.Framing = knownOf(f)
 		a := *v.Appearance.Value
-		a.Lights, a.Materials, a.DiagnosticOverrides = knownOf(contentRef("l", "text/plain", []string{RunDir(id) + "/l"}, "whole", "")),
-			knownOf(contentRef("m", "text/plain", []string{RunDir(id) + "/m"}, "whole", "")), knownOf(contentRef("d", "text/plain", []string{RunDir(id) + "/d"}, "whole", ""))
+		a.Lights, a.Materials, a.DiagnosticOverrides = knownOf(contentRef("l", "text/plain", []string{"copies/" + string(id) + "/l"}, "whole", "")),
+			knownOf(contentRef("m", "text/plain", []string{"copies/" + string(id) + "/m"}, "whole", "")), knownOf(contentRef("d", "text/plain", []string{"copies/" + string(id) + "/d"}, "whole", ""))
 		v.Appearance = knownOf(a)
 		if alter != nil {
 			alter(&v)
@@ -188,7 +188,7 @@ func TestVisualConditionsDecideComparability(t *testing.T) {
 			v.Framing = knownOf(f)
 		}), "not observed in either run"},
 		{"different transforms bytes", pictured(invocationA, nil), pictured(invocationB, func(v *model.VisualObservation) {
-			v.Transforms = knownOf(contentRef(`{"joints":[25.03]}`, "application/json", []string{RunDir(invocationB) + "/transforms.json"}, "whole", ""))
+			v.Transforms = knownOf(contentRef(`{"joints":[25.03]}`, "application/json", []string{"copies/" + string(invocationB) + "/transforms.json"}, "whole", ""))
 		}), "transforms"},
 		{"different backend", pictured(invocationA, nil), pictured(invocationB, func(v *model.VisualObservation) { v.Backend = knownOf("webgl2") }), "backend"},
 		{"different viewport", pictured(invocationA, nil), pictured(invocationB, func(v *model.VisualObservation) {
@@ -212,20 +212,20 @@ func TestVisualConditionsDecideComparability(t *testing.T) {
 // a pictured run with no visual observation cannot compare as a numeric one.
 func TestObserveMarksARunThatMadeAPicture(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, root, RunDir(invocationA)+"/out/result.json", resultArtifact)
-	result := contentRef(resultArtifact, "application/json", []string{RunDir(invocationA) + "/out/result.json"}, "whole", "")
-	frame := contentRef("\x89PNG\r\n\x1a\nframe", "image/png", []string{RunDir(invocationA) + "/frame.png"}, "whole", "")
+	writeFile(t, root, storeCopy(resultArtifact), resultArtifact)
+	result := runOutput("out/result.json", resultArtifact, "application/json")
+	frame := runOutput("frame.png", "\x89PNG\r\n\x1a\nframe", "image/png")
 	for _, tc := range []struct {
 		name    string
-		outputs []model.ArtifactRef
+		outputs []model.RunOutput
 		want    bool
 	}{
-		{"control: numeric outputs only", []model.ArtifactRef{result}, false},
-		{"an image output", []model.ArtifactRef{result, frame}, true},
+		{"control: numeric outputs only", []model.RunOutput{result}, false},
+		{"an image output", []model.RunOutput{result, frame}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			env := testEnvelope(t, invocationA)
-			env.OutputRefs = knownOf(tc.outputs)
+			env.Outputs = knownOutputs(tc.outputs...)
 			o, err := NewResolver(root).Observe(context.Background(), testCriterion(t), env)
 			if err != nil || o.Unavailable != "" || o.ImageOutput != tc.want {
 				t.Fatalf("want ImageOutput=%v, got %v (%s, %v)", tc.want, o.ImageOutput, o.Unavailable, err)
