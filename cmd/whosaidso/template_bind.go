@@ -4,11 +4,12 @@ package main
 // Printing and --capture, which hands the event to capture's own path so the
 // gate stays the judge, live in template_capture.go. WhoSaidSo fills only what has one
 // computable answer: references and current revisions (template_ledger.go),
-// pins (template_pin.go), the project id, the packet author where it is the
+// pins (template_pin.go) and what their bytes state (template_derive.go), the project id, the packet author where it is the
 // author or attempt holder, the handback verb's false defaults, and a choice
 // with one member; which member of a choice the author filled is decided in
-// template_choice.go. Judgment stays a placeholder, and capture refuses
-// while any placeholder remains.
+// template_choice.go; where a path may add what the tree lacks, in
+// template_grow.go. Judgment stays a placeholder, and capture refuses while
+// any placeholder remains.
 
 import (
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	"fmt"
 	"strings"
 
+	"whosaidso/internal/evidence"
 	"whosaidso/internal/model"
 	"whosaidso/internal/store"
 )
@@ -41,6 +43,11 @@ type boundTemplate struct {
 	examples map[string]string
 	project  *store.Project
 	state    *store.State
+	// readings are what a criterion.fix's pinned selectors read (template_derive.go)
+	readings map[string]*evidence.Reading
+	// skeleton is the event's unfilled tree, the schema a path may grow into
+	skeleton  any
+	projectID string // the project id filled from whosaidso.toml, if found
 }
 
 // templateBindEvents says which events each bind flag fills. A flag given
@@ -135,7 +142,8 @@ func templateVerb(fs *flag.FlagSet) func(*call) error {
 // fill applies, in order: what needs no flag, the bind flags, then --set.
 func (t *boundTemplate) fill(b templateBinds) error {
 	if p, err := store.Discover(t.c.cwd); err == nil {
-		t.replaceAll("<project: the id declared in whosaidso.toml>", string(p.ID), "whosaidso.toml")
+		t.projectID = string(p.ID)
+		t.replaceAll(projectPlaceholder, t.projectID, "whosaidso.toml")
 	}
 	if path, ok := templateAuthorPaths[t.event]; ok && !model.Blank(t.author.ID) {
 		if err := t.put(path, model.Actor{ID: t.author.ID}, "the packet author (--actor or WHOSAIDSO_ACTOR)"); err != nil {
@@ -172,6 +180,9 @@ func (t *boundTemplate) fill(b templateBinds) error {
 		_, target, _ := strings.Cut(p, "=")
 		target, _, _ = strings.Cut(target, "#")
 		pinned[target] = true
+	}
+	if err := t.fillStated(); err != nil {
+		return err
 	}
 	for output := range t.examples {
 		if !pinned[output] {
@@ -235,6 +246,9 @@ func (t *boundTemplate) put(path string, v any, from string) error {
 			return err
 		}
 	}
+	if t.body, err = t.grow(t.body, steps, nil); err != nil {
+		return usageError("whosaidso template %s: %v", t.event, err)
+	}
 	if t.body, err = templateSet(t.body, steps, node, ""); err != nil {
 		return usageError("whosaidso template %s: %v", t.event, err)
 	}
@@ -248,27 +262,8 @@ func (t *boundTemplate) put(path string, v any, from string) error {
 
 // replaceAll fills every occurrence of one placeholder string.
 func (t *boundTemplate) replaceAll(placeholder, value, from string) {
-	count := 0
-	var walk func(node any) any
-	walk = func(node any) any {
-		switch n := node.(type) {
-		case templateObject:
-			for i := range n {
-				n[i].value = walk(n[i].value)
-			}
-		case []any:
-			for i := range n {
-				n[i] = walk(n[i])
-			}
-		case string:
-			if n == placeholder {
-				count++
-				return value
-			}
-		}
-		return node
-	}
-	t.body = walk(t.body)
+	var count int
+	t.body, count = replacePlaceholder(t.body, placeholder, value)
 	if count > 0 {
 		t.filled = append(t.filled, fmt.Sprintf("every %s (%d): %s", placeholder, count, from))
 	}

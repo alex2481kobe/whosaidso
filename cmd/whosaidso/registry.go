@@ -93,7 +93,8 @@ one completed run produced the candidate. Writes nothing. Exit 0 TRUE,
 		{name: "check admission", summary: "dry-run admission; list every refusal", detail: `Puts --events (one uncaptured packet by the actor) and any captured --packet
 through the admission gate at this watermark and collects every refusal the
 gate's stages allow, with each proof member's criterion verdict and its
-instrument's validation. The events packet carries no blobs. Writes nothing.
+instrument's validation. The events packet carries what capture would store
+with it: the --blob files and a source.intake's source bytes. Writes nothing.
 Exit 0 would-admit, 1 would-refuse. --family CLAIM instead lists every run a
 proof of the claim's current criterion must name (earlier revisions and
 rejected runs included), confirms the list through the same dry run, shows
@@ -119,16 +120,24 @@ evidence), --hold finds an open hold for blocker.clear. --pin NAME=PATH
 builds a reference from real bytes: PATH (project-relative) is a content pin
 (digest, length, a media type the bytes pass), PATH@REV the committed object
 (full commit, object format), #POINTER a json-pointer selector, else whole;
-a pinned file travels with --capture as a blob. --example OUTPUT=FILE lets
---pin NAME=OUTPUT pin FILE's bytes under a run output's name, for a
-criterion's example (never an observation). Judgment never:
+a pinned file travels with --capture as a blob. A PATH outside the project
+is pinned by content alone: no locator is stored, the bytes are the blob.
+--example OUTPUT=FILE lets --pin NAME=OUTPUT pin FILE's bytes under a run
+output's name, for a criterion's example (never an observation). What the
+pinned bytes state is filled too: a source.intake's original_digest and
+length; a criterion's unit, population identity and denominator when every
+declaration its selectors read states the same one (else they stay yours).
+Judgment never:
 assertions, falsifiers, blind spots, reasons, dispositions, verdicts,
 acceptance and validation stay placeholders; fill them with --set PATH=VALUE
 (paths as the notes print them, e.g. evidence[0].disposition) or by editing.
 Filling one member of a choice chooses it: --set actor.id=X drops
 actor.unknown_reason, a key of one member sets the tag, and the other
 members' keys nobody filled go; a filled one stays for the gate.
---set PATH=null omits an optional key; a required one is refused.
+--set PATH=null omits an optional key; a required one is refused. --set or
+--pin at a key the tree lacks adds it when the event's schema has it there
+(replacement.progress after --from), and at one past a list's end appends
+an element (acceptance_witness_refs[1].witness_ref); anything else is refused.
 --capture captures the result through capture's own path, refused while any
 placeholder remains; an optional key you put nothing into is omitted, and
 the ids it minted are named on stderr. --admit then admits it, as capture --admit

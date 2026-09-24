@@ -13,8 +13,9 @@ import (
 	"strings"
 )
 
-// print writes the event on stdout, and on stderr the notes, what was filled
-// and every placeholder still left to the author.
+// print writes the event on stdout, and on stderr the notes that still apply
+// to it (template_final.go), what was filled and every placeholder still left
+// to the author.
 func (t *boundTemplate) print() error {
 	data, err := renderTemplate(t.event, t.body)
 	if err != nil {
@@ -24,8 +25,8 @@ func (t *boundTemplate) print() error {
 		return err
 	}
 	var b strings.Builder
-	b.WriteString(renderTemplateNotes(t.event, t.notes))
-	for _, f := range t.filled {
+	b.WriteString(renderTemplateNotes(t.event, t.liveNotes()))
+	for _, f := range t.filledLines() {
 		fmt.Fprintf(&b, "filled   %s\n", f)
 	}
 	left := templatePlaceholders(t.body, "")

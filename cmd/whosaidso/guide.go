@@ -21,9 +21,12 @@ and disagreed"; what could not be compared is UNKNOWN.
   accept    a witnessed task.close ends the task (whosaidso help accept)
 
 Setup. Build with: go build -o whosaidso ./cmd/whosaidso. The project is the nearest
-whosaidso.toml above the working directory; it names the project id and the
-ledger path, conventionally .whosaidso/events. Bind the checkout holding the live
-ledger once per machine: whosaidso home PATH (whosaidso help home).
+whosaidso.toml above the working directory. It holds exactly two keys, both
+required, each a quoted string on its own line (# starts a comment):
+  id = 'animation/toy'          # the project id every record names
+  ledger = '.whosaidso/events'  # the ledger folder, inside the checkout
+Bind the checkout holding the live ledger once per machine:
+whosaidso home PATH (whosaidso help home).
 Set WHOSAIDSO_ACTOR to your name; --actor overrides it; a missing actor is
 recorded unknown, never guessed. Ids: whosaidso id prints one, whosaidso id 5 five.
 Never hand-write an id.
@@ -42,7 +45,8 @@ task.start (take an attempt; keep its attempt_id for run and handback),
 claim.assert, decision.open, and decision.dispose to record an owner's
 ruling (its quote must equal, byte for byte, what the authority's selector
 reads from a captured source, usually the owner's message captured as a
-source.intake with --blob). Look records up with whosaidso show --json ID.
+source.intake: whosaidso help sources).
+Look records up with whosaidso show --json ID.
 `},
 	{"views", "the four reads: todo, continue, show, history", `  whosaidso todo                   everything owed, in flight first
   whosaidso continue RECORD_ID     resume any record (a plan: its items)
@@ -59,9 +63,13 @@ whole record; --json is the complete answer, with snake_case keys.
 --limit N cuts only optional results (ready tasks, context refs) and says
 how many; blockers, closure, corrections and attention are never cut.
 show --kind task|claim|decision|instrument keeps one kind; instruments come
-validation first. Reads keep a disposable snapshot in .whosaidso/cache: it is
-checked against every ledger byte before use, and deleting it changes no
-answer.
+validation first. Reads keep a disposable snapshot in .whosaidso/cache, a
+local speed-up used only while it matches the ledger's chained hash;
+deleting it changes no answer. Its blind spot: a cache edited on purpose,
+with its checksum recomputed, can change what reads display (the ledger,
+the authority, is untouched). For final acceptance or any check that
+matters, set WHOSAIDSO_NO_CACHE=1: reads replay the whole ledger and neither
+read nor write the cache.
 `},
 	{"admit", "admission is the review; any actor; self-admission", `  whosaidso admit --outcome accepted|rejected|correction-requested --reason TEXT PACKET ...
 Any actor may admit. Admitting your own packet is allowed and recorded:
@@ -73,13 +81,36 @@ capture --admit and run --admit admit as a second act: if admission is
 refused, the capture stands, the packet stays pending, the retry command is
 printed and the exit status is 4 (partial success).
 `},
-	{"accept", "who accepts work; SELF-ACCEPTED", `A success handback closes the attempt, not the task: with no acceptance
-witness the task waits in todo's awaiting-acceptance section. A task.close
-with its witnesses ends it. A task may name its accepter; then only that
-actor may close it, otherwise anyone may. A closer who also did the work
-reads self_accepted: TRUE (SELF-ACCEPTED): visible, never blocked. Keep
-tasks small (R14.3) so success honestly means "this piece is done"; a large
-task stays open with the small ones as its prerequisites.
+	{"accept", "closing a task: witnesses, outcomes, withheld acceptance", `A success handback closes the attempt, not the task: the task waits in
+todo's awaiting-acceptance section until a task.close ends it. A task may
+name its accepter; then only that actor may close it, otherwise anyone may.
+A closer who also did the work reads self_accepted: TRUE (SELF-ACCEPTED):
+visible, never blocked. Keep tasks small (R14.3) so success honestly means
+"this piece is done"; a large task stays open with the small ones as its
+prerequisites. Start to close (A is the attempt_id start prints, PACKET the
+receipt handback prints):
+  whosaidso template task.start --task T --capture --admit --reason "..."
+  whosaidso handback --attempt-id A --outcome success --reason "..." --next-action "..."
+  whosaidso admit --outcome accepted --reason "..." PACKET
+  whosaidso template task.close --task T --set outcome=success \
+      --pin 'acceptance_witness_refs[0].witness_ref=EVIDENCE' \
+      --pin 'delivery_witness_refs[0]=DELIVERED' --capture --admit --reason "..."
+success needs both witnesses: an acceptance witness for each acceptance
+criterion of the revision closed (--task fills each criterion_id and
+revision; its witness_ref pins the evidence that criterion is met) and at
+least one delivery witness, pinning what was handed over (a commit, a file).
+Every attempt needs its receipt first. cancelled, withdrawn and waived
+close without witnesses; only success satisfies a task-success prerequisite.
+On someone else's word, cite them as the close's authority: capture their
+message as a source.intake (whosaidso help sources), then set authority.actor.id
+to them, --pin authority.source_ref to the same file, and name the task
+revision in authority.scope.context_refs.
+Not accepted yet: record why as a hold, and clear it when that is met:
+  whosaidso template blocker.hold --task T --set reason=awaiting-acceptance \
+      --set actor.id=WHO --set criterion="not accepted because ...; \
+      accepted when ..." --capture --admit --reason "..."
+  whosaidso template blocker.clear --hold H --pin resolving_witness=EVIDENCE \
+      --capture --admit --reason "..."
 `},
 	{"outcomes", "the nine handback outcomes, and holds", `  whosaidso handback --attempt-id ULID --outcome OUTCOME --reason TEXT --next-action TEXT
 Only success says the work got done, and it closes the attempt, not the
@@ -105,12 +136,46 @@ prerequisites are its items; whosaidso continue PLAN_ID shows each item with its
 current status and what is owed. Add an item by amending the plan task's
 prerequisites (task.amend).
 `},
+	{"sources", "what someone said, or an old record: source.intake", `A source.intake keeps the exact bytes someone said or wrote: an owner's
+message, an old note, a file from outside the repo. It records only what
+was said; nothing in it becomes a fact by being captured.
+  whosaidso template source.intake --pin source_ref=PATH --set order=0 \
+      --set speaker.id=WHO --set "referents=[$REF]" --capture --admit --reason "..."
+with REF='{"project":"P","record_id":"ID","revision":1}' for each record.
+PATH may lie outside the project: its bytes travel as a blob and no path is
+stored. original_digest and length are filled from the pin. speaker is who
+said it (speaker.unknown_reason when nobody knows); order is its zero-based
+place in that speaker's own sequence (their first message 0, the next 1),
+not ledger order; referents are the exact record revisions it concerns, and
+a close or waiver authority counts only for a revision its source names.
+An old record needs no import: capture it unchanged, then record what it
+becomes, by judgment: a task.create for work it asks for, a task.amend
+--from whose progress cites it (--set replacement.progress.summary=...
+--pin 'replacement.progress.witness_refs[0]=PATH'), or a claim with its
+falsifier. The home's staging/ folder holds runs' outputs, not notes.
+`},
 	{"proof", "criterion first, the whole family, a verdict", `1. Fix the criterion (criterion.fix) and admit it in an EARLIER bundle than
    any run it judges; freezing is checked against WhoSaidSo's capture stamp, not
    the started_at you write. Dry-run it first: whosaidso check criterion.
    whosaidso template criterion.fix --claim C --example stdout=FILE
    --pin expression.result_selector=stdout#/PTR pins an example run output
-   (an example, never an observation); the unit, target and the rest are yours.
+   (an example, never an observation). The unit, population identity and
+   denominator are filled when the example states each one alike; operator,
+   target and reducer are yours.
+   What a selector reads: at a JSON pointer, a bare value, or an object whose
+   "value" (one reading) or "values" (a set; each a value or an object with
+   its own "value") is compared. That object, else its parent, states what
+   the number is:
+     {"value": 0.75, "unit": "world units", "population": "the quarter-second
+      step", "denominator": "one step"}
+   unit is what the value is counted in, population which things the
+   reading covers, denominator what those are counted as. The result must
+   state its unit; a stated field must equal the criterion's unit,
+   population.identity and population.denominator; a blank or disagreeing
+   one reads UNKNOWN. The population selector's reading is counted: the
+   result must cover every member (count: at most that many). A whole
+   selector reads the artifact's digest (unit sha256, population and
+   denominator artifact).
 2. Run: whosaidso run --attempt-id A --instrument I --claim C -- ARGV. Omitted
    revisions (and the criterion, when the claim has one) resolve to the
    current admitted ones; the run records and prints them. Name
@@ -118,7 +183,18 @@ prerequisites (task.amend).
    runs without a shell (need a pipeline? -- sh -c '...'). One run carries
    one criterion.
    Its stdout is the output named stdout, in the run's own directory, where a
-   criterion's locator path resolves. Admit the start and seal.
+   criterion's locator path resolves. More outputs: write files under
+   $WHOSAIDSO_RUN_DIR and list them in the report at $WHOSAIDSO_RUN_REPORT,
+     {"version":1,"outputs":[{"path":"result.json","media_type":"application/json"}],
+      "config_effective":{"samples":{"type":"number","number":8}},"conditions_observed":{}}
+   and each is an output under its path, as stdout is. Paths are regular
+   files relative to the run dir, no symlinks or "..", each named once with a
+   media_type (not stdout, stderr or producer.json). config_effective gives
+   the instrument's config_surface knobs, conditions_observed the run's
+   declared conditions, each a typed scalar; a declared one left out, or a
+   map left out, is UNKNOWN; visual is optional. At most 1 MiB and 256
+   outputs, no unknown or duplicate keys: an invalid report is kept as an
+   output and supplies no facts. Admit the start and seal.
 3. Prove: proof.admit lists the whole family, every run of the criterion
    including rejected runs and earlier revisions, each with a disposition,
    and states verdict: supports or refutes. whosaidso check admission --family C
@@ -175,8 +251,9 @@ use the checkout you invoke them in. A git object missing from the home
 repository stays unavailable. Plain capture needs no home: intake is routed
 by the declared project id.
 Per machine, one WhoSaidSo home holds the registry (projects/), intake,
-staging and the machine id: $WHOSAIDSO_HOME, else $HOME/.whosaidso. Set WHOSAIDSO_HOME
-to a scratch directory to rehearse without touching the real ones.
+staging (runs' outputs while they run) and the machine id:
+$WHOSAIDSO_HOME, else $HOME/.whosaidso. Set WHOSAIDSO_HOME to a scratch
+directory to rehearse without touching the real ones.
 `},
 	{"pitfalls", "rules that prevent the known mistakes", `- Never invent a value: a missing actor, reading, unit or validation stays
   UNKNOWN with its reason. Two unknowns never match.
