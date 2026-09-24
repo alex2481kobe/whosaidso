@@ -283,6 +283,15 @@ func TestAstraConfirmHoldReplayOrdering(t *testing.T) {
 	}
 }
 
+// Coordinator edit 2026-09-24: this test first required replay to refuse a clear
+// naming the task's current revision for a hold recorded at an earlier one. That
+// contradicts hold-clear-after-amendment above (the schema makes hold_ref.task equal
+// the clear's task, and a clear must name the current revision), so the two could
+// not both pass under any rule without a format change. Coordinator ruling: a hold
+// is identified by (task, blocker id) and survives amendments; admission and replay
+// share that one lookup. The test now pins that contract from the replay side:
+// after an amendment the current-revision clear is accepted and the task may close,
+// while a clear still naming the superseded revision is refused.
 func TestAstraConfirmReplayRequiresTheRecordedHoldRevision(t *testing.T) {
 	create := laneEReduceCreate(1, laneEReduceSpec(1))
 	hold := &model.BlockerHold{Task: laneEReduceRef(1, 1), BlockerID: laneEReduceID(70), Reason: model.BlockerAwaitingAcceptance, Actor: model.Actor{ID: "reviewer"}, Criterion: "read before accepting"}
@@ -292,12 +301,18 @@ func TestAstraConfirmReplayRequiresTheRecordedHoldRevision(t *testing.T) {
 		t.Fatalf("recorded hold revision control: %v", err)
 	}
 	amended := laneEReduceBundle(t, first, &model.TaskAmend{Target: hold.Task, Replacement: create.Spec, Provenance: create.Provenance})
-	clear.Task.Revision = 2
-	clear.HoldRef.Task.Revision = 2
-	last := laneEReduceBundle(t, amended, clear, laneEReduceClose(1, 2, 1, model.ClosureSuccess))
+	stale := laneEReduceBundle(t, amended, clear, laneEReduceClose(1, 2, 1, model.ClosureSuccess))
+	if _, err := reduce.Replay([]model.Bundle{first, amended, stale}); err == nil {
+		t.Error("replay accepted a clear naming the superseded task revision 1 after the amendment to revision 2")
+	}
+	current := *clear
+	current.Task.Revision, current.HoldRef.Task.Revision = 2, 2
+	last := laneEReduceBundle(t, amended, &current, laneEReduceClose(1, 2, 1, model.ClosureSuccess))
 	s, err := reduce.Replay([]model.Bundle{first, amended, last})
-	if err == nil {
-		p, _ := s.Task(laneEReduceIdent(1))
-		t.Errorf("replay accepted a clear naming hold revision 2, never recorded (the hold is revision 1), then success-closed: status=%s outcome=%s. Admission refuses this hold_ref; replay must enforce that exact reference too", p.Status, p.Outcome)
+	if err != nil {
+		t.Fatalf("replay must accept the current-revision clear of a hold that survived the amendment, as admission does: %v", err)
+	}
+	if p, _ := s.Task(laneEReduceIdent(1)); p.Status != reduce.StatusClosed || p.Outcome != model.ClosureSuccess {
+		t.Errorf("after clearing its hold at the current revision the task must close as success, got %s %s", p.Status, p.Outcome)
 	}
 }
