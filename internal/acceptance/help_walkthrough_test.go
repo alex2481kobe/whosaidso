@@ -9,8 +9,8 @@ package acceptance_test
 //
 // What belongs here: guide-extracted recipes and the judgment an agent must
 // author (texts, file contents). What does not: hand-built events, --json
-// decoding, or recipes typed into the test; a recipe the guide does not show
-// is a finding, marked "not in the guide" where the walk has to supply it.
+// decoding, or recipes typed into the test; a step the guide does not show
+// fails the walk as a finding, never supplied by the test.
 
 import (
 	"bytes"
@@ -393,8 +393,7 @@ func TestHelpWalkthrough(t *testing.T) {
 	pvPut(t, w.root, "delivered.txt", []byte("the delivered file\n"))
 	v["EVIDENCE"], v["DELIVERED"], v["WHO"] = "evidence.txt", "delivered.txt", "owner"
 	_, se = w.step("hold (help accept)", 0, w.recipe("accept", "whosaidso template blocker.hold"), nil)
-	v["H"] = w.carry("hold id the hold's capture prints", se, `blocker_id = `)
-	v["HOLD"] = v["H"]
+	v["HOLD"] = w.carry("hold id (help accept: it prints blocker_id = HOLD)", se, `blocker_id = `)
 	close := w.recipe("accept", "whosaidso template task.close")
 	out, se = w.step("close while held is partial success (help admit)", 4, close, nil)
 	v["PACKET"] = w.carry("pending packet of the refused close", out+se, `captured `)
@@ -405,16 +404,7 @@ func TestHelpWalkthrough(t *testing.T) {
 	if !strings.HasPrefix(out, "rejected "+v["PACKET"]) {
 		t.Fatalf("admit --outcome rejected should acknowledge %s:\n%s", v["PACKET"], out)
 	}
-	// help loop teaches --set with blocker.clear's resolving_witness; help accept
-	// pins it. Both are the guide's; the loop's is tried first (a finding when
-	// refused), then the accept topic's clears the hold so the walk goes on.
-	args, _ := w.fill(w.recipe("loop", "whosaidso template blocker.clear"), nil)
-	if so, se, code := w.exec(nil, "", args...); code != 0 {
-		t.Errorf("FINDING help loop: `whosaidso %s` (its example of giving the rest with --set) exits %d: %s%s"+
-			"An agent following the loop topic cannot clear a hold: resolving_witness is a reference, which only --pin builds (help accept shows --pin resolving_witness=EVIDENCE), and the refusal does not say so.",
-			strings.Join(args, " "), code, so, se)
-		w.step("clear (help accept)", 0, w.recipe("accept", "whosaidso template blocker.clear"), nil)
-	}
+	w.step("clear (help accept)", 0, w.recipe("accept", "whosaidso template blocker.clear"), nil)
 	w.step("close (help accept)", 0, close, nil)
 	closed := v["T"]
 
@@ -426,16 +416,16 @@ func TestHelpWalkthrough(t *testing.T) {
 	_, se = w.step("start (help accept)", 0, w.recipe("accept", "whosaidso template task.start"), nil)
 	v["A"] = w.carry("attempt_id start prints", se, `attempt_id = `)
 
-	// ---- not in the guide: the instrument (I) and claims (C) help proof needs.
-	// The guide names them and says PROVEN needs a validated instrument, but
-	// shows no recipe; this is the loop's general form, filled by the walk.
+	// ---- the instrument I and the claims C the proof needs (help proof).
 	pvPut(t, w.root, "measure.json", []byte(`{"step": {"value": 0.75, "unit": "world units", "population": "the quarter-second step", "denominator": "one step"}}`+"\n"))
 	pvPut(t, w.root, "validation.json", []byte(`{"validated": "against a known step"}`+"\n"))
-	_, se = w.step("instrument (not in the guide)", 0, wtTok0("template instrument.declare --set provenance.source_refs=[] --set 'spec.question_answered=the step length' --set 'spec.blind_to=frames between steps' --set 'spec.not_answered=gait quality' --set spec.config_surface=[] --set spec.dangerous_defaults=[] --set 'spec.valid_range=one step' --pin spec.implementation_ref=measure.json --pin spec.validation.value.ref=validation.json --set spec.validation.value.version=v1 --capture --admit --reason instrument"), nil)
-	v["I"] = w.carry("new instrument id", se, `minted\s+id = `)
-	for _, c := range []struct{ name, assertion string }{{"C", "the step is 0.75 world units"}, {"C2", "the step is 0.5 world units"}} {
-		_, se = w.step("claim (not in the guide)", 0, wtTok0("template claim.assert --set provenance.source_refs=[] --set 'spec.assertion="+c.assertion+"' --set 'spec.falsifier=a measured step of any other length' --set spec.scope.source_paths=[] --set spec.scope.context_refs=[] --set 'spec.scope.applies_when=the walkthrough fixture' --set 'spec.scope.limitations=a temp project' --set spec.external_refs=[] --capture --admit --reason claim"), nil)
-		v[c.name] = w.carry("new claim id", se, `minted\s+id = `)
+	v["TOOL"], v["VALIDATION"] = "measure.json", "validation.json"
+	_, se = w.step("instrument (help proof)", 0, w.recipe("proof", "whosaidso template instrument.declare"), nil)
+	v["I"] = w.carry("instrument id (help proof: minted id = ID)", se, `minted\s+id = `)
+	claims := map[string]string{}
+	for _, name := range []string{"proven", "refuted"} {
+		_, se = w.step("claim (help proof)", 0, w.recipe("proof", "whosaidso template claim.assert --set"), nil)
+		claims[name] = w.carry("claim id (help proof: minted id = ID)", se, `minted\s+id = `)
 	}
 
 	// ---- proof (help proof), twice: C measured as claimed reads PROVEN; C2,
@@ -449,17 +439,12 @@ func TestHelpWalkthrough(t *testing.T) {
 		preview         int
 		disposition     string
 		verdict, status string
-	}{{v["C"], 0.75, 0, "supports", "supports", "PROVEN"}, {v["C2"], 0.5, 1, "contradicts", "refutes", "REFUTED"}} {
+	}{{claims["proven"], 0.75, 0, "supports", "supports", "PROVEN"}, {claims["refuted"], 0.5, 1, "contradicts", "refutes", "REFUTED"}} {
 		on := map[string]string{"C": c.claim}
-		// 1. fix the criterion from an example; help proof pins only the result
-		// selector, and the population selector (a placeholder too) is pinned
-		// the same way: not in the guide.
-		fix := append(w.recipe("proof", "whosaidso template criterion.fix"), w.recipe("proof", "--pin expression.result_selector=")[:2]...)
-		fix = append(fix, wtTok0("--pin expression.population.selector=stdout#/step > crit.json")[1:]...)
-		_, se = w.step("criterion from an example (help proof)", 0, fix, on)
-		blobNote := regexp.MustCompile(`capture it with (--blob \S+)`).FindStringSubmatch(se)
-		if blobNote == nil {
-			t.Fatalf("template criterion.fix --example should say how to capture the example's bytes:\n%s", se)
+		// 1. fix the criterion from an example (help proof).
+		_, se = w.step("criterion from an example (help proof)", 0, w.recipe("proof", "whosaidso template criterion.fix"), on)
+		if !strings.Contains(se, "capture it with --blob "+v["FILE"]) {
+			t.Errorf("help proof: the criterion's capture needs --blob FILE, which the template prints; its notes do not name --blob %s:\n%s", v["FILE"], se)
 		}
 		w.edit("crit.json", map[string]any{ // operator, target and reducer are yours (help proof)
 			"expression.operator":     "eq",
@@ -474,10 +459,8 @@ func TestHelpWalkthrough(t *testing.T) {
 			w.step("criterion preview FALSE exits 1 (help check)", 1, checkCrit, map[string]string{"RUN_OUTPUT": "long.json"})
 			w.step("criterion preview UNKNOWN exits 3 (help check)", 3, checkCrit, map[string]string{"RUN_OUTPUT": "unitless.json"})
 		}
-		// "admit it in an EARLIER bundle than any run": the loop's one-step
-		// capture, with the blob the template's note names.
-		oneStep := w.recipe("loop", "whosaidso capture --events task.json --admit")
-		w.step("admit the criterion (help loop, proof)", 0, append(oneStep, wtTok0(blobNote[1])[1:]...), map[string]string{"task.json": "crit.json"})
+		// "admit it in an EARLIER bundle than any run".
+		w.step("admit the criterion (help proof)", 0, w.recipe("proof", "whosaidso capture --events crit.json"), nil)
 
 		// 2. run, then admit its start and seal.
 		out, _ = w.step("run (help proof)", 0, w.recipe("proof", "whosaidso run --attempt-id"), on)
@@ -491,7 +474,7 @@ func TestHelpWalkthrough(t *testing.T) {
 		if !strings.Contains(out, run) {
 			t.Fatalf("check admission --family should list run %s:\n%s", run, out)
 		}
-		w.step("proof skeleton (help proof)", 0, append(w.recipe("proof", "whosaidso template proof.admit --claim C"), wtTok0("> proof.json")[1:]...), on)
+		w.step("proof skeleton (help proof)", 0, w.recipe("proof", "whosaidso template proof.admit --claim C"), on)
 		w.edit("proof.json", map[string]any{
 			"evidence[0].disposition": c.disposition,
 			"evidence[0].reason":      "the run read the step",
@@ -500,7 +483,7 @@ func TestHelpWalkthrough(t *testing.T) {
 			"verdict":                 c.verdict,
 		})
 		w.step("proof dry run (help proof)", 0, w.recipe("proof", "whosaidso check admission --events proof.json"), nil)
-		w.step("admit the proof (help loop, proof)", 0, oneStep, map[string]string{"task.json": "proof.json"})
+		w.step("admit the proof (help proof)", 0, w.recipe("proof", "whosaidso capture --events proof.json"), nil)
 		out = views("show the claim (help views)", map[string]string{"RECORD_ID": c.claim}, "whosaidso show [RECORD_ID]")
 		if !regexp.MustCompile(`CLAIM ` + c.claim + ` .*\b` + c.status + `\b`).MatchString(out) {
 			t.Errorf("after a %s proof, show %s should read %s:\n%s", c.verdict, c.claim, c.status, out)
@@ -547,17 +530,18 @@ func TestHelpWalkthrough(t *testing.T) {
 			t.Errorf("history %s should list its %s:\n%s", closed, e, out)
 		}
 	}
-	// capture named the source's id on stderr ("each id its events create");
-	// the views topic says show ID is that record's detail.
+	// help views: a source's source_id reads with show and history; bare show lists sources.
 	out = views("show the source (help views)", map[string]string{"RECORD_ID": src}, "whosaidso show [RECORD_ID]")
-	if strings.Contains(out, "no admitted record") {
-		t.Errorf("FINDING help sources/views: the source.intake just admitted (its capture printed `minted source_id = %s`) cannot be read: `whosaidso show %s` answers %q. "+
-			"continue and history of that id answer the same, and bare show and history never print it. An agent that captured an owner's message is handed an id no read accepts, and the answer it gets says the admitted record is absent.",
-			src, src, strings.TrimSpace(strings.SplitN(out, "\n", 3)[1]))
+	if first, _, _ := strings.Cut(out, "\n"); !strings.Contains(first, "KNOWN") || strings.Contains(first, "UNKNOWN") || !strings.Contains(out, src) {
+		t.Errorf("help views says show reads a source's source_id; show %s should answer KNOWN and list the source:\n%s", src, out)
+	}
+	out = views("history of the source (help views)", map[string]string{"RECORD_ID": src}, "whosaidso history [RECORD_ID]")
+	if !strings.Contains(out, "source.intake") {
+		t.Errorf("help views says history reads a source's source_id; history %s should list its source.intake:\n%s", src, out)
+	}
+	if out = views("bare show (help views)", nil, "whosaidso show [RECORD_ID]"); !strings.Contains(out, src) {
+		t.Errorf("help views says bare show lists sources; source %s is missing:\n%s", src, out)
 	}
 }
-
-// wtTok0 lexes a command line the walk had to write because the guide has none.
-func wtTok0(line string) []wtTok { return wtLex("whosaidso "+line, nil) }
 
 func wtSHA(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
