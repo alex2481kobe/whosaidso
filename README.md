@@ -31,7 +31,7 @@ interface or a callback.
 datum
 |-- cmd/
 |   `-- datum          whole command surface: the write side that captures and admits, and the read side that answers from what was admitted
-|          20 files, tested -- uses evidence, model, query, reduce, store, write
+|          21 files, tested -- uses evidence, model, query, reduce, store, write
 |-- internal/
 |   |-- acceptance     (tests only, no production code)
 |   |      tests only
