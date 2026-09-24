@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"whosaidso/internal/evidence"
@@ -173,12 +174,9 @@ func (t *boundTemplate) fill(b templateBinds) error {
 		if !ok {
 			return usageError("whosaidso template: --set takes PATH=VALUE, got %q", s)
 		}
-		var v any = value
-		if json.Valid([]byte(value)) {
-			var err error
-			if v, err = templateValue([]byte(value)); err != nil {
-				return usageError("whosaidso template: --set %s: %v", path, err)
-			}
+		v, err := t.setValue(path, value)
+		if err != nil {
+			return usageError("whosaidso template: --set %s: %v", path, err)
 		}
 		if v == nil {
 			if err := t.omit(path); err != nil {
@@ -192,6 +190,55 @@ func (t *boundTemplate) fill(b templateBinds) error {
 	}
 	t.resolveChoices()
 	return t.deriveFinal()
+}
+
+// templateNonText are the skeleton's placeholders for fields that are not JSON
+// strings (numbers, revisions, counts, booleans), spelled by the builder itself.
+var templateNonText = func() map[string]bool {
+	b := &templateBuilder{}
+	out := map[string]bool{}
+	for _, v := range []any{json.Number(""), model.Revision(0), 0, uint64(0), false} {
+		out[b.walk(reflect.TypeOf(v), nil, reflect.StructField{}).(string)] = true
+	}
+	return out
+}()
+
+// setValue reads a --set VALUE as the event's schema types the field at path.
+// A text field takes VALUE as text, decoded only when it is a JSON string
+// literal, so a commit such as 79461799e564 or a numeric-looking name stays
+// text. Any other field (number, boolean, object, array) takes VALUE as JSON
+// when it parses, else as text for capture to refuse. null (nil) omits an
+// optional key, whatever the field.
+func (t *boundTemplate) setValue(path, value string) (any, error) {
+	if t.textField(path) {
+		if v, err := templateValue([]byte(value)); err == nil {
+			switch v.(type) {
+			case nil, string:
+				return v, nil
+			}
+		}
+		return value, nil
+	}
+	if !json.Valid([]byte(value)) {
+		return value, nil
+	}
+	return templateValue([]byte(value))
+}
+
+// textField reports whether the schema holds a JSON string at path: the
+// event's skeleton there, or for a map key the skeleton cannot name, the
+// draft's own node.
+func (t *boundTemplate) textField(path string) bool {
+	steps, err := parseTemplatePath(path)
+	if err != nil {
+		return false // put reports the malformed path
+	}
+	node, ok := t.skeletonAt(steps)
+	if !ok {
+		node, ok = templateGet(t.body, steps)
+	}
+	s, isString := node.(string)
+	return ok && isString && !templateNonText[s]
 }
 
 // fillUnflagged fills what needs no flag: the project id, the packet author,
