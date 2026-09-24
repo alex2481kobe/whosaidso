@@ -61,6 +61,7 @@ func TestCriterionMetadataIsFilledOnlyWhenTheBytesStateIt(t *testing.T) {
 	}{
 		"absent":                        {`{"a":{"value":1}}`, "/a", "/a", [3]bool{}},
 		"blank is UNKNOWN":              {`{"a":{"value":1,"unit":" ","population":"p","denominator":"d"}}`, "/a", "/a", [3]bool{false, true, true}},
+		"UNKNOWN beside a stated one":   {`{"a":{"unit":"ms","values":[{"value":1,"unit":" "}],"population":"p","denominator":"d"}}`, "/a", "/a", [3]bool{false, true, true}},
 		"selectors disagree":            {stated + `"b":{"values":[1],"population":"other","denominator":"runs"}}`, "/a", "/b", [3]bool{true, false, true}},
 		"members disagree":              {`{"a":{"unit":"ms","values":[{"value":1,"unit":"ms"},{"value":2,"unit":"s"}],"population":"p","denominator":"d"}}`, "/a", "/a", [3]bool{false, true, true}},
 		"unit only from the population": {`{"a":{"value":1},"b":{"values":[1],"unit":"ms"}}`, "/a", "/b", [3]bool{}},
