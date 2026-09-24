@@ -52,6 +52,9 @@ type flowWorld struct {
 	instrument model.RecordRef
 	attempt    model.ID
 	criterion  model.CriterionRef
+	// produced is the file holding each hand run's output, which capture
+	// carries as that run's seal packet's blob.
+	produced map[model.ID]string
 }
 
 const flowLane = "lane"
@@ -108,7 +111,13 @@ func (w *flowWorld) capture(author string, events ...model.TypedEvent) model.ID 
 		w.t.Fatal(err)
 	}
 	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
-	out, err := w.cli(body, "capture", "--json", "--actor", author, "--command-id", string(w.id()), "--events", "-")
+	args := []string{"capture", "--json", "--actor", author, "--command-id", string(w.id()), "--events", "-"}
+	for _, e := range events {
+		if seal, ok := e.(*model.InvocationSeal); ok && w.produced[seal.Envelope.InvocationID] != "" {
+			args = append(args, "--blob", w.produced[seal.Envelope.InvocationID])
+		}
+	}
+	out, err := w.cli(body, args...)
 	if err != nil {
 		w.t.Fatalf("control: capture must durably write intake: %v", err)
 	}
@@ -546,7 +555,7 @@ func (w *flowWorld) claimStatus() string {
 }
 
 // handEnvelope is a lane's hand-captured start envelope under the current
-// criterion; seal completes it with one output in the run's own directory.
+// criterion; seal completes it with one output, out/result.json.
 func (w *flowWorld) handEnvelope(id model.ID, started time.Time) model.InvocationEnvelope {
 	unknownMap := recUnknown[map[string]model.Availability[model.Scalar]]("not launched")
 	return model.InvocationEnvelope{InvocationID: id, AttemptID: w.attempt, InstrumentRef: w.instrument, CriterionRef: recKnown(w.criterion),
@@ -554,19 +563,22 @@ func (w *flowWorld) handEnvelope(id model.ID, started time.Time) model.Invocatio
 		Argv:                    []string{"/bin/sh", "tools/run.sh"}, InputRefs: []model.ArtifactRef{}, ConfigRequested: map[string]model.Scalar{}, ConditionsDeclared: map[string]model.Scalar{},
 		ConfigEffective: unknownMap, ConditionsObserved: unknownMap, Isolation: recUnknown[model.Isolation]("not enforced"),
 		StartedAt: started.UTC(), ObservedAt: recUnknown[time.Time]("not launched"), Outcome: recUnknown[model.ProcessOutcome]("not launched"),
-		OutputRefs: recUnknown[[]model.ArtifactRef]("not launched"), Visual: recUnknown[model.VisualObservation]("numeric")}
+		Outputs: recUnknown[[]model.RunOutput]("not launched"), Visual: recUnknown[model.VisualObservation]("numeric")}
 }
 
 func (w *flowWorld) handRun(started time.Time, body string) (model.ID, []model.TypedEvent) {
 	id := w.id()
 	env := w.handEnvelope(id, started)
-	rel := pvRunPath(id, "out/result.json")
-	w.put(rel, []byte(body))
+	if w.produced == nil {
+		w.produced = map[model.ID]string{}
+	}
+	w.produced[id] = filepath.Join(w.t.TempDir(), "result.json")
+	pvPut(w.t, filepath.Dir(w.produced[id]), "result.json", []byte(body))
 	exit := 0
 	seal := env
 	seal.ObservedAt = recKnown(started.UTC().Add(time.Millisecond))
 	seal.Outcome = recKnown(model.ProcessOutcome{Kind: "exit", ExitCode: &exit})
-	seal.OutputRefs = recKnown([]model.ArtifactRef{pvPin([]byte(body), rel)})
+	seal.Outputs = recKnown([]model.RunOutput{pvOutput([]byte(body), "out/result.json")})
 	seal.ConfigEffective = recKnown(map[string]model.Availability[model.Scalar]{})
 	seal.ConditionsObserved = recKnown(map[string]model.Availability[model.Scalar]{})
 	return id, []model.TypedEvent{&model.InvocationStart{Envelope: env}, &model.InvocationSeal{StartRef: model.InvocationRef{Project: w.project, InvocationID: id}, Envelope: seal}}
@@ -806,7 +818,7 @@ func TestFlowProof(t *testing.T) {
 		body := []byte(`{"retracted":"the failing reading"}`)
 		w.put("corrections/retract.json", body)
 		corrective := pvPin(body, "corrections/retract.json")
-		output := pvPin([]byte(pvFail), pvRunPath(failed, "out/result.json"))
+		output := pvOutput([]byte(pvFail), "out/result.json").Ref()
 		w.mustAdmit(flowLane, &model.Correction{Target: model.CorrectionTarget{Kind: "support", Support: &model.SupportLink{Dependent: w.claim, Evidence: output}},
 			AffectedRevisions: []model.RecordRef{w.claim}, Reason: "the failing reading is disputed", CorrectiveRef: corrective})
 		for _, disposition := range []string{"inapplicable", "inconclusive", "contradicts"} {

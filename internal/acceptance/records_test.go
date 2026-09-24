@@ -180,7 +180,7 @@ func recEnvelope() model.InvocationEnvelope {
 		StartedAt:          recWhen,
 		ObservedAt:         recUnknown[time.Time]("the process has not run"),
 		Outcome:            recUnknown[model.ProcessOutcome]("the process has not run"),
-		OutputRefs:         recUnknown[[]model.ArtifactRef]("the process has not run"),
+		Outputs:            recUnknown[[]model.RunOutput]("the process has not run"),
 		Visual:             recUnknown[model.VisualObservation]("the process has not run"),
 	}
 }

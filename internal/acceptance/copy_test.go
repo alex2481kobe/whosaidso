@@ -22,11 +22,11 @@ func TestCopySnapshotNestedMapsAndPointersRemainDetached(t *testing.T) {
 	got := after.Invocations()[0]
 	got.Start.ConfigRequested["sample_count"] = laneEEvidenceNumber("999")
 	*(*got.Seal.ConfigEffective.Value)["sample_count"].Value.Number = "888"
-	(*got.Seal.OutputRefs.Value)[0].Content.Locators[0].Path = "caller-only"
+	(*got.Seal.Outputs.Value)[0].Name = "caller-only"
 	*got.Seal.Outcome.Value.ExitCode = 99
 	for name, s := range map[string]reduce.Snapshot{"earlier": before, "later": after} {
 		if !reflect.DeepEqual(want, s.Invocations()[0]) {
-			t.Errorf("mutating nested map values, scalar pointers or artifact locator slices returned by the later snapshot changed the %s snapshot without an admitted event", name)
+			t.Errorf("mutating nested map values, scalar pointers or output slices returned by the later snapshot changed the %s snapshot without an admitted event", name)
 		}
 	}
 }

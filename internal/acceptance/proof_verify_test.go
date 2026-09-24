@@ -1,7 +1,7 @@
 package acceptance_test
 
-// Independent review of U12's proof gate: run-directory binding of criterion
-// contract paths, rejected family members, correction, reconciliation of a
+// Independent review of U12's proof gate: binding of criterion contract paths
+// to a run's named outputs, rejected family members, correction, reconciliation of a
 // dead runner, and a real `whosaidso run` through fresh processes. Every scenario
 // is driven through the public capture/admit/reconcile API or the built CLI,
 // and every refusal is preceded by a control that the same fixture admits.
@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,6 +42,8 @@ type pvWorld struct {
 	instrument model.RecordRef
 	attempt    model.ID
 	criterion  model.CriterionRef
+	// produced holds the bytes each run produced, by invocation and output name.
+	produced map[model.ID]map[string][]byte
 }
 
 func pvPin(body []byte, paths ...string) model.ArtifactRef {
@@ -102,7 +105,17 @@ func (w *pvWorld) capture(author model.Actor, events ...model.TypedEvent) model.
 	for i, e := range events {
 		raw[i] = recEncode(w.t, e)
 	}
-	ref, err := store.WriteIntake(context.Background(), w.p, store.IntakeRequest{CommandID: w.id(), Author: author, Events: raw})
+	var blobs []io.Reader
+	for _, e := range events {
+		if seal, ok := e.(*model.InvocationSeal); ok && seal.Envelope.Outputs.Value != nil {
+			for _, out := range *seal.Envelope.Outputs.Value {
+				if body, ok := w.produced[seal.Envelope.InvocationID][out.Name]; ok && model.HashBytes(body) == out.SHA256 {
+					blobs = append(blobs, bytes.NewReader(body))
+				}
+			}
+		}
+	}
+	ref, err := store.WriteIntake(context.Background(), w.p, store.IntakeRequest{CommandID: w.id(), Author: author, Events: raw, Blobs: blobs})
 	if err != nil {
 		w.t.Fatalf("fixture must durably capture its packet: %v", err)
 	}
@@ -152,25 +165,25 @@ func (w *pvWorld) start(id model.ID, criterion bool) model.InvocationEnvelope {
 		Argv:                    []string{"/bin/sh", "tools/measure.sh"}, InputRefs: []model.ArtifactRef{}, ConfigRequested: map[string]model.Scalar{}, ConditionsDeclared: map[string]model.Scalar{},
 		ConfigEffective: unknownMap, ConditionsObserved: unknownMap, Isolation: recUnknown[model.Isolation]("not enforced"),
 		StartedAt: time.Now().UTC(), ObservedAt: recUnknown[time.Time]("not launched"), Outcome: recUnknown[model.ProcessOutcome]("not launched"),
-		OutputRefs: recUnknown[[]model.ArtifactRef]("not launched"), Visual: recUnknown[model.VisualObservation]("numeric")}
+		Outputs: recUnknown[[]model.RunOutput]("not launched"), Visual: recUnknown[model.VisualObservation]("numeric")}
 	if criterion {
 		env.CriterionRef = recKnown(w.criterion)
 	}
 	return env
 }
 
-func (w *pvWorld) seal(env model.InvocationEnvelope, outputs ...model.ArtifactRef) *model.InvocationSeal {
+func (w *pvWorld) seal(env model.InvocationEnvelope, outputs ...model.RunOutput) *model.InvocationSeal {
 	exit := 0
 	env.ObservedAt = recKnown(env.StartedAt.Add(time.Millisecond))
 	env.Outcome = recKnown(model.ProcessOutcome{Kind: "exit", ExitCode: &exit})
-	env.OutputRefs = recKnown(outputs)
+	env.Outputs = recKnown(outputs)
 	env.ConfigEffective = recKnown(map[string]model.Availability[model.Scalar]{})
 	env.ConditionsObserved = recKnown(map[string]model.Availability[model.Scalar]{})
 	return &model.InvocationSeal{StartRef: model.InvocationRef{Project: w.p.ID, InvocationID: env.InvocationID}, Envelope: env}
 }
 
 // run admits a hand-captured start and seal whose outputs the caller declares.
-func (w *pvWorld) run(criterion bool, outputs func(id model.ID) []model.ArtifactRef) (model.ID, error) {
+func (w *pvWorld) run(criterion bool, outputs func(id model.ID) []model.RunOutput) (model.ID, error) {
 	w.t.Helper()
 	id := w.id()
 	env := w.start(id, criterion)
@@ -213,39 +226,53 @@ func (w *pvWorld) status() reduce.ClaimStatus {
 	return p.Status
 }
 
-func pvRunPath(id model.ID, rel string) string {
-	return ".whosaidso/artifacts/runs/" + string(id) + "/" + rel
+// pvOutput is an output named inside a run and pinned to body. Declaring it
+// does not produce it: only produce puts its bytes in the seal's packet.
+func pvOutput(body []byte, name string) model.RunOutput {
+	return model.RunOutput{Name: name, SHA256: model.HashBytes(body), Length: uint64(len(body)), MediaType: "application/json"}
 }
 
-// ---- run-directory binding -------------------------------------------------
+// produce records that run id produced body as its output name. capture puts
+// those bytes in the packet of any seal of that run listing the output, as
+// whosaidso run captures a run's outputs with its seal.
+func (w *pvWorld) produce(id model.ID, body []byte, name string) model.RunOutput {
+	if w.produced == nil {
+		w.produced = map[model.ID]map[string][]byte{}
+	}
+	if w.produced[id] == nil {
+		w.produced[id] = map[string][]byte{}
+	}
+	w.produced[id][name] = body
+	return pvOutput(body, name)
+}
 
-// Control: a run whose result file really sits in its own run directory,
-// named by the bare contract path out/result.json, reaches PROVEN.
-func pvOwnRunDirControl(t *testing.T, example []byte) *pvWorld {
+// ---- output binding ----------------------------------------------------------
+
+// Control: a run that produced its result as out/result.json, the name the
+// contract path gives, reaches PROVEN.
+func pvOwnOutputControl(t *testing.T, example []byte) *pvWorld {
 	t.Helper()
 	w := pvNew(t)
 	pvPut(t, w.p.Root, "out/result.json", example)
 	w.fix("out/result.json", example)
-	id, err := w.run(true, func(id model.ID) []model.ArtifactRef {
-		pvPut(t, w.p.Root, pvRunPath(id, "out/result.json"), []byte(pvPass))
-		return []model.ArtifactRef{pvPin([]byte(pvPass), pvRunPath(id, "out/result.json"))}
+	id, err := w.run(true, func(id model.ID) []model.RunOutput {
+		return []model.RunOutput{w.produce(id, []byte(pvPass), "out/result.json")}
 	})
 	if err != nil {
-		t.Fatalf("control: a run whose output is in its own run directory must admit: %v", err)
+		t.Fatalf("control: a run that captured its own output must admit: %v", err)
 	}
 	if err := w.prove(map[model.ID]string{id: "supports"}); err != nil || w.status() != reduce.StatusProven {
-		t.Fatalf("control: proof over the run's own run-dir output must reach PROVEN: %v, status %s", err, w.status())
+		t.Fatalf("control: proof over the run's own output must reach PROVEN: %v, status %s", err, w.status())
 	}
 	return w
 }
 
-// The rule says the contract path is resolved in the observing run's own
-// directory. The check is made on the declared locator string; the bytes are
-// then read by digest, and the content store answers for any digest ever
-// admitted, including the criterion's own pinned example. A run whose
-// directory never held a result file is observed as having produced one.
-func TestProofVerifyRunDirReadingMustComeFromTheRunNotTheContentStore(t *testing.T) {
-	pvOwnRunDirControl(t, []byte(pvPass))
+// The contract path names an output of the observing run. The bytes are read
+// by digest, and the content store answers for any digest ever admitted,
+// including the criterion's own pinned example. A run that never produced a
+// result file must not be observed as having produced one.
+func TestProofVerifyOutputReadingMustComeFromTheRunNotTheContentStore(t *testing.T) {
+	pvOwnOutputControl(t, []byte(pvPass))
 	w := pvNew(t)
 	// The criterion pins an example result. Admission copies its bytes into
 	// the content store; the working copy is then gone.
@@ -254,42 +281,35 @@ func TestProofVerifyRunDirReadingMustComeFromTheRunNotTheContentStore(t *testing
 	if err := os.Remove(filepath.Join(w.p.Root, "out", "result.json")); err != nil {
 		t.Fatal(err)
 	}
-	var runDir string
-	id, sealErr := w.run(true, func(id model.ID) []model.ArtifactRef {
-		runDir = filepath.Join(w.p.Root, filepath.FromSlash(pvRunPath(id, "")))
-		// No file is written: the run directory does not even exist.
-		return []model.ArtifactRef{pvPin([]byte(pvPass), pvRunPath(id, "out/result.json"))}
+	id, sealErr := w.run(true, func(id model.ID) []model.RunOutput {
+		// Declared, never produced: the seal's packet carries no bytes.
+		return []model.RunOutput{pvOutput([]byte(pvPass), "out/result.json")}
 	})
-	if _, err := os.Stat(runDir); !os.IsNotExist(err) {
-		t.Fatalf("fixture: run directory %s must not exist, stat=%v", runDir, err)
-	}
 	proofErr := errors.New("not attempted")
 	if sealErr == nil {
 		proofErr = w.prove(map[model.ID]string{id: "supports"})
 	}
 	if status := w.status(); status == reduce.StatusProven {
-		t.Errorf("expected the seal or the proof to be refused: the seal declares %s, which never existed, and its only copy of those bytes is the criterion's pinned example in the content store. Got seal admission error %v, proof admission error %v, claim %s. The run-dir rule is checked on the locator string while the reading is served by digest, so the criterion's own example was observed as this run's result - the failure Observe's comment says must not happen",
-			pvRunPath(id, "out/result.json"), sealErr, proofErr, status)
+		t.Errorf("expected the seal or the proof to be refused: run %s declares out/result.json, which it never produced, and its only copy of those bytes is the criterion's pinned example in the content store. Got seal admission error %v, proof admission error %v, claim %s. The reading is served by digest, so the criterion's own example was observed as this run's result - the failure Observe's comment says must not happen",
+			id, sealErr, proofErr, status)
 	}
 }
 
-// A contract path spelled with a redundant "." segment names another run's
-// directory but does not start with the literal runs/ prefix the matcher
-// excludes, so it is admitted as a bare path and reads that other run's file.
+// A contract path spelled as another run's storage, in any spelling, names no
+// output of the observing run, so it never reads that other run's file.
 func TestProofVerifyContractPathNamingAnotherRunNeverMatches(t *testing.T) {
-	pvOwnRunDirControl(t, []byte(pvPass))
+	pvOwnOutputControl(t, []byte(pvPass))
 	for _, form := range []string{"clean", "dot-segment", "double-slash"} {
 		t.Run(form, func(t *testing.T) {
 			w := pvNew(t)
 			// Run B, under no criterion, leaves a passing result in its own dir.
-			other, err := w.run(false, func(id model.ID) []model.ArtifactRef {
-				pvPut(t, w.p.Root, pvRunPath(id, "out/result.json"), []byte(pvPass))
-				return []model.ArtifactRef{pvPin([]byte(pvPass), pvRunPath(id, "out/result.json"))}
+			other, err := w.run(false, func(id model.ID) []model.RunOutput {
+				return []model.RunOutput{w.produce(id, []byte(pvPass), "out/result.json")}
 			})
 			if err != nil {
 				t.Fatalf("control: run B must admit: %v", err)
 			}
-			contract := pvRunPath(other, "out/result.json")
+			contract := ".whosaidso/artifacts/runs/" + string(other) + "/out/result.json"
 			switch form {
 			case "dot-segment":
 				contract = ".whosaidso/./artifacts/runs/" + string(other) + "/out/result.json"
@@ -297,43 +317,45 @@ func TestProofVerifyContractPathNamingAnotherRunNeverMatches(t *testing.T) {
 				contract = ".whosaidso//artifacts/runs/" + string(other) + "/out/result.json"
 			}
 			w.fix(contract, []byte(pvPass))
-			// Run A declares B's file under the same spelling the criterion uses.
-			id, sealErr := w.run(true, func(model.ID) []model.ArtifactRef {
-				return []model.ArtifactRef{pvPin([]byte(pvPass), contract)}
+			// Run A produces its own passing result under its own name.
+			id, sealErr := w.run(true, func(id model.ID) []model.RunOutput {
+				return []model.RunOutput{w.produce(id, []byte(pvPass), "out/result.json")}
 			})
 			proofErr := errors.New("not attempted")
 			if sealErr == nil {
 				proofErr = w.prove(map[model.ID]string{id: "supports"})
 			}
 			if status := w.status(); status == reduce.StatusProven {
-				t.Errorf("expected run %s's observation to find nothing: the contract path %q names run %s's directory, which must never match. Got seal error %v, proof error %v, claim %s. The matcher excludes other runs by the literal prefix .whosaidso/artifacts/runs/, not by the path it resolves to",
+				t.Errorf("expected run %s's observation to find nothing: the contract path %q names run %s's storage, which must never match. Got seal error %v, proof error %v, claim %s",
 					id, contract, other, sealErr, proofErr, status)
 			}
 		})
 	}
 }
 
-// Guard: declaring both the run-dir form and the bare contract path is
-// ambiguous, so a seal carrying the bare form is refused at admission and the
-// run never proves, even though both paths hold passing bytes.
-func TestProofVerifyRunDirAndBareFormTogetherAreAmbiguous(t *testing.T) {
-	// R9 migration: the bare form is no longer expressible; assert its refusal at admission.
-	pvOwnRunDirControl(t, []byte(pvPass))
-	w := pvNew(t)
-	pvPut(t, w.p.Root, "out/result.json", []byte(pvPass))
-	w.fix("out/result.json", []byte(pvPass))
-	id, err := w.run(true, func(id model.ID) []model.ArtifactRef {
-		pvPut(t, w.p.Root, pvRunPath(id, "out/result.json"), []byte(pvPass))
-		return []model.ArtifactRef{pvPin([]byte(pvPass), pvRunPath(id, "out/result.json")), pvPin([]byte(pvPass), "out/result.json")}
-	})
-	if recCode(err) != "invalid-field" {
-		t.Errorf("expected a seal declaring the bare contract path to be refused at admission with invalid-field, got %v; a bare-form locator can borrow the criterion's example bytes", err)
+// Guard: two outputs of one run under one name are ambiguous, so the seal is
+// refused wherever it enters: encoding a capture, and decoding stored bytes.
+func TestProofVerifyTwoOutputsOfOneNameAreRefused(t *testing.T) {
+	w := pvOwnOutputControl(t, []byte(pvPass))
+	id := w.id()
+	one := w.seal(w.start(id, true), pvOutput([]byte(pvPass), "out/result.json"))
+	raw := recEncode(t, one)
+	two := w.seal(w.start(id, true), pvOutput([]byte(pvPass), "out/result.json"), pvOutput([]byte(pvFail), "out/result.json"))
+	if _, err := model.EncodeEvent(two); recCode(err) != "invalid-field" {
+		t.Errorf("expected a seal naming out/result.json twice to be refused with invalid-field, got %v", err)
 	}
-	if err == nil {
-		_ = w.prove(map[model.ID]string{id: "supports"})
+	var data map[string]any
+	if err := json.Unmarshal(raw.Data, &data); err != nil {
+		t.Fatal(err)
 	}
-	if w.status() == reduce.StatusProven {
-		t.Error("an ambiguous run reached PROVEN")
+	outputs := data["envelope"].(map[string]any)["outputs"].(map[string]any)
+	outputs["value"] = append(outputs["value"].([]any), outputs["value"].([]any)[0])
+	dup, err := json.Marshal(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := model.DecodeEvent(model.Event{Type: raw.Type, Data: dup}); recCode(err) != "invalid-field" {
+		t.Errorf("expected stored seal bytes naming one output twice to be refused with invalid-field, got %v", err)
 	}
 }
 
@@ -341,16 +363,15 @@ func TestProofVerifyRunDirAndBareFormTogetherAreAmbiguous(t *testing.T) {
 
 func TestProofVerifyRejectedRunStaysInTheFamily(t *testing.T) {
 	passing := func(t *testing.T, w *pvWorld) model.ID {
-		id, err := w.run(true, func(id model.ID) []model.ArtifactRef {
-			pvPut(t, w.p.Root, pvRunPath(id, "out/result.json"), []byte(pvPass))
-			return []model.ArtifactRef{pvPin([]byte(pvPass), pvRunPath(id, "out/result.json"))}
+		id, err := w.run(true, func(id model.ID) []model.RunOutput {
+			return []model.RunOutput{w.produce(id, []byte(pvPass), "out/result.json")}
 		})
 		if err != nil {
 			t.Fatalf("control: passing run must admit: %v", err)
 		}
 		return id
 	}
-	pvOwnRunDirControl(t, []byte(pvPass))
+	pvOwnOutputControl(t, []byte(pvPass))
 	for _, outcome := range []string{"rejected", "correction-requested"} {
 		for _, packing := range []string{"start-and-seal", "seal-only"} {
 			t.Run(outcome+"/"+packing, func(t *testing.T) {
@@ -360,8 +381,7 @@ func TestProofVerifyRejectedRunStaysInTheFamily(t *testing.T) {
 				// A failing run is captured, then turned away at review.
 				failed := w.id()
 				env := w.start(failed, true)
-				pvPut(t, w.p.Root, pvRunPath(failed, "out/result.json"), []byte(pvFail))
-				seal := w.seal(env, pvPin([]byte(pvFail), pvRunPath(failed, "out/result.json")))
+				seal := w.seal(env, w.produce(failed, []byte(pvFail), "out/result.json"))
 				var packet model.ID
 				if packing == "seal-only" {
 					w.mustAdmit(w.lane, &model.InvocationStart{Envelope: env})
@@ -401,8 +421,7 @@ func TestProofVerifyRejectedRunStaysInTheFamily(t *testing.T) {
 		w.fix("out/result.json", []byte(pvPass))
 		again := w.id()
 		env := w.start(again, true)
-		pvPut(t, w.p.Root, pvRunPath(again, "out/result.json"), []byte(pvPass))
-		seal := w.seal(env, pvPin([]byte(pvPass), pvRunPath(again, "out/result.json")))
+		seal := w.seal(env, w.produce(again, []byte(pvPass), "out/result.json"))
 		if err := w.review("rejected", w.capture(w.lane, &model.InvocationStart{Envelope: env}, seal)); err != nil {
 			t.Fatal(err)
 		}
@@ -442,18 +461,17 @@ func TestProofVerifyReconciliationRules(t *testing.T) {
 	// outcome and an unidentified author.
 	hand := w.seal(env)
 	hand.Envelope.Outcome = recUnknown[model.ProcessOutcome]("observer died")
-	for _, field := range []string{"observed_at", "output_refs", "config_effective", "conditions_observed"} {
+	for _, field := range []string{"observed_at", "outputs", "config_effective", "conditions_observed"} {
 		bad := *hand
 		bad.Envelope.ObservedAt = recUnknown[time.Time]("observer died")
-		bad.Envelope.OutputRefs = recUnknown[[]model.ArtifactRef]("observer died")
+		bad.Envelope.Outputs = recUnknown[[]model.RunOutput]("observer died")
 		bad.Envelope.ConfigEffective = recUnknown[map[string]model.Availability[model.Scalar]]("observer died")
 		bad.Envelope.ConditionsObserved = recUnknown[map[string]model.Availability[model.Scalar]]("observer died")
 		switch field {
 		case "observed_at":
 			bad.Envelope.ObservedAt = recKnown(env.StartedAt.Add(time.Second))
-		case "output_refs":
-			pvPut(t, w.p.Root, pvRunPath(dead, "out/result.json"), []byte(pvPass))
-			bad.Envelope.OutputRefs = recKnown([]model.ArtifactRef{pvPin([]byte(pvPass), pvRunPath(dead, "out/result.json"))})
+		case "outputs":
+			bad.Envelope.Outputs = recKnown([]model.RunOutput{w.produce(dead, []byte(pvPass), "out/result.json")})
 		case "config_effective":
 			bad.Envelope.ConfigEffective = recKnown(map[string]model.Availability[model.Scalar]{})
 		case "conditions_observed":
@@ -494,7 +512,7 @@ func TestProofVerifyReconciliationRules(t *testing.T) {
 		t.Error("reconcile captured a second seal for an already sealed invocation")
 	}
 	inv, _ := w.snapshot().Invocation(reduce.InvocationKey{Project: w.p.ID, InvocationID: dead})
-	if inv.Seal == nil || inv.Seal.Outcome.State != model.Unknown || inv.Seal.ObservedAt.State != model.Unknown || inv.Seal.OutputRefs.State != model.Unknown ||
+	if inv.Seal == nil || inv.Seal.Outcome.State != model.Unknown || inv.Seal.ObservedAt.State != model.Unknown || inv.Seal.Outputs.State != model.Unknown ||
 		inv.Seal.ConfigEffective.State != model.Unknown || inv.Seal.ConditionsObserved.State != model.Unknown || inv.Seal.Isolation.State != model.Unknown || inv.Seal.Visual.State != model.Unknown {
 		t.Fatalf("reconciled seal carries a reading: %+v", inv.Seal)
 	}
@@ -516,8 +534,7 @@ func TestProofVerifyReconciliationRefusedWhileARealSealIsPending(t *testing.T) {
 			id := w.id()
 			env := w.start(id, true)
 			w.mustAdmit(w.lane, &model.InvocationStart{Envelope: env})
-			pvPut(t, w.p.Root, pvRunPath(id, "out/result.json"), []byte(pvFail))
-			real := w.seal(env, pvPin([]byte(pvFail), pvRunPath(id, "out/result.json")))
+			real := w.seal(env, w.produce(id, []byte(pvFail), "out/result.json"))
 			var unknown, realPacket model.ID
 			switch route {
 			case "control":
@@ -538,7 +555,7 @@ func TestProofVerifyReconciliationRefusedWhileARealSealIsPending(t *testing.T) {
 				hand := w.seal(env)
 				hand.Envelope.Outcome = recUnknown[model.ProcessOutcome]("observer died")
 				hand.Envelope.ObservedAt = recUnknown[time.Time]("observer died")
-				hand.Envelope.OutputRefs = recUnknown[[]model.ArtifactRef]("observer died")
+				hand.Envelope.Outputs = recUnknown[[]model.RunOutput]("observer died")
 				hand.Envelope.ConfigEffective = recUnknown[map[string]model.Availability[model.Scalar]]("observer died")
 				hand.Envelope.ConditionsObserved = recUnknown[map[string]model.Availability[model.Scalar]]("observer died")
 				unknown = w.capture(w.lane, hand)
@@ -561,9 +578,8 @@ func pvProven(t *testing.T) (*pvWorld, model.ID) {
 	w := pvNew(t)
 	pvPut(t, w.p.Root, "out/result.json", []byte(pvPass))
 	w.fix("out/result.json", []byte(pvPass))
-	id, err := w.run(true, func(id model.ID) []model.ArtifactRef {
-		pvPut(t, w.p.Root, pvRunPath(id, "out/result.json"), []byte(pvPass))
-		return []model.ArtifactRef{pvPin([]byte(pvPass), pvRunPath(id, "out/result.json"))}
+	id, err := w.run(true, func(id model.ID) []model.RunOutput {
+		return []model.RunOutput{w.produce(id, []byte(pvPass), "out/result.json")}
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -945,22 +961,20 @@ func TestProofVerifyFreshProcessRunReachesProvenOnItsOwnBytes(t *testing.T) {
 // claim without that failure ever being dispositioned.
 func TestProofVerifyNewCriterionRevisionCannotEraseCounterevidence(t *testing.T) {
 	passing := func(w *pvWorld) model.ID {
-		id, err := w.run(true, func(id model.ID) []model.ArtifactRef {
-			pvPut(t, w.p.Root, pvRunPath(id, "out/result.json"), []byte(pvPass))
-			return []model.ArtifactRef{pvPin([]byte(pvPass), pvRunPath(id, "out/result.json"))}
+		id, err := w.run(true, func(id model.ID) []model.RunOutput {
+			return []model.RunOutput{w.produce(id, []byte(pvPass), "out/result.json")}
 		})
 		if err != nil {
 			t.Fatalf("control: passing run must admit: %v", err)
 		}
 		return id
 	}
-	pvOwnRunDirControl(t, []byte(pvPass))
+	pvOwnOutputControl(t, []byte(pvPass))
 	w := pvNew(t)
 	pvPut(t, w.p.Root, "out/result.json", []byte(pvPass))
 	w.fix("out/result.json", []byte(pvPass))
-	failed, err := w.run(true, func(id model.ID) []model.ArtifactRef {
-		pvPut(t, w.p.Root, pvRunPath(id, "out/result.json"), []byte(pvFail))
-		return []model.ArtifactRef{pvPin([]byte(pvFail), pvRunPath(id, "out/result.json"))}
+	failed, err := w.run(true, func(id model.ID) []model.RunOutput {
+		return []model.RunOutput{w.produce(id, []byte(pvFail), "out/result.json")}
 	})
 	if err != nil {
 		t.Fatalf("control: a failing run is admitted as family evidence: %v", err)

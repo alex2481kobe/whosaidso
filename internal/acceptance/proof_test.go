@@ -23,7 +23,7 @@ func outsideProofFixture() ([]model.TypedEvent, model.InvocationEnvelope, *model
 	env.ConditionsDeclared = map[string]model.Scalar{"seed": laneEEvidenceNumber("7")}
 	env.ObservedAt = laneEEvidenceUnknown[time.Time]("not launched")
 	env.Outcome = laneEEvidenceUnknown[model.ProcessOutcome]("not launched")
-	env.OutputRefs = laneEEvidenceUnknown[[]model.ArtifactRef]("not launched")
+	env.Outputs = laneEEvidenceUnknown[[]model.RunOutput]("not launched")
 	env.ConfigEffective = laneEEvidenceUnknown[map[string]model.Availability[model.Scalar]]("not launched")
 	env.ConditionsObserved = laneEEvidenceUnknown[map[string]model.Availability[model.Scalar]]("not launched")
 	instrument := model.InstrumentSpec{
@@ -53,7 +53,7 @@ func outsideProofSeal(env model.InvocationEnvelope) *model.InvocationSeal {
 	env.ObservedAt = laneEEvidenceKnown(env.StartedAt.Add(time.Second))
 	exit := 0
 	env.Outcome = laneEEvidenceKnown(model.ProcessOutcome{Kind: "exit", ExitCode: &exit})
-	env.OutputRefs = laneEEvidenceKnown([]model.ArtifactRef{laneEEvidenceContent(laneEEvidenceBody)})
+	env.Outputs = laneEEvidenceKnown([]model.RunOutput{laneEEvidenceRunOutput(laneEEvidenceBody)})
 	env.ConfigEffective = laneEEvidenceConfig("sample_count", "12")
 	env.ConditionsObserved = laneEEvidenceConfig("seed", "7")
 	return &model.InvocationSeal{StartRef: model.InvocationRef{Project: laneEReduceProject, InvocationID: env.InvocationID}, Envelope: env}
