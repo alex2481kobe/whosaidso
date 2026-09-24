@@ -4,7 +4,7 @@ package main
 // Printing and --capture, which hands the event to capture's own path so the
 // gate stays the judge, live in template_capture.go. WhoSaidSo fills only what has one
 // computable answer: references and current revisions (template_ledger.go),
-// pins (template_pin.go) and what their bytes state (template_derive.go), the project id, the packet author where it is the
+// pins (template_pin.go) and, from the final draft, what their bytes or git state (template_derive.go), the project id, the packet author where it is the
 // author or attempt holder, the handback verb's false defaults, and a choice
 // with one member; which member of a choice the author filled is decided in
 // template_choice.go; where a path may add what the tree lacks, in
@@ -43,10 +43,8 @@ type boundTemplate struct {
 	examples map[string]string
 	project  *store.Project
 	state    *store.State
-	// readings are what a criterion.fix's pinned selectors read (template_derive.go)
-	readings map[string]*evidence.Reading
-	// skeleton is the event's unfilled tree, the schema a path may grow into
-	skeleton  any
+	// pinned are the artifacts --pin resolved, read once the draft is final (template_derive.go)
+	pinned    []evidence.ResolvedArtifact
 	projectID string // the project id filled from whosaidso.toml, if found
 }
 
@@ -136,27 +134,14 @@ func templateVerb(fs *flag.FlagSet) func(*call) error {
 	}
 }
 
-// fill applies, in order: what needs no flag, the bind flags, then --set.
+// fill applies, in order: what needs no flag, the bind flags, --set, then
+// what the final references' pinned bytes state.
 func (t *boundTemplate) fill(b templateBinds) error {
 	if p, err := store.Discover(t.c.cwd); err == nil {
 		t.projectID = string(p.ID)
-		t.replaceAll(projectPlaceholder, t.projectID, "whosaidso.toml")
 	}
-	if path, ok := templateAuthorPaths[t.event]; ok && !model.Blank(t.author.ID) {
-		if err := t.put(path, model.Actor{ID: t.author.ID}, "the packet author (--actor or WHOSAIDSO_ACTOR)"); err != nil {
-			return err
-		}
-	}
-	for _, path := range templateDefaults[t.event] {
-		if err := t.put(path, false, "false unless you --set it true, as whosaidso handback"); err != nil {
-			return err
-		}
-	}
-	t.body = t.onlyChoices(t.body)
-	for _, path := range templateMintRevisions[t.event] {
-		if err := t.put(path, json.Number("1"), "a minted id starts at revision 1"); err != nil {
-			return err
-		}
+	if err := t.fillUnflagged(); err != nil {
+		return err
 	}
 	if err := t.bindLedger(b); err != nil {
 		return err
@@ -177,9 +162,6 @@ func (t *boundTemplate) fill(b templateBinds) error {
 		_, target, _ := strings.Cut(p, "=")
 		target, _, _ = strings.Cut(target, "#")
 		pinned[target] = true
-	}
-	if err := t.fillStated(); err != nil {
-		return err
 	}
 	for output := range t.examples {
 		if !pinned[output] {
@@ -209,6 +191,33 @@ func (t *boundTemplate) fill(b templateBinds) error {
 		}
 	}
 	t.resolveChoices()
+	return t.deriveFinal()
+}
+
+// fillUnflagged fills what needs no flag: the project id, the packet author,
+// the verb's defaults, a choice with one member, and a minted id's first
+// revision. An element a path appends is filled by the same code
+// (skeletonAt), so it is the same fresh instance element 0 is.
+func (t *boundTemplate) fillUnflagged() error {
+	if t.projectID != "" {
+		t.replaceAll(projectPlaceholder, t.projectID, "whosaidso.toml")
+	}
+	if path, ok := templateAuthorPaths[t.event]; ok && !model.Blank(t.author.ID) {
+		if err := t.put(path, model.Actor{ID: t.author.ID}, "the packet author (--actor or WHOSAIDSO_ACTOR)"); err != nil {
+			return err
+		}
+	}
+	for _, path := range templateDefaults[t.event] {
+		if err := t.put(path, false, "false unless you --set it true, as whosaidso handback"); err != nil {
+			return err
+		}
+	}
+	t.body = t.onlyChoices(t.body)
+	for _, path := range templateMintRevisions[t.event] {
+		if err := t.put(path, json.Number("1"), "a minted id starts at revision 1"); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

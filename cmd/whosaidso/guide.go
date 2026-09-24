@@ -169,8 +169,8 @@ falsifier. The home's staging/ folder holds runs' outputs, not notes.
    "value" (one reading) or "values" (a set; each a value or an object with
    its own "value") is compared. That object, else its parent, states what
    the number is:
-     {"value": 0.75, "unit": "world units", "population": "the quarter-second
-      step", "denominator": "one step"}
+     {"value": 0.75, "unit": "world units",
+      "population": "the quarter-second step", "denominator": "one step"}
    unit is what the value is counted in, population which things the
    reading covers, denominator what those are counted as. The result must
    state its unit; a stated field must equal the criterion's unit,

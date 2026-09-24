@@ -13,16 +13,19 @@ import (
 
 const projectPlaceholder = "<project: the id declared in whosaidso.toml>"
 
-// skeletonAt is a fresh copy of the unfilled skeleton at steps, every index
-// read as element 0, with what needs no flag already filled (the project id,
-// a choice with one member); false when the schema has nothing there.
+// skeletonAt is the skeleton at steps, every index read as element 0, from a
+// fresh instance of the event's skeleton filled as the draft was with what
+// needs no flag (fillUnflagged): an appended element mints its own ids at
+// revision 1, as element 0 did, and never copies one already minted. False
+// when the schema has nothing there.
 func (t *boundTemplate) skeletonAt(steps []templateStep) (any, bool) {
-	if t.skeleton == nil {
-		skeleton, _, err := buildTemplateTree(t.event)
-		if err != nil {
-			return nil, false
-		}
-		t.skeleton = skeleton
+	skeleton, _, err := buildTemplateTree(t.event)
+	if err != nil {
+		return nil, false
+	}
+	fresh := &boundTemplate{c: t.c, event: t.event, body: skeleton, author: t.author, projectID: t.projectID}
+	if err := fresh.fillUnflagged(); err != nil {
+		return nil, false
 	}
 	normal := make([]templateStep, len(steps))
 	for i, s := range steps {
@@ -31,15 +34,7 @@ func (t *boundTemplate) skeletonAt(steps []templateStep) (any, bool) {
 			normal[i].index = 0
 		}
 	}
-	node, ok := templateGet(t.skeleton, normal)
-	if !ok {
-		return nil, false
-	}
-	node = templateClone(node)
-	if t.projectID != "" {
-		node, _ = replacePlaceholder(node, projectPlaceholder, t.projectID)
-	}
-	return t.onlyChoices(node), true
+	return templateGet(fresh.body, normal)
 }
 
 // grow adds to node what steps pass through and node lacks, from the
