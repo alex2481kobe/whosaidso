@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"whosaidso/internal/model"
 )
 
 // Continuity says what relocation could establish about the new home.
@@ -18,6 +20,9 @@ const (
 	ContinuitySame        = "same"         // already bound here; nothing changed
 	ContinuityContinued   = "continued"    // the new history continues the old
 	ContinuityNotCompared = "not-compared" // the old home is gone
+	// ContinuityUnreadable replaced a binding entry that could not be read:
+	// no previous home is known, so no continuity was compared.
+	ContinuityUnreadable = "unreadable-binding-replaced"
 )
 
 // BindResult is what one binding did.
@@ -71,11 +76,20 @@ func Bind(ctx context.Context, cwd, target string) (BindResult, error) {
 	defer lockRelease(lock)
 
 	previous, bound, err := Binding(invoked.ID)
+	unreadable := false
+	if fault, ok := err.(*model.Fault); ok && fault.Code == codeBindingCorrupt {
+		// An entry that names no home cannot be continued or protected; the
+		// explicit bind replaces it and says so. A readable entry naming a
+		// different home still goes through the relocation checks below.
+		unreadable, err = true, nil
+	}
 	if err != nil {
 		return BindResult{}, err
 	}
 	result := BindResult{Project: dest, Previous: previous, Continuity: ContinuityNew}
 	switch {
+	case unreadable:
+		result.Continuity = ContinuityUnreadable
 	case bound && previous == root:
 		result.Continuity = ContinuitySame
 	case bound:

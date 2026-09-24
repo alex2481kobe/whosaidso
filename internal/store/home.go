@@ -48,6 +48,10 @@ func bindingPath(id model.ProjectID) (string, error) {
 	return filepath.Join(home, "projects", encoded), nil
 }
 
+// codeBindingCorrupt is a registry entry that names no home. Bind replaces
+// it: only an explicit binding can say where the home is.
+const codeBindingCorrupt = "binding-corrupt"
+
 // Binding returns the canonical root this machine binds the project to, and
 // false when it is unbound. A binding file that is not exactly one absolute,
 // clean path and a newline is an error, never read as unbound.
@@ -64,7 +68,7 @@ func Binding(id model.ProjectID) (string, bool, error) {
 		return "", false, storeFault("io", path, err.Error())
 	}
 	if !info.Mode().IsRegular() {
-		return "", false, storeFault("binding-corrupt", path, "a project binding must be a regular file, never a symlink")
+		return "", false, storeFault(codeBindingCorrupt, path, "a project binding must be a regular file, never a symlink; fix it with whosaidso home PATH")
 	}
 	f, err := os.Open(path)
 	if err != nil {
@@ -77,7 +81,7 @@ func Binding(id model.ProjectID) (string, bool, error) {
 	}
 	root, ok := strings.CutSuffix(string(raw), "\n")
 	if !ok || root == "" || !filepath.IsAbs(root) || filepath.Clean(root) != root || strings.ContainsAny(root, "\x00\n") {
-		return "", false, storeFault("binding-corrupt", path, fmt.Sprintf("expected one absolute clean path and a newline, found %q; fix it with whosaidso home PATH", raw))
+		return "", false, storeFault(codeBindingCorrupt, path, fmt.Sprintf("expected one absolute clean path and a newline, found %q; fix it with whosaidso home PATH", raw))
 	}
 	return root, true, nil
 }
@@ -156,8 +160,9 @@ func recheckHome(project Project) error {
 		return err
 	}
 	now := "unbound"
+	var current Project
 	if bound {
-		if _, err := homeAt(root, project.ID); err != nil {
+		if current, err = homeAt(root, project.ID); err != nil {
 			return err
 		}
 		now = "bound to " + root
@@ -165,6 +170,15 @@ func recheckHome(project Project) error {
 	if real, err := filepath.EvalSymlinks(project.Root); !bound || err != nil || real != root {
 		return storeFault("home-moved", project.Root, fmt.Sprintf(
 			"project %s was opened with home %s and is now %s; nothing was published; run the command again", project.ID, project.Root, now))
+	}
+	// The same home can name another ledger since it was opened. Publishing
+	// into the one opened would acknowledge a fact the configured ledger never
+	// holds, so the ledger the config names now must be the one being written.
+	opened, openedErr := filepath.Rel(project.Root, project.Ledger)
+	named, namedErr := filepath.Rel(current.Root, current.Ledger)
+	if openedErr != nil || namedErr != nil || opened != named {
+		return storeFault("home-moved", project.Root, fmt.Sprintf(
+			"project %s was opened with ledger %s and its whosaidso.toml now names %s; nothing was published; run the command again", project.ID, opened, named))
 	}
 	return nil
 }

@@ -16,6 +16,7 @@ package store
 
 import (
 	"crypto/sha256"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -92,11 +93,38 @@ func Replayed(project Project) (State, error) {
 	return State{project: project, snapshot: snapshot, bundles: bundles}, nil
 }
 
+// NoCacheEnv set to exactly "1" makes Load the full ledger read (Replayed):
+// the snapshot cache is neither read nor written. It is the owner's check
+// against a deliberately rewritten cache, which the image checksum does not
+// detect (blind spot: an image rewritten with a recomputed checksum is
+// believed on the default path). Any other non-empty value is refused.
+const NoCacheEnv = "WHOSAIDSO_NO_CACHE"
+
+// cacheOff reports whether NoCacheEnv turns the cache off, or refuses a value
+// it does not define rather than guessing what was meant.
+func cacheOff() (bool, error) {
+	switch v := os.Getenv(NoCacheEnv); v {
+	case "":
+		return false, nil
+	case "1":
+		return true, nil
+	default:
+		return true, storeFault("invalid-field", NoCacheEnv, fmt.Sprintf(
+			"%s must be 1 (read the whole ledger, never the cache) or unset, got %q", NoCacheEnv, v))
+	}
+}
+
 // Load selects the ledger prefix and returns its snapshot, restoring the
 // cached image and folding only the bundles after it when the image matches.
 // When the snapshot had to move, it publishes a new image, best effort: a
-// failed publication changes nothing but the next command's speed.
+// failed publication changes nothing but the next command's speed. With
+// NoCacheEnv=1 it is Replayed and touches no image.
 func Load(project Project) (State, error) {
+	if off, err := cacheOff(); err != nil {
+		return State{}, err
+	} else if off {
+		return Replayed(project)
+	}
 	state, moved, err := load(project)
 	if err != nil {
 		// Whatever went wrong, the full read decides: it returns the answer,
