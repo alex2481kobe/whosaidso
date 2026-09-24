@@ -1,6 +1,8 @@
 // Final adoption probes belong here: independent CLI and ledger counterexamples.
-// Production fixes and other reviewers' specifications do not. Fixtures remain
-// under .review-scratch for inspection; these tests deliberately do not clean up.
+// Production fixes and other reviewers' specifications do not. Coordinator edit
+// 2026-09-24: fixtures live in test temp dirs, not the repo tree (a scratch dir in
+// the checkout made every observed checkout dirty), and the build uses the
+// caller's GOCACHE instead of one machine's path.
 package acceptance_test
 
 import (
@@ -29,22 +31,19 @@ func astraFinalNew(t *testing.T) *gateVerifyFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scratch := filepath.Join(repo, ".review-scratch")
-	if err := os.MkdirAll(scratch, 0700); err != nil {
-		t.Fatal(err)
-	}
 	astraFinalBuild.Do(func() {
-		astraFinalBinary = filepath.Join(scratch, "review-whosaidso")
+		dir, err := os.MkdirTemp("", "whosaidso-review-final-bin-")
+		if err != nil {
+			t.Fatal(err)
+		}
+		astraFinalBinary = filepath.Join(dir, "review-whosaidso")
 		cmd := exec.Command("go", "build", "-o", astraFinalBinary, "./cmd/whosaidso")
-		cmd.Dir, cmd.Env = repo, append(os.Environ(), "GOCACHE=/private/tmp/go-cache-shared")
+		cmd.Dir = repo
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("build: %v: %s", err, out)
 		}
 	})
-	root, err := os.MkdirTemp(scratch, "review-final-")
-	if err != nil {
-		t.Fatal(err)
-	}
+	root := t.TempDir()
 	t.Setenv(store.HomeEnv, filepath.Join(root, "review-machine"))
 	t.Setenv("WHOSAIDSO_ACTOR", "holder")
 	pvPut(t, root, "whosaidso.toml", []byte("id = 'datum/acceptance'\nledger = '.whosaidso/events'\n"))
