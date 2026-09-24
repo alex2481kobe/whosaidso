@@ -1,7 +1,9 @@
 # Agents working on Datum
 
 Any agent, any harness. Read CONTRIBUTING.md too; this file adds what an agent
-needs that a human contributor would pick up from review.
+needs that a human contributor would pick up from review. How to use Datum
+itself (capture, admit, run, handback, the views) is in `datum help`, and only
+there.
 
 ## The build
 
@@ -21,7 +23,7 @@ needs that a human contributor would pick up from review.
   as yours. If a test there contradicts your brief, report it; do not change it.
 - A reviewer owns one acceptance file and no production code. A failing test
   is the reviewer's deliverable: it says what was expected, what happened, and
-  why it matters. Every refusal test opens with a control that passes.
+  why it matters.
 - Work only in the worktree and files your brief names. If one item needs a
   file you do not own, stop that item, finish the rest, and report what you
   needed and why.
@@ -46,7 +48,7 @@ needs that a human contributor would pick up from review.
 
 Mutation-test every rule you add: make small deliberately wrong versions,
 confirm a test fails for each, then restore. Report each mutation and whether
-it was caught. A test you never watched fail proves nothing.
+it was caught.
 
 Defect shapes this codebase keeps producing, worth looking for first:
 - a correct value answering a different question than the one asked;

@@ -19,12 +19,7 @@ change.
 
 ## Running it
 
-```
-go build -o datum ./cmd/datum
-go test ./... -count=1
-gofmt -l .
-go vet ./...
-```
+The build, test and review commands are in [AGENTS.md](AGENTS.md#the-build).
 
 ## Workflows and review
 
