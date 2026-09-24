@@ -1,8 +1,9 @@
 package write
 
-// Accepted-artifact resolution and byte verification, and handing verified
-// bytes to publication, live here. Durable publication itself (store),
-// admission policy and transaction ownership do not.
+// Accepted-artifact resolution and byte verification, handing verified bytes
+// to publication, and checking that a home still holds what admission kept
+// live here. Durable publication itself (store), admission policy and
+// transaction ownership do not.
 
 import (
 	"context"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 
 	"whosaidso/internal/evidence"
 	"whosaidso/internal/model"
@@ -149,4 +151,61 @@ func admissionReadable(resolved evidence.ResolvedArtifact, selector model.Select
 // content-addressed publication (a dry run records instead).
 func preserveAdmissionBlob(root, artifactDir string, data []byte) error {
 	return store.PublishArtifact(root, artifactDir, data)
+}
+
+// HomeHoldsKeptArtifacts refuses a home whose artifact store does not hold
+// every artifact its admitted ledger keeps there. Admission keeps the verified
+// bytes of every content artifact an admitted event cites (materializeAdmission),
+// so each must resolve from the store alone, locators set aside. Two exceptions,
+// both from the ledger itself: a git artifact resolves from the repository, and
+// a recorded disposal says those bytes may be gone. Each refusal names the digest,
+// every admitted event citing it (bundle, event index, type) and the resolver's
+// reason, which tells missing bytes from different ones.
+func HomeHoldsKeptArtifacts(ctx context.Context, home store.Project, state store.State) error {
+	bundles, err := state.Bundles()
+	if err != nil {
+		return err
+	}
+	snapshot := state.Snapshot()
+	resolver := evidence.NewResolverAt(home.Root, home.ArtifactDir())
+	reasons := map[model.Digest]string{}
+	citers := map[model.Digest][]string{}
+	var missing []model.Digest
+	for _, bundle := range bundles {
+		for i, raw := range bundle.Events {
+			event, err := model.DecodeEvent(raw)
+			if err != nil {
+				return err
+			}
+			citer := fmt.Sprintf("bundle %d event %d (%s)", bundle.Sequence, i, raw.Type)
+			for _, ref := range admissionArtifacts(event) {
+				if ref.Kind != "content" || disposed(snapshot, ref) {
+					continue
+				}
+				digest := ref.Content.SHA256
+				if _, checked := reasons[digest]; !checked {
+					kept := model.ArtifactRef{Kind: "content", Selector: model.Selector{Kind: "whole"}, Content: &model.ContentPin{
+						SHA256: digest, Length: ref.Content.Length, MediaType: ref.Content.MediaType, Locators: []model.Locator{}}}
+					reasons[digest] = ""
+					if _, err := resolver.Resolve(ctx, kept); err != nil {
+						reasons[digest] = err.Error()
+						missing = append(missing, digest)
+					}
+				}
+				if reasons[digest] != "" && !slices.Contains(citers[digest], citer) {
+					citers[digest] = append(citers[digest], citer)
+				}
+			}
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	lines := make([]string, len(missing))
+	for i, digest := range missing {
+		lines[i] = fmt.Sprintf("sha256 %s cited by %s: %s", digest, strings.Join(citers[digest], ", "), reasons[digest])
+	}
+	return admissionFault("home-evidence-missing", home.ArtifactDir(), fmt.Sprintf(
+		"%s does not hold %d artifact(s) its admitted records cite; commit the whole .whosaidso folder (events and artifacts) together:\n  %s",
+		home.Root, len(missing), strings.Join(lines, "\n  ")))
 }

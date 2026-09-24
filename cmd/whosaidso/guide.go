@@ -264,6 +264,8 @@ cache use the home; run, source capture and fresh git HEAD and dirty state
 use the checkout you invoke them in. A git object missing from the home
 repository stays unavailable. Plain capture needs no home: intake is routed
 by the declared project id.
+Commit the whole .whosaidso/ folder (events and artifacts) together: a move,
+or any binding, refuses a home missing evidence its admitted records cite.
 Per machine, one WhoSaidSo home holds the registry (projects/), intake,
 staging (runs' outputs while they run) and the machine id:
 $WHOSAIDSO_HOME, else $HOME/.whosaidso. Set WHOSAIDSO_HOME to a scratch

@@ -633,6 +633,13 @@ func TestUnresolvedDependenciesAreUnknownNeverTrue(t *testing.T) {
 			if p.Prerequisites[0].Detail == "" {
 				t.Fatal("UNKNOWN carries no stated reason")
 			}
+			want := "project datum/other's ledger is not read here"
+			if p.Prerequisites[0].Detail != want {
+				t.Fatalf("detail = %q, want %q", p.Prerequisites[0].Detail, want)
+			}
+			if len(p.Reasons) == 0 || p.Reasons[0].Actor.UnknownReason != want {
+				t.Fatalf("who must act on the dependency: %+v, want UNKNOWN because %q", p.Reasons, want)
+			}
 		})
 	}
 }
