@@ -44,7 +44,7 @@ whosaidso
 |   |-- query          selects admitted facts before either output format renders them
 |   |      17 files, tested -- uses model, reduce, store
 |   |-- reduce         folds admitted bundles into the state every WhoSaidSo answer is read from
-|   |      26 files, tested -- uses model
+|   |      27 files, tested -- uses model
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
 |   |      18 files, tested -- uses model, reduce
 |   `-- write          joins immutable capture to canonical state through one admission gate

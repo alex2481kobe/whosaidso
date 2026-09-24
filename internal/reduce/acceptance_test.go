@@ -2,7 +2,7 @@ package reduce
 
 // R15.1 through Replay and Apply alike: a task naming an accepter is closed
 // only by a packet that actor wrote; no authority is needed; the closer is
-// projected, and self_accepted compares it with the receipt's author: TRUE
+// projected, and closer_authored_receipt compares it with the receipt's author: TRUE
 // for the same known actor, FALSE for distinct known actors, UNKNOWN when
 // either is unknown, two unknowns included.
 
@@ -89,23 +89,24 @@ func TestR151SelfAccepted(t *testing.T) {
 		{"the doer closes", "lane-a", "lane-a", TruthTrue},
 		{"another actor closes", "lane-a", "owner", TruthFalse},
 		{"the closer is unknown", "lane-a", "", TruthUnknown},
-		{"the doer is unknown", "", "owner", TruthUnknown},
-		{"two unknowns never match", "", "", TruthUnknown},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			l := acceptLedger(t, nil, tc.doer)
 			closeBy(l, t, tc.closer)
 			p, _ := wantBoth(t, l, "").Task(Ident{Project: testProject, ID: newID("TSKA")})
-			if p.Status != StatusClosed || p.Closure.SelfAccepted != tc.want {
-				t.Fatalf("self_accepted = %s, want %s (a visible fact, never a block): %+v", p.Closure.SelfAccepted, tc.want, p.Closure)
+			if p.Status != StatusClosed || p.Closure.CloserAuthoredReceipt != tc.want {
+				t.Fatalf("closer_authored_receipt = %s, want %s (a visible fact, never a block): %+v", p.Closure.CloserAuthoredReceipt, tc.want, p.Closure)
 			}
 		})
 	}
+	// A receipt whose author is unknown is not the holder's: the ledger
+	// refuses it (handback.go), so no closure is compared with an unknown doer.
+	wantBoth(t, acceptLedger(t, nil, ""), CodeAttributionMismatch)
 	// No receipt at all: there is no known doer to compare with.
 	l := newLedger()
 	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
 	closeBy(l, t, "owner")
-	if p := projectTask(t, l, newID("TSKA")); p.Closure.SelfAccepted != TruthUnknown {
-		t.Fatalf("a closure with no receipt compared against nobody: want UNKNOWN, got %s", p.Closure.SelfAccepted)
+	if p := projectTask(t, l, newID("TSKA")); p.Closure.CloserAuthoredReceipt != TruthUnknown {
+		t.Fatalf("a closure with no receipt compared against nobody: want UNKNOWN, got %s", p.Closure.CloserAuthoredReceipt)
 	}
 }

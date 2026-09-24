@@ -59,10 +59,20 @@ func briefRecord(b *briefWriter, indent int, r cur) {
 		}
 		b.line(indent+1, append(pieces, "-", prefix(reason.at("detail")))...)
 	}
-	// R15.1: who closed the task, and whether they also did the work.
+	// R15.1: who closed the task, and whether the closer also wrote one of
+	// its attempt receipts. A waived closure says whose authority excused it,
+	// or that it cites none: the gate requires none.
 	if c := r.at("task", "closure"); c.ok() {
-		closed := append([]any{"closed:", c.at("outcome"), "by"}, who(c.at("closer", "actor"))...)
-		b.line(indent+1, append(closed, "self-accepted", c.at("self_accepted"))...)
+		closed := []any{"closed:", c.at("outcome")}
+		if c.at("outcome").text() == "waived" {
+			if c.at("authority").ok() {
+				closed = append(append(closed, "under authority of"), who(c.at("authority", "actor"))...)
+			} else {
+				closed = append(closed, "(no authority cited)")
+			}
+		}
+		closed = append(append(closed, "by"), who(c.at("closer", "actor"))...)
+		b.line(indent+1, append(closed, "closer authored a receipt", c.at("closer_authored_receipt"))...)
 	}
 	for _, h := range r.at("task", "attempt_holders").items() {
 		b.line(indent+1, append([]any{"attempt", h.at("attempt", "attempt"), "held by"}, who(h.at("actor"))...)...)

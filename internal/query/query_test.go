@@ -33,8 +33,8 @@ func TestTaskRevisionHoldersAndUnknownNeverBorrowNearbyActors(t *testing.T) {
 	if a.Watermark.Sequence != 2 || a.Watermark.Events != 4 || a.Watermark.Head.(Head).CommandID != testID(101) {
 		t.Fatalf("expected the whole read's second bundle watermark with 4 events, got %+v; record origin is not the watermark", a.Watermark)
 	}
-	appendEvents(t, p, 102, &model.AttemptTerminal{Task: testRef(1, 2), AttemptID: testID(70), Outcome: model.AttemptNoReading,
-		Reason: "no reading", NextAction: "wait for input", DeliveryRefs: []model.ArtifactRef{}})
+	appendEvents(t, p, 102, admittedAs(102, map[int]string{0: "worker"}, &model.AttemptTerminal{Task: testRef(1, 2), AttemptID: testID(70), Outcome: model.AttemptNoReading,
+		Reason: "no reading", NextAction: "wait for input", DeliveryRefs: []model.ArtifactRef{}})...)
 	task = showOf(t, p, testID(1)).Records[0].Task
 	if task.Status != reduce.StatusBlocked || len(task.AttemptHolders) != 0 || len(task.Attempts) != 1 || len(task.Reasons) != 1 {
 		t.Fatalf("terminal attempt must retain its receipt but cease holding; remaining hold must explain BLOCKED, got %+v", task)

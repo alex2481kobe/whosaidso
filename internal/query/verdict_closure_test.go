@@ -16,19 +16,19 @@ import (
 )
 
 // refutedAndClosedWorld is presetWorld plus a refutation of claim 21 (its only
-// run failed) and task 1 closed by lane-a, who also wrote its success receipt.
+// run failed) and task 1 closed by worker, who also wrote its success receipt (its holder).
 func refutedAndClosedWorld(t *testing.T) *ShowAnswer {
 	t.Helper()
 	p := testProject(t)
 	presetWorld(t, p)
-	appendEvents(t, p, 106, admitted(106,
+	appendEvents(t, p, 106, admittedAs(106, map[int]string{1: "worker"},
 		&model.ProofAdmit{Claim: testRef(21, 1), CriterionRef: criterionRef(21), Verdict: model.VerdictRefutes,
 			Evidence: []model.ObservationDisposition{{InvocationRef: model.InvocationRef{Project: projectID, InvocationID: testID(50)},
 				Disposition: "contradicts", Reason: "the run failed"}},
 			Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "reviewer"}, Reason: "the failing run contradicts the criterion"}},
 		&model.AttemptTerminal{Task: testRef(1, 1), AttemptID: testID(70), Outcome: "success", Reason: "done",
 			NextAction: "accept it", DeliveryRefs: []model.ArtifactRef{testArtifact()}})...)
-	appendEvents(t, p, 107, admitted(107, &model.TaskClose{Task: testRef(1, 1), Outcome: model.ClosureSuccess,
+	appendEvents(t, p, 107, admittedAs(107, map[int]string{0: "worker"}, &model.TaskClose{Task: testRef(1, 1), Outcome: model.ClosureSuccess,
 		AcceptanceWitnessRefs: []model.AcceptanceWitness{{CriterionID: testID(90), CriterionRevision: 1, WitnessRef: testArtifact()}},
 		DeliveryWitnessRefs:   []model.ArtifactRef{testArtifact()}})...)
 	return viewAnswerOf(t, p, ViewRequest{View: "show"}).(*ShowAnswer)
@@ -50,7 +50,7 @@ func TestRefutedClaimAndClosureReadHonestly(t *testing.T) {
 	if !strings.Contains(text, "CLAIM "+string(testID(21))+" rev 1 REFUTED") || !strings.Contains(text, "REFUTED at revision 1") {
 		t.Fatalf("the brief must show the refuted standing:\n%s", text)
 	}
-	if !strings.Contains(text, "closed: success by lane-a self-accepted TRUE") {
+	if !strings.Contains(text, "closed: success by worker closer authored a receipt TRUE") {
 		t.Fatalf("the brief must name the closer and self-acceptance:\n%s", text)
 	}
 	var exported bytes.Buffer
@@ -67,11 +67,11 @@ func TestRefutedClaimAndClosureReadHonestly(t *testing.T) {
 		c, _ := task["closure"].(map[string]any)
 		by, _ := c["closer"].(map[string]any)
 		closer, _ := by["actor"].(map[string]any)
-		if closer["id"] == "lane-a" && c["self_accepted"] == "TRUE" {
+		if closer["id"] == "worker" && c["closer_authored_receipt"] == "TRUE" && c["authority_cited"] == false {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("--json must carry the closure's closer and self_accepted:\n%s", exported.String())
+		t.Fatalf("--json must carry the closure's closer, closer_authored_receipt and authority_cited:\n%s", exported.String())
 	}
 }

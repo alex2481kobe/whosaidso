@@ -2,7 +2,7 @@ package write
 
 // R15.1 through admission: task.close needs no authority carrier, only its
 // witnesses; a task that names an accepter is closed only by a packet that
-// actor wrote; the closer is recorded, and self_accepted compares it with the
+// actor wrote; the closer is recorded, and closer_authored_receipt compares it with the
 // author of the attempt receipt. The replay-side rules are in internal/reduce.
 
 import (
@@ -48,7 +48,7 @@ func TestTaskCloseNeedsNoCarrierAndRecordsASelfAcceptance(t *testing.T) {
 	w.f.refuse(w.f.request(w.closeAs(w.f.author.ID, bare)), "closure-ineffective")
 	w.f.accept(w.closeAs(w.f.author.ID, w.closure(model.ClosureSuccess)))
 	p := w.status(t)
-	if p.Status != reduce.StatusClosed || p.Closure.Authority != nil || p.Closure.Closer.Author != w.f.author || p.Closure.SelfAccepted != reduce.TruthTrue {
+	if p.Status != reduce.StatusClosed || p.Closure.Authority != nil || p.Closure.Closer.Author != w.f.author || p.Closure.CloserAuthoredReceipt != reduce.TruthTrue {
 		t.Fatalf("the lane closing its own work must read CLOSED, closer lane, self-accepted TRUE: %+v", p.Closure)
 	}
 }
@@ -66,7 +66,7 @@ func TestTaskAccepterAloneMayClose(t *testing.T) {
 	}
 	w.f.accept(w.closeAs("owner", w.closure(model.ClosureSuccess)))
 	p := w.status(t)
-	if p.Status != reduce.StatusClosed || p.Closure.Closer.Author != owner || p.Closure.SelfAccepted != reduce.TruthFalse {
+	if p.Status != reduce.StatusClosed || p.Closure.Closer.Author != owner || p.Closure.CloserAuthoredReceipt != reduce.TruthFalse {
 		t.Fatalf("the accepter closing another's work must read CLOSED, closer owner, self-accepted FALSE: %+v", p.Closure)
 	}
 }

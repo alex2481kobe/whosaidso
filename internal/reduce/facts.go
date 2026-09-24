@@ -174,20 +174,24 @@ func (b Blocker) Open() bool { return b.Cleared == nil }
 // must see rather than an event that silently vanished. Authority is nil
 // unless the closure cited one (R15.1).
 //
-// Closer and SelfAccepted (R15.1) are projected when the task is read, from
-// the packet authors the ledger records; the stored closure leaves them empty.
-// SelfAccepted is TRUE when the closer is a known actor who also wrote one of
-// the task's attempt receipts, FALSE when every receipt author is a known
-// actor distinct from a known closer, UNKNOWN otherwise. It never blocks.
+// Closer and CloserAuthoredReceipt (R15.1) are projected when the task is
+// read, from the packet authors the ledger records; the stored closure leaves
+// them empty. CloserAuthoredReceipt compares the closer with the authors of
+// the task's attempt receipts (each the attempt holder's own packet): TRUE
+// when the closer, a known actor, wrote one of them, FALSE when every receipt
+// author is a known actor distinct from a known closer, UNKNOWN otherwise.
+// It measures receipt authorship only: FALSE does not say someone else
+// implemented the work, since a holder can report work another lane did. It
+// never blocks.
 type Closure struct {
-	Task                model.RecordRef           `json:"task"`
-	Outcome             model.ClosureOutcome      `json:"outcome"`
-	Authority           *model.Authority          `json:"authority"`
-	AcceptanceWitnesses []model.AcceptanceWitness `json:"acceptance_witnesses"`
-	DeliveryWitnesses   []model.ArtifactRef       `json:"delivery_witnesses"`
-	Origin              Origin                    `json:"origin"`
-	Closer              PacketAuthor              `json:"closer"`
-	SelfAccepted        Truth                     `json:"self_accepted"`
+	Task                  model.RecordRef           `json:"task"`
+	Outcome               model.ClosureOutcome      `json:"outcome"`
+	Authority             *model.Authority          `json:"authority"`
+	AcceptanceWitnesses   []model.AcceptanceWitness `json:"acceptance_witnesses"`
+	DeliveryWitnesses     []model.ArtifactRef       `json:"delivery_witnesses"`
+	Origin                Origin                    `json:"origin"`
+	Closer                PacketAuthor              `json:"closer"`
+	CloserAuthoredReceipt Truth                     `json:"closer_authored_receipt"`
 }
 
 // Invocation pairs an immutable pre-launch intent with its seal, if one was

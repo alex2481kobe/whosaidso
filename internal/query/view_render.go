@@ -82,6 +82,9 @@ func briefDetail(b *briefWriter, indent int, d cur) {
 		b.line(indent, "CLAIM", d.at("ref", "record_id"), "rev", d.at("ref", "revision"), c.at("status"), "support", d.at("current_support"))
 		b.line(indent+1, prefix(d.at("label")))
 		b.line(indent+1, prefix(c.at("standing")))
+		for _, why := range d.at("support_unknown_because").items() {
+			b.line(indent+1, "support", prefix(why))
+		}
 	case "DECISION":
 		c := d.at("decision")
 		b.line(indent, append([]any{"DECISION", d.at("ref", "record_id"), "rev", d.at("ref", "revision"), c.at("status"), "waiting on"}, who(c.at("waiting_actor"))...)...)
@@ -131,7 +134,7 @@ func briefTodo(b *briefWriter, a cur) {
 	}
 	briefList(b, 0, "open decisions", a.at("open_decisions"), briefDetail)
 	briefIntake(b, "intake unreviewed", t.at("intake_unreviewed"), a.at("intake_pending"), "pending")
-	briefIntake(b, "correction requested (each packet's author owes a corrected packet)", t.at("intake_correction_requested"), a.at("intake_pending"), "correction-requested")
+	briefIntake(b, "correction requested (whether a corrected packet answered it is not recorded)", t.at("intake_correction_requested"), a.at("intake_pending"), "correction-requested")
 	if n := t.at("intake_rejected"); n.string() != "0" {
 		b.line(0, "rejected intake:", n, "(reviewed, nothing owed; whosaidso history lists the reviews)")
 	}
