@@ -1,6 +1,6 @@
 package evidence
 
-// This file guards one rule of R13.1 at the source level: production outside
+// This file guards one rule of the record folder at the source level: production outside
 // this package never reaches the default artifact store. Resolution tests
 // belong in resolve_test.go, run-output tests in output_name_test.go.
 

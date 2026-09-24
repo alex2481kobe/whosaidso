@@ -19,19 +19,19 @@ import (
 	"whosaidso/internal/write"
 )
 
-// Contract:99,161-163,362-369: matching execution conditions include the
+// Matching execution conditions include the
 // source actually read. Empty source-pin lists do not establish equal source.
-func TestAstraRound2ChangedExecutionSourceCannotCompare(t *testing.T) {
+func TestChangedExecutionSourceCannotCompare(t *testing.T) {
 	for _, change := range []string{"control", "committed", "dirty"} {
 		t.Run(change, func(t *testing.T) {
-			w := astraProofWorld(t, pvFail)
+			w := proofExampleWorld(t, pvFail)
 			script := strings.Replace(pvProducer(pvPass), "printf '%s' '"+pvPass+"'", "cat measurement.json", 1)
 			pvPut(t, w.p.Root, "tools/run.sh", []byte(script))
 			pvPut(t, w.p.Root, "measurement.json", []byte(pvPass))
 			pvPut(t, w.p.Root, ".gitignore", []byte(".whosaidso/\n"))
 			git := func(args ...string) string {
 				t.Helper()
-				cmd := exec.Command("git", append([]string{"-C", w.p.Root, "-c", "user.name=review", "-c", "user.email=review@example.invalid", "-c", "commit.gpgsign=false"}, args...)...)
+				cmd := exec.Command("git", append([]string{"-C", w.p.Root, "-c", "user.name=test", "-c", "user.email=test@example.invalid", "-c", "commit.gpgsign=false"}, args...)...)
 				out, err := cmd.CombinedOutput()
 				if err != nil {
 					t.Fatalf("git fixture: %v: %s", err, out)
@@ -75,28 +75,28 @@ func TestAstraRound2ChangedExecutionSourceCannotCompare(t *testing.T) {
 				members[env.InvocationID] = "supports"
 			}
 			if change == "control" {
-				astraProven(t, w, members)
+				requireProven(t, w, members)
 				return
 			}
 			if err := w.prove(members); err == nil || w.status() == reduce.StatusProven {
-				t.Errorf("expected incomparable source conditions; got proof=%v, status=%s after %s source changed. The producer read different bytes, but comparison ignores HEAD/dirty and treats two empty source lists as equality (contract:99,161-163)", err, w.status(), change)
+				t.Errorf("expected incomparable source conditions; got proof=%v, status=%s after %s source changed. The producer read different bytes, but comparison ignores HEAD/dirty and treats two empty source lists as equality", err, w.status(), change)
 			}
 		})
 	}
 }
 
-// Contract:120,144: every acknowledged source capture must save its bytes,
+// Every acknowledged source capture must save its bytes,
 // including callers of the same exported writer used by the CLI.
-func TestAstraRound2SourceCaptureCannotBypassDurability(t *testing.T) {
+func TestSourceCaptureCannotBypassDurability(t *testing.T) {
 	for _, route := range []string{"control", "events", "build-events"} {
 		t.Run(route, func(t *testing.T) {
 			w := pvNew(t)
 			body := []byte(`{"message":"words that must survive capture"}`)
 			pin := pvPin(body, "missing-source.json")
 			source := &model.SourceIntake{SourceID: w.id(), OriginalDigest: pin.Content.SHA256, Length: pin.Content.Length,
-				SourceRef: pin, Speaker: w.lane, Referents: []model.RecordRef{w.claim}}
+				SourceRef: pin, Speaker: w.agent, Referents: []model.RecordRef{w.claim}}
 			events := []model.Event{recEncode(t, source)}
-			r := store.IntakeRequest{CommandID: w.id(), Author: w.lane, Events: events}
+			r := store.IntakeRequest{CommandID: w.id(), Author: w.agent, Events: events}
 			if route == "control" {
 				r.Blobs = []io.Reader{bytes.NewReader(body)}
 			} else if route == "build-events" {
@@ -114,15 +114,15 @@ func TestAstraRound2SourceCaptureCannotBypassDurability(t *testing.T) {
 				return
 			}
 			if err == nil {
-				t.Errorf("expected refusal before acknowledging unsaved source; got packet %s, later admission=%s. The public intake writer bypasses the CLI-only source check and promises capture with no original bytes (contract:120,144)", packet.CommandID, recCode(w.review("accepted", packet.CommandID)))
+				t.Errorf("expected refusal before acknowledging unsaved source; got packet %s, later admission=%s. The public intake writer bypasses the CLI-only source check and promises capture with no original bytes", packet.CommandID, recCode(w.review("accepted", packet.CommandID)))
 			}
 		})
 	}
 }
 
-// Contract:52-53: an acceptance hold prevents dispatch when no attempt is live.
+// An acceptance hold prevents dispatch when no attempt is live.
 // Changing the verb to takeover must not reopen a terminal attempt's blocked task.
-func TestAstraRound2TakeoverCannotBypassReady(t *testing.T) {
+func TestTakeoverCannotBypassReady(t *testing.T) {
 	for _, blocked := range []bool{false, true} {
 		t.Run(map[bool]string{false: "control", true: "awaiting-acceptance"}[blocked], func(t *testing.T) {
 			w := flowNew(t)
@@ -135,34 +135,34 @@ func TestAstraRound2TakeoverCannotBypassReady(t *testing.T) {
 				if err := w.review("accepted", packet); err != nil {
 					t.Fatalf("control: terminate the prior attempt: %v", err)
 				}
-				w.mustAdmit(flowLane, &model.BlockerHold{Task: task.ref, BlockerID: w.id(), Reason: model.BlockerAwaitingAcceptance,
-					Actor: model.Actor{ID: flowLane}, Criterion: "owner accepts before any further work"})
-				start := &model.TaskStart{Task: task.ref, Actor: model.Actor{ID: flowLane}, AttemptID: w.id()}
-				if err := w.review("accepted", w.capture(flowLane, start)); err == nil {
+				w.mustAdmit(flowAgent, &model.BlockerHold{Task: task.ref, BlockerID: w.id(), Reason: model.BlockerAwaitingAcceptance,
+					Actor: model.Actor{ID: flowAgent}, Criterion: "owner accepts before any further work"})
+				start := &model.TaskStart{Task: task.ref, Actor: model.Actor{ID: flowAgent}, AttemptID: w.id()}
+				if err := w.review("accepted", w.capture(flowAgent, start)); err == nil {
 					t.Fatal("control: ordinary start must refuse the unresolved hold")
 				}
 			}
 			body := []byte(`{"stopped":true}`)
 			w.put("stopped.json", body)
-			event := &model.TaskTakeover{Task: task.ref, Actor: model.Actor{ID: flowLane}, AttemptID: w.id(),
+			event := &model.TaskTakeover{Task: task.ref, Actor: model.Actor{ID: flowAgent}, AttemptID: w.id(),
 				PriorAttemptID: task.attempt, StoppedConfirmationRef: pvPin(body, "stopped.json")}
-			err := w.review("accepted", w.capture(flowLane, event))
+			err := w.review("accepted", w.capture(flowAgent, event))
 			if !blocked && err != nil {
 				t.Fatalf("control: a takeover with no outstanding hold must admit: %v", err)
 			}
 			if blocked && err == nil {
-				t.Error("expected refusal while acceptance is owed; takeover admitted a new attempt after the prior attempt ended. READY/BLOCKED must govern dispatch through both verbs (contract:52-53)")
+				t.Error("expected refusal while acceptance is owed; takeover admitted a new attempt after the prior attempt ended. READY/BLOCKED must govern dispatch through both verbs")
 			}
 		})
 	}
 }
 
-// Contract:684: a published admission answers an identical retry without
+// A published admission answers an identical retry without
 // requiring access to this machine's intake. Permissions do not change content.
-func TestAstraRound2RetryDoesNotNeedReadableIntake(t *testing.T) {
+func TestRetryDoesNotNeedReadableIntake(t *testing.T) {
 	w := pvNew(t)
-	r := write.AdmitRequest{CommandID: w.id(), PacketIDs: []model.ID{w.capture(w.lane, &model.InvocationStart{Envelope: w.start(w.id(), false)})},
-		Admitter: w.lane, Outcome: "accepted", Reason: "retry the same review"}
+	r := write.AdmitRequest{CommandID: w.id(), PacketIDs: []model.ID{w.capture(w.agent, &model.InvocationStart{Envelope: w.start(w.id(), false)})},
+		Admitter: w.agent, Outcome: "accepted", Reason: "retry the same review"}
 	want, err := write.Admit(context.Background(), w.p, r)
 	if err != nil {
 		t.Fatal(err)
@@ -191,7 +191,7 @@ func TestAstraRound2RetryDoesNotNeedReadableIntake(t *testing.T) {
 		t.Skipf("fixture needs enforced file permissions: %v", err)
 	}
 	if got, err := write.Admit(context.Background(), w.p, r); err != nil || !same(got) {
-		t.Errorf("expected the identical published result, got %v. Retry rereads unchanged but inaccessible intake; losing its permissions must not turn an acknowledged ledger fact into a failed command (contract:684)", err)
+		t.Errorf("expected the identical published result, got %v. Retry rereads unchanged but inaccessible intake; losing its permissions must not turn an acknowledged ledger fact into a failed command", err)
 	}
 	if err := os.Chmod(packet, 0600); err != nil {
 		t.Fatal(err)
@@ -201,16 +201,16 @@ func TestAstraRound2RetryDoesNotNeedReadableIntake(t *testing.T) {
 	}
 }
 
-// Contract:584-585,603-616: config names belong to the exact instrument
+// Config names belong to the exact instrument
 // revision; replay must reject the same invalid relationship admission rejects.
-func TestAstraRound2ReplayChecksInstrumentConfigNames(t *testing.T) {
+func TestReplayChecksInstrumentConfigNames(t *testing.T) {
 	w := pvNew(t)
 	env := w.start(w.id(), false)
-	w.mustAdmit(w.lane, &model.InvocationStart{Envelope: env}, w.seal(env, []model.RunOutput{}...))
+	w.mustAdmit(w.agent, &model.InvocationStart{Envelope: env}, w.seal(env, []model.RunOutput{}...))
 	badEnv := w.start(w.id(), false)
 	bad := w.seal(badEnv, []model.RunOutput{}...)
-	bad.Envelope.ConfigEffective = recKnown(map[string]model.Availability[model.Scalar]{"undeclared-camera": recKnown(laneEEvidenceNumber("1"))})
-	if err := w.admit(w.lane, &model.InvocationStart{Envelope: badEnv}, bad); recCode(err) != "invalid-field" || !strings.Contains(err.Error(), "config_effective") {
+	bad.Envelope.ConfigEffective = recKnown(map[string]model.Availability[model.Scalar]{"undeclared-camera": recKnown(evidenceNumber("1"))})
+	if err := w.admit(w.agent, &model.InvocationStart{Envelope: badEnv}, bad); recCode(err) != "invalid-field" || !strings.Contains(err.Error(), "config_effective") {
 		t.Fatalf("control: admission must refuse the undeclared effective knob: %v", err)
 	}
 	prefix, err := store.ReadPrefix(w.p)
@@ -227,12 +227,12 @@ func TestAstraRound2ReplayChecksInstrumentConfigNames(t *testing.T) {
 				t.Fatal(err)
 			}
 			if seal, ok := event.(*model.InvocationSeal); ok {
-				*seal.Envelope.ConfigEffective.Value = map[string]model.Availability[model.Scalar]{"undeclared-camera": recKnown(laneEEvidenceNumber("1"))}
+				*seal.Envelope.ConfigEffective.Value = map[string]model.Availability[model.Scalar]{"undeclared-camera": recKnown(evidenceNumber("1"))}
 				prefix[i].Events[j] = recEncode(t, seal)
 			}
 		}
 	}
 	if _, err := reduce.Replay(prefix); err == nil {
-		t.Error("expected replay to refuse an effective config name absent from the instrument; got a valid snapshot. The new admission-only check leaves the invalid relationship expressible in canonical history (contract:584-585,603-616)")
+		t.Error("expected replay to refuse an effective config name absent from the instrument; got a valid snapshot. The new admission-only check leaves the invalid relationship expressible in canonical history")
 	}
 }

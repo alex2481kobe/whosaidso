@@ -1,6 +1,6 @@
 package reduce
 
-// R14.2's ledger half through Replay and Apply alike: a failing run of the
+// The code-change rule's ledger half through Replay and Apply alike: a failing run of the
 // proof's own criterion revision is set aside as inapplicable only beside a
 // recorded code change whose From is the run's known clean head, whose paths
 // lie under the claim's scope, and whose To is the clean head every supporting
@@ -32,8 +32,8 @@ func codeChangeLedger(t *testing.T, failedEnv, passedEnv func(model.InvocationEn
 	t.Helper()
 	l := goodLedger(t)
 	claim := ref(newID("CMA1"), 1)
-	l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("lane-a"), Spec: proofInstrument()},
-		&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("lane-a"), Spec: claimSpec()}, fixProofCriterion(claim))
+	l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("agent-a"), Spec: proofInstrument()},
+		&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("agent-a"), Spec: claimSpec()}, fixProofCriterion(claim))
 	failed := failedEnv(atHead(proofEnvelope(claim, newID("RNA0")), oldHead))
 	passed := passedEnv(atHead(proofEnvelope(claim, newID("RNA1")), newHead))
 	l.add(t, &model.InvocationStart{Envelope: failed}, &model.InvocationStart{Envelope: passed})
@@ -48,13 +48,13 @@ func codeChangeLedger(t *testing.T, failedEnv, passedEnv func(model.InvocationEn
 
 func same(env model.InvocationEnvelope) model.InvocationEnvelope { return env }
 
-func TestR142CodeChangeSetsAFailingRunAside(t *testing.T) {
+func TestCodeChangeSetsAFailingRunAside(t *testing.T) {
 	l, claim, proof := codeChangeLedger(t, same, same)
 	l.add(t, proof)
 	wantClaim(t, wantBoth(t, l, ""), claim, StatusProven)
 }
 
-func TestR142CodeChangeRefusals(t *testing.T) {
+func TestCodeChangeRefusals(t *testing.T) {
 	unknownHead := func(env model.InvocationEnvelope) model.InvocationEnvelope {
 		env.ExecutionSourceIdentity.Head = proofUnknown[model.GitHead]()
 		return env
@@ -112,7 +112,7 @@ func TestR142CodeChangeRefusals(t *testing.T) {
 // Without a code change, a failing run of the same revision stays
 // counterevidence: cited as "contradicts" it leaves the claim unproven. (Set
 // aside without one, only the gate can see it fails; internal/write tests it.)
-func TestR142WithoutACodeChangeTheRunStaysCounterevidence(t *testing.T) {
+func TestWithoutACodeChangeTheRunStaysCounterevidence(t *testing.T) {
 	l, _, proof := codeChangeLedger(t, same, same)
 	proof.Evidence[1].Disposition = "contradicts"
 	proof.Evidence[1].CodeChange = nil
@@ -120,7 +120,7 @@ func TestR142WithoutACodeChangeTheRunStaysCounterevidence(t *testing.T) {
 	wantBoth(t, l, CodeInvalidTransition)
 }
 
-func TestR142CodeChangeOnlyForAnExactRevisionRun(t *testing.T) {
+func TestCodeChangeOnlyForAnExactRevisionRun(t *testing.T) {
 	l, claim, proof := codeChangeLedger(t, same, same)
 	l.add(t, criterionRevision(claim, 2))
 	next := atHead(proofEnvelope(claim, newID("RNA3")), newHead)

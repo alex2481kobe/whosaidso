@@ -27,7 +27,7 @@ func TestDiscoverNearestAndRelativeLedger(t *testing.T) {
 	}
 }
 
-// Ruling R8.1: the ledger is committed with the project, so a ledger path that
+// The ledger is committed with the project, so a ledger path that
 // leaves the whosaidso root is refused, whether absolute, climbing, or linked out.
 func TestDiscoverRefusesALedgerLeavingItsRoot(t *testing.T) {
 	parent := t.TempDir()
@@ -190,7 +190,7 @@ func putFile(t *testing.T, path string, data []byte) {
 	}
 }
 
-// R13.1: the artifact store is the ledger's sibling in its record folder,
+// The artifact store is the ledger's sibling in its record folder,
 // derived from the configured ledger rather than named a second time.
 func TestProjectArtifactDirSitsBesideTheLedger(t *testing.T) {
 	root := t.TempDir()

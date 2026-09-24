@@ -1,7 +1,7 @@
 package write
 
 // Tests that admission records each reviewed packet's author in the ledger
-// (R10.1 revised: accountability is visibility), and that every admitted event
+// (accountability is visibility), and that every admitted event
 // is attributed to the packet that carried it even when the gate reorders
 // packets by dependency. Decision disposition rules live in gate_dispose_test.go.
 
@@ -28,15 +28,15 @@ func TestDisposedDecisionNamesItsPacketAuthorBesideTheAuthority(t *testing.T) {
 	packet := w.f.capture(nil, w.dispose(1, "approved"))
 	bundle := w.f.accept(packet)
 	review := decodeReview(t, bundle)
-	if got := review.Authors; !reflect.DeepEqual(got, map[model.ID]model.Actor{packet.CommandID: {ID: "lane-c2"}}) {
-		t.Fatalf("review.admit authors = %+v, want the packet's captured author lane-c2", got)
+	if got := review.Authors; !reflect.DeepEqual(got, map[model.ID]model.Actor{packet.CommandID: {ID: "agent-c2"}}) {
+		t.Fatalf("review.admit authors = %+v, want the packet's captured author agent-c2", got)
 	}
 	if got := review.EventPackets; !reflect.DeepEqual(got, []model.ID{packet.CommandID}) {
 		t.Fatalf("event_packets = %v, want the one dispose event attributed to %s", got, packet.CommandID)
 	}
 	d := w.decision(t, 1).Dispositions[0]
-	if d.Author != (reduce.PacketAuthor{Packet: packet.CommandID, Author: model.Actor{ID: "lane-c2"}}) {
-		t.Fatalf("disposition author = %+v, want lane-c2 from packet %s", d.Author, packet.CommandID)
+	if d.Author != (reduce.PacketAuthor{Packet: packet.CommandID, Author: model.Actor{ID: "agent-c2"}}) {
+		t.Fatalf("disposition author = %+v, want agent-c2 from packet %s", d.Author, packet.CommandID)
 	}
 	if d.Disposition.Authority.Actor.ID != "owner" {
 		t.Fatalf("authority replaced by the author: %+v", d.Disposition.Authority.Actor)
@@ -49,9 +49,9 @@ func TestReorderedPacketsKeepTheirOwnAuthors(t *testing.T) {
 	w := &disposeWorld{f: f, id: f.id(), scope: f.task().Spec.Scope}
 	// The dispose packet gets the LOWER command id, so sorted order and the
 	// gate's dependency order disagree: the open must be admitted first.
-	f.author = model.Actor{ID: "lane-dispose"}
+	f.author = model.Actor{ID: "agent-dispose"}
 	dispose := f.capture(nil, w.dispose(1, "rejected"))
-	f.author = model.Actor{ID: "lane-open"}
+	f.author = model.Actor{ID: "agent-open"}
 	open := f.capture(nil, &model.DecisionOpen{ID: w.id, Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.DecisionSpec{Question: "ship", Options: []string{"yes", "no"}, WaitingActor: model.Actor{ID: "owner"}, Scope: w.scope}})
 	bundle := f.accept(dispose, open)
@@ -60,8 +60,8 @@ func TestReorderedPacketsKeepTheirOwnAuthors(t *testing.T) {
 	}
 	s := f.snapshot()
 	want := []reduce.PacketAuthor{
-		{Packet: open.CommandID, Author: model.Actor{ID: "lane-open"}},
-		{Packet: dispose.CommandID, Author: model.Actor{ID: "lane-dispose"}},
+		{Packet: open.CommandID, Author: model.Actor{ID: "agent-open"}},
+		{Packet: dispose.CommandID, Author: model.Actor{ID: "agent-dispose"}},
 	}
 	for i, w := range want {
 		if got := s.EventAuthor(reduce.Origin{Sequence: bundle.Sequence, EventIndex: i}); got != w {

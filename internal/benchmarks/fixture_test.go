@@ -21,7 +21,7 @@ import (
 
 // Run with -run '^$' -bench BenchmarkCommands -benchmem -benchtime=1x.
 // WHOSAIDSO_BENCH_ROOT optionally retains fixtures across processes; use an empty,
-// lane-prefixed scratch directory. HOME is isolated inside this test binary only;
+// agent-prefixed scratch directory. HOME is isolated inside this test binary only;
 // the invoking Go tool uses its configured shared cache, without a GOCACHE override.
 // Large fixtures use Encode/DecodeBundle, ReadVerifiedIntake and Replay, then write
 // validated immutable files in bulk. They do not pay O(N²) historical admission
@@ -34,7 +34,7 @@ func TestMain(m *testing.M) {
 	remove := benchRoot == ""
 	var err error
 	if remove {
-		benchRoot, err = os.MkdirTemp("", "astraeff-bench-")
+		benchRoot, err = os.MkdirTemp("", "bench-bench-")
 	}
 	if err == nil {
 		err = os.MkdirAll(filepath.Join(benchRoot, "home"), 0700)
@@ -191,7 +191,7 @@ func getFixture(t testing.TB, n int) *fixture {
 func buildFixture(t testing.TB, dir string, n int, realAdmission bool) *fixture {
 	t.Helper()
 	f := &fixture{t: t, Bundles: n, realAdmission: realAdmission, building: true,
-		Project: store.Project{ID: model.ProjectID("astraeff/" + filepath.Base(dir) + "/" + string(model.HashBytes([]byte(dir)))[:8]), Root: dir, Ledger: filepath.Join(dir, ".whosaidso", "events")}}
+		Project: store.Project{ID: model.ProjectID("bench/" + filepath.Base(dir) + "/" + string(model.HashBytes([]byte(dir)))[:8]), Root: dir, Ledger: filepath.Join(dir, ".whosaidso", "events")}}
 	put(t, filepath.Join(dir, "whosaidso.toml"), []byte(fmt.Sprintf("id = %q\nledger = %q\n", f.Project.ID, ".whosaidso/events")))
 	for i := 0; i < n/10; i++ {
 		f.cycle(i)

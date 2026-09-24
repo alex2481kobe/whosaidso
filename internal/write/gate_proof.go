@@ -1,6 +1,6 @@
 package write
 
-// U12 operations the gate enables — claim/instrument revision, trust withdrawal,
+// The operations the gate enables — claim/instrument revision, trust withdrawal,
 // criterion fixing, invocation start/seal, proof, task closure, decision
 // open/revise/dispose and correction — and the post-replay checks that need
 // artifact bytes or pending intake live here. Supersession and
@@ -23,7 +23,7 @@ func gateProofOperation(event model.TypedEvent, author model.Actor) error {
 	case *model.ClaimRevise, *model.DecisionOpen, *model.DecisionRevise:
 		return nil
 	case *model.DecisionDispose:
-		// R10.1 as overruled: an agent writes the packet that records a ruling.
+		// An agent writes the packet that records a ruling.
 		// The packet author stays whoever wrote it and is never checked against
 		// or replaced by the authority; author, authority and the exact quote
 		// (nonblank by schema) are all recorded: visible, not blocked.
@@ -34,7 +34,7 @@ func gateProofOperation(event model.TypedEvent, author model.Actor) error {
 	case *model.Supersede, *model.ArtifactDispose:
 		return gateOwnerActOperation(event)
 	case *model.TaskClose:
-		// R15.1: no authority carrier is required. The accepter, when the task
+		// No authority carrier is required. The accepter, when the task
 		// names one, is checked by the reducer against the packet author; a
 		// cited authority is still checked against its carrier in
 		// gateCloseAuthority; whether the closure takes effect, after replay.
@@ -49,7 +49,7 @@ func gateProofOperation(event model.TypedEvent, author model.Actor) error {
 		// reducer, including criterion freezing, and by artifact resolution.
 		return nil
 	case *model.ProofAdmit:
-		// The verdict (R14.1) is required by the event schema. The judgment
+		// The verdict is required by the event schema. The judgment
 		// must be the identified packet author: see CriterionFix.
 		return nil
 	case *model.CriterionFix:
@@ -206,8 +206,8 @@ func gateProofs(ctx context.Context, project store.Project, after reduce.Snapsho
 	return nil
 }
 
-// gateCloseAuthority: a closure that cites an authority (optional since
-// R15.1) names it, and its exact words are an admitted or bundled
+// gateCloseAuthority: a closure that cites an authority (optional) names
+// it, and its exact words are an admitted or bundled
 // source.intake spoken by that actor about this revision. A closure citing
 // none needs no carrier: acceptance is its packet author.
 func gateCloseAuthority(event model.TypedEvent, sources []reduce.Source) error {

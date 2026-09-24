@@ -1,6 +1,6 @@
 package reduce
 
-// R15.1 through Replay and Apply alike: a task naming an accepter is closed
+// Acceptance through Replay and Apply alike: a task naming an accepter is closed
 // only by a packet that actor wrote; no authority is needed; the closer is
 // projected, and closer_authored_receipt compares it with the receipt's author: TRUE
 // for the same known actor, FALSE for distinct known actors, UNKNOWN when
@@ -41,8 +41,8 @@ func acceptLedger(t *testing.T, accepter *model.Actor, doer string) *ledgerBuild
 	spec := taskSpec()
 	spec.Accepter = accepter
 	l := newLedger()
-	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: spec})
-	l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "lane-a"}, AttemptID: newID("ATTA")})
+	l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: spec})
+	l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID("ATTA")})
 	receipt := &model.AttemptTerminal{Task: ref(newID("TSKA"), 1), AttemptID: newID("ATTA"), Outcome: model.AttemptSuccess,
 		Reason: "done", NextAction: "accept it", DeliveryRefs: []model.ArtifactRef{blobRef("delivery")}}
 	l.add(t, authored(l.seq+1, []model.TypedEvent{receipt}, doer)...)
@@ -56,17 +56,17 @@ func closeBy(l *ledgerBuilder, t *testing.T, closer string) {
 	l.add(t, authored(l.seq+1, []model.TypedEvent{closure}, closer)...)
 }
 
-func TestR151AccepterAloneMayClose(t *testing.T) {
+func TestAccepterAloneMayClose(t *testing.T) {
 	owner := model.Actor{ID: "owner"}
 	for _, tc := range []struct {
 		name, closer, code string
 	}{
 		{"the accepter closes", "owner", ""},
-		{"the doer closes", "lane-a", CodeAccepterMismatch},
+		{"the doer closes", "agent-a", CodeAccepterMismatch},
 		{"an unattributed packet closes", "", CodeAccepterMismatch},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			l := acceptLedger(t, &owner, "lane-a")
+			l := acceptLedger(t, &owner, "agent-a")
 			if p := projectTask(t, l, newID("TSKA")); p.Reasons[0].Actor != owner {
 				t.Fatalf("an awaiting-acceptance task waits on its accepter: %+v", p.Reasons)
 			}
@@ -81,14 +81,14 @@ func TestR151AccepterAloneMayClose(t *testing.T) {
 	}
 }
 
-func TestR151SelfAccepted(t *testing.T) {
+func TestSelfAccepted(t *testing.T) {
 	for _, tc := range []struct {
 		name, doer, closer string
 		want               Truth
 	}{
-		{"the doer closes", "lane-a", "lane-a", TruthTrue},
-		{"another actor closes", "lane-a", "owner", TruthFalse},
-		{"the closer is unknown", "lane-a", "", TruthUnknown},
+		{"the doer closes", "agent-a", "agent-a", TruthTrue},
+		{"another actor closes", "agent-a", "owner", TruthFalse},
+		{"the closer is unknown", "agent-a", "", TruthUnknown},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			l := acceptLedger(t, nil, tc.doer)
@@ -104,7 +104,7 @@ func TestR151SelfAccepted(t *testing.T) {
 	wantBoth(t, acceptLedger(t, nil, ""), CodeAttributionMismatch)
 	// No receipt at all: there is no known doer to compare with.
 	l := newLedger()
-	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+	l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 	closeBy(l, t, "owner")
 	if p := projectTask(t, l, newID("TSKA")); p.Closure.CloserAuthoredReceipt != TruthUnknown {
 		t.Fatalf("a closure with no receipt compared against nobody: want UNKNOWN, got %s", p.Closure.CloserAuthoredReceipt)

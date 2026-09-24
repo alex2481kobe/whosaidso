@@ -9,8 +9,8 @@ import (
 	"reflect"
 )
 
-// TypedEvent is the closed semantic boundary after U01's raw Event. U05/U06
-// consume these payloads; only admission can decide whether they fit current state.
+// TypedEvent is the closed semantic boundary after the raw Event. The task and
+// record reducers consume these payloads; only admission can decide whether they fit current state.
 type TypedEvent interface {
 	eventPayload()
 	EventType() EventType
@@ -161,7 +161,7 @@ func EncodeEvent(event TypedEvent) (Event, error) {
 	}
 	raw, err := json.Marshal(event)
 	if err == nil {
-		raw, err = utcBytes(raw, reflect.TypeOf(event)) // ruling R8.4
+		raw, err = utcBytes(raw, reflect.TypeOf(event)) // the wire carries only UTC
 	}
 	if err != nil {
 		return Event{}, invalid("event.data", err.Error())

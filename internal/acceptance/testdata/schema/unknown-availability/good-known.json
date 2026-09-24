@@ -7,7 +7,7 @@
           "git": {
             "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "object_format": "sha1",
-            "path": "documentation/design/research/BUILD-PLAN-DATUM.md"
+            "path": "docs/plan.md"
           },
           "kind": "git",
           "selector": {

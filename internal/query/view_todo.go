@@ -1,6 +1,6 @@
 package query
 
-// The todo view: everything owed, in flight first (COMMAND-SPEC §3.1). It
+// The todo view: everything owed, in flight first. It
 // absorbs the in-flight half of the old now preset (in-flight tasks with every
 // run of theirs, blocked-task waits, out-of-scope runs), the open decisions,
 // and intake not accepted (every such packet, with the ledger's disposition;

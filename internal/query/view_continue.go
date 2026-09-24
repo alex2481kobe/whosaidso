@@ -1,6 +1,6 @@
 package query
 
-// The continue view: resume any record (COMMAND-SPEC §3.2). A task gets the
+// The continue view: resume any record. A task gets the
 // rich continuation (progress, attempts, runs, what is owed); every kind gets
 // its mandatory closure, optional one-hop context, the caller's fresh
 // workspace observation and its attention. Each record body appears once, in

@@ -10,7 +10,7 @@ import (
 )
 
 func prereqTask(kind string, target model.RecordRef) *model.TaskCreate {
-	return &model.TaskCreate{Provenance: provenance("lane-b"), ID: newID("TSKB"),
+	return &model.TaskCreate{Provenance: provenance("agent-b"), ID: newID("TSKB"),
 		Spec: taskSpec(withPrerequisite(kind, target, "forbid", nil))}
 }
 
@@ -44,7 +44,7 @@ func TestClaimProofNeedsCurrentSupport(t *testing.T) {
 		{"proven then trust withdrawn", true, []model.TypedEvent{withdrawal()}, TruthFalse, StatusBlocked},
 		{"proven then evidence disposed", true, []model.TypedEvent{disposal()}, TruthFalse, StatusBlocked},
 		{"proven revision no longer current", true, []model.TypedEvent{&model.ClaimRevise{Target: claim,
-			Replacement: claimSpec(), Provenance: provenance("lane-a")}}, TruthFalse, StatusBlocked},
+			Replacement: claimSpec(), Provenance: provenance("agent-a")}}, TruthFalse, StatusBlocked},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			l := proofLedger(t, tc.proven)
@@ -100,7 +100,7 @@ func TestDecisionApprovedNeedsApprovalInForce(t *testing.T) {
 // TestReplayRefusesStartUnlessReady: the READY rule lives in the fold, so a
 // ledger carrying a start on a BLOCKED task fails replay whatever wrote it.
 func TestReplayRefusesStartUnlessReady(t *testing.T) {
-	start := &model.TaskStart{Task: ref(newID("TSKB"), 1), Actor: model.Actor{ID: "lane-b"}, AttemptID: newID("ATTB")}
+	start := &model.TaskStart{Task: ref(newID("TSKB"), 1), Actor: model.Actor{ID: "agent-b"}, AttemptID: newID("ATTB")}
 	d := ref(newID("DCSA"), 1)
 	decision := func(after ...model.TypedEvent) *ledgerBuilder {
 		l := newLedger()

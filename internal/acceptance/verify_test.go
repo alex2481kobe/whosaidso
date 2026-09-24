@@ -12,10 +12,10 @@ import (
 )
 
 func TestVerifyExplicitUnavailableMetadataCannotBecomeAgreement(t *testing.T) {
-	c := laneEEvidenceCriterion()
+	c := evidenceCriterion()
 	root := t.TempDir()
-	control := laneEEvidenceObserve(t, root, c, laneEEvidenceBody, 10)
-	laneEEvidenceVerdict(t, c, []evidence.Observation{control}, evidence.True, "")
+	control := evidenceObserve(t, root, c, evidenceBody, 10)
+	evidenceVerdict(t, c, []evidence.Observation{control}, evidence.True, "")
 
 	for _, location := range []string{"results", "population"} {
 		for _, field := range []string{"population", "denominator"} {
@@ -23,7 +23,7 @@ func TestVerifyExplicitUnavailableMetadataCannotBecomeAgreement(t *testing.T) {
 				// Omission is allowed by the current vocabulary. An explicit
 				// statement of unavailability is a different fact, however.
 				var document map[string]map[string]any
-				if err := json.Unmarshal([]byte(laneEEvidenceBody), &document); err != nil {
+				if err := json.Unmarshal([]byte(evidenceBody), &document); err != nil {
 					t.Fatal(err)
 				}
 				delete(document[location], field)
@@ -33,10 +33,10 @@ func TestVerifyExplicitUnavailableMetadataCannotBecomeAgreement(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					return laneEEvidenceObserve(t, root, c, string(body), 11)
+					return evidenceObserve(t, root, c, string(body), 11)
 				}
 				omitted := observe()
-				laneEEvidenceVerdict(t, c, []evidence.Observation{omitted}, evidence.True, "")
+				evidenceVerdict(t, c, []evidence.Observation{omitted}, evidence.True, "")
 				for _, unavailable := range []struct {
 					name  string
 					value any
@@ -73,11 +73,11 @@ func TestVerifyExplicitUnavailableMetadataCannotBecomeAgreement(t *testing.T) {
 }
 
 func TestVerifySelectedPopulationMembersMustBelongToTheDeclaredPopulation(t *testing.T) {
-	c := laneEEvidenceCriterion()
+	c := evidenceCriterion()
 	root := t.TempDir()
-	controlBody := strings.Replace(laneEEvidenceBody, `["pose-a","pose-b"]`, `[{"value":"pose-a","population":"pose sweep","denominator":"poses"},"pose-b"]`, 1)
-	control := laneEEvidenceObserve(t, root, c, controlBody, 10)
-	laneEEvidenceVerdict(t, c, []evidence.Observation{control}, evidence.True, "")
+	controlBody := strings.Replace(evidenceBody, `["pose-a","pose-b"]`, `[{"value":"pose-a","population":"pose sweep","denominator":"poses"},"pose-b"]`, 1)
+	control := evidenceObserve(t, root, c, controlBody, 10)
+	evidenceVerdict(t, c, []evidence.Observation{control}, evidence.True, "")
 
 	for _, tc := range []struct{ field, raw string }{
 		{"population", `"other sweep"`},
@@ -87,8 +87,8 @@ func TestVerifySelectedPopulationMembersMustBelongToTheDeclaredPopulation(t *tes
 	} {
 		t.Run(tc.field+"/"+tc.raw, func(t *testing.T) {
 			members := `[{"value":"pose-a","` + tc.field + `":` + tc.raw + `},"pose-b"]`
-			body := strings.Replace(laneEEvidenceBody, `["pose-a","pose-b"]`, members, 1)
-			o := laneEEvidenceObserve(t, root, c, body, 11)
+			body := strings.Replace(evidenceBody, `["pose-a","pose-b"]`, members, 1)
+			o := evidenceObserve(t, root, c, body, 11)
 			if len(o.Population.MemberMetadata) != 2 {
 				t.Fatalf("selector must preserve both population member positions: %+v", o.Population)
 			}
@@ -111,12 +111,12 @@ func TestVerifyLFSPointerRecognitionRequiresTheActualVersionLine(t *testing.T) {
 	r := evidence.NewResolver(root)
 	resolveText := func(body string) (evidence.ResolvedArtifact, error) {
 		t.Helper()
-		laneEEvidenceWrite(t, root, "out/result.json", body)
-		ref := laneEEvidenceContent(body)
+		evidenceWrite(t, root, "out/result.json", body)
+		ref := evidenceContent(body)
 		ref.Content.MediaType = "text/plain"
 		return r.Resolve(context.Background(), ref)
 	}
-	digest := laneEEvidenceDigest("payload")
+	digest := evidenceDigest("payload")
 	controlBody := fmt.Sprintf("LFS format notes\noid sha256:%s\nsize 7\n", digest)
 	control, err := resolveText(controlBody)
 	if err != nil || string(control.Bytes) != controlBody {

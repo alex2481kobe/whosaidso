@@ -62,7 +62,7 @@ func criterionFix(claim int) *model.CriterionFix {
 			Population: model.Population{Identity: "all cases", Selector: testArtifact(), Denominator: "all cases"},
 			Operator:   model.Equal, Target: model.Scalar{Type: "number", Number: &n}, Reducer: model.All},
 		Policy: model.EvaluationPolicy{Inclusion: "entire-criterion-family", Retry: "retain-all"},
-		Author: model.Actor{ID: "lane-a"}, SourceRefs: []model.ArtifactRef{}}
+		Author: model.Actor{ID: "agent-a"}, SourceRefs: []model.ArtifactRef{}}
 }
 func envelope(id, attempt, instrument, claim int, inputs ...model.ArtifactRef) model.InvocationEnvelope {
 	criterion := notKnown[model.CriterionRef]("no criterion named")
@@ -83,7 +83,7 @@ func envelope(id, attempt, instrument, claim int, inputs ...model.ArtifactRef) m
 func seal(env model.InvocationEnvelope, exit int, after time.Duration) *model.InvocationSeal {
 	env.ObservedAt = known(env.StartedAt.Add(after))
 	env.Outcome = known(model.ProcessOutcome{Kind: "exit", ExitCode: &exit})
-	env.Outputs = known([]model.RunOutput{{Name: "stdout", SHA256: model.HashBytes([]byte("U09")), Length: 3, MediaType: "text/plain"}})
+	env.Outputs = known([]model.RunOutput{{Name: "stdout", SHA256: model.HashBytes([]byte("abc")), Length: 3, MediaType: "text/plain"}})
 	return &model.InvocationSeal{StartRef: model.InvocationRef{Project: projectID, InvocationID: env.InvocationID}, Envelope: env}
 }
 func authority() model.Authority {
@@ -98,14 +98,14 @@ func presetWorld(t *testing.T, p store.Project) {
 	t.Helper()
 	readyControl(t, p)
 	appendEvents(t, p, 101, admitted(101,
-		&model.InstrumentDeclare{ID: testID(10), Provenance: prov("lane-a"), Spec: instrumentSpec(true)},
-		&model.InstrumentDeclare{ID: testID(11), Provenance: prov("lane-a"), Spec: instrumentSpec(false)},
-		&model.ClaimAssert{ID: testID(20), Provenance: prov("lane-e"), Spec: claimSpec("VERIFIED")},
-		&model.ClaimAssert{ID: testID(21), Provenance: prov("lane-e"), Spec: claimSpec()},
-		&model.ClaimAssert{ID: testID(22), Provenance: prov("lane-e"), Spec: claimSpec()},
+		&model.InstrumentDeclare{ID: testID(10), Provenance: prov("agent-a"), Spec: instrumentSpec(true)},
+		&model.InstrumentDeclare{ID: testID(11), Provenance: prov("agent-a"), Spec: instrumentSpec(false)},
+		&model.ClaimAssert{ID: testID(20), Provenance: prov("agent-e"), Spec: claimSpec("VERIFIED")},
+		&model.ClaimAssert{ID: testID(21), Provenance: prov("agent-e"), Spec: claimSpec()},
+		&model.ClaimAssert{ID: testID(22), Provenance: prov("agent-e"), Spec: claimSpec()},
 		criterionFix(21), criterionFix(22),
-		&model.DecisionOpen{ID: testID(30), Provenance: prov("lane-c"), Spec: decisionSpec()},
-		&model.DecisionOpen{ID: testID(31), Provenance: prov("lane-c"), Spec: decisionSpec()})...)
+		&model.DecisionOpen{ID: testID(30), Provenance: prov("agent-c"), Spec: decisionSpec()},
+		&model.DecisionOpen{ID: testID(31), Provenance: prov("agent-c"), Spec: decisionSpec()})...)
 	appendEvents(t, p, 102, &model.TaskStart{Task: testRef(1, 1), AttemptID: testID(70), Actor: model.Actor{ID: "worker"}})
 	inside := envelope(50, 70, 10, 21, gitInput("internal/query/query.go"))
 	outside := envelope(51, 70, 10, 22, gitInput("internal/query/query.go"), gitInput("internal/reduce/task.go"))
@@ -125,7 +125,7 @@ func presetWorld(t *testing.T, p store.Project) {
 
 // admitted appends admission's review to events: one packet per event,
 // authored by the actor the event names (the criterion author, the proof
-// judgment, otherwise lane-a) and captured a minute after presetStart, so the
+// judgment, otherwise agent-a) and captured a minute after presetStart, so the
 // reducer can check authorship and freezing from the ledger.
 func admitted(n int, events ...model.TypedEvent) []model.TypedEvent {
 	return admittedAs(n, nil, events...)
@@ -138,7 +138,7 @@ func admittedAs(n int, as map[int]string, events ...model.TypedEvent) []model.Ty
 		Authors: map[model.ID]model.Actor{}, CapturedAt: map[model.ID]model.Availability[time.Time]{}}
 	for i, e := range events {
 		packet := testID(n*100 + i)
-		author := model.Actor{ID: "lane-a"}
+		author := model.Actor{ID: "agent-a"}
 		switch e := e.(type) {
 		case *model.CriterionFix:
 			author = e.Author

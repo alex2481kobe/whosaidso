@@ -33,17 +33,17 @@ func viewsWorld(t *testing.T, p store.Project) {
 	plan.Spec.Prerequisites = []model.Prerequisite{{Kind: "task-success", Target: testRef(5, 1), WaiverPolicy: "forbid"},
 		{Kind: "task-success", Target: testRef(14, 1), WaiverPolicy: "forbid"}}
 	decision := decisionSpec()
-	decision.Scope.ContextRefs = []model.RecordRef{testRef(11, 1), testRef(10, 1), {Project: "datum/elsewhere", RecordID: testID(777), Revision: 1}}
+	decision.Scope.ContextRefs = []model.RecordRef{testRef(11, 1), testRef(10, 1), {Project: "example/elsewhere", RecordID: testID(777), Revision: 1}}
 	amended := testTask(1).Spec
 	amended.ContextRefs = []model.RecordRef{testRef(21, 1), testRef(22, 1)}
 	appendEvents(t, p, 119, admitted(119, &model.TaskAmend{Target: testRef(1, 1), Replacement: amended,
 		Provenance: testTask(1).Provenance})...)
 	appendEvents(t, p, 120, admitted(120, five, testTask(6), testTask(14), testTask(15), plan, nine,
-		&model.DecisionOpen{ID: testID(33), Provenance: prov("lane-c"), Spec: decision})...)
+		&model.DecisionOpen{ID: testID(33), Provenance: prov("agent-c"), Spec: decision})...)
 	appendEvents(t, p, 121, admitted(121,
 		&model.TaskStart{Task: testRef(5, 1), AttemptID: testID(75), Actor: model.Actor{ID: "worker"}},
 		&model.TaskStart{Task: testRef(6, 1), AttemptID: testID(76), Actor: model.Actor{ID: "worker"}},
-		&model.TaskStart{Task: testRef(9, 1), AttemptID: testID(79), Actor: model.Actor{ID: "lane-a"}},
+		&model.TaskStart{Task: testRef(9, 1), AttemptID: testID(79), Actor: model.Actor{ID: "agent-a"}},
 		&model.TaskStart{Task: testRef(15, 1), AttemptID: testID(78), Actor: model.Actor{ID: "worker"}})...)
 	outside, unsealed := envelope(53, 78, 10, 0, gitInput("cmd/whosaidso/main.go")), envelope(54, 78, 10, 0, testArtifact())
 	appendEvents(t, p, 124, admitted(124, &model.InvocationStart{Envelope: outside}, &model.InvocationStart{Envelope: unsealed})...)

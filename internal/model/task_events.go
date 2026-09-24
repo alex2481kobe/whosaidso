@@ -4,14 +4,15 @@ package model
 // Authored task revisions, invocation evidence, and state transitions do not.
 // This file stays below 200 lines to keep task execution payloads together.
 
-// BlockerRef identifies the hold under its exact task revision. U05 refuses
+// BlockerRef identifies the hold under its exact task revision. Task reduction refuses
 // reusing that blocker ID to replace the hold's authored meaning.
 type BlockerRef struct {
 	Task      RecordRef `json:"task"`
 	BlockerID ID        `json:"blocker_id"`
 }
 
-// Attempt ownership and receipts feed U05/U11; U13 renders the same facts.
+// Attempt ownership and receipts feed task reduction and acceptance; the views
+// render the same facts.
 type TaskStart struct {
 	Task      RecordRef `json:"task"`
 	Actor     Actor     `json:"actor"`
@@ -61,9 +62,9 @@ type AttemptTerminal struct {
 	ReconciliationOwed bool           `json:"reconciliation_owed"`
 }
 
-// TaskClose supplies U05/U12 revision-applicable witnesses. Whether all
+// TaskClose supplies task reduction and proof revision-applicable witnesses. Whether all
 // attempts are terminal and witnesses resolve is a gate/reducer question.
-// Authority is optional since R15.1: acceptance is the closing packet's
+// Authority is optional: acceptance is the closing packet's
 // author (the accepter, when the task names one); an authority, when cited,
 // is still checked against its carrier.
 type TaskClose struct {
@@ -91,7 +92,7 @@ func (o ClosureOutcome) validate(p string) error {
 	return oneOf(string(o), p, "success", "cancelled", "withdrawn", "waived")
 }
 
-// BlockerReason gives U05/U11/U13 separate acceptance, resume and reconciliation
+// BlockerReason gives separate acceptance, resume and reconciliation
 // queues. Prerequisite covers other unmet prerequisites without inventing a status.
 type BlockerReason string
 

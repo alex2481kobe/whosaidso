@@ -84,7 +84,7 @@ type ContentPin struct {
 }
 
 // ArtifactRef is a tagged locator: exactly one pin kind is required, and both
-// may appear only as corroboration. U01 checks shape; U07 verifies the bytes.
+// may appear only as corroboration. Decoding checks shape; evaluation verifies the bytes.
 type ArtifactRef struct {
 	Kind     string      `json:"kind"` // git | content
 	Git      *GitPin     `json:"git,omitempty"`
@@ -98,7 +98,7 @@ type Event struct {
 	Data json.RawMessage `json:"data"`
 }
 
-// Packet is what a lane writes to intake. It is durable before the work that
+// Packet is what an agent writes to intake. It is durable before the work that
 // produced it is acknowledged, and immutable once written.
 type Packet struct {
 	Version       uint16    `json:"version"`
@@ -134,7 +134,7 @@ type Bundle struct {
 // Packet and Bundle normalize their timestamps to UTC when encoding. Without
 // this the SAME INSTANT captured in two zones produced different bytes and
 // different digests - one moment with two identities, which breaks the rule
-// that two runs compare only when their conditions match. Found by lane E.
+// that two runs compare only when their conditions match.
 //
 // The alias type is the standard trick to marshal a struct from inside its own
 // MarshalJSON without recursing forever.

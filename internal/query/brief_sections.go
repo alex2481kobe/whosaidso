@@ -59,7 +59,7 @@ func briefRecord(b *briefWriter, indent int, r cur) {
 		}
 		b.line(indent+1, append(pieces, "-", prefix(reason.at("detail")))...)
 	}
-	// R15.1: who closed the task, and whether the closer also wrote one of
+	// Who closed the task, and whether the closer also wrote one of
 	// its attempt receipts. A waived closure says whose authority excused it,
 	// or that it cites none: the gate requires none.
 	if c := r.at("task", "closure"); c.ok() {

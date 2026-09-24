@@ -6,7 +6,7 @@
           "git": {
             "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "object_format": "sha1",
-            "path": "documentation/design/research/BUILD-PLAN-DATUM.md"
+            "path": "docs/plan.md"
           },
           "kind": "git",
           "selector": {
@@ -25,14 +25,14 @@
       ],
       "constraint_refs": [
         {
-          "project": "datum/acceptance",
+          "project": "example/acceptance",
           "record_id": "01K5V8R0230000000000000000",
           "revision": 2
         }
       ],
       "context_refs": [
         {
-          "project": "datum/acceptance",
+          "project": "example/acceptance",
           "record_id": "01K5V8R0220000000000000000",
           "revision": 3
         }
@@ -54,7 +54,7 @@
               "applies_when": "the payload is decoded at the wire boundary",
               "context_refs": [
                 {
-                  "project": "datum/acceptance",
+                  "project": "example/acceptance",
                   "record_id": "01K5V8R0250000000000000000",
                   "revision": 1
                 }
@@ -72,7 +72,7 @@
               "git": {
                 "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                 "object_format": "sha1",
-                "path": "OWNER-RULINGS-DATUM.md"
+                "path": "docs/decisions.md"
               },
               "kind": "git",
               "selector": {
@@ -82,7 +82,7 @@
           },
           "kind": "claim-proof",
           "target": {
-            "project": "datum/acceptance",
+            "project": "example/acceptance",
             "record_id": "01K5V8R0240000000000000000",
             "revision": 4
           },
@@ -93,7 +93,7 @@
         "applies_when": "the payload is decoded at the wire boundary",
         "context_refs": [
           {
-            "project": "datum/acceptance",
+            "project": "example/acceptance",
             "record_id": "01K5V8R0200000000000000000",
             "revision": 1
           }
@@ -106,7 +106,7 @@
       "subject": "internal/model/records.go"
     },
     "target": {
-      "project": "datum/acceptance",
+      "project": "example/acceptance",
       "record_id": "01K5V8R0010000000000000000",
       "revision": 2
     }

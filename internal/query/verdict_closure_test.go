@@ -1,8 +1,8 @@
 package query
 
-// R14.1 and R15.1 as the reads show them: a refuted claim's standing says
+// Proof verdicts and task acceptance as the reads show them: a refuted claim's standing says
 // REFUTED, never UNMEASURED, and a closed task names its closer and whether
-// the closer also did the work, in the brief and in --json alike. R19: read
+// the closer also did the work, in the brief and in --json alike. Read
 // through show, which absorbed the old state preset.
 
 import (

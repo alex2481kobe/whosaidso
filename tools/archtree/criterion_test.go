@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	critProject    = model.ProjectID("datum/datum")
+	critProject    = model.ProjectID("example/example")
 	critClaim      = model.ID("01ARZ3NDEKTSV4RRFFQ69G5FAV")
 	critID         = model.ID("01ARZ3NDEKTSV4RRFFQ69G5FAW")
 	critAttempt    = model.ID("01ARZ3NDEKTSV4RRFFQ69G5FBV")
@@ -59,7 +59,7 @@ func fileLimit(t *testing.T, example []byte, result, identity string, max int) m
 			Reducer:  model.All,
 		},
 		Policy:     model.EvaluationPolicy{Inclusion: "entire-criterion-family", Retry: "retain-all"},
-		Author:     model.Actor{ID: "archtree-lane"},
+		Author:     model.Actor{ID: "archtree-agent"},
 		SourceRefs: []model.ArtifactRef{},
 	}
 	if err := model.ValidateSchema(c); err != nil {
@@ -161,7 +161,7 @@ func TestPackagePointerSurvivesANewPackage(t *testing.T) {
 }
 
 // The real module, as `go run ./tools/archtree` prints it now. The verdict
-// depends on what other lanes have written, so it is not pinned; that it is a
+// depends on what other agents have written, so it is not pinned; that it is a
 // verdict at all is.
 func TestThisModuleFileLimitIsDecidable(t *testing.T) {
 	out := archtreeJSON(t, "../..")

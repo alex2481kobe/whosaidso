@@ -96,7 +96,7 @@ and only the accepter may remove or change it in an amendment.
 closer_authored_receipt says whether the closer also wrote one of the task's
 attempt receipts (UNKNOWN when either author is unknown); FALSE does not show
 someone else did the work. A waived close shows the authority it cites, or
-"(no authority cited)"; the gate requires none. Visible, never blocking. Keep tasks small (R14.3) so success honestly means
+"(no authority cited)"; the gate requires none. Visible, never blocking. Keep tasks small so success honestly means
 "this piece is done"; a large task stays open with the small ones as its
 prerequisites. Start to close (A is the attempt_id start prints, PACKET the
 receipt handback prints):
@@ -242,9 +242,9 @@ fill it, then capture and admit it as whosaidso help loop shows.
    Each disposition, reason, the judgment and the verdict are yours. Dry-run
    it with whosaidso check admission --events proof.json, then capture and
    admit it: whosaidso capture --events proof.json --admit --reason "...".
-PROVEN needs a validated instrument (R9). A FAILING member can only be
+PROVEN needs a validated instrument. A FAILING member can only be
 contradicts, or inapplicable with a code_change git verifies over the
-claim's scope (R14.2); you choose its two commits, and the template fills
+claim's scope; you choose its two commits, and the template fills
 their object formats and the scoped changed paths from git. Record a failing criterion with a refutes proof: the
 claim reads REFUTED. Every proof judges the claim's current criterion
 revision. A FALSE reason names the failing member: its path or id, else
@@ -270,7 +270,7 @@ Each prints that scope first. None writes anything. Exit status: 0 TRUE,
 would-admit, a listed family or check disposal's list (it has no FALSE);
 1 FALSE, would-refuse or a family the gate disagrees with; 2 usage; 3
 UNKNOWN. A TRUE criterion preview is not an admission.
-WhoSaidSo never deletes bytes (R11.1): an artifact.dispose records the loss,
+WhoSaidSo never deletes bytes: an artifact.dispose records the loss,
 and check disposal lists what it must account for.
 `},
 	{"stale", "re-measuring after a code change", `whosaidso show --stale adds, per observed current claim, stale TRUE, FALSE or
@@ -303,7 +303,7 @@ directory to rehearse without touching the real ones.
 - Check the real thing: a path, time or quote you write is a claim, not a
   fact WhoSaidSo observed. Comparability needs the same clean HEAD or equal pins.
 - Instruments declare what they cannot see (blind_to). KNOWN validation
-  cites a resolvable pinned artifact and is judged at admission (R9).
+  cites a resolvable pinned artifact and is judged at admission.
 - Every "<kind: hint>" in a template is a placeholder. A revise restates the
   whole spec: whosaidso template claim.revise --from ID copies the current one,
   so change only what changed. Judgment is never filled for you.

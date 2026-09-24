@@ -122,7 +122,7 @@ func assertInstrumentDecodeRefusal(t *testing.T, f *admissionFixture, raw model.
 }
 
 func TestAdmissionInstrumentAuthorityAndIdentityRefusals(t *testing.T) {
-	// Known validation and instrument.revise are admitted under R9 when their
+	// Known validation and instrument.revise are admitted when their
 	// artifacts resolve; TestInstrumentKnownValidationMustResolve covers them.
 	for _, mutation := range []string{"duplicate-instrument", "duplicate-task"} {
 		t.Run(mutation, func(t *testing.T) {
@@ -309,7 +309,7 @@ func TestAdmissionStableTieBreakAndExternalReferences(t *testing.T) {
 }
 
 func TestAdmissionOnlyFirstGateOperations(t *testing.T) {
-	// decision.open is enabled by U12 (TestDecisionOpenAndReviseAdmitWithoutDisposition).
+	// decision.open is enabled (TestDecisionOpenAndReviseAdmitWithoutDisposition).
 	for _, operation := range []string{"review"} {
 		t.Run(operation, func(t *testing.T) {
 			f := newAdmissionFixture(t)

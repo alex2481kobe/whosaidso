@@ -1,6 +1,6 @@
 package model
 
-// review.admit's required fields (R18.2): packets, actor, outcome, reason,
+// review.admit's required fields: packets, actor, outcome, reason,
 // authors, captured_at and event_packets are present on every review, and a
 // stored self_admission is refused. Self-admission is projected by reduce from
 // the recorded author and the admitter, never stored. Authors and capture
@@ -8,7 +8,6 @@ package model
 
 import (
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -25,7 +24,7 @@ func reviewFixture() *ReviewAdmit {
 			{CommandID: schemaID(3), Digest: HashBytes([]byte("third"))},
 		},
 		Actor: Actor{ID: "reviewer"}, Outcome: "accepted", Reason: "  exact words\n\t",
-		Authors: map[ID]Actor{schemaID(1): {ID: "reviewer"}, schemaID(2): {ID: "lane-b"}, schemaID(3): {UnknownReason: "not recorded"}},
+		Authors: map[ID]Actor{schemaID(1): {ID: "reviewer"}, schemaID(2): {ID: "agent-b"}, schemaID(3): {UnknownReason: "not recorded"}},
 		CapturedAt: map[ID]Availability[time.Time]{
 			schemaID(1): {State: Known, Value: &at}, schemaID(2): {State: Known, Value: &at},
 			schemaID(3): {State: Unknown, Reason: "not recorded"},
@@ -64,7 +63,7 @@ func TestReviewRequiredFields(t *testing.T) {
 	}
 }
 
-// R18.2: no review stores self_admission, whatever it says.
+// No review stores self_admission, whatever it says.
 func TestReviewStoredSelfAdmissionIsRefused(t *testing.T) {
 	raw, err := EncodeEvent(reviewFixture())
 	if err != nil {
@@ -78,46 +77,5 @@ func TestReviewStoredSelfAdmissionIsRefused(t *testing.T) {
 		if _, err := DecodeEvent(Event{Type: raw.Type, Data: data}); err == nil {
 			t.Errorf("self_admission=%s accepted", value)
 		}
-	}
-}
-
-// Bundle 1 of WhoSaidSo's own ledger, as the R18.2 migration left it: its author
-// and capture time come from the intake packet whose bytes hash to the digest
-// the bundle records, and its reason prose is untouched.
-func TestReviewCommittedSequenceOneRecordsItsVerifiedAuthor(t *testing.T) {
-	// Read the actual committed history, not a recreated fixture or a prose guess.
-	data, err := os.ReadFile("../../.whosaidso/events/00000001-01M3408ER2RFD597S5KPXMYP4P.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	bundle, err := DecodeBundle(data)
-	if err != nil || bundle.Sequence != 1 {
-		t.Fatalf("committed genesis must decode: %+v, %v", bundle, err)
-	}
-	count := 0
-	for _, raw := range bundle.Events {
-		e, err := DecodeEvent(raw)
-		if err != nil {
-			t.Fatal(err)
-		}
-		review, ok := e.(*ReviewAdmit)
-		if !ok {
-			continue
-		}
-		count++
-		packet := review.Packets[0].CommandID
-		if a := review.Authors[packet]; a != (Actor{ID: "coordinator"}) {
-			t.Fatalf("committed author is not the verified intake author: %+v", a)
-		}
-		want := time.Date(2026, 9, 22, 7, 28, 26, 222920000, time.UTC)
-		if c := review.CapturedAt[packet]; c.State != Known || c.Value == nil || !c.Value.Equal(want) {
-			t.Fatalf("committed capture time is not the verified intake stamp: %+v", c)
-		}
-		if !strings.Contains(review.Reason, "Self-admitted: true.") {
-			t.Fatalf("historical reason changed: %q", review.Reason)
-		}
-	}
-	if count != 1 {
-		t.Fatalf("genesis holds %d reviews, want 1", count)
 	}
 }

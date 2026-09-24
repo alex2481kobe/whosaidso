@@ -1,11 +1,11 @@
-// Lane E's independent U02 attacks on the four authored payloads and the
-// invocation envelope. This file owns the shared payload constructors used by
+// Attacks on the four authored payloads and the invocation envelope belong
+// here. This file owns the shared payload constructors used by
 // events_test.go too, so the attack fixtures are built once from the contract
 // tables rather than from the implementation under test.
 //
-// Out of scope here on purpose: whether an event is admissible in current state
-// (U08), what a reducer makes of it (U05/U06) and whether pinned bytes actually
-// resolve (U07). This file only asks whether a shape can carry a lie.
+// Out of scope here on purpose: whether an event is admissible in current state,
+// what a reducer makes of it and whether pinned bytes actually
+// resolve. This file only asks whether a shape can carry a lie.
 package acceptance_test
 
 import (
@@ -22,7 +22,7 @@ import (
 	"whosaidso/internal/model"
 )
 
-const recProject = model.ProjectID("datum/acceptance")
+const recProject = model.ProjectID("example/acceptance")
 
 var recWhen = time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC)
 
@@ -83,14 +83,14 @@ func recScope(context model.ID) model.Scope {
 func recAuthority(context model.ID) model.Authority {
 	return model.Authority{
 		Actor:     recActor("owner"),
-		SourceRef: recGit("OWNER-RULINGS-DATUM.md"),
+		SourceRef: recGit("docs/decisions.md"),
 		Selector:  model.Selector{Kind: "json-pointer", Pointer: "/rulings/3"},
 		Scope:     recScope(context),
 	}
 }
 
 func recProvenance() model.Provenance {
-	return model.Provenance{SourceRefs: []model.ArtifactRef{recGit("documentation/design/research/BUILD-PLAN-DATUM.md")}}
+	return model.Provenance{SourceRefs: []model.ArtifactRef{recGit("docs/plan.md")}}
 }
 
 func recTaskSpec() model.TaskSpec {
@@ -642,16 +642,16 @@ func TestSchemaReservedStatusNameSurvivesInvisiblePadding(t *testing.T) {
 }
 
 // TestSchemaCheckedInFixturesDecideTheSameWayTheyAreNamed drives the five named
-// U02 fixture families from files rather than from Go values, so the negatives
+// schema fixture families from files rather than from Go values, so the negatives
 // are reviewable data. A file named good must decode. A file named bad must be
 // refused, and the family it sits in says which single relationship it breaks.
 func TestSchemaCheckedInFixturesDecideTheSameWayTheyAreNamed(t *testing.T) {
 	families, err := os.ReadDir(filepath.Join("testdata", "schema"))
 	if err != nil {
-		t.Fatalf("the U02 fixture families are missing: %v", err)
+		t.Fatalf("the schema fixture families are missing: %v", err)
 	}
 	if len(families) == 0 {
-		t.Fatal("no U02 fixture family is checked in, so nothing here is proven")
+		t.Fatal("no schema fixture family is checked in, so nothing here is proven")
 	}
 	for _, family := range families {
 		family := family

@@ -14,14 +14,14 @@ import (
 func TestStoppedHandbackFindsItsHoldAcrossAmendment(t *testing.T) {
 	hold := func(task model.ID, rev model.Revision) *model.BlockerHold {
 		return &model.BlockerHold{Task: ref(task, rev), BlockerID: newID("HDA1"), Reason: model.BlockerResume,
-			Actor: model.Actor{ID: "lane-b"}, Criterion: "the owner rules on the boundary"}
+			Actor: model.Actor{ID: "agent-b"}, Criterion: "the owner rules on the boundary"}
 	}
 	receipt := func(outcome model.AttemptOutcome, rev model.Revision) *model.AttemptTerminal {
 		r := receiptATTA(outcome)
 		r.Task.Revision = rev
 		return r
 	}
-	amend := &model.TaskAmend{Provenance: provenance("lane-a"), Target: ref(newID("TSKA"), 1), Replacement: taskSpec()}
+	amend := &model.TaskAmend{Provenance: provenance("agent-a"), Target: ref(newID("TSKA"), 1), Replacement: taskSpec()}
 	blocked := model.AttemptBlockedMidTask
 	elsewhere := hold(newID("TSKA"), 2)
 	elsewhere.Task.Project = "test/elsewhere"
@@ -38,11 +38,11 @@ func TestStoppedHandbackFindsItsHoldAcrossAmendment(t *testing.T) {
 		{"out of scope still may not amend its task", []model.TypedEvent{hold(newID("TSKA"), 1), amend, receipt(model.AttemptOutOfScope, 2)}, CodeInvalidTransition},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			l := handbackLedger(t, model.Actor{ID: "lane-a"})
-			l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKB"), Spec: taskSpec()})
+			l := handbackLedger(t, model.Actor{ID: "agent-a"})
+			l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKB"), Spec: taskSpec()})
 			authors := make([]string, len(tc.events))
 			for i := range authors {
-				authors[i] = "lane-a"
+				authors[i] = "agent-a"
 			}
 			l.add(t, authored(l.seq+1, tc.events, authors...)...)
 			wantBoth(t, l, tc.code)

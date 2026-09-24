@@ -23,7 +23,7 @@ type boundFixture struct {
 }
 
 // boundWorld admits, in process, a task, a claim, a KNOWN-validated
-// instrument, a frozen criterion on the claim and an attempt, all by "lane".
+// instrument, a frozen criterion on the claim and an attempt, all by "agent".
 func boundWorld(t *testing.T) boundFixture {
 	t.Helper()
 	root, _ := cliFixture(t)
@@ -34,23 +34,23 @@ func boundWorld(t *testing.T) boundFixture {
 	n := 300
 	next := func() model.ID { n++; return cliID(n) }
 	f.task, f.claim, f.instrument, f.criterion, f.attempt, f.ac = next(), next(), next(), next(), next(), next()
-	lane := model.Provenance{SourceRefs: []model.ArtifactRef{}}
+	agent := model.Provenance{SourceRefs: []model.ArtifactRef{}}
 	scope := model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this fixture", Limitations: "not a real ledger"}
-	boundAdmit(t, root, &model.TaskCreate{ID: f.task, Provenance: lane, Spec: model.TaskSpec{Intent: "measure", Subject: "pose sweep", Scope: scope, NonGoals: []string{"production writes"},
-		AcceptanceCriteria: []model.AcceptanceCriterion{{ID: f.ac, Revision: 1, Criterion: "measured"}}, ContextRefs: []model.RecordRef{}, ConstraintRefs: []model.RecordRef{}, Prerequisites: []model.Prerequisite{}, NextActor: model.Actor{ID: "lane"}}},
-		&model.ClaimAssert{ID: f.claim, Provenance: lane, Spec: model.ClaimSpec{Assertion: "every pose is below 0.05 mm", Falsifier: "a pose reaches 0.05 mm", Scope: scope, ExternalRefs: []model.ExternalReference{}}},
-		&model.InstrumentDeclare{ID: f.instrument, Provenance: lane, Spec: model.InstrumentSpec{QuestionAnswered: "pose penetration depth", BlindTo: "unmeasured poses",
+	boundAdmit(t, root, &model.TaskCreate{ID: f.task, Provenance: agent, Spec: model.TaskSpec{Intent: "measure", Subject: "pose sweep", Scope: scope, NonGoals: []string{"production writes"},
+		AcceptanceCriteria: []model.AcceptanceCriterion{{ID: f.ac, Revision: 1, Criterion: "measured"}}, ContextRefs: []model.RecordRef{}, ConstraintRefs: []model.RecordRef{}, Prerequisites: []model.Prerequisite{}, NextActor: model.Actor{ID: "agent"}}},
+		&model.ClaimAssert{ID: f.claim, Provenance: agent, Spec: model.ClaimSpec{Assertion: "every pose is below 0.05 mm", Falsifier: "a pose reaches 0.05 mm", Scope: scope, ExternalRefs: []model.ExternalReference{}}},
+		&model.InstrumentDeclare{ID: f.instrument, Provenance: agent, Spec: model.InstrumentSpec{QuestionAnswered: "pose penetration depth", BlindTo: "unmeasured poses",
 			NotAnswered: "production behaviour", ConfigSurface: []string{}, DangerousDefaults: []string{}, ValidRange: "the fixture sweep",
 			ImplementationRef: e2ePin(e2eScript, "tools/measure.sh", "text/plain"),
 			Validation:        e2eKnown(model.InstrumentValidation{Ref: e2ePin(`{"validated":"against a known pose sweep"}`, "validation/measure.json", "application/json"), Version: "v1"})}})
 	result, population := e2ePin(e2ePass, "out/result.json", "application/json"), e2ePin(e2ePass, "out/result.json", "application/json")
 	result.Selector, population.Selector = model.Selector{Kind: "json-pointer", Pointer: "/results"}, model.Selector{Kind: "json-pointer", Pointer: "/population"}
 	target := json.Number("0.05")
-	boundAdmit(t, root, &model.CriterionFix{Claim: model.RecordRef{Project: "test/cli", RecordID: f.claim, Revision: 1}, CriterionID: f.criterion, Revision: 1, Author: model.Actor{ID: "lane"}, SourceRefs: []model.ArtifactRef{},
+	boundAdmit(t, root, &model.CriterionFix{Claim: model.RecordRef{Project: "test/cli", RecordID: f.claim, Revision: 1}, CriterionID: f.criterion, Revision: 1, Author: model.Actor{ID: "agent"}, SourceRefs: []model.ArtifactRef{},
 		Expression: model.CriterionExpression{ResultSelector: result, Unit: "mm", Population: model.Population{Identity: "pose sweep", Selector: population, Denominator: "poses"},
 			Operator: model.Less, Target: model.Scalar{Type: "number", Number: &target}, Reducer: model.All},
 		Policy: model.EvaluationPolicy{Inclusion: "entire-criterion-family", Retry: "retain-all"}})
-	boundAdmit(t, root, &model.TaskStart{Task: model.RecordRef{Project: "test/cli", RecordID: f.task, Revision: 1}, Actor: model.Actor{ID: "lane"}, AttemptID: f.attempt})
+	boundAdmit(t, root, &model.TaskStart{Task: model.RecordRef{Project: "test/cli", RecordID: f.task, Revision: 1}, Actor: model.Actor{ID: "agent"}, AttemptID: f.attempt})
 	return f
 }
 
@@ -68,7 +68,7 @@ func boundAdmit(t *testing.T, root string, events ...model.TypedEvent) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out, errs, code := cliRun(t, root, data, "lane", "capture", "--admit", "--reason", "fixture"); code != 0 {
+	if out, errs, code := cliRun(t, root, data, "agent", "capture", "--admit", "--reason", "fixture"); code != 0 {
 		t.Fatalf("fixture admission: %d %s %s", code, out, errs)
 	}
 }
@@ -76,7 +76,7 @@ func boundAdmit(t *testing.T, root string, events ...model.TypedEvent) {
 // boundTemplate prints a template in process and returns its data object.
 func boundPrint(t *testing.T, root string, args ...string) map[string]any {
 	t.Helper()
-	out, errs, code := cliRun(t, root, nil, "lane", append([]string{"template"}, args...)...)
+	out, errs, code := cliRun(t, root, nil, "agent", append([]string{"template"}, args...)...)
 	if code != 0 {
 		t.Fatalf("template %v: %d %s", args, code, errs)
 	}
@@ -129,7 +129,7 @@ func boundAt(data map[string]any, path string) any {
 func boundCapture(t *testing.T, root string, args ...string) {
 	t.Helper()
 	full := append(append([]string{"template"}, args...), "--capture", "--admit", "--reason", "bound template")
-	if out, errs, code := cliRun(t, root, nil, "lane", full...); code != 0 {
+	if out, errs, code := cliRun(t, root, nil, "agent", full...); code != 0 {
 		t.Fatalf("%v: %d %s %s", full, code, out, errs)
 	}
 }
@@ -151,7 +151,7 @@ func TestBoundTemplatesDecodeAndAdmit(t *testing.T) {
 	f := boundWorld(t)
 	witness := `{"kind":"content","content":{"sha256":"` + string(model.HashBytes([]byte(e2ePass))) + `","length":` + fmt.Sprint(len(e2ePass)) +
 		`,"media_type":"application/json","locators":[{"path":"out/result.json"}]},"selector":{"kind":"whole"}}`
-	boundCapture(t, f.root, "blocker.hold", "--task", string(f.task), "--set", "reason=resume", "--set", `actor={"id":"lane"}`, "--set", "criterion=the fixture output exists")
+	boundCapture(t, f.root, "blocker.hold", "--task", string(f.task), "--set", "reason=resume", "--set", `actor={"id":"agent"}`, "--set", "criterion=the fixture output exists")
 	hold := openHold(t, boundSnapshot(t, f.root), f.task)
 	boundCapture(t, f.root, "blocker.clear", "--hold", string(hold), "--set", "resolving_witness="+witness)
 	if b := boundSnapshot(t, f.root).Blockers(reduce.Ident{Project: "test/cli", ID: f.task}); len(b) != 1 || b[0].Open() {
@@ -192,7 +192,7 @@ func TestBoundTemplatesDecodeAndAdmit(t *testing.T) {
 // placeholder, whatever the flags computed around it.
 func TestBoundTemplatesLeaveJudgment(t *testing.T) {
 	f := boundWorld(t)
-	boundCapture(t, f.root, "blocker.hold", "--task", string(f.task), "--set", "reason=resume", "--set", `actor={"id":"lane"}`, "--set", "criterion=the fixture output exists")
+	boundCapture(t, f.root, "blocker.hold", "--task", string(f.task), "--set", "reason=resume", "--set", `actor={"id":"agent"}`, "--set", "criterion=the fixture output exists")
 	hold := openHold(t, boundSnapshot(t, f.root), f.task)
 	for _, tc := range []struct {
 		args     []string
@@ -232,12 +232,12 @@ func TestTemplateCaptureRefusesAnyPlaceholder(t *testing.T) {
 	}
 	// The only placeholder left is criterion, a text field: its type fits, and
 	// the decoder refuses it too (placeholder_capture_test.go covers that path).
-	args := []string{"template", "blocker.hold", "--task", string(f.task), "--set", "reason=resume", "--set", `actor={"id":"lane"}`}
-	printed, _, code := cliRun(t, f.root, nil, "lane", args...)
+	args := []string{"template", "blocker.hold", "--task", string(f.task), "--set", "reason=resume", "--set", `actor={"id":"agent"}`}
+	printed, _, code := cliRun(t, f.root, nil, "agent", args...)
 	if err := decodeTemplate([]byte(printed)); code != 0 || err == nil || !strings.Contains(err.Error(), "event.data.criterion") {
 		t.Fatalf("control: the one-placeholder template must print, and decode only to a refusal of criterion (%d): %v", code, err)
 	}
-	out, errs, code := cliRun(t, f.root, nil, "lane", append(args, "--capture")...)
+	out, errs, code := cliRun(t, f.root, nil, "agent", append(args, "--capture")...)
 	if code != 1 || out != "" || !strings.Contains(errs, "capture refused: 1 placeholder(s) unfilled: criterion") {
 		t.Fatalf("capture must refuse the unfilled criterion: %d %q %q", code, out, errs)
 	}
@@ -245,11 +245,11 @@ func TestTemplateCaptureRefusesAnyPlaceholder(t *testing.T) {
 	if err != nil || len(after) != len(before) {
 		t.Fatalf("a refused capture wrote intake: %d -> %d, %v", len(before), len(after), err)
 	}
-	if _, errs, code := cliRun(t, f.root, nil, "lane", append(args, "--set", "criterion=the fixture output exists", "--capture")...); code != 0 || !regexp.MustCompile(`minted   blocker_id = `+ulid).MatchString(errs) {
+	if _, errs, code := cliRun(t, f.root, nil, "agent", append(args, "--set", "criterion=the fixture output exists", "--capture")...); code != 0 || !regexp.MustCompile(`minted   blocker_id = `+ulid).MatchString(errs) {
 		t.Fatalf("control: the filled template must capture and name the id it minted: %d %s", code, errs)
 	}
 	// An id a bind flag supplied was not minted, so it is not named as minted.
-	if _, errs, _ := cliRun(t, f.root, nil, "lane", "template", "criterion.fix", "--criterion", string(f.criterion), "--set", "source_refs=[]", "--capture"); strings.Contains(errs, "minted") {
+	if _, errs, _ := cliRun(t, f.root, nil, "agent", "template", "criterion.fix", "--criterion", string(f.criterion), "--set", "source_refs=[]", "--capture"); strings.Contains(errs, "minted") {
 		t.Fatalf("a bound criterion id is not a minted one: %s", errs)
 	}
 }
@@ -308,11 +308,11 @@ func TestPlaceholderRecognitionCoversEveryTemplate(t *testing.T) {
 func TestTemplateBindFlagMustApply(t *testing.T) {
 	f := boundWorld(t)
 	for _, args := range [][]string{{"claim.assert", "--task", string(f.task)}, {"task.start", "--from", string(f.task)}, {"task.start", "--admit", "--reason", "x"}} {
-		if _, errs, code := cliRun(t, f.root, nil, "lane", append([]string{"template"}, args...)...); code != 2 {
+		if _, errs, code := cliRun(t, f.root, nil, "agent", append([]string{"template"}, args...)...); code != 2 {
 			t.Errorf("%v must be a usage error, got %d %s", args, code, errs)
 		}
 	}
-	if _, errs, code := cliRun(t, f.root, nil, "lane", "template", "claim.revise", "--from", string(f.task)); code != 1 || !strings.Contains(errs, "is a TASK, not a CLAIM") {
+	if _, errs, code := cliRun(t, f.root, nil, "agent", "template", "claim.revise", "--from", string(f.task)); code != 1 || !strings.Contains(errs, "is a TASK, not a CLAIM") {
 		t.Errorf("--from of the wrong kind must be refused, got %d %s", code, errs)
 	}
 }

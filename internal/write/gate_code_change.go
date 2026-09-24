@@ -1,6 +1,6 @@
 package write
 
-// The git half of R14.2 lives here: a proof's recorded code change is admitted
+// The git half of the code-change rule lives here: a proof's recorded code change is admitted
 // only when git, asked for the files under the claim's scope that differ
 // between its two commits, answers exactly the recorded paths. The ledger
 // half (the run's head, the scope, the current commit) is the reducer's and

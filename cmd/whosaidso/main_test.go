@@ -40,7 +40,7 @@ func TestWhoSaidSoFreshProcessesCaptureAdmitReplay(t *testing.T) {
 			t.Fatalf("fresh CLI process failed: %s\n%v", output, err)
 		}
 	}
-	invoke(input, "capture", "--command-id", string(cliID(3)), "--actor", "lane")
+	invoke(input, "capture", "--command-id", string(cliID(3)), "--actor", "agent")
 	project, err := store.Discover(root)
 	if err != nil {
 		t.Fatal(err)

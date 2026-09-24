@@ -1,6 +1,6 @@
 package query
 
-// The four views of the command surface (COMMAND-SPEC §3, R19): todo,
+// The four views of the command surface: todo,
 // continue, show and history. This file holds their request, the answer
 // header every view carries, request checks and routing. Each view's
 // selection lives in its own view_*.go file; the record detail they share is

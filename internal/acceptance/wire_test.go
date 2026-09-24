@@ -1,6 +1,5 @@
-// Lane E's independent U01 attacks. This is the only Go file owned by this
-// lane; helpers stay here to preserve the ownership boundary. Event semantics,
-// resolved git/content agreement (U07), and ledger history (U04) are not U01.
+// Wire-format attacks belong here, with their helpers. Event semantics,
+// resolved git/content agreement, and ledger history do not.
 package acceptance_test
 
 import (
@@ -28,13 +27,13 @@ const wireDigest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789ab
 
 // Handwritten controls do not depend on Encode agreeing with Decode.
 const wirePacket = `{
-  "version":1,"project":"datum/acceptance",
+  "version":1,"project":"example/acceptance",
   "command_id":"` + wirePacketID + `","request_digest":"` + wireDigest + `",
-  "author":{"id":"lane-e"},"captured_at":"2026-09-21T12:34:56Z",
+  "author":{"id":"agent-e"},"captured_at":"2026-09-21T12:34:56Z",
   "events":[{"type":"task.create","data":{}}]
 }`
 const wireBundle = `{
-  "version":1,"project":"datum/acceptance","sequence":1,
+  "version":1,"project":"example/acceptance","sequence":1,
   "command_id":"` + wireAdmissionID + `","request_digest":"` + wireDigest + `",
   "admitter":{"id":"coordinator"},"recorded_at":"2026-09-21T12:34:56Z",
   "packets":[{"command_id":"` + wirePacketID + `","digest":"` + wireDigest + `"}],
@@ -155,7 +154,7 @@ func TestWireDefectFixturesHaveAcceptedSingleRepairControls(t *testing.T) {
 			good := bytes.Replace(bad, []byte(tc.defect), []byte(tc.repair), 1)
 			check := func(b []byte) error { return wireDecode(b, false) }
 			if tc.name == "git-content-confusion" {
-				// Data is opaque at U01: explicitly exercise the exported ref validator.
+				// Data is opaque at the wire: explicitly exercise the exported ref validator.
 				check = func(b []byte) error {
 					ref, err := wireSource(b)
 					if err != nil {
@@ -182,7 +181,7 @@ func TestWireStrictDecodersRejectSingleDefectsAtEveryDepth(t *testing.T) {
 		{"deep_duplicate_empty_key", `"data":{}`, `"data":{"a":[{"b":{"":1,"":2}}]}`},
 		{"unknown_envelope_field", `"version":1`, `"version":1,"surprise":true`},
 		{"unknown_case_variant_field", `"version":1`, `"VERSION":1`},
-		{"case_alias_overwrites_same_envelope_field", `"project":"datum/acceptance"`, `"project":"datum/acceptance","PROJECT":"impostor"`},
+		{"case_alias_overwrites_same_envelope_field", `"project":"example/acceptance"`, `"project":"example/acceptance","PROJECT":"impostor"`},
 		{"case_alias_overwrites_event_type", `"type":"task.create"`, `"type":"task.create","TYPE":"source.intake"`},
 		{"unknown_event_envelope_field", `"type":"task.create"`, `"type":"task.create","surprise":true`},
 		{"unknown_version", `"version":1`, `"version":2`},
@@ -233,7 +232,7 @@ func TestWireStrictDecodersRejectSingleDefectsAtEveryDepth(t *testing.T) {
 }
 
 func TestWireActorUnionAndKnownUnknownComparisonCannotInventIdentity(t *testing.T) {
-	known := model.Actor{ID: "lane-e"}
+	known := model.Actor{ID: "agent-e"}
 	unknown := model.Actor{UnknownReason: "not supplied"}
 	for _, tc := range []struct {
 		name string
@@ -259,7 +258,7 @@ func TestWireActorUnionAndKnownUnknownComparisonCannotInventIdentity(t *testing.
 		})
 	}
 	for _, bundle := range []bool{false, true} {
-		kind, input, old := "packet", wirePacket, `{"id":"lane-e"}`
+		kind, input, old := "packet", wirePacket, `{"id":"agent-e"}`
 		if bundle {
 			kind, input, old = "bundle", wireBundle, `{"id":"coordinator"}`
 		}
@@ -531,10 +530,10 @@ func TestWireArtifactKindRequiresItsOwnPinAndValidObjectID(t *testing.T) {
 	}
 }
 
-func TestWireDisagreeingCorroborationRemainsVisibleForU07(t *testing.T) {
+func TestWireDisagreeingCorroborationRemainsVisible(t *testing.T) {
 	// Construct an actual git blob/tree/commit identity in memory: the git pin
 	// binds "git copy", while the content pin binds different bytes at that path.
-	// U01 has no resolver; comparing commit and raw-content hashes is incorrect.
+	// The wire has no resolver; comparing commit and raw-content hashes is incorrect.
 	gitBytes, contentBytes := []byte("git copy\n"), []byte("different content copy\n")
 	gitObjectID := func(kind string, data []byte) []byte {
 		h := sha1.New() // Git's declared sha1 object format, not a security choice.
@@ -544,7 +543,7 @@ func TestWireDisagreeingCorroborationRemainsVisibleForU07(t *testing.T) {
 	}
 	blob := gitObjectID("blob", gitBytes)
 	tree := gitObjectID("tree", append([]byte("100644 copy.txt\x00"), blob...))
-	commit := gitObjectID("commit", []byte(fmt.Sprintf("tree %x\nauthor Lane E <lane-e@example.invalid> 0 +0000\ncommitter Lane E <lane-e@example.invalid> 0 +0000\n\nWire attack\n", tree)))
+	commit := gitObjectID("commit", []byte(fmt.Sprintf("tree %x\nauthor Test <test@example.invalid> 0 +0000\ncommitter Test <test@example.invalid> 0 +0000\n\nWire attack\n", tree)))
 	gitSum, contentSum := sha256.Sum256(gitBytes), sha256.Sum256(contentBytes)
 	if gitSum == contentSum {
 		t.Fatal("attack control must describe different bytes")
@@ -555,7 +554,7 @@ func TestWireDisagreeingCorroborationRemainsVisibleForU07(t *testing.T) {
 		Selector: model.Selector{Kind: "whole"},
 	}
 	if err := model.ValidateArtifactRef(ref, "source"); err != nil {
-		t.Fatalf("both well-formed pins are legal pending U07 resolution: %v", err)
+		t.Fatalf("both well-formed pins are legal pending resolution: %v", err)
 	}
 	out, err := model.Encode(ref)
 	if err != nil {
@@ -563,9 +562,9 @@ func TestWireDisagreeingCorroborationRemainsVisibleForU07(t *testing.T) {
 	}
 	var got model.ArtifactRef
 	if err := json.Unmarshal(out, &got); err != nil || !reflect.DeepEqual(got, ref) {
-		t.Fatalf("wire encoding hid/rewrote corroboration before U07 could compare bytes: %v\n%s", err, out)
+		t.Fatalf("wire encoding hid/rewrote corroboration before resolution could compare bytes: %v\n%s", err, out)
 	}
-	t.Log("U07 must resolve git copy and content copy and reject their disagreement; U01 proves preservation only")
+	t.Log("resolution must reject the git copy and content copy disagreeing; the wire proves preservation only")
 }
 
 func TestWireHashBytesBindsExactBytesWithoutNormalization(t *testing.T) {

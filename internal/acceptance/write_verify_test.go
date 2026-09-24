@@ -63,7 +63,7 @@ func TestWriteVerifyUTF8CannotRewriteLedgerAuthorship(t *testing.T) {
 			got := prefix[len(prefix)-1]
 			review := recMustDecodeReview(t, got.Events[len(got.Events)-1])
 			if field == "admitter" {
-				t.Errorf("expected refusal of unrepresentable admitter %q; fresh ledger contains %q and recorded author %q for author %q. Admission rewrites actor identity after computing attribution, so even its recorded author contradicts its stored actor", r.Admitter.ID, got.Admitter.ID, review.Authors[packet.CommandID].ID, author.ID) // R18.2: self_admission is no longer stored; the recorded author is.
+				t.Errorf("expected refusal of unrepresentable admitter %q; fresh ledger contains %q and recorded author %q for author %q. Admission rewrites actor identity after computing attribution, so even its recorded author contradicts its stored actor", r.Admitter.ID, got.Admitter.ID, review.Authors[packet.CommandID].ID, author.ID) // self_admission is not stored; the recorded author is.
 			} else {
 				t.Errorf("expected refusal of unrepresentable authored review reason %q; fresh ledger contains %q. Checking UTF-8 after JSON encoding acknowledges different review text than was authored", r.Reason, review.Reason)
 			}
@@ -95,7 +95,7 @@ func TestWriteVerifyProducerRejectsInvalidUTF8BeforeDecodingFacts(t *testing.T) 
 	// Transport only: the malformed bytes travel hex-encoded because argv is
 	// authored intent and now refuses invalid UTF-8. The child writes the
 	// decoded ORIGINAL bytes to producer.json, and every assertion below is
-	// unchanged. Reconciled in the open by the coordinator, 2026-09-22.
+	// unchanged.
 	result, err := write.Run(context.Background(), p, outsideRunRequest(p, "hex:"+hex.EncodeToString([]byte(report)), ""))
 	_, seal := outsideRunPackets(t, p, result)
 	raw, readErr := os.ReadFile(filepath.Join(result.ArtifactDir, "producer.json"))
@@ -169,9 +169,9 @@ func TestWriteVerifyNestedInvocationIntentCopiesAreOwned(t *testing.T) {
 	r.InputRefs = []model.ArtifactRef{gateVerifyContent([]byte("input"), "input.json")}
 	r.InputRefs[0].Git = &model.GitPin{ObjectFormat: "sha1", Commit: strings.Repeat("a", 40), Path: "input.json"}
 	r.ExecutionSourceIdentity.SourceRefs = []model.ArtifactRef{gateVerifyContent([]byte("source"), "source.json")}
-	r.ExecutionSourceIdentity.MachineID = laneEEvidenceKnown(laneEReduceID(90))
-	r.ExecutionSourceIdentity.Head = laneEEvidenceKnown(model.GitHead{ObjectFormat: "sha1", Commit: strings.Repeat("b", 40)})
-	r.ExecutionSourceIdentity.Dirty = laneEEvidenceKnown(true)
+	r.ExecutionSourceIdentity.MachineID = evidenceKnown(reduceID(90))
+	r.ExecutionSourceIdentity.Head = evidenceKnown(model.GitHead{ObjectFormat: "sha1", Commit: strings.Repeat("b", 40)})
+	r.ExecutionSourceIdentity.Dirty = evidenceKnown(true)
 	text, flag := "original", true
 	r.ConditionsDeclared["label"] = model.Scalar{Type: "string", String: &text}
 	r.ConditionsDeclared["flag"] = model.Scalar{Type: "bool", Bool: &flag}
@@ -195,7 +195,7 @@ func TestWriteVerifyNestedInvocationIntentCopiesAreOwned(t *testing.T) {
 		*r.ConditionsDeclared["seed"].Number = "777"
 		text, flag = "reused", false
 		r.CriterionRef.Value.Revision++
-		*r.ExecutionSourceIdentity.MachineID.Value = laneEReduceID(91)
+		*r.ExecutionSourceIdentity.MachineID.Value = reduceID(91)
 		r.ExecutionSourceIdentity.Head.Value.Commit = strings.Repeat("c", 40)
 		*r.ExecutionSourceIdentity.Dirty.Value = false
 		r.InputRefs[0].Git.Path = "reused.json"
@@ -254,7 +254,7 @@ func TestWriteVerifyCLIJSONAliasesCannotChooseAuthoredMeaning(t *testing.T) {
 			claim := f.claim(author)
 			raw := recEncode(t, claim)
 			input := "[{" + keys + ",\"data\":" + string(raw.Data) + "}]"
-			// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+			// Writes print a one-line acknowledgement by default; --json is the full result this test decodes.
 			packet, err := writeVerifyCLIPacket(binary, f, input, "capture", "--json", "--actor", author.ID, "--events", "-")
 			return packet, claim.ID, err
 		}
@@ -288,7 +288,7 @@ func TestWriteVerifyCLIJSONAliasesCannotChooseAuthoredMeaning(t *testing.T) {
 		}
 		capture := func(input string) (model.PacketRef, error) {
 			_, r := hbVerifyStart(t, f, author)
-			// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+			// Writes print a one-line acknowledgement by default; --json is the full result this test decodes.
 			return writeVerifyCLIPacket(binary, f, input, "handback", "--json", "--actor", author.ID, "--attempt-id", string(r.AttemptID),
 				"--outcome", "stopped", "--reason", "stopped", "--next-action", "owner reviews", "--delivery-refs", "-")
 		}

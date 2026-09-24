@@ -2,14 +2,12 @@ package query
 
 import (
 	"bytes"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"whosaidso/internal/model"
-	"whosaidso/internal/store"
 )
 
 // uncaptured records every packet's capture time as unknown: these reviews
@@ -33,7 +31,7 @@ func authoredBy(id string, refs []model.PacketRef) map[model.ID]model.Actor {
 
 func TestSelfAdmissionAuditThreeStates(t *testing.T) {
 	p := testProject(t)
-	// C39: the answer is computed from each packet's recorded author and the
+	// The answer is computed from each packet's recorded author and the
 	// admitter; the reason prose claims otherwise and is never read.
 	authors := []model.Actor{{ID: "reviewer"}, {ID: "other"}, {UnknownReason: "author not recorded"}}
 	expected := map[model.ID]string{}
@@ -54,7 +52,7 @@ func TestSelfAdmissionAuditThreeStates(t *testing.T) {
 	unrecorded := model.PacketRef{CommandID: testID(31), Digest: model.HashBytes([]byte("unrecorded"))}
 	appendEvents(t, p, 103, &model.ReviewAdmit{Packets: []model.PacketRef{unrecorded}, Outcome: "rejected",
 		Actor: model.Actor{ID: "reviewer"}, Reason: "Self-admitted: true.",
-		Authors:    map[model.ID]model.Actor{unrecorded.CommandID: {UnknownReason: "not recorded at admission (before R10.1)"}},
+		Authors:    map[model.ID]model.Actor{unrecorded.CommandID: {UnknownReason: "not recorded at admission"}},
 		CapturedAt: uncaptured([]model.PacketRef{unrecorded}), EventPackets: []model.ID{}})
 	unknown := model.PacketRef{CommandID: testID(32), Digest: model.HashBytes([]byte("unknown actor"))}
 	expected[unrecorded.CommandID], expected[unknown.CommandID] = "UNKNOWN", "UNKNOWN"
@@ -148,58 +146,5 @@ func TestSelfAdmissionFilterValidationAndEmptyAnswers(t *testing.T) {
 	a := historyOf(t, p, testID(99))
 	if a.Result != "UNKNOWN" || a.Watermark.Sequence != 0 {
 		t.Fatalf("absent ID changed: %+v", a)
-	}
-}
-
-func TestSelfAdmissionRealLedgerIsComputedFromRecordedAuthors(t *testing.T) {
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
-	p, err := store.Discover(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	a := view_(t, p, ViewRequest{View: "history", SelfAdmitted: model.SelfAdmissionTrue}).(*HistoryAnswer)
-	// Deliberately no assertion on the watermark or the review COUNT. This
-	// test reads the repository's own live ledger, which is the strongest
-	// regression evidence available here: real bytes, committed. It is also
-	// append-only, so pinning its size or head position makes every
-	// legitimate record a test failure.
-	//
-	// Sequences 1-4 were admitted before packet authors were recorded; the
-	// R18.2 migration recorded each author from the intake packet whose bytes
-	// hash to the digest the bundle holds. Their author is the admitter, so
-	// under C39 (computed from the recorded author and the admitter) they read
-	// TRUE, and the reason prose that also says so is kept but never read.
-	found, early := false, 0
-	for _, r := range a.Reviews {
-		if r.SelfAdmission != "true" {
-			t.Fatalf("true filter selected another state: %+v", r)
-		}
-		if r.Origin.Sequence == 1 {
-			found = strings.Contains(r.Reason, "Self-admitted: true.") && r.Author.ID == "coordinator"
-		}
-		if r.Origin.Sequence <= 4 {
-			early++
-		}
-	}
-	if !found {
-		t.Fatal("lost the first bundle's recorded author or its original prose")
-	}
-	// Sequences 1-4 each dispositioned one packet and are fixed history.
-	if early != 4 {
-		t.Fatalf("the four committed reviews with verified authors must all select as true, got %d", early)
-	}
-	for _, state := range []model.SelfAdmissionState{"false", "unknown"} {
-		selected := view_(t, p, ViewRequest{View: "history", SelfAdmitted: state}).(*HistoryAnswer)
-		if selected.Watermark != a.Watermark {
-			t.Fatalf("classified read failed for %s: %+v", state, selected)
-		}
-		for _, r := range selected.Reviews {
-			if r.Origin.Sequence <= 4 {
-				t.Fatalf("a committed review with a verified author was classified as %s: %+v", state, r)
-			}
-		}
 	}
 }

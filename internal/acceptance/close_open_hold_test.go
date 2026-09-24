@@ -1,5 +1,4 @@
-// The open-hold success closure (review final-2 adoption review 2026-09-24,
-// finding 1) belongs here: a task.close with outcome success while a hold on
+// The open-hold success closure belongs here: a task.close with outcome success while a hold on
 // the task is open, through admission, the admission dry run and ledger-only
 // replay, and how show and continue display a hold a non-success close left
 // open. Other acceptance specifications do not.
@@ -15,9 +14,9 @@ import (
 	"whosaidso/internal/reduce"
 )
 
-// fixHoldWorld is a task whose attempt handed back success and which then got
+// openHoldWorld is a task whose attempt handed back success and which then got
 // an open awaiting-acceptance hold: the documented "withhold acceptance" recipe.
-type fixHoldWorld struct {
+type openHoldWorld struct {
 	*flowWorld
 	subject  flowTask
 	hold     *model.BlockerHold
@@ -25,9 +24,9 @@ type fixHoldWorld struct {
 	delivery model.ArtifactRef
 }
 
-func fixHoldNew(t *testing.T) *fixHoldWorld {
+func openHoldNew(t *testing.T) *openHoldWorld {
 	t.Helper()
-	w := &fixHoldWorld{flowWorld: flowNew(t)}
+	w := &openHoldWorld{flowWorld: flowNew(t)}
 	w.subject = w.task("deliver the report")
 	delivery := []byte(`{"delivered":"report v1"}`)
 	w.put("delivery/report.json", delivery)
@@ -53,7 +52,7 @@ func fixHoldNew(t *testing.T) *fixHoldWorld {
 	return w
 }
 
-func (w *fixHoldWorld) close(outcome model.ClosureOutcome) *model.TaskClose {
+func (w *openHoldWorld) close(outcome model.ClosureOutcome) *model.TaskClose {
 	c := &model.TaskClose{Task: w.subject.ref, Outcome: outcome,
 		AcceptanceWitnessRefs: []model.AcceptanceWitness{}, DeliveryWitnessRefs: []model.ArtifactRef{}}
 	if outcome == model.ClosureSuccess {
@@ -63,23 +62,23 @@ func (w *fixHoldWorld) close(outcome model.ClosureOutcome) *model.TaskClose {
 	return c
 }
 
-func (w *fixHoldWorld) clear() *model.BlockerClear {
+func (w *openHoldWorld) clear() *model.BlockerClear {
 	return &model.BlockerClear{Task: w.subject.ref, BlockerID: w.hold.BlockerID,
 		HoldRef: model.BlockerRef{Task: w.subject.ref, BlockerID: w.hold.BlockerID}, ResolvingWitness: w.witness}
 }
 
 // dryRun is `whosaidso check admission --packet P`: its verdict must be the
 // one admission then gives.
-func (w *fixHoldWorld) dryRun(packet model.ID) (result string, reasons []any) {
+func (w *openHoldWorld) dryRun(packet model.ID) (result string, reasons []any) {
 	w.t.Helper()
 	out, _ := w.cli(nil, "check", "admission", "--json", "--actor", "coordinator", "--packet", string(packet))
 	a := flowDecode(w.t, out)
 	return flowStr(a, "result"), flowList(a, "reasons")
 }
 
-func TestFixCloseHoldSuccessRefusedWhileAHoldIsOpen(t *testing.T) {
+func TestCloseOpenHoldSuccessRefusedWhileAHoldIsOpen(t *testing.T) {
 	t.Parallel()
-	w := fixHoldNew(t)
+	w := openHoldNew(t)
 	if got := flowStr(w.record(w.subject.ref.RecordID), "task", "status"); got != "BLOCKED" {
 		t.Fatalf("control: an open hold must leave the task BLOCKED, got %s", got)
 	}
@@ -107,10 +106,10 @@ func TestFixCloseHoldSuccessRefusedWhileAHoldIsOpen(t *testing.T) {
 }
 
 // A clear earlier in the same packet counts; a clear after the close does not.
-func TestFixCloseHoldClearInTheSameBundle(t *testing.T) {
+func TestCloseOpenHoldClearInTheSameBundle(t *testing.T) {
 	t.Parallel()
 	t.Run("clear-then-close", func(t *testing.T) {
-		w := fixHoldNew(t)
+		w := openHoldNew(t)
 		packet := w.capture("coordinator", w.clear(), w.close(model.ClosureSuccess))
 		if result, reasons := w.dryRun(packet); result != "would-admit" {
 			t.Fatalf("control: check admission must admit a clear followed by the close: %s %v", result, reasons)
@@ -124,7 +123,7 @@ func TestFixCloseHoldClearInTheSameBundle(t *testing.T) {
 		}
 	})
 	t.Run("close-then-clear", func(t *testing.T) {
-		w := fixHoldNew(t)
+		w := openHoldNew(t)
 		packet := w.capture("coordinator", w.close(model.ClosureSuccess), w.clear())
 		if result, _ := w.dryRun(packet); result != "would-refuse" {
 			t.Errorf("expected check admission to refuse a close before the clear that follows it; got %s", result)
@@ -134,11 +133,11 @@ func TestFixCloseHoldClearInTheSameBundle(t *testing.T) {
 }
 
 // Abandoning held work stays possible, and the hold it left open is shown.
-func TestFixCloseHoldNonSuccessClosesAndShowsTheOpenHold(t *testing.T) {
+func TestCloseOpenHoldNonSuccessShowsTheOpenHold(t *testing.T) {
 	t.Parallel()
 	for _, outcome := range []model.ClosureOutcome{model.ClosureCancelled, model.ClosureWithdrawn} {
 		t.Run(string(outcome), func(t *testing.T) {
-			w := fixHoldNew(t)
+			w := openHoldNew(t)
 			packet := w.capture("coordinator", w.close(outcome))
 			if result, reasons := w.dryRun(packet); result != "would-admit" {
 				t.Fatalf("control: check admission must admit a %s close over an open hold: %s %v", outcome, result, reasons)
@@ -170,32 +169,32 @@ func TestFixCloseHoldNonSuccessClosesAndShowsTheOpenHold(t *testing.T) {
 }
 
 // Replay decides from the ledger alone: the same shapes as hand-built bundles.
-func TestFixCloseHoldReplay(t *testing.T) {
-	create := laneEReduceCreate(1, laneEReduceSpec(1))
-	task := laneEReduceRef(1, 1)
-	hold := &model.BlockerHold{Task: task, BlockerID: laneEReduceID(70), Reason: model.BlockerAwaitingAcceptance,
+func TestCloseOpenHoldReplay(t *testing.T) {
+	create := reduceCreate(1, reduceSpec(1))
+	task := reduceRef(1, 1)
+	hold := &model.BlockerHold{Task: task, BlockerID: reduceID(70), Reason: model.BlockerAwaitingAcceptance,
 		Actor: model.Actor{ID: "reviewer"}, Criterion: "not accepted until the reviewer has read it"}
 	clear := &model.BlockerClear{Task: task, BlockerID: hold.BlockerID,
-		HoldRef: model.BlockerRef{Task: task, BlockerID: hold.BlockerID}, ResolvingWitness: laneEReduceArtifact("acceptance")}
-	second := &model.BlockerHold{Task: task, BlockerID: laneEReduceID(71), Reason: model.BlockerResume,
+		HoldRef: model.BlockerRef{Task: task, BlockerID: hold.BlockerID}, ResolvingWitness: reduceArtifact("acceptance")}
+	second := &model.BlockerHold{Task: task, BlockerID: reduceID(71), Reason: model.BlockerResume,
 		Actor: model.Actor{UnknownReason: "no owner named yet"}, Criterion: "resume once someone rules"}
-	first := laneEReduceBundle(t, model.Bundle{}, create, hold)
+	first := reduceBundle(t, model.Bundle{}, create, hold)
 	one, both := []model.ID{hold.BlockerID}, []model.ID{hold.BlockerID, second.BlockerID}
 	cases := []struct {
 		name   string
 		events []model.TypedEvent
 		names  []model.ID // the open holds a refusal must name; none: admits
 	}{
-		{"success over the open hold", []model.TypedEvent{laneEReduceClose(1, 1, 1, model.ClosureSuccess)}, one},
-		{"success over two open holds", []model.TypedEvent{second, laneEReduceClose(1, 1, 1, model.ClosureSuccess)}, both},
-		{"close then clear", []model.TypedEvent{laneEReduceClose(1, 1, 1, model.ClosureSuccess), clear}, one},
-		{"clear then close", []model.TypedEvent{clear, laneEReduceClose(1, 1, 1, model.ClosureSuccess)}, nil},
-		{"cancelled over the open hold", []model.TypedEvent{laneEReduceClose(1, 1, 1, model.ClosureCancelled)}, nil},
-		{"withdrawn over the open hold", []model.TypedEvent{laneEReduceClose(1, 1, 1, model.ClosureWithdrawn)}, nil},
+		{"success over the open hold", []model.TypedEvent{reduceClose(1, 1, 1, model.ClosureSuccess)}, one},
+		{"success over two open holds", []model.TypedEvent{second, reduceClose(1, 1, 1, model.ClosureSuccess)}, both},
+		{"close then clear", []model.TypedEvent{reduceClose(1, 1, 1, model.ClosureSuccess), clear}, one},
+		{"clear then close", []model.TypedEvent{clear, reduceClose(1, 1, 1, model.ClosureSuccess)}, nil},
+		{"cancelled over the open hold", []model.TypedEvent{reduceClose(1, 1, 1, model.ClosureCancelled)}, nil},
+		{"withdrawn over the open hold", []model.TypedEvent{reduceClose(1, 1, 1, model.ClosureWithdrawn)}, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := reduce.Replay([]model.Bundle{first, laneEReduceBundle(t, first, tc.events...)})
+			_, err := reduce.Replay([]model.Bundle{first, reduceBundle(t, first, tc.events...)})
 			if len(tc.names) == 0 {
 				if err != nil {
 					t.Errorf("control: replay must admit; got %v", err)

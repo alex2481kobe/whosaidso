@@ -1,6 +1,6 @@
 package write
 
-// Fixture and core negative tests for U12 proof admission: empty family,
+// Fixture and core negative tests for proof admission: empty family,
 // contradicting members, unknown validation,
 // unnamed judgment and cross-revision evidence. Family closure over pending
 // intake and artifact containment through the new operations live in
@@ -107,7 +107,7 @@ func (w *proofWorld) fix(claim model.RecordRef) model.CriterionRef {
 
 func (w *proofWorld) envelope(criterion model.CriterionRef) model.InvocationEnvelope {
 	return model.InvocationEnvelope{InvocationID: w.f.id(), AttemptID: w.attempt, InstrumentRef: w.instrument, CriterionRef: proofKnown(criterion),
-		ExecutionSourceIdentity: model.ExecutionIdentity{Project: w.f.project.ID, MachineID: proofKnown(proofMachine), SourceRefs: []model.ArtifactRef{}, Head: proofKnown(model.GitHead{ObjectFormat: "sha1", Commit: "0123456789abcdef0123456789abcdef01234567"}), Dirty: proofKnown(false)}, // source established equal (coordinator decision 2026-09-23)
+		ExecutionSourceIdentity: model.ExecutionIdentity{Project: w.f.project.ID, MachineID: proofKnown(proofMachine), SourceRefs: []model.ArtifactRef{}, Head: proofKnown(model.GitHead{ObjectFormat: "sha1", Commit: "0123456789abcdef0123456789abcdef01234567"}), Dirty: proofKnown(false)}, // source established equal: a known HEAD and a known clean checkout
 		Argv:                    []string{"fixture-measurement"}, InputRefs: []model.ArtifactRef{}, ConfigRequested: map[string]model.Scalar{}, ConditionsDeclared: map[string]model.Scalar{},
 		ConfigEffective: proofUnknown[map[string]model.Availability[model.Scalar]]("not launched"), ConditionsObserved: proofUnknown[map[string]model.Availability[model.Scalar]]("not launched"),
 		Isolation: proofUnknown[model.Isolation]("not enforced"), StartedAt: time.Now().UTC(), ObservedAt: proofUnknown[time.Time]("not launched"),
@@ -178,7 +178,7 @@ func TestProofControlReachesProvenWithNoInboxLimit(t *testing.T) {
 	if w.status(t) != reduce.StatusProven {
 		t.Fatal("control proof did not reach PROVEN")
 	}
-	// R10.3: validity is decided from the ledger alone, so no machine limit is recorded.
+	// Validity is decided from the ledger alone, so no machine limit is recorded.
 	review := bundle.Events[len(bundle.Events)-1]
 	if bytes.Contains(review.Data, []byte("inbox")) {
 		t.Fatalf("proof admission still records a per-machine inbox limit: %s", review.Data)
@@ -242,7 +242,7 @@ func TestProofRequiresANamedJudgmentByItsAuthor(t *testing.T) {
 	proof.Judgment.Actor = model.Actor{UnknownReason: "nobody named"}
 	w.f.refuse(w.f.request(w.f.captureRaw(proof)), "invalid-field")
 	w.f.author = model.Actor{UnknownReason: "packet author not recorded"}
-	proof.Judgment.Actor = model.Actor{ID: "lane-c2"}
+	proof.Judgment.Actor = model.Actor{ID: "agent-c2"}
 	w.f.refuse(w.f.request(w.f.capture(nil, proof)), "attribution-mismatch")
 	if w.status(t) != reduce.StatusMeasured {
 		t.Fatal("an unnamed judgment reached PROVEN")

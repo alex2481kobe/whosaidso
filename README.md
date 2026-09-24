@@ -1,9 +1,13 @@
 # WhoSaidSo
 
-WhoSaidSo keeps a project accountable. An agent runs a measurement, hands back a
-receipt, and the record exists; a task cannot close on prose alone. Every
-answer, from what is owed to what a tool cannot see, is a query over one
-append-only ledger.
+WhoSaidSo keeps a project accountable. Work is recorded as it happens in an
+append-only ledger inside the repository, and every answer, from what is owed
+to what a measurement cannot see, is a query over that ledger. A task cannot
+close on prose alone: it closes on a receipt and on witnesses someone can
+check.
+
+It is a single command line tool, written in Go with the standard library
+only. It works the same for a person or an agent, in any project.
 
 ## Two ideas it is built on
 
@@ -15,10 +19,71 @@ and two runs compare only when those match.
 run, every observation in the family including the failures, and a named
 responsible judgment.
 
-## Using it
+UNKNOWN is a real answer throughout. FALSE means "compared and disagreed";
+anything that could not be compared is UNKNOWN, never a guessed default.
 
-`go build -o whosaidso ./cmd/whosaidso`, then run `whosaidso help`. The guide ships with
-the binary.
+## Install
+
+You need Go 1.22 or later. From a checkout of this repository:
+
+```sh
+go build -o whosaidso ./cmd/whosaidso
+```
+
+Put the binary on your `PATH`. There are no other dependencies.
+
+## The 60-second loop
+
+Declare the project and bind this checkout as the home of its ledger:
+
+```sh
+cd your-project
+printf "id = 'you/your-project'\nledger = '.whosaidso/events'\n" > whosaidso.toml
+whosaidso home .
+export WHOSAIDSO_ACTOR=alice          # who is acting; never guessed
+```
+
+Writing is two acts: **capture** proposes a packet, **admit** reviews it and
+is the only act that writes to the ledger.
+
+```sh
+whosaidso template task.create > task.json   # fill every "<...>" placeholder
+whosaidso capture --events task.json --admit --reason "the work we agreed"
+whosaidso todo                               # the new task is READY
+
+whosaidso template task.start --task TASK_ID --capture --admit --reason "starting"
+whosaidso handback --attempt-id ATTEMPT_ID --outcome success \
+    --reason "every sample config loads" --next-action "accept it"
+whosaidso admit --outcome accepted --reason "receipt checked" PACKET_ID
+whosaidso continue TASK_ID                   # awaiting acceptance, with its receipt
+```
+
+Each command prints the ids the next one needs. A success handback ends the
+attempt, not the task: a `task.close` with its witnesses does that
+(`whosaidso help accept`).
+
+Commit the `.whosaidso/` folder with your code. It is the record.
+
+## Learn more
+
+The guide ships with the binary, so it cannot drift from the CLI:
+
+```sh
+whosaidso help             # every topic and verb
+whosaidso help loop        # capture, admit, run, handback, accept
+whosaidso help proof       # criterion first, the whole family, a verdict
+whosaidso VERB --help      # one verb's usage
+```
+
+`skill/whosaidso/SKILL.md` is a short pointer for agent harnesses that load
+skills.
+
+## Performance
+
+TODO: the numbers for a 10,000-record ledger go here on release day, with a
+link to the ledger records (criteria, benchmark runs and proofs) they come
+from. The benchmarks are in `internal/benchmarks`, and `tools/benchreport`
+turns `go test -bench` output into readings a criterion can select.
 
 ## How it fits together
 
@@ -57,10 +122,16 @@ whosaidso
 ```
 <!-- archtree:end -->
 
+## Contributing and security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md) for agents
+working on the code, and [SECURITY.md](SECURITY.md) to report a
+vulnerability.
+
 ## Status
 
-Early construction; nothing is stable yet. Go 1.22, standard library only.
-Tested on macOS and, in CI, Linux; Windows is untested.
+Early: the design is still settling and nothing is stable yet. Tested on
+macOS and, in CI, on Linux; Windows is untested.
 
 ## Licence
 

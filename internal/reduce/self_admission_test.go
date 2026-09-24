@@ -1,8 +1,6 @@
 package reduce
 
 import (
-	"os"
-	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -80,8 +78,8 @@ func TestReviewSelfAdmissionProjection(t *testing.T) {
 	}
 }
 
-// TestReviewSelfAdmissionComputedStates is C39 through the ledger: the answer
-// comes from the recorded author and the admitter, never from a stored field.
+// TestReviewSelfAdmissionComputedStates: through the ledger, the answer comes
+// from the recorded author and the admitter, never from a stored field.
 func TestReviewSelfAdmissionComputedStates(t *testing.T) {
 	known := func(id string) model.Actor { return model.Actor{ID: id} }
 	unknown := func(reason string) model.Actor { return model.Actor{UnknownReason: reason} }
@@ -124,43 +122,6 @@ func TestSelfAdmissionMalformedActorIsUnknown(t *testing.T) {
 	}
 }
 
-// WhoSaidSo's own bundles 1-4 were admitted before packet authors were recorded.
-// The R18.2 migration recorded each packet's author from its intake bytes,
-// verified against the digest the bundle holds, and dropped the "true" that
-// bundles 3 and 4 used to store. Self-admission is computed from that author
-// and the admitter: TRUE, never read from the stored field or the prose.
-func TestReviewSelfAdmissionCommittedHistoryIsComputed(t *testing.T) {
-	paths, err := filepath.Glob("../../.whosaidso/events/*.json")
-	if err != nil || len(paths) < 4 {
-		t.Fatalf("committed history missing: %v %v", paths, err)
-	}
-	var bundles []model.Bundle
-	for _, path := range paths[:4] {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		bundle, err := model.DecodeBundle(data)
-		if err != nil {
-			t.Fatal(err)
-		}
-		bundles = append(bundles, bundle)
-	}
-	s := mustReplay(t, bundles)
-	reviews := s.Reviews()
-	if len(reviews) != 4 {
-		t.Fatalf("committed reviews in bundles 1-4 missing: %+v", reviews)
-	}
-	for _, review := range reviews {
-		if review.Author != (model.Actor{ID: "coordinator"}) || review.Actor != review.Author {
-			t.Fatalf("control: bundles 1-4 record their verified author, who also admitted them: %+v", review)
-		}
-		if review.SelfAdmission != model.SelfAdmissionTrue {
-			t.Fatalf("the same known author and admitter must read true: %+v", review)
-		}
-	}
-}
-
 func TestReviewSelfAdmissionLegacyIgnoresProse(t *testing.T) {
 	for _, reason := range []string{
 		"Self-admitted: true.", "Self-admitted: false.", "Self-admitted: unknown.", "no machine-generated suffix",
@@ -181,37 +142,6 @@ func TestReviewSelfAdmissionLegacyIgnoresProse(t *testing.T) {
 	}
 }
 
-func TestReviewSelfAdmissionCommittedSequenceOneReplay(t *testing.T) {
-	data, err := os.ReadFile("../../.whosaidso/events/00000001-01M3408ER2RFD597S5KPXMYP4P.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	bundle, err := model.DecodeBundle(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := mustReplay(t, []model.Bundle{bundle})
-	if s.Watermark().Sequence != 1 || len(s.Records()) == 0 {
-		t.Fatal("committed history did not replay")
-	}
-	all := s.Reviews()
-	if len(all) != 1 || all[0].SelfAdmission != model.SelfAdmissionTrue || all[0].Author.ID != "coordinator" {
-		t.Fatalf("committed review must read true from its recorded author: %+v", all)
-	}
-	for _, raw := range bundle.Events {
-		if raw.Type != "review.admit" {
-			continue
-		}
-		e, err := model.DecodeEvent(raw)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if all[0].Reason != e.(*model.ReviewAdmit).Reason {
-			t.Fatal("committed reason was rewritten")
-		}
-	}
-}
-
 func TestReviewSelfAdmissionEmptySnapshot(t *testing.T) {
 	var s Snapshot
 	if got := s.Reviews(); got == nil || len(got) != 0 {
@@ -228,7 +158,7 @@ func TestReviewSelfAdmissionMixedHistoryAudit(t *testing.T) {
 	known := model.PacketRef{CommandID: newID("B"), Digest: newDigest("known")}
 	independent := model.PacketRef{CommandID: newID("C"), Digest: newDigest("independent")}
 	l.add(t, review("accepted", model.Actor{ID: "reviewer"}, "Self-admitted: true.", []model.PacketRef{legacy},
-		model.Actor{UnknownReason: "not recorded at admission (before R10.1)"}))
+		model.Actor{UnknownReason: "not recorded at admission"}))
 	earlier := mustReplay(t, l.bundles())
 	l.add(t, review("accepted", model.Actor{ID: "reviewer"}, "Self-admitted: false.", []model.PacketRef{known, independent},
 		model.Actor{ID: "reviewer"}, model.Actor{ID: "other"}))
@@ -250,7 +180,7 @@ func TestReviewSelfAdmissionMixedHistoryAudit(t *testing.T) {
 	}
 }
 
-// R18.2: a review never stores self_admission; the field is refused, whatever
+// A review never stores self_admission; the field is refused, whatever
 // it says.
 func TestReviewStoredSelfAdmissionCannotReplay(t *testing.T) {
 	packet := model.PacketRef{CommandID: newID("A"), Digest: newDigest("packet")}

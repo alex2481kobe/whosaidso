@@ -76,7 +76,7 @@ func tamper(t *testing.T, path string) {
 
 func readsFail(t *testing.T, p store.Project, want string) {
 	t.Helper()
-	// Intake pending is a todo section (R19): todo is the read that presents it.
+	// Intake pending is a todo section: todo is the read that presents it.
 	_, err := ReadView(p, ViewRequest{View: "todo"})
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("todo must refuse with %q, got %v", want, err)

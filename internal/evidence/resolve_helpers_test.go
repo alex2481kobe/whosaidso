@@ -29,8 +29,8 @@ func newRepo(t *testing.T, args ...string) string {
 	t.Helper()
 	dir := t.TempDir()
 	gitRun(t, dir, append([]string{"init", "--quiet"}, args...)...)
-	gitRun(t, dir, "config", "user.email", "lane-d@example.invalid")
-	gitRun(t, dir, "config", "user.name", "lane D")
+	gitRun(t, dir, "config", "user.email", "agent-d@example.invalid")
+	gitRun(t, dir, "config", "user.name", "agent D")
 	return dir
 }
 

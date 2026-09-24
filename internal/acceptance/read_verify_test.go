@@ -1,8 +1,7 @@
 package acceptance_test
 
-// Coordinator edit 2026-09-24 (principles audit item 8, owner-approved fixes): todo's
-// intake_pending list holds every packet not accepted (unreviewed, correction
-// requested, rejected), so it is renamed packets_not_accepted; contents unchanged.
+// todo's packets_not_accepted list holds every packet not accepted (unreviewed,
+// correction requested, rejected).
 
 import (
 	"bytes"
@@ -27,7 +26,7 @@ func readVerifyProject(t *testing.T) store.Project {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	root := t.TempDir()
-	return store.Project{ID: laneEReduceProject, Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
+	return store.Project{ID: reduceProject, Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
 }
 
 // Publish through the real store and validate the sealed prefix with Replay.
@@ -43,7 +42,7 @@ func readVerifyAppend(t *testing.T, p store.Project, n int, packets []model.Pack
 		}
 		raw = append(raw, encoded)
 	}
-	_, err := store.Transact(context.Background(), p, laneEReduceID(n), model.HashBytes([]byte(fmt.Sprint(n))),
+	_, err := store.Transact(context.Background(), p, reduceID(n), model.HashBytes([]byte(fmt.Sprint(n))),
 		func([]model.Bundle) (model.Bundle, error) {
 			return model.Bundle{Admitter: model.Actor{ID: "reviewer"}, Packets: packets, Events: raw}, nil
 		})
@@ -61,7 +60,7 @@ func readVerifyAppend(t *testing.T, p store.Project, n int, packets []model.Pack
 	return s
 }
 
-// R19: reads go through the four views; intake pending is todo's section.
+// Reads go through the four views; intake pending is todo's section.
 func readVerifyAnswer(t *testing.T, p store.Project, view string, id model.ID) query.ViewAnswer {
 	t.Helper()
 	a, err := query.ReadView(p, query.ViewRequest{View: view, ID: id})
@@ -78,8 +77,8 @@ func readVerifyPending(t *testing.T, p store.Project) *query.TodoAnswer {
 
 func readVerifyReady(t *testing.T, p store.Project) {
 	t.Helper()
-	readVerifyAppend(t, p, 100, []model.PacketRef{}, laneEReduceCreate(1, laneEReduceSpec(1)))
-	a := readVerifyAnswer(t, p, "show", laneEReduceID(1)).(*query.ShowAnswer)
+	readVerifyAppend(t, p, 100, []model.PacketRef{}, reduceCreate(1, reduceSpec(1)))
+	a := readVerifyAnswer(t, p, "show", reduceID(1)).(*query.ShowAnswer)
 	if a.Result != "KNOWN" || a.Watermark.Sequence != 1 || len(a.Records) != 1 || a.Records[0].Task.Status != reduce.StatusReady {
 		t.Fatalf("control must read one admitted READY task at watermark 1, got %+v", a)
 	}
@@ -88,7 +87,6 @@ func readVerifyReady(t *testing.T, p store.Project) {
 // readVerifyAdmitted captures each group as a real intake packet, then
 // publishes the groups with the accepted review write.Admit records: packet
 // authors, the capture stamps intake assigned, and each event's packet.
-// review round-2 consolidation, step 1.
 func readVerifyAdmitted(t *testing.T, p store.Project, n int, groups ...model.Packet) reduce.Snapshot {
 	t.Helper()
 	ids := make([]model.ID, 0, len(groups))
@@ -107,7 +105,7 @@ func readVerifyAdmitted(t *testing.T, p store.Project, n int, groups ...model.Pa
 		packets[i], refs[i] = v.Packet, v.Ref
 	}
 	var events []model.TypedEvent
-	for _, raw := range laneEReduceReview(t, model.Actor{ID: "reviewer"}, refs, packets) {
+	for _, raw := range reduceReview(t, model.Actor{ID: "reviewer"}, refs, packets) {
 		e, err := model.DecodeEvent(raw)
 		if err != nil {
 			t.Fatal(err)
@@ -149,23 +147,23 @@ func TestReadVerifyClaimHistoryIncludesReceiptsExplicitlyNamingItsCriterion(t *t
 			records = append(records, e)
 		}
 	}
-	readVerifyAdmitted(t, p, 100, laneEReducePacket(t, 2201, "lane-e", time.Time{}, records...), laneEReducePacket(t, 2202, "runner", time.Time{}, starts...))
+	readVerifyAdmitted(t, p, 100, reducePacket(t, 2201, "agent-e", time.Time{}, records...), reducePacket(t, 2202, "runner", time.Time{}, starts...))
 	prefix, err := store.ReadPrefix(p)
 	if err != nil || len(prefix) == 0 {
 		t.Fatalf("control criterion bundle must be published: %v", err)
 	}
 	env.StartedAt = readVerifyAfter(prefix[len(prefix)-1].RecordedAt)
 	seal := outsideProofSeal(env)
-	seal.Envelope.ObservedAt = laneEEvidenceKnown(readVerifyAfter(env.StartedAt))
-	s := readVerifyAdmitted(t, p, 101, laneEReducePacket(t, 2203, "runner", time.Time{}, &model.InvocationStart{Envelope: env}),
-		laneEReducePacket(t, 2204, "runner", time.Time{}, seal), laneEReducePacket(t, 2205, "reviewer", time.Time{}, proof))
+	seal.Envelope.ObservedAt = evidenceKnown(readVerifyAfter(env.StartedAt))
+	s := readVerifyAdmitted(t, p, 101, reducePacket(t, 2203, "runner", time.Time{}, &model.InvocationStart{Envelope: env}),
+		reducePacket(t, 2204, "runner", time.Time{}, seal), reducePacket(t, 2205, "reviewer", time.Time{}, proof))
 	claim, ok := s.ClaimAt(proof.Claim)
 	if !ok || claim.Status != reduce.StatusProven || len(claim.Observations) != 1 {
 		t.Fatalf("control admitted start, seal and proof must establish a PROVEN claim with one observation, got %+v", claim)
 	}
 	// Both receipts are already selected when the question is about the owning
 	// task or the explicitly named instrument. No artifact resolution is needed.
-	for _, id := range []model.ID{laneEReduceID(1), env.InstrumentRef.RecordID} {
+	for _, id := range []model.ID{reduceID(1), env.InstrumentRef.RecordID} {
 		a := readVerifyAnswer(t, p, "history", id)
 		if !strings.Contains(fmt.Sprint(readVerifyTypes(a)), "invocation.start invocation.seal") || a.Header().Watermark.Sequence != s.Watermark().Sequence {
 			t.Fatalf("control task/instrument history must include both admitted receipts at the ledger head %d, got %v at %d", s.Watermark().Sequence, readVerifyTypes(a), a.Header().Watermark.Sequence)
@@ -189,12 +187,12 @@ func TestReadVerifyPendingCannotIgnoreAReplayedReviewMissingFromEnvelopePackets(
 			readVerifyReady(t, p)
 			capture := func(n int) model.PacketRef {
 				t.Helper()
-				event, err := model.EncodeEvent(laneEReduceCreate(n, laneEReduceSpec(1)))
+				event, err := model.EncodeEvent(reduceCreate(n, reduceSpec(1)))
 				if err != nil {
 					t.Fatal(err)
 				}
 				ref, err := store.WriteIntake(context.Background(), p, store.IntakeRequest{
-					CommandID: laneEReduceID(n + 1000), Author: model.Actor{ID: "author"}, Events: []model.Event{event}})
+					CommandID: reduceID(n + 1000), Author: model.Actor{ID: "author"}, Events: []model.Event{event}})
 				if err != nil {
 					t.Fatalf("control capture must succeed: %v", err)
 				}
@@ -203,7 +201,7 @@ func TestReadVerifyPendingCannotIgnoreAReplayedReviewMissingFromEnvelopePackets(
 			review := func(ref model.PacketRef) *model.ReviewAdmit {
 				return &model.ReviewAdmit{Packets: []model.PacketRef{ref}, Outcome: outcome,
 					Actor: model.Actor{ID: "reviewer"}, Reason: "explicit canonical disposition",
-					// R18.2: every review carries authors, captured_at and event_packets.
+					// Every review carries authors, captured_at and event_packets.
 					Authors:    map[model.ID]model.Actor{ref.CommandID: {ID: "author"}},
 					CapturedAt: map[model.ID]model.Availability[time.Time]{ref.CommandID: {State: model.Unknown, Reason: "not recorded"}}, EventPackets: []model.ID{}}
 			}
@@ -272,12 +270,12 @@ func TestReadVerifyAuthoredValuesSurviveTextFromTheAdmittedLedger(t *testing.T) 
 		"literal \\u003c is different from < & >; actual separator \u2028; trailing spaces   ",
 	}
 	for i, value := range values {
-		spec := laneEReduceSpec(1)
+		spec := reduceSpec(1)
 		spec.Intent = value
 		spec.NextActor = model.Actor{UnknownReason: "author, reviewer and holder cannot assign the next actor"}
-		readVerifyAppend(t, p, 101+i, []model.PacketRef{}, laneEReduceCreate(2+i, spec))
+		readVerifyAppend(t, p, 101+i, []model.PacketRef{}, reduceCreate(2+i, spec))
 	}
-	// R19: the views replace the old reads; todo holds the open tasks the
+	// The views replace the old reads; todo holds the open tasks the
 	// removed `task todo` selected. --full is removed: complete strings are
 	// asserted in --json, and the brief is held to the brief's agreement rule.
 	for _, view := range []string{"show", "history", "todo"} {
@@ -334,14 +332,14 @@ func TestReadVerifyAuthoredValuesSurviveTextFromTheAdmittedLedger(t *testing.T) 
 func TestReadVerifyLaterAdmissionDoesNotDispositionAnEarlierPrefix(t *testing.T) {
 	p := readVerifyProject(t)
 	readVerifyReady(t, p)
-	create := laneEReduceCreate(2, laneEReduceSpec(1))
+	create := reduceCreate(2, reduceSpec(1))
 	create.Provenance.SourceRefs = []model.ArtifactRef{}
 	event, err := model.EncodeEvent(create)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ref, err := store.WriteIntake(context.Background(), p, store.IntakeRequest{
-		CommandID: laneEReduceID(1002), Author: model.Actor{ID: "lane-e"}, Events: []model.Event{event}})
+		CommandID: reduceID(1002), Author: model.Actor{ID: "agent-e"}, Events: []model.Event{event}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +368,7 @@ func TestReadVerifyLaterAdmissionDoesNotDispositionAnEarlierPrefix(t *testing.T)
 			t.Fatal(err)
 		}
 	}
-	_, err = write.Admit(context.Background(), p, write.AdmitRequest{CommandID: laneEReduceID(200),
+	_, err = write.Admit(context.Background(), p, write.AdmitRequest{CommandID: reduceID(200),
 		PacketIDs: []model.ID{ref.CommandID}, Admitter: model.Actor{ID: "reviewer"}, Outcome: "accepted", Reason: "accept the control task"})
 	if err != nil {
 		t.Fatalf("control packet must pass the real admission gate: %v", err)

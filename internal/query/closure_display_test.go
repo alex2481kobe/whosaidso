@@ -30,9 +30,9 @@ func TestWaivedClosureSaysWhetherItCitesAnAuthority(t *testing.T) {
 	a := viewAnswerOf(t, p, ViewRequest{View: "show", Kind: "task"})
 	text := assertViewHonest(t, a)
 	for _, want := range []string{
-		"closed: waived (no authority cited) by lane-a",
-		"closed: waived under authority of owner by lane-a",
-		"closed: cancelled by lane-a", // the word carries no excuse to qualify
+		"closed: waived (no authority cited) by agent-a",
+		"closed: waived under authority of owner by agent-a",
+		"closed: cancelled by agent-a", // the word carries no excuse to qualify
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the brief must read %q:\n%s", want, text)

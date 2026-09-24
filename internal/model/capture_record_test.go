@@ -1,7 +1,7 @@
 package model
 
-// Wire and validation tests for review.admit packet capture times (U14
-// review: criterion freezing is decided against them). Packet authors live in
+// Wire and validation tests for review.admit packet capture times
+// (criterion freezing is decided against them). Packet authors live in
 // author_record_test.go.
 
 import (

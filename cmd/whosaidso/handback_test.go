@@ -128,7 +128,7 @@ func TestCLIHandbackRefusesMissingMeaning(t *testing.T) {
 				if flag == "--actor" && !strings.Contains(value, "-") {
 					return
 				}
-				args := append(append([]string(nil), control...), "--actor", "lane")
+				args := append(append([]string(nil), control...), "--actor", "agent")
 				args[i+1] = value
 				if value == "omitted" {
 					args = append(args[:i], args[i+2:]...)
@@ -173,7 +173,7 @@ func TestCLIHandbackRefusesInvalidFlags(t *testing.T) {
 }
 
 // The outcomes topic of whosaidso help names every outcome on a line of its own,
-// in the model's order. R19: the README's "Using it" moved into whosaidso help,
+// in the model's order. The README's "Using it" lives in whosaidso help,
 // so help is the one manual this is checked against.
 func TestHelpDefinesEveryOutcomeOncePerLine(t *testing.T) {
 	outcomes := []model.AttemptOutcome{model.AttemptSuccess, model.AttemptStopped, model.AttemptRefused, model.AttemptNoReading,

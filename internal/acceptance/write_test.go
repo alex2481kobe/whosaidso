@@ -21,29 +21,17 @@ func outsideWriteProject(t *testing.T) store.Project {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	root := t.TempDir()
-	return store.Project{ID: laneEReduceProject, Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
+	return store.Project{ID: reduceProject, Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
 }
 
-// TestWriteAdmissionCannotAcceptItsOwnAuthorsPacket was removed by the
-// coordinator, not by the reviewer who wrote it, and the reason is recorded
-// here rather than in a commit nobody will read again.
-//
-// It asserted that admission must REFUSE a packet whose author is also its
-// admitter. The contract says the opposite, in the owner's own words:
-//
-//	DATUM-CONTRACT.md:407  "they are the same actor ... is visible and
-//	queryable (--self-admitted), never blocked"
-//	DATUM-CONTRACT.md:804  "A lane never admits its own; when author and
-//	admitter match it is visible as --self-admitted, not blocked."
+// There is deliberately no test that admission REFUSES a packet whose author
+// is also its admitter. When author and admitter are the same actor, the
+// admission is visible and queryable (--self-admitted), never blocked.
 //
 // The rule exists so self-admitted work can be AUDITED later rather than
 // prevented. Blocking it would destroy the very record those audits read.
 //
-// The reviewer was not wrong to test it; it tested the rule I gave it, and the
-// rule I gave it contradicted a ruling the owner had already made. The fault
-// is in the brief.
-//
-// Two real defects surfaced underneath it, and both are open:
+// Two real defects were found around it:
 //
 //   - admissionReason writes self-admission as PROSE into a reason string
 //     ("Self-admitted: true"). The contract requires it to be queryable. You
@@ -59,8 +47,8 @@ func outsideRunRequest(project store.Project, report, gate string) write.RunRequ
 		Instrument: events[2].(*model.InstrumentDeclare).Spec, ExecutionSourceIdentity: env.ExecutionSourceIdentity,
 		Argv: []string{os.Args[0], "-test.run=^TestWriteProducerChild$", "--", "outside-producer", report, gate},
 		Dir:  project.Root, Timeout: 10 * time.Second,
-		ConfigRequested:    map[string]model.Scalar{"sample_count": laneEEvidenceNumber("12")},
-		ConditionsDeclared: map[string]model.Scalar{"seed": laneEEvidenceNumber("7")},
+		ConfigRequested:    map[string]model.Scalar{"sample_count": evidenceNumber("12")},
+		ConditionsDeclared: map[string]model.Scalar{"seed": evidenceNumber("7")},
 	}
 }
 
@@ -183,16 +171,16 @@ func TestWriteProducerFreezesCallerIntentBeforeLaunch(t *testing.T) {
 	}
 	// Receiving copied orders all copy reads before these writes. Closing resume
 	// orders these writes before publication and sealing, even if copying regresses.
-	request.ConfigRequested["sample_count"] = laneEEvidenceNumber("999")
-	request.ConditionsDeclared["seed"] = laneEEvidenceNumber("777")
+	request.ConfigRequested["sample_count"] = evidenceNumber("999")
+	request.ConditionsDeclared["seed"] = evidenceNumber("777")
 	resume()
 	answer := <-done
 	if answer.err != nil {
 		t.Fatalf("fixture run must complete after caller storage is reused: %v", answer.err)
 	}
 	start, seal := outsideRunPackets(t, project, answer.result)
-	wantConfig := map[string]model.Scalar{"sample_count": laneEEvidenceNumber("12")}
-	wantConditions := map[string]model.Scalar{"seed": laneEEvidenceNumber("7")}
+	wantConfig := map[string]model.Scalar{"sample_count": evidenceNumber("12")}
+	wantConditions := map[string]model.Scalar{"seed": evidenceNumber("7")}
 	for _, packet := range []struct {
 		name     string
 		envelope model.InvocationEnvelope
@@ -218,11 +206,9 @@ func TestWriteProducerChild(t *testing.T) {
 	}
 	report, gate := args[2], args[3]
 	// A report whose bytes are not valid UTF-8 cannot travel as argv: argv is
-	// authored intent, and the encoder refuses invalid UTF-8 there (R8.4 and
-	// the shared-encoder hardening, 2026-09-22). "hex:" carries such bytes
+	// authored intent, and the encoder refuses invalid UTF-8 there. "hex:" carries such bytes
 	// intact. Reports are JSON and begin with "{", so the prefix cannot
-	// collide with a real one. Added by the coordinator to restore this
-	// fixture's transport; no assertion anywhere was changed.
+	// collide with a real one.
 	if rest, ok := strings.CutPrefix(report, "hex:"); ok {
 		raw, err := hex.DecodeString(rest)
 		if err != nil {

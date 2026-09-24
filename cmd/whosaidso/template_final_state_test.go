@@ -26,7 +26,7 @@ func TestCriterionMetadataComesFromTheFinalSelectors(t *testing.T) {
 	draft := func(extra ...string) ([3]any, string) {
 		t.Helper()
 		args := append(append([]string{"template"}, good...), extra...)
-		out, errs, code := cliRun(t, f.root, nil, "lane", args...)
+		out, errs, code := cliRun(t, f.root, nil, "agent", args...)
 		var tree []map[string]any
 		if code != 0 || json.Unmarshal([]byte(out), &tree) != nil {
 			t.Fatalf("%v: %d %s", args, code, errs)
@@ -77,7 +77,7 @@ func TestAppendedCriteriaAreFreshSkeletonInstances(t *testing.T) {
 	args := []string{"task.create", "--set", "provenance.source_refs=[]", "--set", "spec.intent=measure", "--set", "spec.subject=pose sweep",
 		"--set", "spec.scope.source_paths=[]", "--set", "spec.scope.context_refs=[]", "--set", "spec.scope.applies_when=this fixture",
 		"--set", "spec.scope.limitations=none", "--set", `spec.non_goals=["production writes"]`, "--set", "spec.context_refs=[]",
-		"--set", "spec.constraint_refs=[]", "--set", "spec.prerequisites=[]", "--set", "spec.next_actor.id=lane",
+		"--set", "spec.constraint_refs=[]", "--set", "spec.prerequisites=[]", "--set", "spec.next_actor.id=agent",
 		"--set", "spec.accepter=null", "--set", "spec.progress=null", "--set", "spec.acceptance_criteria[0].criterion=first property",
 		"--set", "spec.acceptance_criteria[1].criterion=second property", "--set", "spec.acceptance_criteria[2].criterion=third property"}
 	data := boundPrint(t, f.root, args...)
@@ -93,11 +93,11 @@ func TestAppendedCriteriaAreFreshSkeletonInstances(t *testing.T) {
 			t.Errorf("%s.revision = %v: a minted id starts at revision 1", at, boundAt(data, at+".revision"))
 		}
 	}
-	out, errs, code := cliRun(t, f.root, nil, "lane", append([]string{"template"}, args...)...)
+	out, errs, code := cliRun(t, f.root, nil, "agent", append([]string{"template"}, args...)...)
 	if code != 0 {
 		t.Fatalf("%d %s", code, errs)
 	}
-	if text, errs, code := cliRun(t, f.root, []byte(out), "lane", "check", "admission", "--events", "-"); code != 0 || !strings.Contains(text, "\nresult: would-admit\n") {
+	if text, errs, code := cliRun(t, f.root, []byte(out), "agent", "check", "admission", "--events", "-"); code != 0 || !strings.Contains(text, "\nresult: would-admit\n") {
 		t.Fatalf("the printed draft must pass check admission: %d %s %s", code, text, errs)
 	}
 }

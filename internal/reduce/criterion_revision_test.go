@@ -17,8 +17,8 @@ func revisedLedger(t *testing.T) (*ledgerBuilder, model.RecordRef, model.Invocat
 	t.Helper()
 	l := goodLedger(t)
 	claim := ref(newID("CMA1"), 1)
-	l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("lane-a"), Spec: proofInstrument()},
-		&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("lane-a"), Spec: claimSpec()}, fixProofCriterion(claim))
+	l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("agent-a"), Spec: proofInstrument()},
+		&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("agent-a"), Spec: claimSpec()}, fixProofCriterion(claim))
 	failed := proofEnvelope(claim, newID("RNA0"))
 	l.add(t, &model.InvocationStart{Envelope: failed})
 	l.add(t, sealProof(failed, 1))
@@ -39,7 +39,7 @@ func revisedProof(claim model.RecordRef, rev2 model.CriterionRef) *model.ProofAd
 	return p
 }
 
-func TestR10EarlierRevisionRunsStayInTheFamily(t *testing.T) {
+func TestEarlierRevisionRunsStayInTheFamily(t *testing.T) {
 	for _, disposition := range []string{"inapplicable", "inconclusive"} {
 		t.Run(disposition, func(t *testing.T) {
 			l, claim, failed, rev2 := revisedLedger(t)
@@ -67,7 +67,7 @@ func TestR10EarlierRevisionRunsStayInTheFamily(t *testing.T) {
 	}
 }
 
-func TestR10LaterRevisionRunsAreNotEarlierFamily(t *testing.T) {
+func TestLaterRevisionRunsAreNotEarlierFamily(t *testing.T) {
 	// Revision 1's proof never needs revision 2's run, and cannot borrow it.
 	l, claim, failed, _ := revisedLedger(t)
 	l.add(t, withMember(admitProof(claim, newID("RNA1")), failed, "inconclusive"))
@@ -82,7 +82,7 @@ func TestR10LaterRevisionRunsAreNotEarlierFamily(t *testing.T) {
 	}
 }
 
-func TestR10RejectedRunUnderAnEarlierRevisionStaysInTheFamily(t *testing.T) {
+func TestRejectedRunUnderAnEarlierRevisionStaysInTheFamily(t *testing.T) {
 	build := func(omit bool) (*ledgerBuilder, model.RecordRef) {
 		l, claim, rejected := rejectedLedger(t, "rejected", model.CriterionRef{})
 		second := fixProofCriterion(claim)

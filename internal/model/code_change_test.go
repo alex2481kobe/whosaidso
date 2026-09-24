@@ -1,6 +1,6 @@
 package model
 
-// R14.2 code-change shape: two different commits of one format, at least one
+// Code-change shape: two different commits of one format, at least one
 // clean, distinct changed path, and only beside an inapplicable disposition.
 
 import (

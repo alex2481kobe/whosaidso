@@ -68,7 +68,7 @@ func TestExecutionIdentityDecidesComparability(t *testing.T) {
 
 }
 
-// Source must be ESTABLISHED equal (coordinator decision 2026-09-23): equal
+// Source must be ESTABLISHED equal: equal
 // source pins, or a known equal HEAD with both checkouts known clean.
 func TestExecutedSourceMustBeEstablishedEqual(t *testing.T) {
 	c := testCriterion(t)

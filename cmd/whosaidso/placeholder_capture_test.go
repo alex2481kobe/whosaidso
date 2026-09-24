@@ -4,7 +4,7 @@ package main
 // only template --capture (the decoder owns the rule: model.IsPlaceholder),
 // that authored text which merely resembles one is accepted, and that
 // revising from a template never carries an old judgment across: --from
-// leaves an instrument's validation a placeholder to judge again (R9, R18.1).
+// leaves an instrument's validation a placeholder to judge again.
 
 import (
 	"bytes"
@@ -58,7 +58,7 @@ func intakeCount(t *testing.T, root string) int {
 // A blocker.hold whose criterion is the given string, written to a file.
 func holdWithCriterion(t *testing.T, f boundFixture, criterion string) string {
 	t.Helper()
-	printed, errs, code := cliRun(t, f.root, nil, "lane", "template", "blocker.hold", "--task", string(f.task), "--set", "reason=resume", "--set", `actor={"id":"lane"}`)
+	printed, errs, code := cliRun(t, f.root, nil, "agent", "template", "blocker.hold", "--task", string(f.task), "--set", "reason=resume", "--set", `actor={"id":"agent"}`)
 	if code != 0 {
 		t.Fatalf("template: %d %s", code, errs)
 	}
@@ -89,28 +89,28 @@ func TestPlaceholderRefusedAtEveryCaptureEntrance(t *testing.T) {
 		"<>",
 	} {
 		file := holdWithCriterion(t, f, authored)
-		if out, errs, code := cliRun(t, f.root, nil, "lane", "check", "admission", "--events", file); code != 0 || !strings.Contains(out, "\nresult: would-admit\n") {
+		if out, errs, code := cliRun(t, f.root, nil, "agent", "check", "admission", "--events", file); code != 0 || !strings.Contains(out, "\nresult: would-admit\n") {
 			t.Errorf("authored %q must would-admit: %d %s %s", authored, code, out, errs)
 		}
-		if out, errs, code := cliRun(t, f.root, nil, "lane", "capture", "--events", file); code != 0 {
+		if out, errs, code := cliRun(t, f.root, nil, "agent", "capture", "--events", file); code != 0 {
 			t.Errorf("authored %q must capture: %d %s %s", authored, code, out, errs)
 		}
 	}
 	before := intakeCount(t, f.root)
 	for _, placeholder := range []string{textPlaceholder, "<text>", "<path: project-relative, forward slashes>"} {
 		file := holdWithCriterion(t, f, placeholder)
-		out, errs, code := cliRun(t, f.root, nil, "lane", "capture", "--events", file)
+		out, errs, code := cliRun(t, f.root, nil, "agent", "capture", "--events", file)
 		if code != 1 || out != "" || !strings.Contains(errs, "event.data.criterion") || !strings.Contains(errs, "placeholder") {
 			t.Errorf("plain capture must refuse the placeholder %q at criterion: %d %q %q", placeholder, code, out, errs)
 		}
-		out, errs, code = cliRun(t, f.root, nil, "lane", "check", "admission", "--events", file)
+		out, errs, code = cliRun(t, f.root, nil, "agent", "check", "admission", "--events", file)
 		if code != 1 || strings.Contains(out, "would-admit") || !strings.Contains(errs, "event.data.criterion") {
 			t.Errorf("check admission must report the placeholder %q refused, not would-admit: %d %q %q", placeholder, code, out, errs)
 		}
 	}
 	// A handback builds its receipt in process (internal/write): the same
 	// decoder refuses a placeholder given as its reason.
-	out, errs, code := cliRun(t, f.root, nil, "lane", "handback", "--attempt-id", string(f.attempt), "--outcome", "stopped", "--reason", textPlaceholder, "--next-action", "fill the reason")
+	out, errs, code := cliRun(t, f.root, nil, "agent", "handback", "--attempt-id", string(f.attempt), "--outcome", "stopped", "--reason", textPlaceholder, "--next-action", "fill the reason")
 	if code != 1 || !strings.Contains(errs, "placeholder") {
 		t.Errorf("handback must refuse a placeholder reason: %d %q %q", code, out, errs)
 	}
@@ -125,7 +125,7 @@ func TestPlaceholderRefusedAtEveryCaptureEntrance(t *testing.T) {
 func TestReviseFromLeavesValidationToJudgeAgain(t *testing.T) {
 	f := boundWorld(t)
 	args := []string{"template", "instrument.revise", "--from", string(f.instrument), "--set", "provenance.source_refs=[]"}
-	out, errs, code := cliRun(t, f.root, nil, "lane", args...)
+	out, errs, code := cliRun(t, f.root, nil, "agent", args...)
 	if code != 0 {
 		t.Fatalf("template: %d %s", code, errs)
 	}
@@ -148,7 +148,7 @@ func TestReviseFromLeavesValidationToJudgeAgain(t *testing.T) {
 		t.Errorf("the notes must say validation was not copied: %s", errs)
 	}
 	before := intakeCount(t, f.root)
-	if _, errs, code := cliRun(t, f.root, nil, "lane", append(args, "--capture")...); code != 1 || !strings.Contains(errs, "replacement.validation.state") {
+	if _, errs, code := cliRun(t, f.root, nil, "agent", append(args, "--capture")...); code != 1 || !strings.Contains(errs, "replacement.validation.state") {
 		t.Fatalf("capture must refuse the unjudged validation: %d %s", code, errs)
 	}
 	if after := intakeCount(t, f.root); after != before {

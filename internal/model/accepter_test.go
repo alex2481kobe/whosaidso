@@ -1,6 +1,6 @@
 package model
 
-// R15.1 shapes: a task may name a known accepter or none, never an unknown
+// Accepter shapes: a task may name a known accepter or none, never an unknown
 // one; a task.close may omit its authority, and one it cites is still whole.
 
 import "testing"

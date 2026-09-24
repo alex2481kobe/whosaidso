@@ -1,10 +1,9 @@
 package acceptance_test
 
-// Coordinator edit 2026-09-24 (principles audit item 8, owner-approved fixes): todo's
-// intake_pending list holds every packet not accepted (unreviewed, correction
-// requested, rejected), so it is renamed packets_not_accepted; contents unchanged.
+// todo's packets_not_accepted list holds every packet not accepted (unreviewed,
+// correction requested, rejected).
 
-// U14 independent end-to-end flows. Every step runs the built `whosaidso` binary
+// Independent end-to-end flows belong here. Every step runs the built `whosaidso` binary
 // in a fresh process, inside a temp project with its own whosaidso.toml and its
 // own HOME (so its own intake), and every fact is read back through the read
 // surface. Every read is taken three times, as the default (brief) text, as
@@ -15,10 +14,10 @@ package acceptance_test
 // leave .whosaidso/events byte-identical.
 //
 // Event payloads are built with the model types only to produce the JSON a
-// lane would pipe to `whosaidso capture`; nothing here calls the write, store or
+// agent would pipe to `whosaidso capture`; nothing here calls the write, store or
 // reduce packages directly.
 //
-// Supersede and artifact.dispose are left to a later lane on purpose.
+// Supersede and artifact.dispose are not covered here.
 //
 // Changed when the reducer types gained json tags: every JSON path here is snake_case.
 
@@ -57,7 +56,7 @@ type flowWorld struct {
 	produced map[model.ID]string
 }
 
-const flowLane = "lane"
+const flowAgent = "agent"
 
 func flowNew(t *testing.T) *flowWorld {
 	t.Helper()
@@ -110,7 +109,7 @@ func (w *flowWorld) capture(author string, events ...model.TypedEvent) model.ID 
 	if err != nil {
 		w.t.Fatal(err)
 	}
-	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	// Writes print a one-line acknowledgement by default; --json is the full result this test decodes.
 	args := []string{"capture", "--json", "--actor", author, "--command-id", string(w.id()), "--events", "-"}
 	for _, e := range events {
 		if seal, ok := e.(*model.InvocationSeal); ok && w.produced[seal.Envelope.InvocationID] != "" {
@@ -135,8 +134,8 @@ func flowPacket(t *testing.T, out []byte) model.ID {
 
 func (w *flowWorld) review(outcome string, packets ...model.ID) error {
 	w.t.Helper()
-	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
-	args := []string{"admit", "--json", "--command-id", string(w.id()), "--actor", "coordinator", "--outcome", outcome, "--reason", "U14 flow review"}
+	// Writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	args := []string{"admit", "--json", "--command-id", string(w.id()), "--actor", "coordinator", "--outcome", outcome, "--reason", "flow review"}
 	for _, p := range packets {
 		args = append(args, string(p))
 	}
@@ -192,7 +191,7 @@ var flowBundleName = regexp.MustCompile(`^([0-9]{8})-([0-9A-Z]{26})\.json$`)
 // read runs the view as brief text and as --json. The brief must agree with
 // --json under the brief's rule (flowBriefAgrees). It requires the watermark
 // to name the ledger's actual head, and returns the decoded JSON answer.
-// R19: --full is removed; --json is the complete answer and the default text
+// --full is removed; --json is the complete answer and the default text
 // is checked by the brief's rule.
 func (w *flowWorld) read(args ...string) map[string]any {
 	w.t.Helper()
@@ -214,7 +213,7 @@ func (w *flowWorld) read(args ...string) map[string]any {
 // count is the length of the array at its path.
 func flowBriefAgrees(t testing.TB, what string, exported []byte, answer map[string]any, text string) {
 	t.Helper()
-	want, facts, err := query.ViewBriefOf(exported) // R19: the views' brief
+	want, facts, err := query.ViewBriefOf(exported) // the views' brief
 	if err != nil {
 		t.Fatalf("%s: the brief of the JSON export fails: %v", what, err)
 	}
@@ -311,8 +310,8 @@ func (w *flowWorld) readFlag(flag string, args ...string) []byte {
 
 // openTasks reads `whosaidso show` on both surfaces (same facts, same watermark,
 // via read) and keeps the TASK records whose status is not CLOSED, IN FLIGHT
-// included. That is exactly what `whosaidso task todo` selected before the owner
-// removed the verb as redundant (R12); the todo preset's sections differ.
+// included. That is exactly what `whosaidso task todo` selected before the verb
+// was removed as redundant; the todo preset's sections differ.
 func (w *flowWorld) openTasks() []any {
 	w.t.Helper()
 	var open []any
@@ -419,25 +418,25 @@ type flowTask struct {
 	attempt model.ID
 }
 
-// task admits a task and an attempt held by the lane.
+// task admits a task and an attempt held by the agent.
 func (w *flowWorld) task(intent string) flowTask {
 	w.t.Helper()
 	prov := model.Provenance{SourceRefs: []model.ArtifactRef{}}
 	spec := model.TaskSpec{Intent: intent, Subject: "the flow fixture", Scope: w.scope, NonGoals: []string{"production writes"},
 		AcceptanceCriteria: []model.AcceptanceCriterion{{ID: w.id(), Revision: 1, Criterion: "the fixture measurement is delivered"}},
-		ContextRefs:        []model.RecordRef{}, ConstraintRefs: []model.RecordRef{}, Prerequisites: []model.Prerequisite{}, NextActor: model.Actor{ID: flowLane}}
+		ContextRefs:        []model.RecordRef{}, ConstraintRefs: []model.RecordRef{}, Prerequisites: []model.Prerequisite{}, NextActor: model.Actor{ID: flowAgent}}
 	create := &model.TaskCreate{ID: w.id(), Provenance: prov, Spec: spec}
-	w.mustAdmit(flowLane, create)
+	w.mustAdmit(flowAgent, create)
 	task := flowTask{ref: w.ref(create.ID, 1), spec: spec, attempt: w.id()}
-	w.mustAdmit(flowLane, &model.TaskStart{Task: task.ref, Actor: model.Actor{ID: flowLane}, AttemptID: task.attempt})
+	w.mustAdmit(flowAgent, &model.TaskStart{Task: task.ref, Actor: model.Actor{ID: flowAgent}, AttemptID: task.attempt})
 	return task
 }
 
 // handback captures a receipt through the CLI and returns its packet.
 func (w *flowWorld) handback(attempt model.ID, outcome string, extra ...string) (model.ID, error) {
 	w.t.Helper()
-	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
-	args := append([]string{"handback", "--json", "--command-id", string(w.id()), "--actor", flowLane, "--attempt-id", string(attempt),
+	// Writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	args := append([]string{"handback", "--json", "--command-id", string(w.id()), "--actor", flowAgent, "--attempt-id", string(attempt),
 		"--outcome", outcome, "--reason", "the flow ends this attempt " + outcome, "--next-action", "next: " + outcome}, extra...)
 	out, err := w.cli(nil, args...)
 	if err != nil {
@@ -463,7 +462,7 @@ func flowProofWorld(t *testing.T) *flowWorld {
 		NotAnswered: "production behaviour", ConfigSurface: []string{}, DangerousDefaults: []string{}, ValidRange: "the fixture sweep",
 		ImplementationRef: pvPin(impl, "tools/measure.json"),
 		Validation:        recKnown(model.InstrumentValidation{Ref: pvPin(validation, "validation/measure.json"), Version: "v1"})}}
-	w.mustAdmit(flowLane, claim, instrument)
+	w.mustAdmit(flowAgent, claim, instrument)
 	w.claim, w.instrument = w.ref(claim.ID, 1), w.ref(instrument.ID, 1)
 	w.put("out/result.json", []byte(pvFail))
 	w.fix(w.id(), 1)
@@ -474,7 +473,7 @@ func (w *flowWorld) criterionFix(id model.ID, revision model.Revision) *model.Cr
 	result, population := pvPin([]byte(pvFail), "out/result.json"), pvPin([]byte(pvFail), "out/result.json")
 	result.Selector, population.Selector = model.Selector{Kind: "json-pointer", Pointer: "/results"}, model.Selector{Kind: "json-pointer", Pointer: "/population"}
 	target := json.Number("0.05")
-	return &model.CriterionFix{Claim: w.claim, CriterionID: id, Revision: revision, Author: model.Actor{ID: flowLane}, SourceRefs: []model.ArtifactRef{},
+	return &model.CriterionFix{Claim: w.claim, CriterionID: id, Revision: revision, Author: model.Actor{ID: flowAgent}, SourceRefs: []model.ArtifactRef{},
 		Expression: model.CriterionExpression{ResultSelector: result, Unit: "mm", Population: model.Population{Identity: "pose sweep", Selector: population, Denominator: "poses"},
 			Operator: model.Less, Target: model.Scalar{Type: "number", Number: &target}, Reducer: model.All},
 		Policy: model.EvaluationPolicy{Inclusion: "entire-criterion-family", Retry: "retain-all"}}
@@ -482,7 +481,7 @@ func (w *flowWorld) criterionFix(id model.ID, revision model.Revision) *model.Cr
 
 func (w *flowWorld) fix(id model.ID, revision model.Revision) {
 	w.t.Helper()
-	w.mustAdmit(flowLane, w.criterionFix(id, revision))
+	w.mustAdmit(flowAgent, w.criterionFix(id, revision))
 	w.criterion = model.CriterionRef{Claim: w.claim, CriterionID: id, Revision: revision}
 	time.Sleep(2 * time.Millisecond) // the criterion's bundle strictly precedes any launch
 }
@@ -491,12 +490,12 @@ func (w *flowWorld) fix(id model.ID, revision model.Revision) {
 func (w *flowWorld) run(script string) (model.ID, []model.ID, error) {
 	w.t.Helper()
 	w.put("tools/run.sh", []byte(script))
-	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
-	out, err := w.cli(nil, "run", "--json", "--actor", flowLane, "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),
+	// Writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	out, err := w.cli(nil, "run", "--json", "--actor", flowAgent, "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),
 		"--claim", string(w.claim.RecordID), "--claim-revision", "1", "--criterion-id", string(w.criterion.CriterionID),
 		"--criterion-revision", strconv.FormatUint(uint64(w.criterion.Revision), 10), "--", "/bin/sh", "tools/run.sh")
 	var result struct {
-		// whosaidso run prints snake_case keys (coordinator change, in the open).
+		// whosaidso run prints snake_case keys.
 		Envelope    model.InvocationEnvelope `json:"envelope"`
 		StartPacket model.PacketRef          `json:"start_packet"`
 		SealPacket  model.PacketRef          `json:"seal_packet"`
@@ -537,16 +536,16 @@ func (w *flowWorld) proofEvent(members map[model.ID]string) *model.ProofAdmit {
 	sort.Strings(ids)
 	for _, id := range ids {
 		evidence = append(evidence, model.ObservationDisposition{InvocationRef: model.InvocationRef{Project: w.project, InvocationID: model.ID(id)},
-			Disposition: members[model.ID(id)], Reason: "dispositioned by the lane's judgment"})
+			Disposition: members[model.ID(id)], Reason: "dispositioned by the agent's judgment"})
 	}
-	// R14.1: a new proof states its verdict.
+	// A new proof states its verdict.
 	return &model.ProofAdmit{Claim: w.claim, CriterionRef: w.criterion, Evidence: evidence, Verdict: "supports",
-		Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: flowLane}, Reason: "the complete family satisfies the frozen criterion"}}
+		Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: flowAgent}, Reason: "the complete family satisfies the frozen criterion"}}
 }
 
 func (w *flowWorld) prove(members map[model.ID]string) error {
 	w.t.Helper()
-	return w.review("accepted", w.capture(flowLane, w.proofEvent(members)))
+	return w.review("accepted", w.capture(flowAgent, w.proofEvent(members)))
 }
 
 func (w *flowWorld) claimStatus() string {
@@ -554,7 +553,7 @@ func (w *flowWorld) claimStatus() string {
 	return flowStr(w.record(w.claim.RecordID), "claim", "status")
 }
 
-// handEnvelope is a lane's hand-captured start envelope under the current
+// handEnvelope is an agent's hand-captured start envelope under the current
 // criterion; seal completes it with one output, out/result.json.
 func (w *flowWorld) handEnvelope(id model.ID, started time.Time) model.InvocationEnvelope {
 	unknownMap := recUnknown[map[string]model.Availability[model.Scalar]]("not launched")
@@ -650,7 +649,7 @@ func TestFlowHonestStopping(t *testing.T) {
 			t.Errorf("%s: expected task %s, got %s", c.outcome, c.want.status, got)
 		}
 		if got := flowStr(r, "task", "revision"); got != "1" {
-			t.Errorf("%s: the receipt changed the task's revision to %s; its scope is not the lane's to amend", c.outcome, got)
+			t.Errorf("%s: the receipt changed the task's revision to %s; its scope is not the agent's to amend", c.outcome, got)
 		}
 		if got := flowStr(r, "task", "outcome"); got != "UNKNOWN" {
 			t.Errorf("%s: an open task reports closure outcome %s", c.outcome, got)
@@ -672,7 +671,7 @@ func TestFlowHonestStopping(t *testing.T) {
 		}
 		// The next action is readable from the continuation brief.
 		brief := w.readJSON("continue", string(task.ref.RecordID))
-		attempt := flowGet(brief, "attempts", 0) // R19: continue's own attempts section
+		attempt := flowGet(brief, "attempts", 0) // continue's own attempts section
 		if flowStr(attempt, "outcome") != c.outcome || flowStr(attempt, "next_action") != "next: "+c.outcome || flowStr(attempt, "live") != "false" {
 			t.Errorf("%s: continue does not carry the receipt's outcome and next action: %v", c.outcome, attempt)
 		}
@@ -686,7 +685,7 @@ func TestFlowHonestStopping(t *testing.T) {
 		}
 		section := map[string]string{"READY": "ready", "BLOCKED": "blocked"}[c.want.status]
 		listed := false
-		for _, rec := range flowList(w.read("todo"), section) { // R19: todo's own sections
+		for _, rec := range flowList(w.read("todo"), section) { // todo's own sections
 			listed = listed || flowStr(rec, "fact", "key", "id") == string(task.ref.RecordID)
 		}
 		if !listed {
@@ -710,8 +709,8 @@ func TestFlowHonestStopping(t *testing.T) {
 	}
 }
 
-// DATUM-CONTRACT (out-of-scope): "Preserve the owed work; propose
-// reassignment." The command's own usage says out-of-scope "needs a resume
+// An out-of-scope stop must preserve the owed work and propose
+// reassignment. The command's own usage says out-of-scope "needs a resume
 // hold with an authored reassignment criterion and actor". The gate checks
 // only the hold's reason, so a resume hold that names nobody is admitted and
 // the task waits on an unknown actor: the work is preserved, but no
@@ -760,7 +759,7 @@ func TestFlowProof(t *testing.T) {
 		t.Fatalf("control: the claim must read PROVEN with one proof, got %s", flowStr(claim, "claim", "status"))
 	}
 	w.read("history", string(w.claim.RecordID))
-	w.read("show") // R19: state is bare show
+	w.read("show") // state is bare show
 
 	notProven := func(w *flowWorld, what string) {
 		t.Helper()
@@ -789,7 +788,7 @@ func TestFlowProof(t *testing.T) {
 			t.Fatalf("control: the reviewer may turn the failing run away: %v", err)
 		}
 		pass := w.admittedRun(pvPass)
-		w.refused("proof omitting a rejected family member (R10.3)", func() error { return w.prove(map[model.ID]string{pass: "supports"}) })
+		w.refused("proof omitting a rejected family member", func() error { return w.prove(map[model.ID]string{pass: "supports"}) })
 		notProven(w, "rejected run left out")
 	})
 
@@ -799,8 +798,8 @@ func TestFlowProof(t *testing.T) {
 		failed := w.admittedRun(pvFail)
 		w.fix(w.criterion.CriterionID, 2)
 		pass := w.admittedRun(pvPass)
-		w.refused("proof under revision 2 omitting revision 1's failing run (R10.2)", func() error { return w.prove(map[model.ID]string{pass: "supports"}) })
-		w.refused("revision 1's failing run offered as support (R10.2)", func() error {
+		w.refused("proof under revision 2 omitting revision 1's failing run", func() error { return w.prove(map[model.ID]string{pass: "supports"}) })
+		w.refused("revision 1's failing run offered as support", func() error {
 			return w.prove(map[model.ID]string{pass: "supports", failed: "supports"})
 		})
 		notProven(w, "earlier revision's failing run left out")
@@ -819,10 +818,10 @@ func TestFlowProof(t *testing.T) {
 		w.put("corrections/retract.json", body)
 		corrective := pvPin(body, "corrections/retract.json")
 		output := pvOutput([]byte(pvFail), "out/result.json").Ref()
-		w.mustAdmit(flowLane, &model.Correction{Target: model.CorrectionTarget{Kind: "support", Support: &model.SupportLink{Dependent: w.claim, Evidence: output}},
+		w.mustAdmit(flowAgent, &model.Correction{Target: model.CorrectionTarget{Kind: "support", Support: &model.SupportLink{Dependent: w.claim, Evidence: output}},
 			AffectedRevisions: []model.RecordRef{w.claim}, Reason: "the failing reading is disputed", CorrectiveRef: corrective})
 		for _, disposition := range []string{"inapplicable", "inconclusive", "contradicts"} {
-			w.refused("a corrected contradicting run dispositioned "+disposition+" (R10.2)", func() error {
+			w.refused("a corrected contradicting run dispositioned "+disposition, func() error {
 				return w.prove(map[model.ID]string{pass: "supports", failed: disposition})
 			})
 		}
@@ -836,7 +835,7 @@ func TestFlowProof(t *testing.T) {
 		criterion := w.id()
 		w.criterion = model.CriterionRef{Claim: w.claim, CriterionID: criterion, Revision: 1}
 		_, events := w.handRun(time.Now(), pvPass)
-		packet := w.capture(flowLane, events...)
+		packet := w.capture(flowAgent, events...)
 		time.Sleep(2 * time.Millisecond)
 		w.fix(criterion, 1)
 		w.refused("a run captured before its criterion was fixed", func() error { return w.review("accepted", packet) })
@@ -844,13 +843,12 @@ func TestFlowProof(t *testing.T) {
 	})
 }
 
-// DATUM-CONTRACT criterion.fix: "the proof criterion, frozen before
-// execution". The gate compares the criterion's admission time with the
+// The proof criterion is frozen before execution. The gate compares the criterion's admission time with the
 // start's authored started_at and nothing else. A run captured (and its
 // result seen) BEFORE the criterion existed is admitted when its start simply
 // claims a later started_at, and the claim reaches PROVEN on a criterion
 // written after the reading. The packet's own captured_at, which intake
-// records and the lane does not author, already shows the run came first.
+// records and the agent does not author, already shows the run came first.
 func TestFlowCriterionFrozenIsCheckedAgainstTheCaptureNotTheAuthoredStart(t *testing.T) {
 	t.Parallel()
 	w := flowProofWorld(t)
@@ -858,10 +856,10 @@ func TestFlowCriterionFrozenIsCheckedAgainstTheCaptureNotTheAuthoredStart(t *tes
 	criterion := w.id()
 	w.criterion = model.CriterionRef{Claim: w.claim, CriterionID: criterion, Revision: 1}
 	honestRun, honest := w.handRun(time.Now(), pvPass)
-	honestPacket := w.capture(flowLane, honest...)
+	honestPacket := w.capture(flowAgent, honest...)
 	// The same run, captured at the same moment, claiming to start an hour later.
 	late, dated := w.handRun(time.Now().Add(time.Hour), pvPass)
-	datedPacket := w.capture(flowLane, dated...)
+	datedPacket := w.capture(flowAgent, dated...)
 	time.Sleep(2 * time.Millisecond)
 	w.fix(criterion, 1)
 	w.refused("control: a run captured before its criterion", func() error { return w.review("accepted", honestPacket) })
@@ -869,7 +867,7 @@ func TestFlowCriterionFrozenIsCheckedAgainstTheCaptureNotTheAuthoredStart(t *tes
 		t.Fatal(err)
 	}
 	var captured string
-	for _, p := range flowList(w.read("todo"), "packets_not_accepted") { // R19: intake pending is a todo section
+	for _, p := range flowList(w.read("todo"), "packets_not_accepted") { // intake pending is a todo section
 		if flowStr(p, "command_id") == string(datedPacket) {
 			captured = flowStr(p, "packet", "captured_at")
 		}
@@ -894,8 +892,8 @@ func TestFlowAcceptance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w.put("flow-lane-delivery.json", refs)
-	packet, err := w.handback(task.attempt, "success", "--delivery-refs", filepath.Join(w.root, "flow-lane-delivery.json"))
+	w.put("flow-agent-delivery.json", refs)
+	packet, err := w.handback(task.attempt, "success", "--delivery-refs", filepath.Join(w.root, "flow-agent-delivery.json"))
 	if err != nil {
 		t.Fatalf("control: a success receipt captures: %v", err)
 	}
@@ -907,7 +905,7 @@ func TestFlowAcceptance(t *testing.T) {
 		t.Fatalf("success must land awaiting acceptance, got %s %v", flowStr(r, "task", "status"), flowGet(r, "task", "reasons"))
 	}
 	awaiting := false
-	for _, rec := range flowList(w.read("todo"), "awaiting_acceptance") { // R19: todo's own section
+	for _, rec := range flowList(w.read("todo"), "awaiting_acceptance") { // todo's own section
 		awaiting = awaiting || flowStr(rec, "fact", "key", "id") == string(task.ref.RecordID)
 	}
 	if !awaiting {
@@ -918,12 +916,12 @@ func TestFlowAcceptance(t *testing.T) {
 	ruling := []byte(`{"ruling":"accepted: report v1 is delivered"}`)
 	w.put("rulings/accept.json", ruling)
 	rulingRef := pvPin(ruling, "rulings/accept.json")
-	w.mustAdmit(flowLane, &model.SourceIntake{SourceID: w.id(), SourceRef: rulingRef, OriginalDigest: rulingRef.Content.SHA256, Length: rulingRef.Content.Length,
+	w.mustAdmit(flowAgent, &model.SourceIntake{SourceID: w.id(), SourceRef: rulingRef, OriginalDigest: rulingRef.Content.SHA256, Length: rulingRef.Content.Length,
 		Speaker: model.Actor{ID: "owner"}, Referents: []model.RecordRef{task.ref}})
 	scope := task.spec.Scope
 	scope.ContextRefs = []model.RecordRef{task.ref}
 	closure := func(witnessed bool) *model.TaskClose {
-		c := &model.TaskClose{Task: task.ref, Outcome: model.ClosureSuccess, // R15.1: the authority is optional, so a pointer.
+		c := &model.TaskClose{Task: task.ref, Outcome: model.ClosureSuccess, // The authority is optional, so a pointer.
 			Authority:             &model.Authority{Actor: model.Actor{ID: "owner"}, SourceRef: rulingRef, Selector: model.Selector{Kind: "json-pointer", Pointer: "/ruling"}, Scope: scope},
 			AcceptanceWitnessRefs: []model.AcceptanceWitness{}, DeliveryWitnessRefs: []model.ArtifactRef{}}
 		if witnessed {
@@ -963,9 +961,9 @@ func TestFlowRecovery(t *testing.T) {
 	pass := w.admittedRun(pvPass)
 
 	// Kill a real `whosaidso run` after its producer is running.
-	w.put("tools/run.sh", []byte("touch flow-lane-started\nwhile kill -0 $PPID 2>/dev/null; do sleep 0.05; done\n"))
-	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
-	cmd := exec.Command(pvWhoSaidSo(t), "run", "--json", "--actor", flowLane, "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),
+	w.put("tools/run.sh", []byte("touch flow-agent-started\nwhile kill -0 $PPID 2>/dev/null; do sleep 0.05; done\n"))
+	// Writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	cmd := exec.Command(pvWhoSaidSo(t), "run", "--json", "--actor", flowAgent, "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),
 		"--claim", string(w.claim.RecordID), "--claim-revision", "1", "--criterion-id", string(w.criterion.CriterionID), "--criterion-revision", "1",
 		"--", "/bin/sh", "tools/run.sh")
 	cmd.Dir = w.root
@@ -978,7 +976,7 @@ func TestFlowRecovery(t *testing.T) {
 	}
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		if _, err := os.Stat(filepath.Join(w.root, "flow-lane-started")); err == nil {
+		if _, err := os.Stat(filepath.Join(w.root, "flow-agent-started")); err == nil {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -996,7 +994,7 @@ func TestFlowRecovery(t *testing.T) {
 	}
 	// Its intent was persisted before launch and is pending in intake.
 	var deadStart, dead model.ID
-	for _, p := range flowList(w.read("todo"), "packets_not_accepted") { // R19: intake pending is a todo section
+	for _, p := range flowList(w.read("todo"), "packets_not_accepted") { // intake pending is a todo section
 		for _, e := range flowList(p, "packet", "events") {
 			if flowStr(e, "type") == "invocation.start" && flowStr(p, "disposition") == "pending" {
 				deadStart, dead = model.ID(flowStr(p, "command_id")), model.ID(flowStr(e, "data", "envelope", "invocation_id"))
@@ -1015,15 +1013,15 @@ func TestFlowRecovery(t *testing.T) {
 	w.refused("proof listing an unsealed family member as inconclusive", func() error {
 		return w.prove(map[model.ID]string{pass: "supports", dead: "inconclusive"})
 	})
-	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
-	out, err := w.cli(nil, "reconcile", "--json", "--actor", flowLane, "--invocation-id", string(dead), "--reason", "the observer was killed mid-run")
+	// Writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	out, err := w.cli(nil, "reconcile", "--json", "--actor", flowAgent, "--invocation-id", string(dead), "--reason", "the observer was killed mid-run")
 	if err != nil {
 		t.Fatalf("control: the dead run reconciles: %v", err)
 	}
 	if err := w.review("accepted", flowPacket(t, out)); err != nil {
 		t.Fatalf("control: the reconciliation seal admits: %v", err)
 	}
-	for _, run := range flowList(w.read("show"), "runs") { // R19: bare show carries every run
+	for _, run := range flowList(w.read("show"), "runs") { // bare show carries every run
 		if flowStr(run, "invocation") == string(dead) {
 			if flowStr(run, "sealed") != "true" || flowStr(run, "outcome", "state") != "UNKNOWN" || flowStr(run, "observed_at", "state") != "UNKNOWN" {
 				t.Errorf("the reconciled run must read sealed with an UNKNOWN outcome and observation, got %v", run)
@@ -1039,7 +1037,7 @@ func TestFlowRecovery(t *testing.T) {
 
 	// Delete everything that is not the ledger, the config or intake: every
 	// read must answer exactly as before.
-	// R19: the four views replace now, state, instruments, intake pending and context.
+	// The four views replace now, state, instruments, intake pending and context.
 	reads := [][]string{{"show"}, {"show", string(w.claim.RecordID)}, {"history"}, {"history", string(w.claim.RecordID)},
 		{"todo"}, {"show", "--kind", "instrument"}, {"show", "--kind", "claim"}}
 	before := map[string]map[string]any{}
@@ -1092,7 +1090,7 @@ func (w *flowWorld) decision() (model.RecordRef, model.ArtifactRef) {
 	w.t.Helper()
 	open := &model.DecisionOpen{ID: w.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.DecisionSpec{Question: "ship revision one?", Options: []string{"ship", "hold"}, WaitingActor: model.Actor{ID: "owner"}, Scope: w.scope}}
-	w.mustAdmit(flowLane, open)
+	w.mustAdmit(flowAgent, open)
 	ruling := []byte(`{"ruling":"ship revision one"}`)
 	w.put("rulings/ship.json", ruling)
 	return w.ref(open.ID, 1), pvPin(ruling, "rulings/ship.json")
@@ -1108,8 +1106,8 @@ func TestFlowDecisionAndCorrection(t *testing.T) {
 	w := flowNew(t)
 	decision, source := w.decision()
 	d := w.record(decision.RecordID)
-	if flowStr(d, "decision", "status") != "OPEN" || flowStr(d, "author", "actor", "id") != flowLane {
-		t.Fatalf("control: an opened decision reads OPEN, authored by the lane, got %s by %v", flowStr(d, "decision", "status"), flowGet(d, "author"))
+	if flowStr(d, "decision", "status") != "OPEN" || flowStr(d, "author", "actor", "id") != flowAgent {
+		t.Fatalf("control: an opened decision reads OPEN, authored by the agent, got %s by %v", flowStr(d, "decision", "status"), flowGet(d, "author"))
 	}
 	unnamed := w.dispose(decision, source, "ship revision one", "")
 	unnamed.Authority.Actor = model.Actor{UnknownReason: "the scribe did not record who ruled"}
@@ -1123,13 +1121,13 @@ func TestFlowDecisionAndCorrection(t *testing.T) {
 		t.Fatalf("decision.dispose with a quote and a named authority must admit: %v", err)
 	}
 	d = w.record(decision.RecordID)
-	ruling := flowGet(d, "decision", "rulings", 0) // R19: the record detail names a decision's dispositions its rulings
+	ruling := flowGet(d, "decision", "rulings", 0) // the record detail names a decision's dispositions its rulings
 	if flowStr(d, "decision", "status") != "DECIDED" || flowStr(ruling, "author", "actor", "id") != "scribe" ||
 		flowStr(ruling, "disposition", "authority", "actor", "id") != "owner" || flowStr(ruling, "disposition", "quote") != "ship revision one" {
 		t.Errorf("show must read DECIDED with author scribe, authority owner and the quote, got %s %v", flowStr(d, "decision", "status"), ruling)
 	}
 	found := false
-	for _, e := range flowList(w.read("history", string(decision.RecordID)), "events") { // R19: the history view's events
+	for _, e := range flowList(w.read("history", string(decision.RecordID)), "events") { // the history view's events
 		found = found || flowStr(e, "event", "type") == "decision.dispose" && flowStr(e, "author", "actor", "id") == "scribe"
 	}
 	if !found {
@@ -1149,7 +1147,7 @@ func TestFlowDecisionAndCorrection(t *testing.T) {
 	body := []byte(`{"missed":"pose-c"}`)
 	p.put("corrections/missed.json", body)
 	corrective := pvPin(body, "corrections/missed.json")
-	p.mustAdmit(flowLane, &model.Correction{Target: model.CorrectionTarget{Kind: "support", Support: &model.SupportLink{Dependent: p.claim, Evidence: corrective}},
+	p.mustAdmit(flowAgent, &model.Correction{Target: model.CorrectionTarget{Kind: "support", Support: &model.SupportLink{Dependent: p.claim, Evidence: corrective}},
 		AffectedRevisions: []model.RecordRef{p.claim}, Reason: "the sweep missed a pose", CorrectiveRef: corrective})
 	c = p.record(p.claim.RecordID)
 	if flowStr(c, "claim", "status") != "PROVEN" || len(flowList(c, "claim", "proofs")) != 1 {
@@ -1159,7 +1157,7 @@ func TestFlowDecisionAndCorrection(t *testing.T) {
 		t.Errorf("a correction must remove current support, got %v, current %s", flowGet(c, "claim", "support"), flowStr(c, "current_support"))
 	}
 	stated := false
-	for _, v := range flowList(p.read("show", "--kind", "claim"), "records") { // R19: state's claims are show --kind claim
+	for _, v := range flowList(p.read("show", "--kind", "claim"), "records") { // state's claims are show --kind claim
 		if flowStr(v, "ref", "record_id") == string(p.claim.RecordID) {
 			stated = flowStr(v, "current_support") == "FALSE" && len(flowList(v, "corrections")) == 1
 		}
@@ -1170,9 +1168,9 @@ func TestFlowDecisionAndCorrection(t *testing.T) {
 	p.refused("a second proof over an unresolved correction", func() error { return p.prove(map[model.ID]string{run: "supports"}) })
 }
 
-// R10.1 revised: an owner act carries "a non-blank verbatim ruling quote and a
-// named authority"; the Authority type exists so admission can "resolve an
-// actor's exact words", with the selector choosing the ruling inside the
+// An owner act carries a non-blank verbatim ruling quote and a named
+// authority; the Authority type exists so admission can resolve an actor's
+// exact words, with the selector choosing the ruling inside the
 // pinned source. Admission resolves the source and checks the quote is not
 // blank, but never compares the quote with the words the selector reads. A
 // disposition can therefore record the owner as having said "ship it" while
@@ -1206,31 +1204,31 @@ func TestFlowRemainingEvents(t *testing.T) {
 	task := w.task("take over and reconcile")
 	amended := task.spec
 	amended.Intent = "take over, reconcile, and say so"
-	w.mustAdmit(flowLane, &model.TaskAmend{Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
+	w.mustAdmit(flowAgent, &model.TaskAmend{Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Target: task.ref, Replacement: amended})
 	r := w.record(task.ref.RecordID)
 	if flowStr(r, "task", "revision") != "2" || flowStr(r, "fact", "task", "intent") != amended.Intent || flowStr(r, "task", "status") != "IN FLIGHT" {
 		t.Fatalf("task.amend must read revision 2 with the new intent and leave the attempt live, got %s %s", flowStr(r, "task", "revision"), flowStr(r, "task", "status"))
 	}
 	current := w.ref(task.ref.RecordID, 2)
-	stopped := []byte(`{"stopped":"lane confirmed it stopped"}`)
+	stopped := []byte(`{"stopped":"agent confirmed it stopped"}`)
 	w.put("confirmations/stopped.json", stopped)
 	second := w.id()
-	w.mustAdmit("lane2", &model.TaskTakeover{Task: current, Actor: model.Actor{ID: "lane2"}, AttemptID: second, PriorAttemptID: task.attempt,
+	w.mustAdmit("agent2", &model.TaskTakeover{Task: current, Actor: model.Actor{ID: "agent2"}, AttemptID: second, PriorAttemptID: task.attempt,
 		StoppedConfirmationRef: pvPin(stopped, "confirmations/stopped.json")})
 	holders := map[string]bool{}
 	for _, h := range flowList(w.record(task.ref.RecordID), "task", "attempt_holders") {
 		holders[flowStr(h, "actor", "id")] = true
 	}
-	if !holders["lane2"] || !holders[flowLane] {
+	if !holders["agent2"] || !holders[flowAgent] {
 		t.Errorf("after task.takeover both the new holder and the unanswered prior holder must be visible, got %v", holders)
 	}
 	stop, err := w.handback(task.attempt, "stopped")
 	if err != nil || w.review("accepted", stop) != nil {
 		t.Fatalf("control: the prior holder's receipt admits: %v", err)
 	}
-	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
-	out, err := w.cli(nil, "handback", "--json", "--command-id", string(w.id()), "--actor", "lane2", "--attempt-id", string(second), "--outcome", "runner-died",
+	// Writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	out, err := w.cli(nil, "handback", "--json", "--command-id", string(w.id()), "--actor", "agent2", "--attempt-id", string(second), "--outcome", "runner-died",
 		"--reason", "the runner host rebooted", "--next-action", "reconcile the lost run", "--reconciliation-owed")
 	if err != nil || w.review("accepted", flowPacket(t, out)) != nil {
 		t.Fatalf("control: the new holder's runner-died receipt admits: %v", err)
@@ -1239,10 +1237,10 @@ func TestFlowRemainingEvents(t *testing.T) {
 		t.Fatalf("reconciliation owed must block, got %s", got)
 	}
 	hold := w.id()
-	w.mustAdmit("lane2", &model.BlockerHold{Task: current, BlockerID: hold, Reason: model.BlockerReconciliation, Actor: model.Actor{ID: "lane2"}, Criterion: "the lost run is reconciled"})
+	w.mustAdmit("agent2", &model.BlockerHold{Task: current, BlockerID: hold, Reason: model.BlockerReconciliation, Actor: model.Actor{ID: "agent2"}, Criterion: "the lost run is reconciled"})
 	witness := []byte(`{"reconciled":"no run outlived the reboot"}`)
 	w.put("confirmations/reconciled.json", witness)
-	w.mustAdmit("lane2", &model.BlockerClear{Task: current, BlockerID: hold, HoldRef: model.BlockerRef{Task: current, BlockerID: hold},
+	w.mustAdmit("agent2", &model.BlockerClear{Task: current, BlockerID: hold, HoldRef: model.BlockerRef{Task: current, BlockerID: hold},
 		ResolvingWitness: pvPin(witness, "confirmations/reconciled.json")})
 	if got := flowStr(w.record(task.ref.RecordID), "task", "status"); got != "READY" {
 		t.Errorf("blocker.clear of the reconciliation must leave the task READY, got %s", got)
@@ -1250,7 +1248,7 @@ func TestFlowRemainingEvents(t *testing.T) {
 
 	// Decision revision.
 	decision, _ := w.decision()
-	w.mustAdmit(flowLane, &model.DecisionRevise{Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
+	w.mustAdmit(flowAgent, &model.DecisionRevise{Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Target: decision, Replacement: model.DecisionSpec{Question: "ship revision two?", Options: []string{"ship", "hold"}, WaitingActor: model.Actor{ID: "owner"}, Scope: w.scope}})
 	d := w.record(decision.RecordID)
 	if flowStr(d, "fact", "key", "revision") != "2" || flowStr(d, "decision", "status") != "OPEN" || flowStr(d, "fact", "decision", "question") != "ship revision two?" {
@@ -1263,13 +1261,13 @@ func TestFlowRemainingEvents(t *testing.T) {
 	if err := p.prove(map[model.ID]string{run: "supports"}); err != nil {
 		t.Fatalf("control: fixture reaches PROVEN: %v", err)
 	}
-	p.mustAdmit(flowLane, &model.TrustWithdraw{Instrument: p.instrument, Scope: p.scope, RevalidationCondition: "re-run against a known sweep"})
+	p.mustAdmit(flowAgent, &model.TrustWithdraw{Instrument: p.instrument, Scope: p.scope, RevalidationCondition: "re-run against a known sweep"})
 	c := p.record(p.claim.RecordID)
 	if flowStr(c, "claim", "status") != "PROVEN" || flowStr(c, "claim", "support", "active_trust") != "FALSE" || flowStr(c, "current_support") != "FALSE" {
 		t.Errorf("trust.withdraw must keep PROVEN history and remove current support, got %s %v", flowStr(c, "claim", "status"), flowGet(c, "claim", "support"))
 	}
 	spec := model.ClaimSpec{Assertion: "every pose is below 0.04 mm", Falsifier: "a pose reaches 0.04 mm", Scope: p.scope, ExternalRefs: []model.ExternalReference{}}
-	p.mustAdmit(flowLane, &model.ClaimRevise{Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Target: p.claim, Replacement: spec})
+	p.mustAdmit(flowAgent, &model.ClaimRevise{Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Target: p.claim, Replacement: spec})
 	c = p.record(p.claim.RecordID)
 	if flowStr(c, "fact", "key", "revision") != "2" || flowStr(c, "claim", "status") != "UNMEASURED" {
 		t.Errorf("a revised claim must not borrow revision 1's proof: got revision %s %s", flowStr(c, "fact", "key", "revision"), flowStr(c, "claim", "status"))
@@ -1281,9 +1279,9 @@ func TestFlowRemainingEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	instrument.BlindTo = "unmeasured poses and any pose outside the fixture sweep"
-	p.mustAdmit(flowLane, &model.InstrumentRevise{Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Target: p.instrument, Replacement: instrument})
+	p.mustAdmit(flowAgent, &model.InstrumentRevise{Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Target: p.instrument, Replacement: instrument})
 	listed := false
-	for _, v := range flowList(p.read("show", "--kind", "instrument"), "records") { // R19: instruments is show --kind instrument
+	for _, v := range flowList(p.read("show", "--kind", "instrument"), "records") { // instruments is show --kind instrument
 		listed = listed || flowStr(v, "ref", "record_id") == string(p.instrument.RecordID) && flowStr(v, "ref", "revision") == "2" && flowStr(v, "instrument", "blind_to") == instrument.BlindTo
 	}
 	if !listed {

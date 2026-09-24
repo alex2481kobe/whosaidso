@@ -1,6 +1,6 @@
 package write
 
-// Tests for decision.dispose admission (R10.1 as overruled): the contract's
+// Tests for decision.dispose admission: the contract's
 // fields, a nonblank ruling quote and named authority, the packet author kept
 // as whoever wrote it, and superseded history staying visible. Decision
 // open/revise live in gate_close_test.go; still-refused operations live in
@@ -57,7 +57,7 @@ func TestDecisionDisposeRecordsTheRulingAndItsRealAuthor(t *testing.T) {
 	for _, disposition := range []string{"approved", "rejected", "withdrawn"} {
 		t.Run(disposition, func(t *testing.T) {
 			w := newDisposeWorld(t)
-			// An agent (lane-c2) records the owner's ruling; it is not the owner.
+			// An agent (agent-c2) records the owner's ruling; it is not the owner.
 			bundle := w.f.accept(w.f.capture(nil, w.dispose(1, disposition)))
 			d := w.decision(t, 1)
 			if d.Status != reduce.StatusDecided || len(d.Dispositions) != 1 {
@@ -77,10 +77,10 @@ func TestDecisionDisposeRecordsTheRulingAndItsRealAuthor(t *testing.T) {
 				t.Fatalf("packet author missing: %+v", r.Authors)
 			}
 			for _, p := range r.Packets {
-				if author := r.Authors[p.CommandID]; author.ID != "lane-c2" {
+				if author := r.Authors[p.CommandID]; author.ID != "agent-c2" {
 					t.Fatalf("packet author rewritten or missing: %+v", author)
 				}
-				// C39: the comparison is computed from the recorded author.
+				// The comparison is computed from the recorded author.
 				projected, ok := w.f.snapshot().Review(reduce.ReviewKey{Project: w.f.project.ID, CommandID: p.CommandID})
 				if !ok || projected.SelfAdmission != model.SelfAdmissionFalse {
 					t.Fatalf("author/admitter comparison changed: %+v", projected)

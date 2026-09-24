@@ -56,16 +56,16 @@ func TestFreshProcessesExplainAdmittedWhoSaidSoConstructionTaskAndSource(t *test
 		t.Fatal(err)
 	}
 	task := typed.(*model.TaskCreate)
-	// This is the actual U09 obligation, admitted through the real gate in an
-	// isolated project. It does not claim to complete the user's canonical task.
-	body := []byte("Build U09 of WhoSaidSo: the first usable read slice. Go, standard library only. Text and JSON use one structure. Include task revision, attempt holder, blockers, expected next actor, and ledger watermark.")
-	path := filepath.Join(root, "u09-request.txt")
+	// This is a real read-slice obligation, admitted through the real gate in an
+	// isolated project.
+	body := []byte("Build the first usable read slice of WhoSaidSo. Go, standard library only. Text and JSON use one structure. Include task revision, attempt holder, blockers, expected next actor, and ledger watermark.")
+	path := filepath.Join(root, "read-slice-request.txt")
 	if err := os.WriteFile(path, body, 0600); err != nil {
 		t.Fatal(err)
 	}
 	artifact := model.ArtifactRef{Kind: "content", Content: &model.ContentPin{SHA256: model.HashBytes(body), Length: uint64(len(body)),
 		MediaType: "text/plain", Locators: []model.Locator{}}, Selector: model.Selector{Kind: "whole"}}
-	task.Spec.Intent = "Build U09 of WhoSaidSo: the first usable read slice"
+	task.Spec.Intent = "Build the first usable read slice of WhoSaidSo"
 	task.Spec.Subject = "WhoSaidSo construction"
 	task.Spec.Scope.SourcePaths = []string{"internal/query/query.go", "cmd/whosaidso/read.go"}
 	task.Spec.AcceptanceCriteria[0].Criterion = "a fresh process explains this task and its source"
@@ -84,23 +84,23 @@ func TestFreshProcessesExplainAdmittedWhoSaidSoConstructionTaskAndSource(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	readProcess(t, root, input, "capture", "--command-id", string(cliID(3)), "--actor", "lane", "--blob", path)
-	// R19: intake pending is a section of todo.
+	readProcess(t, root, input, "capture", "--command-id", string(cliID(3)), "--actor", "agent", "--blob", path)
+	// Intake pending is a section of todo.
 	pending := readJSON[query.TodoAnswer](t, readProcess(t, root, nil, "todo", "--json"))
 	if len(pending.PacketsNotAccepted) != 1 || pending.PacketsNotAccepted[0].Disposition != "pending" || pending.Watermark.Sequence != 0 {
-		t.Fatalf("control captured U09 must be visible before admission at watermark 0, got %+v", pending)
+		t.Fatalf("control captured task must be visible before admission at watermark 0, got %+v", pending)
 	}
-	readProcess(t, root, nil, "admit", "--command-id", string(cliID(4)), "--actor", "reviewer", "--outcome", "accepted", "--reason", "admit U09 construction obligation and source", string(cliID(3)))
+	readProcess(t, root, nil, "admit", "--command-id", string(cliID(4)), "--actor", "reviewer", "--outcome", "accepted", "--reason", "admit the read-slice obligation and source", string(cliID(3)))
 	showBytes := readProcess(t, root, nil, "show", "--json", string(task.ID))
 	show := readJSON[query.ShowAnswer](t, showBytes)
 	if len(show.Records) != 1 || show.Records[0].Task.Status != reduce.StatusReady || show.Records[0].Task.Revision != 1 || show.Watermark.Sequence != 1 {
-		t.Fatalf("expected admitted U09 READY revision 1 at watermark 1, got %+v", show)
+		t.Fatalf("expected admitted task READY revision 1 at watermark 1, got %+v", show)
 	}
 	record := show.Records[0]
 	if record.Fact.Task.Intent != task.Spec.Intent || record.Fact.Provenance.SourceRefs[0].Content.SHA256 != artifact.Content.SHA256 || len(record.Sources) != 1 || record.Sources[0].Intake.Speaker.ID != "requesting-owner" {
-		t.Fatalf("fresh read must retain U09 intent, source hash and original speaker separately from author/reviewer, got %+v", record)
+		t.Fatalf("fresh read must retain the task intent, source hash and original speaker separately from author/reviewer, got %+v", record)
 	}
-	// R19: --full is removed; --json is the complete answer.
+	// --full is removed; --json is the complete answer.
 	text := readProcess(t, root, nil, "show", "--json", string(task.ID))
 	if !bytes.Contains(text, []byte(task.Spec.Intent)) || !bytes.Contains(text, []byte(artifact.Content.SHA256)) || !bytes.Contains(text, []byte("watermark")) {
 		t.Fatalf("text must explain the same obligation, source and watermark as JSON, got %s", text)
@@ -135,13 +135,13 @@ func TestFreshProcessesExplainAdmittedWhoSaidSoConstructionTaskAndSource(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	readProcess(t, root, finding, "capture", "--command-id", string(cliID(31)), "--actor", "lane")
+	readProcess(t, root, finding, "capture", "--command-id", string(cliID(31)), "--actor", "agent")
 	readProcess(t, root, nil, "admit", "--command-id", string(cliID(32)), "--actor", "reviewer", "--outcome", "accepted", "--reason", "record finding without claiming measurement", string(cliID(31)))
 	found := readJSON[query.ShowAnswer](t, readProcess(t, root, nil, "show", "--json", string(cliID(30))))
 	if found.Records[0].Claim.Status != reduce.StatusUnmeasured || found.Watermark.Sequence != 2 {
 		t.Fatalf("new finding must enter through capture/admit as UNMEASURED CLAIM at watermark 2, got %+v", found)
 	}
-	readProcess(t, root, finding, "capture", "--command-id", string(cliID(33)), "--actor", "lane")
+	readProcess(t, root, finding, "capture", "--command-id", string(cliID(33)), "--actor", "agent")
 	readProcess(t, root, nil, "admit", "--command-id", string(cliID(34)), "--actor", "reviewer", "--outcome", "rejected", "--reason", "duplicate assertion", string(cliID(33)))
 	rejected := readJSON[query.TodoAnswer](t, readProcess(t, root, nil, "todo", "--json"))
 	if len(rejected.PacketsNotAccepted) != 1 || rejected.PacketsNotAccepted[0].Disposition != "rejected" || rejected.Watermark.Sequence != 3 || !strings.Contains(rejected.PacketsNotAccepted[0].Review.Reason, "duplicate assertion") {
@@ -190,7 +190,7 @@ func TestReadCLIConventionsErrorsAndNoCanonicalWrites(t *testing.T) {
 	}
 }
 
-// R18.2/R19: the replaced verbs and flags are removed with no alias. Each is
+// The replaced verbs and flags are removed with no alias. Each is
 // an unknown command or flag (exit 2), never a quiet answer.
 func TestRemovedVerbsAndFlagsAreUnreachable(t *testing.T) {
 	root, data := cliFixture(t)
@@ -211,7 +211,7 @@ func TestReadCLISelfAdmissionAudit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// C39: the filter answers from the recorded author against the admitter
+	// The filter answers from the recorded author against the admitter
 	// "reviewer" (same, distinct, unknown).
 	refs := []model.PacketRef{}
 	authors := map[model.ID]model.Actor{}
@@ -245,7 +245,7 @@ func TestReadCLISelfAdmissionAudit(t *testing.T) {
 		if len(a.Reviews) != 1 || a.Reviews[0].Key.CommandID != tc.id || a.Reviews[0].SelfAdmission != tc.state || a.Watermark.Sequence != 1 {
 			t.Fatalf("%s selected wrong audit: %+v", tc.flag, a)
 		}
-		// R19: --full is removed; the default text is the brief of the same --json.
+		// --full is removed; the default text is the brief of the same --json.
 		want, _, err := query.ViewBriefOf(exported)
 		if err != nil {
 			t.Fatal(err)
@@ -264,24 +264,46 @@ func TestReadCLISelfAdmissionAudit(t *testing.T) {
 	}
 }
 
-func TestFreshProcessInstrumentsOnThisRepositoryShowUnknownValidation(t *testing.T) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
+// A fresh process lists every admitted instrument with its validation: KNOWN
+// only when one was recorded, UNKNOWN with its reason otherwise, and the text
+// lists attention before the instrument details.
+func TestFreshProcessInstrumentsShowUnknownValidation(t *testing.T) {
+	root, data := cliFixture(t)
+	cliControl(t, root, data)
+	const tool, validation = "#!/bin/sh\necho 1\n", `{"validated":"against a known answer"}`
+	proofWrite(t, root, "tools/measure.sh", tool)
+	proofWrite(t, root, "validation/measure.json", validation)
+	spec := func(v model.Availability[model.InstrumentValidation]) model.InstrumentSpec {
+		return model.InstrumentSpec{QuestionAnswered: "pose penetration depth", BlindTo: "unmeasured poses",
+			NotAnswered: "production behaviour", ConfigSurface: []string{}, DangerousDefaults: []string{}, ValidRange: "the fixture sweep",
+			ImplementationRef: e2ePin(tool, "tools/measure.sh", "text/plain"), Validation: v}
 	}
-	root := filepath.Join(cwd, "..", "..")
-	bindTestHome(t, root)
-	// R19: the instruments preset is show --kind instrument.
+	agent := model.Provenance{SourceRefs: []model.ArtifactRef{}}
+	validated := &model.InstrumentDeclare{ID: cliID(60), Provenance: agent,
+		Spec: spec(e2eKnown(model.InstrumentValidation{Ref: e2ePin(validation, "validation/measure.json", "application/json"), Version: "v1"}))}
+	unvalidated := &model.InstrumentDeclare{ID: cliID(61), Provenance: agent,
+		Spec: spec(model.Availability[model.InstrumentValidation]{State: model.Unknown, Reason: "never checked against a known answer"})}
+	for i, declared := range []*model.InstrumentDeclare{validated, unvalidated} {
+		if err := e2eAdmitOne(t, root, declared, 62+2*i, 63+2*i, "agent"); err != nil {
+			t.Fatalf("control: instrument %d must admit: %v", i, err)
+		}
+	}
+	// The instruments preset is show --kind instrument.
 	answer := readJSON[query.ShowAnswer](t, readProcess(t, root, nil, "show", "--kind", "instrument", "--json"))
-	if answer.Project != "whosaidso/whosaidso" || answer.Watermark.Bundles == 0 || len(answer.Records) == 0 {
-		t.Fatalf("instruments must answer from this repository's own ledger, got %+v", answer.ViewHeader)
+	if answer.Project != "test/cli" || answer.Watermark.Bundles == 0 || len(answer.Records) != 2 {
+		t.Fatalf("instruments must answer from the project's ledger, got %+v", answer.ViewHeader)
 	}
 	// Attention listing is asserted in internal/query; this checks dispatch and rendering.
+	states := map[model.ID]string{}
 	for _, r := range answer.Records {
 		v := r.Instrument
 		if v == nil || v.Validation.State != "KNOWN" && (v.Validation.State != "UNKNOWN" || v.Validation.Reason == "") {
 			t.Fatalf("instrument %s validation must be KNOWN, or UNKNOWN with its reason; got %+v", r.Ref.RecordID, v)
 		}
+		states[r.Ref.RecordID] = v.Validation.State
+	}
+	if states[validated.ID] != "KNOWN" || states[unvalidated.ID] != "UNKNOWN" {
+		t.Fatalf("validation must be KNOWN only where it was recorded, got %v", states)
 	}
 	text := readProcess(t, root, nil, "show", "--kind", "instrument")
 	if !bytes.Contains(text, []byte("\nattention")) || bytes.Index(text, []byte("\nattention")) > bytes.Index(text, []byte("\ninstruments:")) {

@@ -145,7 +145,7 @@ func gateOperation(event model.TypedEvent, author model.Actor) error {
 		// Claims start UNMEASURED. A record's author is its packet's author,
 		// recorded by the review, never a second copy in the record.
 	case *model.InstrumentDeclare:
-		// R9: known validation is admitted when its pinned artifact resolves;
+		// Known validation is admitted when its pinned artifact resolves;
 		// the admitter is the judgment and trust.withdraw revokes it.
 		return gateValidation(e.Spec.Validation)
 	case *model.TaskStart, *model.TaskTakeover, *model.AttemptTerminal, *model.BlockerHold, *model.BlockerClear:
@@ -213,7 +213,7 @@ func gateReference(snapshot reduce.Snapshot, ref model.Reference) (gateKey, bool
 	if ref.Invocation != nil {
 		_, exists := snapshot.Invocation(reduce.InvocationKey{Project: ref.Invocation.Project, InvocationID: ref.Invocation.InvocationID})
 		if !exists && strings.HasPrefix(ref.Path, "evidence[") {
-			// R10.3: a proof may name a run the ledger recorded as rejected;
+			// A proof may name a run the ledger recorded as rejected;
 			// the reducer's proof family checker decides its disposition.
 			exists = snapshot.RejectedRecorded(*ref.Invocation)
 		}

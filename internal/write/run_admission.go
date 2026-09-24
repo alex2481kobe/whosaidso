@@ -20,7 +20,7 @@ type runOwnOutput struct {
 // runAdmitOutputs proves each output a seal declares existed as THIS run's
 // output when its seal is admitted, and returns those verified bytes so
 // materializeAdmission publishes exactly them, without reading them again.
-// An output is a name inside the run and a content pin (R9); its bytes must
+// An output is a name inside the run and a content pin; its bytes must
 // be in the seal packet's own captured blobs. Never from the content store,
 // any other packet or any path: a same-digest copy there (the criterion's
 // example, say) was not produced by this run.

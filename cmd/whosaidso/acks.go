@@ -31,7 +31,7 @@ func joinIDs(ids []model.ID) string {
 }
 
 // selfAdmissions compares each reviewed packet's recorded author with the
-// admitter, as the reducer does (C39): TRUE only for the same known actor,
+// admitter, as the reducer does: TRUE only for the same known actor,
 // FALSE for two distinct known actors, UNKNOWN otherwise.
 func selfAdmissions(b model.Bundle) map[model.ID]model.SelfAdmissionState {
 	out := map[model.ID]model.SelfAdmissionState{}

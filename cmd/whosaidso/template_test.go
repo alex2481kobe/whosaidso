@@ -187,7 +187,7 @@ func fillTemplate(t *testing.T, eventType model.EventType, choices map[string]st
 }
 
 // unattributedReview empties a filled review.admit's event_packets unless it
-// is accepted: every review carries the list (R18.2), and only an accepted
+// is accepted: every review carries the list, and only an accepted
 // review has events before it to attribute. A template skeleton always holds
 // one placeholder entry.
 func unattributedReview(t *testing.T, filled []byte) []byte {
@@ -481,7 +481,7 @@ func cliTree(t *testing.T, root string) string {
 	return strings.Join(lines, "\n")
 }
 
-// R18.2: the model requires a proof's verdict, so the template never offers
+// The model requires a proof's verdict, so the template never offers
 // to omit it, while a truly optional key still reads optional.
 func TestTemplateVerdictIsNotOptional(t *testing.T) {
 	_, notes, err := buildTemplate("proof.admit")

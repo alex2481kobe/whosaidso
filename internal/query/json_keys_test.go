@@ -51,7 +51,7 @@ func richWorld(t *testing.T, p store.Project) {
 	appendEvents(t, p, 106,
 		testTask(2), &model.BlockerHold{Task: testRef(2, 1), BlockerID: testID(80), Reason: model.BlockerResume,
 			Actor: model.Actor{ID: "owner"}, Criterion: "resume is authorized"},
-		&model.DecisionOpen{ID: testID(32), Provenance: prov("lane-c"), Spec: decisionSpec()},
+		&model.DecisionOpen{ID: testID(32), Provenance: prov("agent-c"), Spec: decisionSpec()},
 		&model.TrustWithdraw{Instrument: testRef(10, 1), Scope: testScope(), RevalidationCondition: "rerun the known-answer suite"},
 		&model.Supersede{Prior: testRef(31, 1), Replacement: testRef(32, 1), Reason: "the owner restated the ruling", Authority: &ruling},
 		&model.Correction{Target: model.CorrectionTarget{Kind: "record", Record: ptrRef(testRef(20, 1))},

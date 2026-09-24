@@ -93,7 +93,7 @@ func TestSupersedeOfAnOwnerRulingNeedsItsAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := review.(*model.ReviewAdmit)
-	if len(r.Packets) != 1 || r.Authors[r.Packets[0].CommandID].ID != "lane-c2" {
+	if len(r.Packets) != 1 || r.Authors[r.Packets[0].CommandID].ID != "agent-c2" {
 		t.Fatalf("packet author not recorded: %+v", r.Authors)
 	}
 	if d := w.decision(t, 1); len(d.Dispositions) != 1 {

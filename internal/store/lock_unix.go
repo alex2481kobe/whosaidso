@@ -26,7 +26,7 @@ import (
 // the one a planted symlink could redirect: O_CREATE follows a dangling link
 // and creates its target, wherever that is. O_NOFOLLOW refuses a link as the
 // final component, and the open file must be a regular file, so admission
-// never creates or locks anything outside the ledger directory (R8.1).
+// never creates or locks anything outside the ledger directory.
 func lockAcquire(path string) (*os.File, error) {
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0o644)
 	if errors.Is(err, syscall.ELOOP) {

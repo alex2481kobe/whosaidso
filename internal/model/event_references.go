@@ -11,7 +11,8 @@ import (
 
 // Reference is one exact dependency discovered by the model, with its field path.
 // Exactly one branch is set. Artifact pins are deliberately not record referents;
-// U07 resolves bytes, while U08/U13 use this walker for project ledger references.
+// Evaluation resolves bytes, while admission and the views use this walker for
+// project ledger references.
 type Reference struct {
 	Path       string
 	Record     *RecordRef

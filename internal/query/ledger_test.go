@@ -1,11 +1,12 @@
 package query
 
-// Invariants over this repository's real ledger in .whosaidso/events/. The ledger
-// is append-only, so these tests never pin its size, head or record count;
-// they check properties that must hold of every prefix it can grow into.
+// Invariants every ledger's views must keep, checked over viewsWorld, a
+// synthetic ledger that carries every fact kind the views read: validated,
+// withdrawn and UNKNOWN instruments, proven and unproven claims, held, closed
+// and in-flight tasks with their attempts. Exact answers for each view are
+// asserted in the views_*_test.go files; these properties hold of any prefix.
 
 import (
-	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -15,16 +16,10 @@ import (
 	"whosaidso/internal/store"
 )
 
-func realLedger(t *testing.T) (store.Project, reduce.Snapshot) {
+func invariantLedger(t *testing.T) (store.Project, reduce.Snapshot) {
 	t.Helper()
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	p, err := store.Discover(cwd)
-	if err != nil || p.ID != "whosaidso/whosaidso" {
-		t.Fatalf("the repository's own whosaidso.toml must be discoverable from the query package, got %+v, %v", p, err)
-	}
+	p := testProject(t)
+	viewsWorld(t, p)
 	prefix, err := store.ReadPrefix(p)
 	if err != nil {
 		t.Fatal(err)
@@ -36,8 +31,8 @@ func realLedger(t *testing.T) (store.Project, reduce.Snapshot) {
 	return p, s
 }
 
-func TestRealLedgerInstrumentsNeverHideUnknownValidation(t *testing.T) {
-	p, s := realLedger(t)
+func TestInstrumentsViewNeverHidesUnknownValidation(t *testing.T) {
+	p, s := invariantLedger(t)
 	a := view_(t, p, ViewRequest{View: "show", Kind: "instrument"}).(*ShowAnswer)
 	assertViewHonest(t, a)
 	if a.Watermark.Bundles != int(a.Watermark.Sequence) || a.Watermark.Bundles == 0 {
@@ -67,18 +62,19 @@ func TestRealLedgerInstrumentsNeverHideUnknownValidation(t *testing.T) {
 			t.Fatalf("instrument %s must show what it is blind to and does not answer", v.Ref.RecordID)
 		}
 	}
-	// Identities are permanent in an append-only ledger: the two instruments
-	// declared at sequence 3 stay listed at whatever revision is current.
-	for _, id := range []model.ID{"01M344A7W8PM8PQWTHH5CJBC85", "01M344A7W9XRX1DQQ0KSYG9JSS"} {
+	// Identities are permanent in an append-only ledger: both declared
+	// instruments, the withdrawn one included, stay listed at whatever revision
+	// is current.
+	for _, id := range []model.ID{testID(10), testID(11)} {
 		rev, ok := s.CurrentRevision(reduce.Ident{Project: p.ID, ID: id})
 		if _, shown := views[model.RecordRef{Project: p.ID, RecordID: id, Revision: rev}]; !ok || !shown {
-			t.Fatalf("instrument %s declared at sequence 3 must remain listed", id)
+			t.Fatalf("declared instrument %s must remain listed", id)
 		}
 	}
 }
 
-func TestRealLedgerViewsKeepTheirInvariants(t *testing.T) {
-	p, s := realLedger(t)
+func TestViewsKeepTheirInvariants(t *testing.T) {
+	p, s := invariantLedger(t)
 	before := treeBytes(t, p.Ledger)
 	for _, r := range []ViewRequest{{View: "show"}, {View: "show", Kind: "claim"}, {View: "todo"}} {
 		a := view_(t, p, r)
@@ -97,7 +93,7 @@ func TestRealLedgerViewsKeepTheirInvariants(t *testing.T) {
 	full := view_(t, p, ViewRequest{View: "todo"}).(*TodoAnswer)
 	cut := view_(t, p, ViewRequest{View: "todo", Limit: 1}).(*TodoAnswer)
 	if !reflect.DeepEqual(full.Blocked, cut.Blocked) || !reflect.DeepEqual(full.AwaitingAcceptance, cut.AwaitingAcceptance) {
-		t.Fatal("a todo limit hid blocked or awaiting-acceptance work on the real ledger")
+		t.Fatal("a todo limit hid blocked or awaiting-acceptance work")
 	}
 	for _, task := range s.Tasks() {
 		c := view_(t, p, ViewRequest{View: "continue", ID: task.Task.ID}).(*ContinueAnswer)
@@ -111,6 +107,6 @@ func TestRealLedgerViewsKeepTheirInvariants(t *testing.T) {
 		}
 	}
 	if !reflect.DeepEqual(before, treeBytes(t, p.Ledger)) {
-		t.Fatal("a read changed the real ledger")
+		t.Fatal("a read changed the ledger")
 	}
 }

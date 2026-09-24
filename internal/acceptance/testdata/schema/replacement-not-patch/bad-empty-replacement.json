@@ -6,7 +6,7 @@
           "git": {
             "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "object_format": "sha1",
-            "path": "documentation/design/research/BUILD-PLAN-DATUM.md"
+            "path": "docs/plan.md"
           },
           "kind": "git",
           "selector": {
@@ -17,7 +17,7 @@
     },
     "replacement": {},
     "target": {
-      "project": "datum/acceptance",
+      "project": "example/acceptance",
       "record_id": "01K5V8R0010000000000000000",
       "revision": 2
     }

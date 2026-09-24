@@ -4,7 +4,7 @@ package reduce
 // a stopped handback must carry in its own bundle, live here. These are ledger
 // rules: admission reaches them through Apply and Replay applies them to every
 // bundle, so one implementation answers both. The receipt's revision
-// translation (R8.2) is admission's clerical rewrite and stays in write.
+// translation is admission's clerical rewrite and stays in write.
 
 import (
 	"whosaidso/internal/model"

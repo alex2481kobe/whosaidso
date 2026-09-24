@@ -41,7 +41,7 @@ func TestCaptureSavesSourceBytesBeforeAcknowledging(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "ruling.txt"), body, 0600); err != nil {
 		t.Fatal(err)
 	}
-	out, err := callWriteCLI(t, root, sourceEvents(t, body, "ruling.txt"), "capture", "--command-id", string(cliID(41)), "--actor", "lane")
+	out, err := callWriteCLI(t, root, sourceEvents(t, body, "ruling.txt"), "capture", "--command-id", string(cliID(41)), "--actor", "agent")
 	if err != nil {
 		t.Fatalf("control: a source resolving inside the root must be captured: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestCaptureRefusesSourceBytesItCannotSave(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := callWriteCLI(t, root, sourceEvents(t, body, prepare()), "capture", "--actor", "lane")
+			_, err := callWriteCLI(t, root, sourceEvents(t, body, prepare()), "capture", "--actor", "agent")
 			if err == nil || !strings.Contains(err.Error(), "source-not-captured") {
 				t.Fatalf("expected source-not-captured, got %v", err)
 			}
@@ -102,7 +102,7 @@ func TestCaptureRefusesSourceBytesItCannotSave(t *testing.T) {
 	if err := os.WriteFile(blob, body, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := callWriteCLI(t, root, sourceEvents(t, body, "gone.txt"), "capture", "--actor", "lane", "--blob", blob); err != nil {
+	if _, err := callWriteCLI(t, root, sourceEvents(t, body, "gone.txt"), "capture", "--actor", "agent", "--blob", blob); err != nil {
 		t.Fatalf("control: --blob must satisfy the source: %v", err)
 	}
 }

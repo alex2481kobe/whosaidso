@@ -12,7 +12,7 @@ package reduce
 //
 // Nil and empty are distinct (a nil slice and an empty one render differently
 // in JSON answers), maps are written in sorted key order so one state always
-// encodes to the same bytes, and a time must be UTC (R8.4) and is restored as
+// encodes to the same bytes, and a time must be UTC and is restored as
 // the same UTC instant.
 
 import (

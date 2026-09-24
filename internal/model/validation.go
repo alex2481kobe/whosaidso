@@ -16,13 +16,13 @@ import (
 // see. strings.TrimSpace answers "is every rune Unicode White_Space", which is a
 // different question: a zero width space, a byte order mark, a right to left
 // mark and a word joiner are all category Cf, render as nothing, and are not
-// White_Space. Lane E accepted an instrument whose blind_to was U+200B, which is
-// an instrument declaring no blind spot at all.
+// White_Space. An instrument whose blind_to was U+200B would otherwise pass,
+// which is an instrument declaring no blind spot at all.
 //
 // This is the one emptiness rule. Everything that needs one calls it.
 // stripInvisible removes what Blank would ignore, so a reserved name cannot be
-// smuggled past an exact comparison with padding a reader cannot see. Found by
-// lane E: a knob called "status " was not the reserved name "status".
+// smuggled past an exact comparison with padding a reader cannot see: a knob
+// called "status " must not slip past the reserved name "status".
 func stripInvisible(s string) string {
 	return strings.TrimSpace(strings.Map(func(r rune) rune {
 		if unicode.Is(unicode.Cf, r) || r == '\uFEFF' {
@@ -124,7 +124,7 @@ func ValidateArtifactRef(a ArtifactRef, path string) error {
 		}
 		if len(a.Git.Commit) != want || !lowerHex(a.Git.Commit) {
 			// Length alone let "gggg...g" through - a true measurement of the
-			// wrong property. Found by lane E.
+			// wrong property.
 			return fault("invalid-field", path+".git.commit",
 				fmt.Sprintf("commit must be %d lowercase hex characters for %s", want, a.Git.ObjectFormat))
 		}

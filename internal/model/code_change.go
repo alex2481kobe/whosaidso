@@ -1,6 +1,6 @@
 package model
 
-// The R14.2 code-change fact a proof records beside a set-aside run lives
+// The code-change fact a proof records beside a set-aside run lives
 // here: the run's recorded commit, the commit the proof's support ran at, and
 // the paths under the claim's scope that differ between them. Its shape is
 // checked here; that it matches the run, the scope and the supporting runs is

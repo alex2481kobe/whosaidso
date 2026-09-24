@@ -41,7 +41,7 @@ func TestTransactAssignsTheClericalFields(t *testing.T) {
 func TestConcurrentAdmissionsCannotFork(t *testing.T) {
 	p := ledgerProject(t)
 	admitControl(t, p, 1)
-	// Forty one writers against tail one: the contract's own counterexample,
+	// Forty one writers against tail one: the classic counterexample,
 	// where two coordinator calls both read tail 41, both validate and both
 	// publish under different filenames so neither overwrite fails.
 	const writers = 41
@@ -89,7 +89,7 @@ func TestConcurrentProcessesCannotFork(t *testing.T) {
 	p := ledgerProject(t)
 	admitControl(t, p, 1)
 	// Goroutines share one process. An OS lock has to hold between processes,
-	// which is where the real coordinator and a real lane meet.
+	// which is where two real writers meet.
 	const writers = 5
 	children := make([]*exec.Cmd, 0, writers)
 	for n := 2; n <= writers+1; n++ {

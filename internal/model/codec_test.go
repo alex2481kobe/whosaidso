@@ -3,8 +3,6 @@ package model
 import (
 	"bytes"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -50,9 +48,9 @@ func TestDecodeBundleWritableSequence(t *testing.T) {
 // injects. Every refusal case below starts from bytes that are known to pass.
 func validPacketJSON(inject string) string {
 	d := string(HashBytes([]byte("authored input")))
-	body := `"version":1,"project":"datum/datum",` +
+	body := `"version":1,"project":"example/example",` +
 		`"command_id":"01K5V8Q1110000000000000000","request_digest":"` + d + `",` +
-		`"author":{"id":"lane-a"},"captured_at":"2026-09-22T01:02:03Z",` +
+		`"author":{"id":"agent-a"},"captured_at":"2026-09-22T01:02:03Z",` +
 		`"events":[{"type":"task.create","data":{"intent":"x"}}]`
 	if inject != "" {
 		body = inject + "," + body
@@ -85,13 +83,13 @@ func TestStrictDecodeRefuses(t *testing.T) {
 		{"event data is not an object", strings.Replace(validPacketJSON(""),
 			`"data":{"intent":"x"}`, `"data":[1,2]`, 1), "invalid-field"},
 		{"actor is both known and unknown", strings.Replace(validPacketJSON(""),
-			`"author":{"id":"lane-a"}`, `"author":{"id":"lane-a","unknown_reason":"r"}`, 1), "invalid-field"},
+			`"author":{"id":"agent-a"}`, `"author":{"id":"agent-a","unknown_reason":"r"}`, 1), "invalid-field"},
 		{"actor is neither", strings.Replace(validPacketJSON(""),
-			`"author":{"id":"lane-a"}`, `"author":{}`, 1), "invalid-field"},
+			`"author":{"id":"agent-a"}`, `"author":{}`, 1), "invalid-field"},
 		{"lowercase id", strings.Replace(validPacketJSON(""),
 			`"01K5V8Q1110000000000000000"`, `"01k5v8q1110000000000000000"`, 1), "invalid-field"},
 		{"uppercase digest", strings.Replace(validPacketJSON(""), d, strings.ToUpper(d), 1), "invalid-field"},
-		{"empty project", strings.Replace(validPacketJSON(""), `"project":"datum/datum"`, `"project":""`, 1), "invalid-field"},
+		{"empty project", strings.Replace(validPacketJSON(""), `"project":"example/example"`, `"project":""`, 1), "invalid-field"},
 	}
 
 	for _, c := range cases {
@@ -166,7 +164,8 @@ func TestBundleChainRules(t *testing.T) {
 }
 
 // TestArtifactRefShape: the tag picks the pin, and a selector cannot contradict
-// itself. U01 checks shape only; U07 verifies the actual bytes.
+// itself. The model checks shape only; resolution in internal/evidence
+// verifies the actual bytes.
 func TestArtifactRefShape(t *testing.T) {
 	sha1Commit := strings.Repeat("a", 40)
 	good := ArtifactRef{
@@ -212,7 +211,7 @@ func utcSeal(zone *time.Location) *InvocationSeal {
 	return seal
 }
 
-// Ruling R8.4, encode half: an in-process timestamp in any zone is written as
+// UTC timestamps, encode half: an in-process timestamp in any zone is written as
 // UTC, so one instant has one spelling, one byte string and one digest.
 func TestEncodeWritesOneInstantAsOneSpelling(t *testing.T) {
 	var first []byte
@@ -226,7 +225,7 @@ func TestEncodeWritesOneInstantAsOneSpelling(t *testing.T) {
 			t.Errorf("%s: EncodeEvent rewrote the caller's value instead of a private copy", zone)
 		}
 		packet, err := Encode(Packet{Version: WireVersion, Project: schemaProject, CommandID: schemaID(20),
-			RequestDigest: HashBytes([]byte("r")), Author: Actor{ID: "lane-a"},
+			RequestDigest: HashBytes([]byte("r")), Author: Actor{ID: "agent-a"},
 			CapturedAt: seal.Envelope.StartedAt, Events: []Event{event}})
 		if err != nil {
 			t.Fatal(err)
@@ -244,7 +243,7 @@ func TestEncodeWritesOneInstantAsOneSpelling(t *testing.T) {
 	}
 }
 
-// Ruling R8.4, decode half: any other offset is refused, not normalised, at
+// UTC timestamps, decode half: any other offset is refused, not normalised, at
 // every depth, naming the field. Stored bytes are exactly what decode returns.
 func TestDecodeRefusesANonUTCTimestampAtAnyDepth(t *testing.T) {
 	event, err := EncodeEvent(utcSeal(time.UTC))
@@ -280,28 +279,5 @@ func TestDecodeRefusesANonUTCTimestampAtAnyDepth(t *testing.T) {
 				t.Fatalf("want invalid-field at %s, got %v", c.path, err)
 			}
 		})
-	}
-}
-
-// The refusal breaks no history: WhoSaidSo's own committed ledger decodes whole.
-func TestCommittedLedgerIsAlreadyUTC(t *testing.T) {
-	paths, err := filepath.Glob(filepath.Join("..", "..", ".whosaidso", "events", "*.json"))
-	if err != nil || len(paths) == 0 {
-		t.Fatalf("committed ledger not found: %v", err)
-	}
-	for _, path := range paths {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		bundle, err := DecodeBundle(data)
-		if err != nil {
-			t.Fatalf("%s: %v", path, err)
-		}
-		for i, event := range bundle.Events {
-			if _, err := DecodeEvent(event); err != nil {
-				t.Errorf("%s event %d: %v", path, i, err)
-			}
-		}
 	}
 }

@@ -43,10 +43,8 @@ jobs:
 
       - name: Test under the race detector
         # always(), because a step that only runs when everything else passed
-        # is not a check, it is a wish. Without it this step was SKIPPED on
-        # every run while main carried known failing tests, so the race
-        # detector never executed in CI once. The config said it ran. It did
-        # not run. That is this repository's own subject, committed by me.
+        # is not a check, it is a wish: while any test fails, a step without
+        # it is skipped, and the race detector would silently never run.
         #
         # Races are a different property from correctness, so this has to be
         # able to fail on its own and to report when the suite is otherwise
@@ -64,7 +62,7 @@ jobs:
         run: go run ./tools/archtree -check
 
       - name: macOS release builds compile
-        # U14 requires darwin arm64 and amd64 binaries. Cross-compiling here
+        # Releases ship darwin arm64 and amd64 binaries. Cross-compiling here
         # proves both targets build; nothing is uploaded.
         if: always()
         run: |

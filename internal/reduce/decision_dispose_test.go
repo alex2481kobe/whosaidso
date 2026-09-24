@@ -10,7 +10,7 @@ import (
 	"whosaidso/internal/model"
 )
 
-func TestR10DispositionNeedsANamedAuthorityOnReplay(t *testing.T) {
+func TestDispositionNeedsANamedAuthorityOnReplay(t *testing.T) {
 	l := proofLedger(t, true)
 	d := ref(newID("DCSA"), 1)
 	l.add(t, &model.DecisionOpen{ID: d.RecordID, Provenance: provenance("author"), Spec: decisionSpec()})

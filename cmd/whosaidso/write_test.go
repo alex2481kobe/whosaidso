@@ -28,7 +28,7 @@ func cliFixture(t *testing.T) (string, []byte) {
 			Intent: "exercise the CLI", Subject: "an intake packet",
 			Scope:    model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this fixture", Limitations: "not a real ledger"},
 			NonGoals: []string{"write production state"}, AcceptanceCriteria: []model.AcceptanceCriterion{{ID: cliID(2), Revision: 1, Criterion: "capture then admit then replay"}},
-			ContextRefs: []model.RecordRef{}, ConstraintRefs: []model.RecordRef{}, Prerequisites: []model.Prerequisite{}, NextActor: model.Actor{ID: "lane"},
+			ContextRefs: []model.RecordRef{}, ConstraintRefs: []model.RecordRef{}, Prerequisites: []model.Prerequisite{}, NextActor: model.Actor{ID: "agent"},
 		},
 	})
 	if err != nil {
@@ -84,7 +84,7 @@ func withJSON(args []string) []string {
 
 func cliControl(t *testing.T, root string, data []byte) {
 	t.Helper()
-	if _, err := callWriteCLI(t, root, data, "capture", "--command-id", string(cliID(3)), "--actor", "lane"); err != nil {
+	if _, err := callWriteCLI(t, root, data, "capture", "--command-id", string(cliID(3)), "--actor", "agent"); err != nil {
 		t.Fatal(err)
 	}
 	project, err := store.Discover(root)
@@ -111,7 +111,7 @@ func cliControl(t *testing.T, root string, data []byte) {
 func TestCLICaptureAdmissionAndExplicitUnavailable(t *testing.T) {
 	root, data := cliFixture(t)
 	cliControl(t, root, data)
-	// run is enabled by U12; TestCLIRunRefusesBeforeLaunch covers its refusals.
+	// run is a real command; TestCLIRunRefusesBeforeLaunch covers its refusals.
 	for _, command := range []string{"publish", "append", "decision", "claim"} {
 		if out, errs, code := cliRun(t, root, nil, "", command); code != 2 || out != "" || !strings.Contains(errs, "unknown command") {
 			t.Fatalf("unknown command %s must be a usage error: %d %q %q", command, code, out, errs)
@@ -138,7 +138,7 @@ func TestCLICaptureRejectsMalformedEvents(t *testing.T) {
 		// A valid event whose last-wins alias would otherwise decode cleanly.
 		strings.Replace(string(data), `"type": "task.create"`, `"TYPE": "task.start", "type": "task.create"`, 1),
 	} {
-		if _, err := callWriteCLI(t, root, []byte(input), "capture", "--actor", "lane"); err == nil {
+		if _, err := callWriteCLI(t, root, []byte(input), "capture", "--actor", "agent"); err == nil {
 			t.Fatalf("malformed intake was acknowledged: %s", input)
 		}
 	}

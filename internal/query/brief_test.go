@@ -106,7 +106,7 @@ func viewAnswerOf(t *testing.T, p store.Project, r ViewRequest) ViewAnswer {
 	return a
 }
 
-// R19: the brief is the views' default text; these ran over the old presets
+// The brief is the views' default text; these ran over the old presets
 // and now read the views that absorbed them (now and intake pending -> todo).
 func TestBriefNamesStatusReasonAndNextActorPerRecord(t *testing.T) {
 	p := testProject(t)
@@ -115,7 +115,7 @@ func TestBriefNamesStatusReasonAndNextActorPerRecord(t *testing.T) {
 		Actor: model.Actor{ID: "owner"}, Criterion: "resume is authorized"})
 	todo := assertViewHonest(t, viewAnswerOf(t, p, ViewRequest{View: "todo"}))
 	for _, want := range []string{
-		"blocked: 1\n  TASK " + string(testID(2)) + " rev 1 BLOCKED next acceptance-owner\n    Build U09 of WhoSaidSo",
+		"blocked: 1\n  TASK " + string(testID(2)) + " rev 1 BLOCKED next acceptance-owner\n    Build the first usable read slice of WhoSaidSo",
 		"    blocked: resume waits on owner hold " + string(testID(80)) + " - resume is authorized\n",
 		"ready: 1\n  TASK " + string(testID(1)) + " rev 1 READY next acceptance-owner\n",
 		"attention: 1\n  task-blocked-owed " + string(testID(2)) + " rev 1 waits on owner\n",

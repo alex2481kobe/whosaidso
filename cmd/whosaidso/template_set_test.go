@@ -85,7 +85,7 @@ func TestSetValueFillsTypedPlaceholders(t *testing.T) {
 // control: a whole reference object is still taken as JSON.
 func TestSetOnAReferenceNamesPin(t *testing.T) {
 	f := boundWorld(t)
-	boundCapture(t, f.root, "blocker.hold", "--task", string(f.task), "--set", "reason=resume", "--set", `actor={"id":"lane"}`, "--set", "criterion=the fixture output exists")
+	boundCapture(t, f.root, "blocker.hold", "--task", string(f.task), "--set", "reason=resume", "--set", `actor={"id":"agent"}`, "--set", "criterion=the fixture output exists")
 	hold := string(openHold(t, boundSnapshot(t, f.root), f.task))
 	pinned := boundPrint(t, f.root, "blocker.clear", "--hold", hold, "--pin", "resolving_witness=out/result.json")
 	whole, err := json.Marshal(pinned["resolving_witness"])
@@ -104,7 +104,7 @@ func TestSetOnAReferenceNamesPin(t *testing.T) {
 			id = string(f.task)
 		}
 		for _, value := range []string{"out/result.json", `"out/result.json"`, "[]"} {
-			_, errs, code := cliRun(t, f.root, nil, "lane", "template", c.event, c.flag, id, "--set", c.path+"="+value)
+			_, errs, code := cliRun(t, f.root, nil, "agent", "template", c.event, c.flag, id, "--set", c.path+"="+value)
 			if want := c.path + " is a reference: use --pin " + c.path + "=PATH"; code != 2 || !strings.Contains(errs, want) {
 				t.Errorf("template %s --set %s=%s: want exit 2 saying %q, got %d %s", c.event, c.path, value, want, code, errs)
 			}

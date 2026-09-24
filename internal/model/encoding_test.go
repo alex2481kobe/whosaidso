@@ -9,7 +9,7 @@ import (
 
 func utf8Packet(author string, data json.RawMessage) Packet {
 	return Packet{
-		Version: WireVersion, Project: "datum/datum", CommandID: "01K5V8Q1110000000000000000",
+		Version: WireVersion, Project: "example/example", CommandID: "01K5V8Q1110000000000000000",
 		RequestDigest: HashBytes([]byte("authored input")), Author: Actor{ID: author},
 		CapturedAt: time.Date(2026, 9, 22, 1, 2, 3, 0, time.UTC),
 		Events:     []Event{{Type: "task.create", Data: data}},

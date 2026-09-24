@@ -9,15 +9,16 @@ import (
 )
 
 // InvocationRef addresses the immutable start/seal pair by its subordinate ID.
-// U06/U12 require a seal when it is used as an observation. No event UUID or
+// Observation history and proof require a seal when it is used as an observation. No event UUID or
 // future admission coordinate is needed while both packets are still in intake.
 type InvocationRef struct {
 	Project      ProjectID `json:"project"`
 	InvocationID ID        `json:"invocation_id"`
 }
 
-// InvocationStart/Seal feed U06 observation history and U10 capture. Seal carries
-// the complete envelope and a start link; U06/U12 enforce immutable intent equality.
+// InvocationStart/Seal feed observation history and run capture. Seal carries
+// the complete envelope and a start link; history and proof enforce immutable
+// intent equality.
 type InvocationStart struct {
 	Envelope InvocationEnvelope `json:"envelope"`
 }
@@ -32,7 +33,7 @@ func (e InvocationStart) validate(p string) error {
 	// conditions it ran under, an effective configuration the process never
 	// reported, and a clean isolation, before anything had launched. Those are
 	// exactly the facts a proof compares when deciding whether two runs are
-	// comparable and whether isolation held. Found by lane E.
+	// comparable and whether isolation held.
 	for _, f := range []struct {
 		name  string
 		state AvailabilityState
@@ -59,7 +60,8 @@ func (e InvocationSeal) validate(p string) error {
 	return nil
 }
 
-// SourceIntake feeds U03/U08 exact-byte capture and U13 attribution/ordering.
+// SourceIntake feeds exact-byte capture and admission, and the views'
+// attribution/ordering.
 // Order is zero-based within the producer's source sequence, not ledger order.
 type SourceIntake struct {
 	SourceID       ID          `json:"source_id"`
@@ -81,7 +83,7 @@ func (e SourceIntake) validate(p string) error {
 	return nil
 }
 
-// CriterionFix feeds U06 independent criterion revisions and U07/U12 execution.
+// CriterionFix feeds independent criterion revisions and their evaluation and proof.
 // Author is the actual predicate author, not inferred from the eventual admitter.
 type CriterionFix struct {
 	Claim       RecordRef           `json:"claim"`
@@ -96,7 +98,7 @@ type ObservationDisposition struct {
 	InvocationRef InvocationRef `json:"invocation_ref"`
 	Disposition   string        `json:"disposition"`
 	Reason        string        `json:"reason" semantic:"text"`
-	// CodeChange (R14.2) is the recorded fact that lets a failing run of the
+	// CodeChange is the recorded fact that lets a failing run of the
 	// proof's own criterion revision be set aside as inapplicable: code under
 	// the claim's scope changed since the run's commit (code_change.go).
 	CodeChange *CodeChange `json:"code_change,omitempty"`
@@ -121,9 +123,9 @@ func (j ResponsibleJudgment) validate(p string) error {
 	return nil
 }
 
-// ProofAdmit supplies U06/U12 the family and responsible judgment, not a writable
+// ProofAdmit supplies history and proof the family and responsible judgment, not a writable
 // PROVEN. Family completeness, timing and unresolved contradiction are gate checks.
-// Verdict (R14.1) says which way the judgment goes: supports or refutes. Every
+// Verdict says which way the judgment goes: supports or refutes. Every
 // proof states it.
 type ProofAdmit struct {
 	Claim        RecordRef                `json:"claim"`
@@ -133,7 +135,7 @@ type ProofAdmit struct {
 	Verdict      string                   `json:"verdict" semantic:"text"`
 }
 
-// Proof verdicts (R14.1). Status stays projected from them, never written.
+// Proof verdicts. Status stays projected from them, never written.
 const (
 	VerdictSupports = "supports"
 	VerdictRefutes  = "refutes"
@@ -162,26 +164,26 @@ func (e ProofAdmit) validate(p string) error {
 	return nil
 }
 
-// TrustWithdraw supplies U06/U12 scope and the condition for restoring support.
+// TrustWithdraw supplies history and proof the scope and the condition for restoring support.
 type TrustWithdraw struct {
 	Instrument            RecordRef `json:"instrument"`
 	Scope                 Scope     `json:"scope"`
 	RevalidationCondition string    `json:"revalidation_condition" semantic:"text"`
 }
 
-// ReviewAdmit feeds U08 admission and U13 visible pending/rejected dispositions.
+// ReviewAdmit feeds admission and the views' visible pending/rejected dispositions.
 // Packet refs identify exact intake bytes; they are not record references.
 type ReviewAdmit struct {
 	Packets []PacketRef `json:"packets"`
 	Outcome string      `json:"outcome"`
 	Actor   Actor       `json:"actor"`
 	Reason  string      `json:"reason" semantic:"text"`
-	// Invocations (R10.3) records, on a rejected or correction-requested review,
+	// Invocations records, on a rejected or correction-requested review,
 	// each invocation.start/seal its packets carried: extracted facts, never the
 	// packet. A refused run stays a ledger-visible criterion family member, so
 	// proof validity never depends on which machine's intake holds its bytes.
 	Invocations []ReviewedInvocation `json:"invocations,omitempty"`
-	// Authors (R10.1 revised) binds each reviewed packet's command ID to the
+	// Authors binds each reviewed packet's command ID to the
 	// Actor the packet was captured with, so who wrote an admitted act is in the
 	// ledger, not only in local intake. It covers every reviewed packet; an
 	// author nobody recorded is an unknown Actor with its reason.
@@ -279,7 +281,8 @@ func (e ReviewAdmit) validate(p string) error {
 	return oneOf(e.Outcome, p+".outcome", "accepted", "correction-requested", "rejected")
 }
 
-// ArtifactDispose feeds U12's manual loss accounting and U06/U13 current support.
+// ArtifactDispose feeds proof's manual loss accounting and the current support
+// that history and the views show.
 // An empty support-loss list explicitly states no known dependent revision.
 type ArtifactDispose struct {
 	Artifact         ArtifactRef   `json:"artifact"`

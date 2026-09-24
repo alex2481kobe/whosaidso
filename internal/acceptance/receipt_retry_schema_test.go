@@ -1,4 +1,4 @@
-// Second adoption review probes belong here: independent admission, replay,
+// Receipt, retry and schema counterexamples belong here: admission, replay,
 // schema-fixture and revision-diff counterexamples. Production fixes do not.
 package acceptance_test
 
@@ -17,7 +17,7 @@ import (
 	"whosaidso/internal/write"
 )
 
-func astra2Replay(t *testing.T, f *gateVerifyFixture, mutate func(model.TypedEvent)) (reduce.Snapshot, error) {
+func receiptReplay(t *testing.T, f *gateVerifyFixture, mutate func(model.TypedEvent)) (reduce.Snapshot, error) {
 	t.Helper()
 	prefix, err := store.ReadPrefix(f.p)
 	if err != nil {
@@ -40,10 +40,10 @@ func astra2Replay(t *testing.T, f *gateVerifyFixture, mutate func(model.TypedEve
 	return reduce.Replay(prefix)
 }
 
-func TestAstraFinal2ReceiptAttribution(t *testing.T) {
+func TestReceiptAttribution(t *testing.T) {
 	for _, unknownHolder := range []bool{false, true} {
 		t.Run(map[bool]string{false: "known-holder", true: "unknown-holder"}[unknownHolder], func(t *testing.T) {
-			f := astraFinalNew(t)
+			f := cliParityNew(t)
 			holder := model.Actor{ID: "holder"}
 			if unknownHolder {
 				holder = model.Actor{UnknownReason: "not identified"}
@@ -57,7 +57,7 @@ func TestAstraFinal2ReceiptAttribution(t *testing.T) {
 			if _, err := f.admit(model.Actor{ID: "holder"}, model.Actor{ID: "reviewer"}, terminal); err != nil {
 				t.Fatal(err)
 			}
-			_, err := astra2Replay(t, f, func(e model.TypedEvent) {
+			_, err := receiptReplay(t, f, func(e model.TypedEvent) {
 				if r, ok := e.(*model.ReviewAdmit); ok {
 					for p := range r.Authors {
 						r.Authors[p] = unknown
@@ -71,8 +71,8 @@ func TestAstraFinal2ReceiptAttribution(t *testing.T) {
 	}
 }
 
-func TestAstraFinal2InvalidCacheSettingOnAdmissionRetry(t *testing.T) {
-	f := astraFinalNew(t)
+func TestInvalidCacheSettingOnAdmissionRetry(t *testing.T) {
+	f := cliParityNew(t)
 	a := model.Actor{ID: "holder"}
 	packet := f.capture(a, recEncode(t, f.claim(a)))
 	r := write.AdmitRequest{CommandID: f.id(), PacketIDs: []model.ID{packet.CommandID}, Admitter: a, Outcome: "accepted", Reason: "retry control"}
@@ -94,7 +94,7 @@ func TestAstraFinal2InvalidCacheSettingOnAdmissionRetry(t *testing.T) {
 	}
 }
 
-func TestAstraFinal2SchemaFixturesFailForTheirNamedReason(t *testing.T) {
+func TestSchemaFixturesFailForTheirNamedReason(t *testing.T) {
 	root := t.TempDir()
 	read := func(name string) model.Event {
 		t.Helper()
@@ -144,8 +144,8 @@ func TestAstraFinal2SchemaFixturesFailForTheirNamedReason(t *testing.T) {
 	}
 }
 
-func TestAstraFinal2AmendmentDiffIncludesSourceCitations(t *testing.T) {
-	f := astraFinalNew(t)
+func TestAmendmentDiffIncludesSourceCitations(t *testing.T) {
+	f := cliParityNew(t)
 	a := model.Actor{ID: "holder"}
 	c := f.claim(a)
 	if _, err := f.admit(a, a, c); err != nil {
@@ -172,7 +172,7 @@ func TestAstraFinal2AmendmentDiffIncludesSourceCitations(t *testing.T) {
 	if _, err := f.admit(a, a, revise); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := astra2Replay(t, f, nil); err != nil {
+	if _, err := receiptReplay(t, f, nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, view := range []string{"continue", "history"} {

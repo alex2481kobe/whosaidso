@@ -2,37 +2,46 @@
 
 Any agent, any harness. Read CONTRIBUTING.md too; this file adds what an agent
 needs that a human contributor would pick up from review. How to use WhoSaidSo
-itself (capture, admit, run, handback, the views) is in `whosaidso help`, and only
-there.
+itself (capture, admit, run, handback, the views) is in `whosaidso help`, and
+only there.
 
 ## The build
 
 - Go 1.22 is the target and the standard library is the only dependency. Say
   which Go version you actually ran.
-- Before calling work done: `gofmt -l .`, `go vet ./...`,
+- Before calling work done: `gofmt -l .` (must print nothing), `go vet ./...`,
   `go test ./... -count=1`, and `go test -race` on the packages you touched.
   If you changed the package structure, run `go run ./tools/archtree -readme`
   and commit the README it regenerates.
 - Files stay around 200-300 lines. A new file opens with a comment saying what
   belongs in it and what does not.
 
+## Tests are about behaviour, not about this repository
+
+- A test builds its own fixture: a temp project with its own `whosaidso.toml`
+  and ledger, generated in the test or kept small under `testdata/` and built
+  from synthetic events. Never read this repository's own `.whosaidso/`, its
+  bundles or its artifact store, and never write into it.
+- Set `WHOSAIDSO_HOME` (or `HOME`) to a temp directory in any test that binds a
+  project or captures intake, so a run never touches a real machine home.
+- Name test files and functions for the rule they check, not for when or by
+  whom they were written.
+- Comments state the rule and the failure it prevents on their own. Do not cite
+  issue threads, review rounds or documents a reader of the code cannot see.
+
 ## Who owns what
 
 - `internal/acceptance/` is the specification. It is written by reviewers who
-  own no production code. Never edit it unless your brief names a file there
-  as yours. If a test there contradicts your brief, report it; do not change it.
+  own no production code. Do not edit it unless your task names a file there
+  as yours. If a test there contradicts your task, report it; do not change it.
 - A reviewer owns one acceptance file and no production code. A failing test
   is the reviewer's deliverable: it says what was expected, what happened, and
   why it matters.
-- Work only in the worktree and files your brief names. If one item needs a
-  file you do not own, stop that item, finish the rest, and report what you
-  needed and why.
-- Commit on your branch with a plain message. Do not push.
-- WhoSaidSo records its own work in `.whosaidso/`, so its ledger grows. A test that reads the committed
-  ledger reads the fixed prefix it is about (bundles 1..N), never the live head. Committing a new
-  ledger bundle needs the same full test run as committing code.
-- Parallel lanes may share a scratch directory: prefix every scratch file with
-  your lane name.
+- Work only in the files your task names. If one item needs a file you do not
+  own, stop that item, finish the rest, and report what you needed and why.
+- Commit on your own branch with a plain message. Do not push unless asked.
+- When several agents share one scratch directory, prefix every scratch file
+  with a name unique to your task.
 
 ## Semantics that are easy to get wrong
 

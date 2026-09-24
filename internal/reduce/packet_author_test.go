@@ -32,16 +32,16 @@ func TestCriterionAuthorIsThePacketAuthor(t *testing.T) {
 		review    bool // false: no review attributes it
 		code      string
 	}{
-		{"control: the packet author fixed it", model.Actor{ID: "lane-a"}, actor("lane-a"), true, ""},
-		{"another known author", model.Actor{ID: "lane-a"}, actor("lane-b"), true, CodeAttributionMismatch},
+		{"control: the packet author fixed it", model.Actor{ID: "agent-a"}, actor("agent-a"), true, ""},
+		{"another known author", model.Actor{ID: "agent-a"}, actor("agent-b"), true, CodeAttributionMismatch},
 		{"two unknown actors", model.Actor{UnknownReason: "not recorded"}, unknownActor("not recorded"), true, CodeAttributionMismatch},
-		{"known criterion author, unknown packet author", model.Actor{ID: "lane-a"}, unknownActor("not recorded"), true, CodeAttributionMismatch},
-		{"no review attributes it", model.Actor{ID: "lane-a"}, nil, false, CodeAttributionMismatch},
+		{"known criterion author, unknown packet author", model.Actor{ID: "agent-a"}, unknownActor("not recorded"), true, CodeAttributionMismatch},
+		{"no review attributes it", model.Actor{ID: "agent-a"}, nil, false, CodeAttributionMismatch},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			l := goodLedger(t)
 			claim := ref(newID("CMA1"), 1)
-			l.add(t, &model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("lane-a"), Spec: claimSpec()})
+			l.add(t, &model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("agent-a"), Spec: claimSpec()})
 			fix := fixProofCriterion(claim)
 			fix.Author = tc.criterion
 			events := []model.TypedEvent{fix}
@@ -63,7 +63,7 @@ func TestProofJudgmentIsThePacketAuthor(t *testing.T) {
 		code   string
 	}{
 		{"control: the packet author judged it", actor("reviewer"), true, ""},
-		{"another known author", actor("lane-b"), true, CodeAttributionMismatch},
+		{"another known author", actor("agent-b"), true, CodeAttributionMismatch},
 		{"unknown packet author", unknownActor("not recorded"), true, CodeAttributionMismatch},
 		{"no review attributes it", nil, false, CodeAttributionMismatch},
 	} {

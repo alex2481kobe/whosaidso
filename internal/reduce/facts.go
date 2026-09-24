@@ -172,16 +172,16 @@ func (b Blocker) Open() bool { return b.Cleared == nil }
 // Closure is one admitted authorised closure. It is retained even when it does
 // not take effect, because an unwitnessed success closure is a fact a reader
 // must see rather than an event that silently vanished. Authority is nil
-// unless the closure cited one (R15.1).
+// unless the closure cited one.
 //
-// Closer and CloserAuthoredReceipt (R15.1) are projected when the task is
+// Closer and CloserAuthoredReceipt are projected when the task is
 // read, from the packet authors the ledger records; the stored closure leaves
 // them empty. CloserAuthoredReceipt compares the closer with the authors of
 // the task's attempt receipts (each the attempt holder's own packet): TRUE
 // when the closer, a known actor, wrote one of them, FALSE when every receipt
 // author is a known actor distinct from a known closer, UNKNOWN otherwise.
 // It measures receipt authorship only: FALSE does not say someone else
-// implemented the work, since a holder can report work another lane did. It
+// implemented the work, since a holder can report work another agent did. It
 // never blocks.
 type Closure struct {
 	Task                  model.RecordRef           `json:"task"`
@@ -213,13 +213,13 @@ type Review struct {
 	Actor   model.Actor     `json:"actor"`
 	Reason  string          `json:"reason"`
 	Origin  Origin          `json:"origin"`
-	// SelfAdmission is computed from Author and Actor (C39); no review stores it.
+	// SelfAdmission is computed from Author and Actor; no review stores it.
 	SelfAdmission model.SelfAdmissionState `json:"self_admission"`
 	// Author is the Actor the review recorded this packet was captured with,
-	// known or unknown with its reason (R10.1 revised).
+	// known or unknown with its reason.
 	Author model.Actor `json:"author"`
 	// Invocations are the invocation facts this packet carried when it was not
-	// accepted (R10.3). Empty for accepted packets.
+	// accepted. Empty for accepted packets.
 	Invocations []model.ReviewedInvocation `json:"invocations"`
 }
 
@@ -242,8 +242,9 @@ type Criterion struct {
 	RecordedAt time.Time `json:"recorded_at"`
 }
 
-// Referrer is one reverse edge: an admitted event that named a referent. U06
-// expands correction and supersession through these, and U13 traverses them.
+// Referrer is one reverse edge: an admitted event that named a referent.
+// Correction and supersession expand through these, and reverse traversal
+// follows them.
 type Referrer struct {
 	Origin Origin          `json:"origin"`
 	Type   model.EventType `json:"type"`

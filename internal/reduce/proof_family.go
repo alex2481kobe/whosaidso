@@ -3,9 +3,9 @@ package reduce
 // The one proof family checker lives here, shared by Replay and admission's
 // Apply: family membership (same exact claim revision, same criterion id, a
 // criterion revision no later than the proof's), classification of each
-// listed member as exact, earlier-revision or rejected-only (R10.3), closure
+// listed member as exact, earlier-revision or rejected-only, closure
 // over the admitted prefix and over invocations later in the same bundle, and
-// U12's rule that a rejected start or seal must be byte-identical to the
+// the rule that a rejected start or seal must be byte-identical to the
 // admitted one. Support rules for exact members stay in proof_admission.go;
 // artifact evaluation and pending intake stay in internal/write.
 

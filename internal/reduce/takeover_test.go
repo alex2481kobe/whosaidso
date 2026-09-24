@@ -12,7 +12,7 @@ import (
 
 func takeoverOf(prior string) *model.TaskTakeover {
 	return &model.TaskTakeover{
-		Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "lane-b"},
+		Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-b"},
 		AttemptID: newID("ATTB"), PriorAttemptID: newID(prior),
 		StoppedConfirmationRef: blobRef("prior-stopped"),
 	}
@@ -91,7 +91,7 @@ func TestTakeoverAfterATerminalAttemptMeetsTheStartRule(t *testing.T) {
 		// nobody; the live writer is the one a takeover must name.
 		l := goodLedger(t)
 		l.add(t, terminalATTA(model.AttemptStopped, false))
-		l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "lane-c"}, AttemptID: newID("ATTC")})
+		l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-c"}, AttemptID: newID("ATTC")})
 		takeoverRefused(t, l, takeoverOf("ATTA"))
 	})
 }

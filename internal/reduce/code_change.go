@@ -1,6 +1,6 @@
 package reduce
 
-// The ledger half of R14.2 lives here: a failing run of the proof's own
+// The ledger half of the code-change rule lives here: a failing run of the proof's own
 // criterion revision may be set aside as inapplicable only with a recorded
 // code change that replay can check without the filesystem: the run's
 // recorded head is known, clean and is the change's From; every changed path

@@ -1,6 +1,6 @@
 package write
 
-// Criterion freezing against the capture time (U14 review): a run's criterion
+// Criterion freezing against the capture time: a run's criterion
 // must be admitted before intake captured the run's start, the authored
 // started_at may not claim a start after that capture, and review.admit
 // records each packet's capture time so the check replays from the ledger.

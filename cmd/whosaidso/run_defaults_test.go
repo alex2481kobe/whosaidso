@@ -33,7 +33,7 @@ func TestRunDefaultsPickTheCurrentRevisions(t *testing.T) {
 	f := boundWorld(t)
 	base := []string{"run", "--attempt-id", string(f.attempt), "--instrument", string(f.instrument), "--admit", "--reason", "defaults"}
 	run := func(extra ...string) (string, string, int) {
-		out, errs, code := cliRun(t, f.root, nil, "lane", append(append(append([]string{}, base...), extra...), "--", "/bin/sh", "tools/measure.sh")...)
+		out, errs, code := cliRun(t, f.root, nil, "agent", append(append(append([]string{}, base...), extra...), "--", "/bin/sh", "tools/measure.sh")...)
 		if m := familyAck.FindStringSubmatch(out); m != nil {
 			return m[1], errs, code
 		}
@@ -67,7 +67,7 @@ func TestRunDefaultsPickTheCurrentRevisions(t *testing.T) {
 	// refuses, naming the revision it is fixed on, and launches nothing.
 	boundCapture(t, f.root, "claim.revise", "--from", string(f.claim), "--set", "provenance.source_refs=[]", "--set", "replacement.scope.limitations=revised")
 	marker := filepath.Join(f.root, "launched")
-	out, errs, code := cliRun(t, f.root, nil, "lane", append(append([]string{}, base...), "--claim", string(f.claim), "--criterion-id", string(f.criterion), "--", "/usr/bin/touch", marker)...)
+	out, errs, code := cliRun(t, f.root, nil, "agent", append(append([]string{}, base...), "--claim", string(f.claim), "--criterion-id", string(f.criterion), "--", "/usr/bin/touch", marker)...)
 	if code != 1 || out != "" || !strings.Contains(errs, "no admitted revision on claim "+string(f.claim)+" revision 2 (claim revisions it is fixed on: 1)") {
 		t.Fatalf("a criterion absent from the current claim revision must be refused: %d %q %s", code, out, errs)
 	}
@@ -81,7 +81,7 @@ func TestRunDefaultsPickTheCurrentRevisions(t *testing.T) {
 	boundCapture(t, f.root, "criterion.fix", "--claim", string(f.claim), "--set", "source_refs=[]", "--pin", "expression.result_selector=out/result.json#/results",
 		"--pin", "expression.population.selector=out/result.json#/population", "--set", "expression.unit=mm", "--set", "expression.population.identity=pose sweep",
 		"--set", "expression.population.denominator=poses", "--set", "expression.operator=lt", "--set", `expression.target={"type":"number","number":0.04}`, "--set", "expression.reducer=all")
-	if _, errs, code := cliRun(t, f.root, nil, "lane", append(append([]string{}, base...), "--claim", string(f.claim), "--", "/usr/bin/touch", marker)...); code != 1 || !strings.Contains(errs, "has 2 admitted criteria") {
+	if _, errs, code := cliRun(t, f.root, nil, "agent", append(append([]string{}, base...), "--claim", string(f.claim), "--", "/usr/bin/touch", marker)...); code != 1 || !strings.Contains(errs, "has 2 admitted criteria") {
 		t.Fatalf("two criteria on the claim must be refused as ambiguous: %d %s", code, errs)
 	}
 }

@@ -1,6 +1,6 @@
 package reduce
 
-// R14.1 proof verdicts through Replay and Apply alike: a refutation lists the
+// Proof verdicts through Replay and Apply alike: a refutation lists the
 // contradicting runs of the current criterion revision, counts nothing as
 // support, projects REFUTED, and a later supports proof under a new revision
 // proves the claim again. A proof with no verdict is refused.
@@ -27,7 +27,7 @@ func criterionRevision(claim model.RecordRef, revision model.Revision) *model.Cr
 	return fix
 }
 
-func TestR141RefutationProjectsRefutedAndEstablishesNothing(t *testing.T) {
+func TestRefutationProjectsRefutedAndEstablishesNothing(t *testing.T) {
 	l, claim, failed, _ := familyLedger(t, true)
 	l.add(t, refutation(claim, member(failed.InvocationID, "contradicts"), member(newID("RNA1"), "inconclusive")))
 	s := wantBoth(t, l, "")
@@ -43,9 +43,9 @@ func TestR141RefutationProjectsRefutedAndEstablishesNothing(t *testing.T) {
 	}
 }
 
-// R18.2: a proof without a verdict is refused, never read as supports: the
+// A proof without a verdict is refused, never read as supports: the
 // event cannot be encoded, and bytes that omit it do not replay.
-func TestR141ProofWithoutVerdictIsRefused(t *testing.T) {
+func TestProofWithoutVerdictIsRefused(t *testing.T) {
 	l, claim, failed, _ := familyLedger(t, true)
 	proof := admitProof(claim, newID("RNA1"))
 	proof.Evidence = append(proof.Evidence, member(failed.InvocationID, "inconclusive"))
@@ -71,7 +71,7 @@ func TestR141ProofWithoutVerdictIsRefused(t *testing.T) {
 	}
 }
 
-func TestR141RefutationRefusals(t *testing.T) {
+func TestRefutationRefusals(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		members func(failed model.ID) []model.ObservationDisposition
@@ -101,9 +101,9 @@ func TestR141RefutationRefusals(t *testing.T) {
 	}
 }
 
-// R10.2: the contradicting run stays counterevidence for its own revision; a
+// The contradicting run stays counterevidence for its own revision; a
 // new criterion revision overcomes it, and its later supports proof is in force.
-func TestR141NewCriterionRevisionProvesARefutedClaim(t *testing.T) {
+func TestNewCriterionRevisionProvesARefutedClaim(t *testing.T) {
 	l, claim, failed, _ := familyLedger(t, true)
 	l.add(t, refutation(claim, member(failed.InvocationID, "contradicts"), member(newID("RNA1"), "inconclusive")))
 	wantClaim(t, mustReplay(t, l.out), claim, StatusRefuted)

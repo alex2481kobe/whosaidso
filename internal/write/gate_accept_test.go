@@ -1,6 +1,6 @@
 package write
 
-// R15.1 through admission: task.close needs no authority carrier, only its
+// Acceptance through admission: task.close needs no authority carrier, only its
 // witnesses; a task that names an accepter is closed only by a packet that
 // actor wrote; the closer is recorded, and closer_authored_receipt compares it with the
 // author of the attempt receipt. The replay-side rules are in internal/reduce.
@@ -13,7 +13,7 @@ import (
 )
 
 // newAcceptWorld is newCloseWorld with an optional accepter on the task. The
-// lane (f.author) starts the attempt and writes its success receipt.
+// agent (f.author) starts the attempt and writes its success receipt.
 func newAcceptWorld(t *testing.T, accepter *model.Actor) *closeWorld {
 	t.Helper()
 	f := newAdmissionFixture(t)
@@ -30,9 +30,9 @@ func newAcceptWorld(t *testing.T, accepter *model.Actor) *closeWorld {
 
 // closeAs captures a closure with no authority, written by author.
 func (w *closeWorld) closeAs(author string, closure *model.TaskClose) model.PacketRef {
-	lane := w.f.author
+	agent := w.f.author
 	w.f.author = model.Actor{ID: author}
-	defer func() { w.f.author = lane }()
+	defer func() { w.f.author = agent }()
 	closure.Authority = nil
 	return w.f.capture(nil, closure)
 }
@@ -49,7 +49,7 @@ func TestTaskCloseNeedsNoCarrierAndRecordsASelfAcceptance(t *testing.T) {
 	w.f.accept(w.closeAs(w.f.author.ID, w.closure(model.ClosureSuccess)))
 	p := w.status(t)
 	if p.Status != reduce.StatusClosed || p.Closure.Authority != nil || p.Closure.Closer.Author != w.f.author || p.Closure.CloserAuthoredReceipt != reduce.TruthTrue {
-		t.Fatalf("the lane closing its own work must read CLOSED, closer lane, self-accepted TRUE: %+v", p.Closure)
+		t.Fatalf("the agent closing its own work must read CLOSED, closer agent, self-accepted TRUE: %+v", p.Closure)
 	}
 }
 

@@ -1,8 +1,8 @@
-// Final adoption probes belong here: independent CLI and ledger counterexamples.
-// Production fixes and other reviewers' specifications do not. Coordinator edit
-// 2026-09-24: fixtures live in test temp dirs, not the repo tree (a scratch dir in
-// the checkout made every observed checkout dirty), and the build uses the
-// caller's GOCACHE instead of one machine's path.
+// End-to-end CLI and ledger counterexamples belong here: forged caches,
+// read/replay parity and CLI refusals. Production fixes and other acceptance
+// specifications do not. Fixtures live in test temp dirs, not the repo tree (a
+// scratch dir in the checkout makes every observed checkout dirty), and the
+// build uses the caller's GOCACHE instead of one machine's path.
 package acceptance_test
 
 import (
@@ -22,31 +22,31 @@ import (
 	"whosaidso/internal/store"
 )
 
-var astraFinalBuild sync.Once
-var astraFinalBinary string
+var cliParityBuild sync.Once
+var cliParityBinary string
 
-func astraFinalNew(t *testing.T) *gateVerifyFixture {
+func cliParityNew(t *testing.T) *gateVerifyFixture {
 	t.Helper()
 	repo, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)
 	}
-	astraFinalBuild.Do(func() {
-		dir, err := os.MkdirTemp("", "whosaidso-review-final-bin-")
+	cliParityBuild.Do(func() {
+		dir, err := os.MkdirTemp("", "whosaidso-cli-parity-bin-")
 		if err != nil {
 			t.Fatal(err)
 		}
-		astraFinalBinary = filepath.Join(dir, "review-whosaidso")
-		cmd := exec.Command("go", "build", "-o", astraFinalBinary, "./cmd/whosaidso")
+		cliParityBinary = filepath.Join(dir, "whosaidso")
+		cmd := exec.Command("go", "build", "-o", cliParityBinary, "./cmd/whosaidso")
 		cmd.Dir = repo
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("build: %v: %s", err, out)
 		}
 	})
 	root := t.TempDir()
-	t.Setenv(store.HomeEnv, filepath.Join(root, "review-machine"))
+	t.Setenv(store.HomeEnv, filepath.Join(root, "machine"))
 	t.Setenv("WHOSAIDSO_ACTOR", "holder")
-	pvPut(t, root, "whosaidso.toml", []byte("id = 'datum/acceptance'\nledger = '.whosaidso/events'\n"))
+	pvPut(t, root, "whosaidso.toml", []byte("id = 'example/acceptance'\nledger = '.whosaidso/events'\n"))
 	if _, err := store.Bind(context.Background(), root, root); err != nil {
 		t.Fatal(err)
 	}
@@ -57,9 +57,9 @@ func astraFinalNew(t *testing.T) *gateVerifyFixture {
 	return &gateVerifyFixture{t: t, p: p, n: 200}
 }
 
-func astraFinalCLI(t *testing.T, f *gateVerifyFixture, args ...string) ([]byte, int) {
+func cliParityRun(t *testing.T, f *gateVerifyFixture, args ...string) ([]byte, int) {
 	t.Helper()
-	cmd := exec.Command(astraFinalBinary, args...)
+	cmd := exec.Command(cliParityBinary, args...)
 	cmd.Dir = f.p.Root
 	var out, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &stderr
@@ -72,15 +72,15 @@ func astraFinalCLI(t *testing.T, f *gateVerifyFixture, args ...string) ([]byte, 
 		}
 		code = e.ExitCode()
 	}
-	pvPut(t, f.p.Root, "review-last-stdout.txt", out.Bytes())
-	pvPut(t, f.p.Root, "review-last-stderr.txt", stderr.Bytes())
+	pvPut(t, f.p.Root, "last-stdout.txt", out.Bytes())
+	pvPut(t, f.p.Root, "last-stderr.txt", stderr.Bytes())
 	return out.Bytes(), code
 }
 
-func TestAstraFinalReplayHandbackParity(t *testing.T) {
+func TestReplayHandbackParity(t *testing.T) {
 	for _, attack := range []string{"stranger", "blocked-mid-task", "out-of-scope"} {
 		t.Run(attack, func(t *testing.T) {
-			f := astraFinalNew(t)
+			f := cliParityNew(t)
 			holder := model.Actor{ID: "holder"}
 			ref, req := hbVerifyStart(t, f, holder)
 			bad := &model.AttemptTerminal{Task: ref, AttemptID: req.AttemptID, Outcome: model.AttemptStopped, Reason: "unfinished", NextAction: "resume", DeliveryRefs: []model.ArtifactRef{}}
@@ -131,14 +131,14 @@ func TestAstraFinalReplayHandbackParity(t *testing.T) {
 	}
 }
 
-func TestAstraFinalCacheCannotForgeLedgerFact(t *testing.T) {
-	f := astraFinalNew(t)
+func TestCacheCannotForgeLedgerFact(t *testing.T) {
+	f := cliParityNew(t)
 	c := f.claim(model.Actor{ID: "holder"})
 	c.Spec.Assertion = "ledger says original"
 	if _, err := f.admit(model.Actor{ID: "holder"}, model.Actor{ID: "holder"}, c); err != nil {
 		t.Fatal(err)
 	}
-	want, code := astraFinalCLI(t, f, "show", string(c.ID), "--json")
+	want, code := cliParityRun(t, f, "show", string(c.ID), "--json")
 	if code != 0 || !bytes.Contains(want, []byte(c.Spec.Assertion)) {
 		t.Fatalf("CLI control: %d %s", code, want)
 	}
@@ -158,7 +158,7 @@ func TestAstraFinalCacheCannotForgeLedgerFact(t *testing.T) {
 	if err := os.WriteFile(cache, forged, 0600); err != nil {
 		t.Fatal(err)
 	}
-	got, code := astraFinalCLI(t, f, "show", string(c.ID), "--json")
+	got, code := cliParityRun(t, f, "show", string(c.ID), "--json")
 	full, err := store.Replayed(f.p)
 	if err != nil {
 		t.Fatal(err)
@@ -167,28 +167,28 @@ func TestAstraFinalCacheCannotForgeLedgerFact(t *testing.T) {
 	if !ok || rec.Claim.Assertion != c.Spec.Assertion {
 		t.Fatal("full replay control lost the original")
 	}
-	// Coordinator edit 2026-09-24, owner ruling R22.3: a cache rewritten together
+	// A cache rewritten together
 	// with its public checksum is a documented blind spot of the default read
 	// (no lightweight check without a secret or a full replay can detect it).
-	// The ruled defense is WHOSAIDSO_NO_CACHE=1, which reads the whole ledger; the
+	// The defense is WHOSAIDSO_NO_CACHE=1, which reads the whole ledger; the
 	// original assertion that the default path resists forgery became this one.
 	if code != 0 {
 		t.Fatalf("default read over a forged cache must still answer, exit %d", code)
 	}
-	t.Logf("default read over the forged cache shows the fabricated assertion: %t (blind spot, R22.3)",
+	t.Logf("default read over the forged cache shows the fabricated assertion: %t (known blind spot)",
 		bytes.Contains(got, []byte("cache says invented!")))
 	t.Setenv("WHOSAIDSO_NO_CACHE", "1")
-	checked, code := astraFinalCLI(t, f, "show", string(c.ID), "--json")
+	checked, code := cliParityRun(t, f, "show", string(c.ID), "--json")
 	if code != 0 || !bytes.Equal(checked, want) || bytes.Contains(checked, []byte("cache says invented!")) {
 		t.Errorf("WHOSAIDSO_NO_CACHE=1 must answer from the ledger alone (%q) over a forged cache; exit=%d, fabricated assertion visible=%t",
 			rec.Claim.Assertion, code, bytes.Contains(checked, []byte("cache says invented!")))
 	}
 }
 
-func TestAstraFinalHomeConfigChangeCannotLoseAdmission(t *testing.T) {
-	f := astraFinalNew(t)
+func TestHomeConfigChangeCannotLoseAdmission(t *testing.T) {
+	f := cliParityNew(t)
 	f.control()
-	pvPut(t, f.p.Root, "whosaidso.toml", []byte("id = 'datum/acceptance'\nledger = '.relocated/events'\n"))
+	pvPut(t, f.p.Root, "whosaidso.toml", []byte("id = 'example/acceptance'\nledger = '.relocated/events'\n"))
 	c := f.claim(model.Actor{ID: "holder"})
 	b, err := f.admit(model.Actor{ID: "holder"}, model.Actor{ID: "holder"}, c)
 	if err != nil {
@@ -207,16 +207,16 @@ func TestAstraFinalHomeConfigChangeCannotLoseAdmission(t *testing.T) {
 	}
 }
 
-func TestAstraFinalDuplicatePacketDryRunMatchesAdmission(t *testing.T) {
-	f := astraFinalNew(t)
+func TestDuplicatePacketDryRunMatchesAdmission(t *testing.T) {
+	f := cliParityNew(t)
 	c := f.claim(model.Actor{ID: "holder"})
 	packet := f.capture(model.Actor{ID: "holder"}, recEncode(t, c))
-	control, code := astraFinalCLI(t, f, "check", "admission", "--json", "--packet", string(packet.CommandID))
+	control, code := cliParityRun(t, f, "check", "admission", "--json", "--packet", string(packet.CommandID))
 	if code != 0 {
 		t.Fatalf("single-packet dry-run control: %d %s", code, control)
 	}
-	got, checkCode := astraFinalCLI(t, f, "check", "admission", "--json", "--packet", string(packet.CommandID), "--packet", string(packet.CommandID))
-	actual, admitCode := astraFinalCLI(t, f, "admit", string(packet.CommandID), string(packet.CommandID), "--json", "--outcome", "accepted", "--reason", "same packet twice")
+	got, checkCode := cliParityRun(t, f, "check", "admission", "--json", "--packet", string(packet.CommandID), "--packet", string(packet.CommandID))
+	actual, admitCode := cliParityRun(t, f, "admit", string(packet.CommandID), string(packet.CommandID), "--json", "--outcome", "accepted", "--reason", "same packet twice")
 	if admitCode != 0 {
 		t.Fatalf("actual admission control: %d %s", admitCode, actual)
 	}
@@ -225,8 +225,8 @@ func TestAstraFinalDuplicatePacketDryRunMatchesAdmission(t *testing.T) {
 	}
 }
 
-func TestAstraFinalCriterionTemplateRefusesAmbiguousClaim(t *testing.T) {
-	f := astraFinalNew(t)
+func TestCriterionTemplateRefusesAmbiguousClaim(t *testing.T) {
+	f := cliParityNew(t)
 	a := model.Actor{ID: "holder"}
 	criterion := f.id()
 	pvPut(t, f.p.Root, "example.json", []byte(pvPass))
@@ -249,11 +249,11 @@ func TestAstraFinalCriterionTemplateRefusesAmbiguousClaim(t *testing.T) {
 		}
 	}
 	for _, claim := range claims {
-		if out, code := astraFinalCLI(t, f, "template", "criterion.fix", "--criterion", string(criterion), "--claim", string(claim)); code != 0 {
+		if out, code := cliParityRun(t, f, "template", "criterion.fix", "--criterion", string(criterion), "--claim", string(claim)); code != 0 {
 			t.Fatalf("explicit-claim control: %d %s", code, out)
 		}
 	}
-	out, code := astraFinalCLI(t, f, "template", "criterion.fix", "--criterion", string(criterion))
+	out, code := cliParityRun(t, f, "template", "criterion.fix", "--criterion", string(criterion))
 	if code == 0 {
 		var events []struct {
 			Data struct {
@@ -263,14 +263,14 @@ func TestAstraFinalCriterionTemplateRefusesAmbiguousClaim(t *testing.T) {
 		if err := json.Unmarshal(out, &events); err != nil {
 			t.Fatal(err)
 		}
-		_, admitCode := astraFinalCLI(t, f, "template", "criterion.fix", "--criterion", string(criterion), "--set", "source_refs=[]", "--capture", "--admit", "--reason", "revise the selected criterion")
+		_, admitCode := cliParityRun(t, f, "template", "criterion.fix", "--criterion", string(criterion), "--set", "source_refs=[]", "--capture", "--admit", "--reason", "revise the selected criterion")
 		t.Errorf("expected ambiguity refusal requiring --claim; template silently selected claim %s from %v; --capture --admit exit=%d. Authoring must not choose which claim's criterion to revise", events[0].Data.Claim.RecordID, claims, admitCode)
 	}
 }
 
-func TestAstraFinalCorruptBindingRecoveryAdviceWorks(t *testing.T) {
-	f := astraFinalNew(t)
-	if out, code := astraFinalCLI(t, f, "home", f.p.Root, "--json"); code != 0 {
+func TestCorruptBindingRecoveryAdviceWorks(t *testing.T) {
+	f := cliParityNew(t)
+	if out, code := cliParityRun(t, f, "home", f.p.Root, "--json"); code != 0 {
 		t.Fatalf("healthy rebind control: %d %s", code, out)
 	}
 	entries, err := os.ReadDir(filepath.Join(os.Getenv(store.HomeEnv), "projects"))
@@ -282,7 +282,7 @@ func TestAstraFinalCorruptBindingRecoveryAdviceWorks(t *testing.T) {
 			pvPut(t, os.Getenv(store.HomeEnv), "projects/"+entry.Name(), []byte("broken\n"))
 		}
 	}
-	out, code := astraFinalCLI(t, f, "home", f.p.Root, "--json")
+	out, code := cliParityRun(t, f, "home", f.p.Root, "--json")
 	if code != 0 && bytes.Contains(out, []byte("fix it with whosaidso home PATH")) {
 		t.Errorf("expected actionable recovery advice; the recommended home PATH command fails with exit %d and repeats the identical advice: %s", code, strings.TrimSpace(string(out)))
 	}

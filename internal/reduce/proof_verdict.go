@@ -1,6 +1,6 @@
 package reduce
 
-// The R14.1 verdict rules that proof_admission.go applies member by member
+// The proof verdict rules that proof_admission.go applies member by member
 // live here: which revision a refutation may judge, and the bar every counted
 // member meets, supporting or contradicting. Which member counts under which
 // verdict, and the family rules, stay in proof_admission.go and proof_family.go.

@@ -1,6 +1,6 @@
 package write
 
-// R14.1 through admission: every new proof states its verdict; a refuting
+// Proof verdicts through admission: every new proof states its verdict; a refuting
 // proof is admitted (so it leaves intake) when its contradicting members
 // really fail the criterion, and the claim projects REFUTED. The replay-side
 // verdict rules are tested in internal/reduce; these reach them through Apply.
@@ -23,7 +23,7 @@ func (w *proofWorld) refutation(members map[model.InvocationRef]string) *model.P
 	return p
 }
 
-// R18.2: a proof without a verdict is refused by the event schema, whether the
+// A proof without a verdict is refused by the event schema, whether the
 // key is omitted or blank; it is never read as supports.
 func TestProofVerdictIsRequiredOnANewProof(t *testing.T) {
 	w := newProofWorld(t, true)
