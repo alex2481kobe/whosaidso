@@ -233,13 +233,13 @@ func TestStoreKilledAdmissionAndNestedGit(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Only the child gets this shim. Git still reads real committed objects.
-	script := "#!/bin/sh\nkill -STOP \"$PPID\"\nprintf ready > \"$ASTRA_MARKER\"\nexec \"$ASTRA_GIT\" \"$@\"\n"
+	script := "#!/bin/sh\nkill -STOP \"$PPID\"\nprintf ready > \"$SHIM_MARKER\"\nexec \"$SHIM_GIT\" \"$@\"\n"
 	if err := os.WriteFile(filepath.Join(shim, "git"), []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
 	marker := filepath.Join(shim, "shim-ready")
 	cmd := procCommand(w, args...)
-	cmd.Env = append(cmd.Env, "PATH="+shim+string(os.PathListSeparator)+os.Getenv("PATH"), "ASTRA_MARKER="+marker, "ASTRA_GIT="+realGit)
+	cmd.Env = append(cmd.Env, "PATH="+shim+string(os.PathListSeparator)+os.Getenv("PATH"), "SHIM_MARKER="+marker, "SHIM_GIT="+realGit)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
