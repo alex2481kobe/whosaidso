@@ -8,7 +8,7 @@ package reduce
 import (
 	"fmt"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // exactTarget resolves a prerequisite target to one admitted revision of the

@@ -17,9 +17,9 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 func runTestID(n int) model.ID { return model.ID(fmt.Sprintf("%026d", n)) }
@@ -32,7 +32,7 @@ func runTestProject(t *testing.T) store.Project {
 	if err := os.Mkdir(root, 0700); err != nil {
 		t.Fatal(err)
 	}
-	return store.Project{ID: "datum/run-test", Root: root, Ledger: filepath.Join(root, ".datum", "events")}
+	return store.Project{ID: "datum/run-test", Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
 }
 
 func runTestNumber(s string) model.Scalar {
@@ -363,7 +363,7 @@ func TestRunRefusesBeforeLaunch(t *testing.T) {
 			case "intake unavailable":
 				home := t.TempDir()
 				t.Setenv("HOME", home)
-				if err := os.WriteFile(filepath.Join(home, ".datum"), []byte("not a directory"), 0600); err != nil {
+				if err := os.WriteFile(filepath.Join(home, ".whosaidso"), []byte("not a directory"), 0600); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -705,7 +705,7 @@ func TestRunChildProcess(t *testing.T) {
 			if err != nil {
 				os.Exit(94)
 			}
-			if start, ok := payload.(*model.InvocationStart); ok && string(start.Envelope.InvocationID) == filepath.Base(os.Getenv("DATUM_RUN_DIR")) && start.Envelope.Outcome.State == model.Unknown {
+			if start, ok := payload.(*model.InvocationStart); ok && string(start.Envelope.InvocationID) == filepath.Base(os.Getenv("WHOSAIDSO_RUN_DIR")) && start.Envelope.Outcome.State == model.Unknown {
 				found = true
 			}
 		}
@@ -726,17 +726,17 @@ func TestRunChildProcess(t *testing.T) {
 			os.Exit(96)
 		}
 	case "report":
-		if err := os.WriteFile(os.Getenv("DATUM_RUN_REPORT"), []byte(args[1]), 0600); err != nil {
+		if err := os.WriteFile(os.Getenv("WHOSAIDSO_RUN_REPORT"), []byte(args[1]), 0600); err != nil {
 			os.Exit(96)
 		}
-		if err := os.WriteFile(filepath.Join(os.Getenv("DATUM_RUN_DIR"), "result.json"), []byte(`{"actual":8}`), 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(os.Getenv("WHOSAIDSO_RUN_DIR"), "result.json"), []byte(`{"actual":8}`), 0600); err != nil {
 			os.Exit(96)
 		}
-		if err := os.Symlink(os.Getenv("DATUM_RUN_REPORT"), filepath.Join(os.Getenv("DATUM_RUN_DIR"), "link")); err != nil {
+		if err := os.Symlink(os.Getenv("WHOSAIDSO_RUN_REPORT"), filepath.Join(os.Getenv("WHOSAIDSO_RUN_DIR"), "link")); err != nil {
 			os.Exit(96)
 		}
 	case "output":
-		// args: the output's path in DATUM_RUN_DIR, its body, the report, and
+		// args: the output's path in WHOSAIDSO_RUN_DIR, its body, the report, and
 		// optionally a directory to make unwritable first, so the seal's
 		// capture fails after the output exists.
 		if args[4] != "" && os.Chmod(args[4], 0500) != nil {
@@ -745,13 +745,13 @@ func TestRunChildProcess(t *testing.T) {
 		// Distinct stream bytes keep every output countable on its own.
 		fmt.Fprint(os.Stdout, "output-stdout")
 		fmt.Fprint(os.Stderr, "output-stderr")
-		out := filepath.Join(os.Getenv("DATUM_RUN_DIR"), filepath.FromSlash(args[1]))
-		if os.MkdirAll(filepath.Dir(out), 0700) != nil || os.WriteFile(out, []byte(args[2]), 0600) != nil || os.WriteFile(os.Getenv("DATUM_RUN_REPORT"), []byte(args[3]), 0600) != nil {
+		out := filepath.Join(os.Getenv("WHOSAIDSO_RUN_DIR"), filepath.FromSlash(args[1]))
+		if os.MkdirAll(filepath.Dir(out), 0700) != nil || os.WriteFile(out, []byte(args[2]), 0600) != nil || os.WriteFile(os.Getenv("WHOSAIDSO_RUN_REPORT"), []byte(args[3]), 0600) != nil {
 			os.Exit(96)
 		}
 	case "report-hex":
 		report, err := hex.DecodeString(args[1])
-		if err != nil || os.WriteFile(os.Getenv("DATUM_RUN_REPORT"), report, 0600) != nil {
+		if err != nil || os.WriteFile(os.Getenv("WHOSAIDSO_RUN_REPORT"), report, 0600) != nil {
 			os.Exit(96)
 		}
 	case "burst":

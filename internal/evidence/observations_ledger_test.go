@@ -1,6 +1,6 @@
 package evidence
 
-// Run outputs as stored: Datum's own committed runs, recorded before outputs
+// Run outputs as stored: WhoSaidSo's own committed runs, recorded before outputs
 // were published only once, resolve from the content store now that their
 // duplicate run-dir copies are deleted (R18.2 migration); and admission's held run-output
 // bytes are verified without a second read. Observation semantics over
@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // ownLedgerPrefix is the fixed committed prefix this test is about. Bundles
@@ -32,7 +32,7 @@ func TestOwnLedgerRunOutputsResolveFromTheStoreAlone(t *testing.T) {
 	if err != nil || len(paths) < ownLedgerPrefix {
 		t.Fatalf("committed history missing: %d bundles, %v", len(paths), err)
 	}
-	r := NewResolverAt(root, DefaultArtifactDir)
+	r := NewResolverAt(root, ".datum/artifacts") // this repository's store; see whosaidso.toml
 	seals, outputs := 0, 0
 	for _, path := range paths {
 		data, err := os.ReadFile(path)

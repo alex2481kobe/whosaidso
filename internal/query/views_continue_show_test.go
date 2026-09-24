@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 // eachObject visits every JSON object in the export.

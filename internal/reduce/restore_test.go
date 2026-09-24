@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // restoreFixtures are ledgers that between them reach every event kind the
@@ -123,7 +123,7 @@ func TestRestoreAtEverySplitEqualsReplay(t *testing.T) {
 
 // The golden ledger's image is pinned. A change that moves it must also move
 // snapshotFormat or the state's types, so older images are refused.
-const goldenImageSHA256 = "c1587b5ad43bab322ae61520ce6e1ae3827a1eceaf3f3a397d1167ff26ead166"
+const goldenImageSHA256 = "d4d8c39746e823cb780225a1d2f8726e8f62a4d79f304e69794faf331ca33baf"
 
 func TestGoldenImageIsPinned(t *testing.T) {
 	image := mustEncode(t, mustReplay(t, goldenLedger(t).bundles()))
@@ -150,7 +150,7 @@ func TestDamagedImagesAreRefusedNeverPartial(t *testing.T) {
 	if _, err := RestoreSnapshot(append(append([]byte{}, image...), 0), nil); err == nil {
 		t.Fatal("trailing bytes restored")
 	}
-	other := []byte(strings.Replace(string(image), snapshotFormat, "datum-snapshot/0", 1))
+	other := []byte(strings.Replace(string(image), snapshotFormat, "whosaidso-snapshot/0", 1))
 	if _, err := RestoreSnapshot(other, nil); err == nil {
 		t.Fatal("an image of another version restored")
 	}

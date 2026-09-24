@@ -1,8 +1,8 @@
-# Agents working on Datum
+# Agents working on WhoSaidSo
 
 Any agent, any harness. Read CONTRIBUTING.md too; this file adds what an agent
-needs that a human contributor would pick up from review. How to use Datum
-itself (capture, admit, run, handback, the views) is in `datum help`, and only
+needs that a human contributor would pick up from review. How to use WhoSaidSo
+itself (capture, admit, run, handback, the views) is in `whosaidso help`, and only
 there.
 
 ## The build
@@ -28,7 +28,7 @@ there.
   file you do not own, stop that item, finish the rest, and report what you
   needed and why.
 - Commit on your branch with a plain message. Do not push.
-- Datum records its own work in `.datum/`, so its ledger grows. A test that reads the committed
+- WhoSaidSo records its own work in `.datum/` (named before the rename; see whosaidso.toml), so its ledger grows. A test that reads the committed
   ledger reads the fixed prefix it is about (bundles 1..N), never the live head. Committing a new
   ledger bundle needs the same full test run as committing code.
 - Parallel lanes may share a scratch directory: prefix every scratch file with
@@ -42,7 +42,7 @@ there.
 - Validity must be decidable from the ledger alone, never from one machine's
   intake or clock.
 - Check the real thing, not its spelling: a path, a time or a quote the author
-  wrote is a claim, not a fact Datum observed.
+  wrote is a claim, not a fact WhoSaidSo observed.
 
 ## Proving a change
 

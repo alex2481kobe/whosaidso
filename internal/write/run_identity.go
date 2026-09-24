@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
-	"datum/internal/store"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
 // RunExecutionIdentity observes where and from what a run executes. Every field
@@ -19,7 +19,7 @@ import (
 // machine must not compare equal to any other machine.
 //
 // BLIND TO: source the run reads from outside the project root, and changes
-// inside Datum's own ledger and artifact directories, which are records of runs
+// inside WhoSaidSo's own ledger and artifact directories, which are records of runs
 // rather than the source a run executes. SourceRefs stays empty: this observer
 // captures no source content, which is also why a dirty checkout is recorded as
 // dirty-UNKNOWN (the schema requires captured source content beside dirty=true).
@@ -44,7 +44,7 @@ func runGitState(ctx context.Context, project store.Project) (model.Availability
 	if head.State != model.Known {
 		return head, model.Availability[bool]{State: model.Unknown, Reason: head.Reason}
 	}
-	// The project directory only, less Datum's own record folders, at the same
+	// The project directory only, less WhoSaidSo's own record folders, at the same
 	// project-relative place in this checkout as in the home.
 	pathspec := []string{"."}
 	ledger, err := filepath.Rel(project.Root, project.Ledger)
@@ -58,7 +58,7 @@ func runGitState(ctx context.Context, project store.Project) (model.Availability
 	}
 	dirty := evidence.CheckoutDirty(ctx, evidence.ExecGit, root, pathspec...)
 	if dirty.State == model.Known && *dirty.Value {
-		return head, model.Availability[bool]{State: model.Unknown, Reason: "the checkout differs from HEAD, and datum run captures no source content, which recording dirty=true requires"}
+		return head, model.Availability[bool]{State: model.Unknown, Reason: "the checkout differs from HEAD, and whosaidso run captures no source content, which recording dirty=true requires"}
 	}
 	return head, dirty
 }

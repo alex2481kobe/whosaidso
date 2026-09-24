@@ -7,7 +7,7 @@ package reduce
 import (
 	"fmt"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // checkPrerequisites refuses a typed prerequisite pointed at the wrong kind of

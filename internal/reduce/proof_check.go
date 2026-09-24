@@ -6,12 +6,12 @@ package reduce
 // proof_family.go, which route each refusal through refuseProof; nothing here
 // decides whether a proof is admissible.
 
-import "datum/internal/model"
+import "whosaidso/internal/model"
 
 // ApplyCollectingProofRefusals folds b onto s like Apply, except that a
 // proof.admit refusal is recorded and checking continues: the remaining
 // members, the family closure, rejected members and claim support are still
-// checked. It is for `datum proof check`, which publishes nothing. The returned
+// checked. It is for `whosaidso proof check`, which publishes nothing. The returned
 // snapshot applies every proof as if it had been admitted, so it answers "what
 // would the later gate stages say", never "what is admitted". Any refusal that
 // is not a proof rule still ends the fold and is returned as err.

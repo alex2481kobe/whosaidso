@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
 // uncaptured records every packet's capture time as unknown: these reviews

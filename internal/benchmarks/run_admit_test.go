@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
-	"datum/internal/write"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
+	"whosaidso/internal/write"
 )
 
 // Run with -run '^$' -bench BenchmarkRunAdmit -benchmem. Timed: the CLI's

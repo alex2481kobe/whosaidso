@@ -4,13 +4,13 @@ package write
 // is set aside only beside a code change git verifies over the claim's scope,
 // in the home repository (the ledger's), never the invoking checkout. The
 // replay-side structure is tested in internal/reduce; the stale-claims read,
-// which uses the invoking checkout, in internal/query and cmd/datum.
+// which uses the invoking checkout, in internal/query and cmd/whosaidso.
 
 import (
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 // codeWorld is a proof world whose claim is scoped to src/ and whose root is a

@@ -1,6 +1,6 @@
-# Datum
+# WhoSaidSo
 
-Datum keeps a project accountable. An agent runs a measurement, hands back a
+WhoSaidSo keeps a project accountable. An agent runs a measurement, hands back a
 receipt, and the record exists; a task cannot close on prose alone. Every
 answer, from what is owed to what a tool cannot see, is a query over one
 append-only ledger.
@@ -17,7 +17,7 @@ responsible judgment.
 
 ## Using it
 
-`go build -o datum ./cmd/datum`, then run `datum help`. The guide ships with
+`go build -o whosaidso ./cmd/whosaidso`, then run `whosaidso help`. The guide ships with
 the binary.
 
 ## How it fits together
@@ -28,9 +28,9 @@ interface or a callback.
 
 <!-- archtree:begin -->
 ```text
-datum
+whosaidso
 |-- cmd/
-|   `-- datum          whole command surface: the write side that captures and admits, and the read side that answers from what was admitted
+|   `-- whosaidso      whole command surface: the write side that captures and admits, and the read side that answers from what was admitted
 |          21 files, tested -- uses evidence, model, query, reduce, store, write
 |-- internal/
 |   |-- acceptance     (tests only, no production code)
@@ -43,7 +43,7 @@ datum
 |   |      16 files, tested -- leaf
 |   |-- query          selects admitted facts before either output format renders them
 |   |      17 files, tested -- uses model, reduce, store
-|   |-- reduce         folds admitted bundles into the state every Datum answer is read from
+|   |-- reduce         folds admitted bundles into the state every WhoSaidSo answer is read from
 |   |      26 files, tested -- uses model
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
 |   |      18 files, tested -- uses model, reduce
@@ -52,7 +52,7 @@ datum
 `-- tools/
     |-- archtree       instrument that reports how this module's packages fit together
     |      5 files, tested -- leaf
-    `-- benchreport    instrument that restates go test -bench output as readings a Datum criterion can select
+    `-- benchreport    instrument that restates go test -bench output as readings a WhoSaidSo criterion can select
            3 files, tested -- leaf
 ```
 <!-- archtree:end -->

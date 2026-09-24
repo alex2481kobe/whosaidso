@@ -6,7 +6,7 @@ package reduce
 import (
 	"sort"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // ---- Snapshot ------------------------------------------------------------

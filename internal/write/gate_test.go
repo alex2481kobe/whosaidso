@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 func (f *admissionFixture) instrument() *model.InstrumentDeclare {

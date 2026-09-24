@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func proofKnown[T any](v T) model.Availability[T] {

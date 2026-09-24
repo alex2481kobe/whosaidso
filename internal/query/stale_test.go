@@ -3,7 +3,7 @@ package query
 // The stale-claims read (R14.2) with a git the test supplies: which claims it
 // answers, which run is the last, and the HEAD-only comparison's TRUE, FALSE
 // and UNKNOWN. That the CLI supplies the invoking checkout's git is tested in
-// cmd/datum; the git observer itself in internal/evidence.
+// cmd/whosaidso; the git observer itself in internal/evidence.
 
 import (
 	"errors"
@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 // staleWorld admits task 1 with attempt 70, validated instrument 10, and

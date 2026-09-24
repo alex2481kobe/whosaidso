@@ -12,18 +12,18 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/query"
-	"datum/internal/reduce"
-	"datum/internal/store"
-	"datum/internal/write"
+	"whosaidso/internal/model"
+	"whosaidso/internal/query"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
+	"whosaidso/internal/write"
 )
 
 func readVerifyProject(t *testing.T) store.Project {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	root := t.TempDir()
-	return store.Project{ID: laneEReduceProject, Root: root, Ledger: filepath.Join(root, ".datum", "events")}
+	return store.Project{ID: laneEReduceProject, Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
 }
 
 // Publish through the real store and validate the sealed prefix with Replay.

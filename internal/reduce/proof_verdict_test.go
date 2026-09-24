@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func refutation(claim model.RecordRef, members ...model.ObservationDisposition) *model.ProofAdmit {

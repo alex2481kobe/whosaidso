@@ -9,7 +9,7 @@ import (
 	"sort"
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // lossLedger admits every inventoried event type at least once, spread over

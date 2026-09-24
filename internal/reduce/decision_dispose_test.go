@@ -7,7 +7,7 @@ package reduce
 import (
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func TestR10DispositionNeedsANamedAuthorityOnReplay(t *testing.T) {

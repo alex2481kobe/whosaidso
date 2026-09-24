@@ -15,11 +15,11 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/query"
-	"datum/internal/reduce"
-	"datum/internal/store"
-	"datum/internal/write"
+	"whosaidso/internal/model"
+	"whosaidso/internal/query"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
+	"whosaidso/internal/write"
 )
 
 type readCase struct {
@@ -50,7 +50,7 @@ type byteCounter int64
 
 func (c *byteCounter) Write(p []byte) (int, error) { *c += byteCounter(len(p)); return len(p), nil }
 
-// Observations mirror cmd/datum/read.go, including fresh subprocesses. Fixture
+// Observations mirror cmd/whosaidso/read.go, including fresh subprocesses. Fixture
 // roots are outside git: HEAD/dirty remain UNKNOWN, with the observed reasons.
 func observe(root string) query.Observation {
 	git := func(args ...string) (string, error) {
@@ -190,7 +190,7 @@ func keepCache(b *testing.B, f *fixture) func() {
 
 // Run includes the CLI's validated prefix load, instrument projection, fresh execution
 // identity, actual child execution, two captures, and result encoding. Only flag
-// parsing and starting the datum executable itself are omitted. /usr/bin/printf
+// parsing and starting the whosaidso executable itself are omitted. /usr/bin/printf
 // is a tiny measurement producer; its workload is deliberately constant.
 func benchRun(b *testing.B, f *fixture) {
 	b.ReportAllocs()

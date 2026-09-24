@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
-const artifactTestDir = ".datum/artifacts"
+const artifactTestDir = ".whosaidso/artifacts"
 
 func TestPublishArtifactOneCopyByDigest(t *testing.T) {
 	root := t.TempDir()
@@ -23,7 +23,7 @@ func TestPublishArtifactOneCopyByDigest(t *testing.T) {
 			t.Fatalf("control publication %d: %v", i, err)
 		}
 	}
-	store := filepath.Join(root, ".datum", "artifacts")
+	store := filepath.Join(root, ".whosaidso", "artifacts")
 	entries, err := os.ReadDir(store)
 	if err != nil {
 		t.Fatal(err)
@@ -46,25 +46,25 @@ func TestPublishArtifactRefusals(t *testing.T) {
 	}{
 		{"relative root", "invalid-field", func(t *testing.T, root string) string { return "relative/root" }},
 		{"store directory is a symlink", "invalid-field", func(t *testing.T, root string) string {
-			mustMkdir(t, filepath.Join(root, ".datum"))
-			mustSymlink(t, t.TempDir(), filepath.Join(root, ".datum", "artifacts"))
+			mustMkdir(t, filepath.Join(root, ".whosaidso"))
+			mustSymlink(t, t.TempDir(), filepath.Join(root, ".whosaidso", "artifacts"))
 			return root
 		}},
 		{"digest name holds other bytes", "conflict", func(t *testing.T, root string) string {
-			mustMkdir(t, filepath.Join(root, ".datum", "artifacts"))
-			putFile(t, filepath.Join(root, ".datum", "artifacts", string(model.HashBytes(data))), []byte("other bytes"))
+			mustMkdir(t, filepath.Join(root, ".whosaidso", "artifacts"))
+			putFile(t, filepath.Join(root, ".whosaidso", "artifacts", string(model.HashBytes(data))), []byte("other bytes"))
 			return root
 		}},
 		{"digest name holds a longer file", "conflict", func(t *testing.T, root string) string {
-			mustMkdir(t, filepath.Join(root, ".datum", "artifacts"))
-			putFile(t, filepath.Join(root, ".datum", "artifacts", string(model.HashBytes(data))), append(append([]byte{}, data...), '!'))
+			mustMkdir(t, filepath.Join(root, ".whosaidso", "artifacts"))
+			putFile(t, filepath.Join(root, ".whosaidso", "artifacts", string(model.HashBytes(data))), append(append([]byte{}, data...), '!'))
 			return root
 		}},
 		{"digest name is a symlink to the right bytes", "invalid-field", func(t *testing.T, root string) string {
-			mustMkdir(t, filepath.Join(root, ".datum", "artifacts"))
+			mustMkdir(t, filepath.Join(root, ".whosaidso", "artifacts"))
 			elsewhere := filepath.Join(t.TempDir(), "copy")
 			putFile(t, elsewhere, data)
-			mustSymlink(t, elsewhere, filepath.Join(root, ".datum", "artifacts", string(model.HashBytes(data))))
+			mustSymlink(t, elsewhere, filepath.Join(root, ".whosaidso", "artifacts", string(model.HashBytes(data))))
 			return root
 		}},
 	} {
@@ -92,7 +92,7 @@ func TestPublishArtifactVerifiesTheDestination(t *testing.T) {
 	requireFault(t, publishArtifact(t.TempDir(), artifactTestDir, data, swapped), "conflict")
 }
 
-func TestRunStagingLivesInTheDatumHomeOutsideTheProject(t *testing.T) {
+func TestRunStagingLivesInTheWhoSaidSoHomeOutsideTheProject(t *testing.T) {
 	p := intakeProject(t)
 	id := commandID(1)
 	dir, err := MakeRunStaging(p, id)
@@ -105,7 +105,7 @@ func TestRunStagingLivesInTheDatumHomeOutsideTheProject(t *testing.T) {
 	}
 	home := filepath.Dir(filepath.Dir(inbox))
 	if want := filepath.Join(home, "staging", filepath.Base(inbox), string(id)); dir != want {
-		t.Fatalf("staging = %s, want %s beside intake in the Datum home", dir, want)
+		t.Fatalf("staging = %s, want %s beside intake in the WhoSaidSo home", dir, want)
 	}
 	if rel, err := filepath.Rel(p.Root, dir); err != nil || !strings.HasPrefix(rel, "..") {
 		t.Fatalf("staging %s must be outside the project %s", dir, p.Root)

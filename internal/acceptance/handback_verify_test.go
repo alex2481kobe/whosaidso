@@ -11,11 +11,11 @@ import (
 	"reflect"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/query"
-	"datum/internal/reduce"
-	"datum/internal/store"
-	"datum/internal/write"
+	"whosaidso/internal/model"
+	"whosaidso/internal/query"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
+	"whosaidso/internal/write"
 )
 
 // These tests use the public capture/admission/read boundaries, including a
@@ -79,15 +79,15 @@ func hbVerifyAPI(f *gateVerifyFixture, r write.HandbackRequest) (model.PacketRef
 
 func hbVerifyCLI(t *testing.T) hbVerifyCapture {
 	t.Helper()
-	binary := filepath.Join(t.TempDir(), "datum")
-	cmd := exec.Command("go", "build", "-o", binary, "./cmd/datum")
+	binary := filepath.Join(t.TempDir(), "whosaidso")
+	cmd := exec.Command("go", "build", "-o", binary, "./cmd/whosaidso")
 	cmd.Dir = filepath.Join("..", "..")
 	cmd.Env = append(os.Environ(), "GOPROXY=off", "GOTOOLCHAIN=local")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("Go CLI control build failed (no dependency downloads allowed): %v\n%s", err, out)
 	}
 	return func(f *gateVerifyFixture, r write.HandbackRequest) (model.PacketRef, error) {
-		stWriteConfig(t, f.p.Root, string(f.p.ID), ".datum/events")
+		stWriteConfig(t, f.p.Root, string(f.p.ID), ".whosaidso/events")
 		// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
 		args := []string{"handback", "--json", "--command-id", string(r.CommandID), "--actor", r.Author.ID,
 			"--attempt-id", string(r.AttemptID), "--outcome", string(r.Outcome), "--reason", r.Reason, "--next-action", r.NextAction}

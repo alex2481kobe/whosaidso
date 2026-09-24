@@ -29,7 +29,7 @@ type BindResult struct {
 }
 
 // Bind binds the project declared nearest cwd to target, which must hold
-// datum.toml itself. Binding again elsewhere is the relocation, with its
+// whosaidso.toml itself. Binding again elsewhere is the relocation, with its
 // checks: the destination declares the same project id, confines its ledger
 // and reads as a complete history; while the old home still exists, the
 // destination's history must continue it bundle for bundle. When the old home

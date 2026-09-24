@@ -9,7 +9,7 @@ package reduce
 import (
 	"fmt"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 const (

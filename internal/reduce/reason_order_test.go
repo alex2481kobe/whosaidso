@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func TestPrerequisiteReasonsFollowNumericIndexOrder(t *testing.T) {

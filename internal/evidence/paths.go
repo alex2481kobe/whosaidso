@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // ---- paths ---------------------------------------------------------------

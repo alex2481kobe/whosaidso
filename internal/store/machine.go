@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
-// MachineIDFile is the machine identity's name in the Datum home (Home). It holds one
+// MachineIDFile is the machine identity's name in the WhoSaidSo home (Home). It holds one
 // ULID and a newline, nothing else.
 const MachineIDFile = "machine-id"
 
@@ -46,7 +46,7 @@ func machineIDAt(dir string) (model.ID, error) {
 		return "", storeFault("io", dir, err.Error())
 	}
 	if info, err := os.Lstat(dir); err != nil || !info.IsDir() {
-		return "", storeFault("io", dir, "the datum home must be a real directory")
+		return "", storeFault("io", dir, "the whosaidso home must be a real directory")
 	}
 	id, err := model.NewID(time.Now(), rand.Reader)
 	if err != nil {

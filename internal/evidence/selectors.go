@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // WholeUnit and WholePopulation are what a whole-artifact selector reports.

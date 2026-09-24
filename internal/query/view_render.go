@@ -133,7 +133,7 @@ func briefTodo(b *briefWriter, a cur) {
 	briefIntake(b, "intake unreviewed", t.at("intake_unreviewed"), a.at("intake_pending"), "pending")
 	briefIntake(b, "correction requested (each packet's author owes a corrected packet)", t.at("intake_correction_requested"), a.at("intake_pending"), "correction-requested")
 	if n := t.at("intake_rejected"); n.string() != "0" {
-		b.line(0, "rejected intake:", n, "(reviewed, nothing owed; datum history lists the reviews)")
+		b.line(0, "rejected intake:", n, "(reviewed, nothing owed; whosaidso history lists the reviews)")
 	}
 	briefList(b, 0, "attention", a.at("attention"), briefAttention)
 }

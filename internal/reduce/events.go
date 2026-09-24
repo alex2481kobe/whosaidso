@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // ---- routing -------------------------------------------------------------

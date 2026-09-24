@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // ---- the single writer ---------------------------------------------------
@@ -94,7 +94,7 @@ func TestConcurrentProcessesCannotFork(t *testing.T) {
 	children := make([]*exec.Cmd, 0, writers)
 	for n := 2; n <= writers+1; n++ {
 		cmd := exec.Command(os.Args[0], "-test.run=^TestLedgerAdmitChild$")
-		cmd.Env = append(os.Environ(), "DATUM_LEDGER_ADMIT="+strconv.Itoa(n), "DATUM_LEDGER_ROOT="+p.Root)
+		cmd.Env = append(os.Environ(), "WHOSAIDSO_LEDGER_ADMIT="+strconv.Itoa(n), "WHOSAIDSO_LEDGER_ROOT="+p.Root)
 		if err := cmd.Start(); err != nil {
 			t.Fatal(err)
 		}
@@ -118,7 +118,7 @@ func TestConcurrentProcessesCannotFork(t *testing.T) {
 }
 
 func TestLedgerAdmitChild(t *testing.T) {
-	n, err := strconv.Atoi(os.Getenv("DATUM_LEDGER_ADMIT"))
+	n, err := strconv.Atoi(os.Getenv("WHOSAIDSO_LEDGER_ADMIT"))
 	if err != nil {
 		return
 	}
@@ -129,8 +129,8 @@ func TestLedgerAdmitChild(t *testing.T) {
 }
 
 func childProject() Project {
-	root := os.Getenv("DATUM_LEDGER_ROOT")
-	return Project{ID: "team/project", Root: root, Ledger: filepath.Join(root, ".datum", "events")}
+	root := os.Getenv("WHOSAIDSO_LEDGER_ROOT")
+	return Project{ID: "team/project", Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
 }
 
 // ---- idempotency and the lost acknowledgement ----------------------------
@@ -544,7 +544,7 @@ func TestCrashSchedule(t *testing.T) {
 			p := ledgerProject(t)
 			admitControl(t, p, 1)
 			cmd := exec.Command(os.Args[0], "-test.run=^TestLedgerCrashChild$")
-			cmd.Env = append(os.Environ(), "DATUM_LEDGER_CRASH="+tc.point, "DATUM_LEDGER_ROOT="+p.Root)
+			cmd.Env = append(os.Environ(), "WHOSAIDSO_LEDGER_CRASH="+tc.point, "WHOSAIDSO_LEDGER_ROOT="+p.Root)
 			output, err := cmd.CombinedOutput()
 			var exit *exec.ExitError
 			if !errors.As(err, &exit) || exit.ExitCode() != 73 {
@@ -593,7 +593,7 @@ func TestCrashSchedule(t *testing.T) {
 }
 
 func TestLedgerCrashChild(t *testing.T) {
-	point := os.Getenv("DATUM_LEDGER_CRASH")
+	point := os.Getenv("WHOSAIDSO_LEDGER_CRASH")
 	if point == "" {
 		return
 	}
@@ -625,7 +625,7 @@ func TestAdmissionLockIsNotInheritedByChildren(t *testing.T) {
 	}
 	pidFile := filepath.Join(t.TempDir(), "grandchild.pid")
 	cmd := exec.Command(os.Args[0], "-test.run=^TestLedgerLockChild$")
-	cmd.Env = append(os.Environ(), "DATUM_LEDGER_LOCK_CHILD=1", "DATUM_LEDGER_ROOT="+p.Root, "DATUM_LEDGER_PIDFILE="+pidFile)
+	cmd.Env = append(os.Environ(), "WHOSAIDSO_LEDGER_LOCK_CHILD=1", "WHOSAIDSO_LEDGER_ROOT="+p.Root, "WHOSAIDSO_LEDGER_PIDFILE="+pidFile)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("lock child: %s, %v", output, err)
 	}
@@ -660,16 +660,16 @@ func TestAdmissionLockIsNotInheritedByChildren(t *testing.T) {
 }
 
 func TestLedgerLockChild(t *testing.T) {
-	if os.Getenv("DATUM_LEDGER_LOCK_CHILD") == "" {
+	if os.Getenv("WHOSAIDSO_LEDGER_LOCK_CHILD") == "" {
 		return
 	}
 	p := childProject()
 	if _, err := lockAcquire(filepath.Join(p.Ledger, lockName)); err != nil {
 		t.Fatalf("child lock: %v", err)
 	}
-	pidFile := os.Getenv("DATUM_LEDGER_PIDFILE")
+	pidFile := os.Getenv("WHOSAIDSO_LEDGER_PIDFILE")
 	grandchild := exec.Command(os.Args[0], "-test.run=^TestLedgerLockGrandchild$")
-	grandchild.Env = append(os.Environ(), "DATUM_LEDGER_GRANDCHILD=1", "DATUM_LEDGER_PIDFILE="+pidFile)
+	grandchild.Env = append(os.Environ(), "WHOSAIDSO_LEDGER_GRANDCHILD=1", "WHOSAIDSO_LEDGER_PIDFILE="+pidFile)
 	// No inherited pipes, or the parent's CombinedOutput would wait for the
 	// grandchild instead of for this process.
 	grandchild.Stdout, grandchild.Stderr = nil, nil
@@ -688,10 +688,10 @@ func TestLedgerLockChild(t *testing.T) {
 }
 
 func TestLedgerLockGrandchild(t *testing.T) {
-	if os.Getenv("DATUM_LEDGER_GRANDCHILD") == "" {
+	if os.Getenv("WHOSAIDSO_LEDGER_GRANDCHILD") == "" {
 		return
 	}
-	if err := os.WriteFile(os.Getenv("DATUM_LEDGER_PIDFILE"), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
+	if err := os.WriteFile(os.Getenv("WHOSAIDSO_LEDGER_PIDFILE"), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	// Stand in for a wrapped instrument process that outlives the admission.

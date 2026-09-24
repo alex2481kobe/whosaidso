@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 // viewsWorld is richWorld plus the task shapes todo must file: task 5 awaiting
@@ -45,7 +45,7 @@ func viewsWorld(t *testing.T, p store.Project) {
 		&model.TaskStart{Task: testRef(6, 1), AttemptID: testID(76), Actor: model.Actor{ID: "worker"}},
 		&model.TaskStart{Task: testRef(9, 1), AttemptID: testID(79), Actor: model.Actor{ID: "lane-a"}},
 		&model.TaskStart{Task: testRef(15, 1), AttemptID: testID(78), Actor: model.Actor{ID: "worker"}})...)
-	outside, unsealed := envelope(53, 78, 10, 0, gitInput("cmd/datum/main.go")), envelope(54, 78, 10, 0, testArtifact())
+	outside, unsealed := envelope(53, 78, 10, 0, gitInput("cmd/whosaidso/main.go")), envelope(54, 78, 10, 0, testArtifact())
 	appendEvents(t, p, 124, admitted(124, &model.InvocationStart{Envelope: outside}, &model.InvocationStart{Envelope: unsealed})...)
 	appendEvents(t, p, 125, seal(outside, 0, time.Second))
 	success := func(task, attempt int) model.TypedEvent {

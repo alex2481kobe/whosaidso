@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/query"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/query"
+	"whosaidso/internal/store"
 )
 
 // privateCopy copies the fixture's config and ledger under a fresh root, so
@@ -25,10 +25,10 @@ func privateCopy(t testing.TB, f *fixture, root string) *fixture {
 	t.Helper()
 	g := *f
 	g.t = t
-	g.Project.Root, g.Project.Ledger = root, filepath.Join(root, ".datum", "events")
-	config, err := os.ReadFile(filepath.Join(f.Project.Root, "datum.toml"))
+	g.Project.Root, g.Project.Ledger = root, filepath.Join(root, ".whosaidso", "events")
+	config, err := os.ReadFile(filepath.Join(f.Project.Root, "whosaidso.toml"))
 	must(t, err)
-	put(t, filepath.Join(root, "datum.toml"), config)
+	put(t, filepath.Join(root, "whosaidso.toml"), config)
 	entries, err := os.ReadDir(f.Project.Ledger)
 	must(t, err)
 	must(t, os.MkdirAll(g.Project.Ledger, 0o755))

@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func intakeProject(t *testing.T) Project {
@@ -23,9 +23,9 @@ func intakeProject(t *testing.T) Project {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	t.Setenv(HomeEnv, "") // HOME alone places the Datum home here
+	t.Setenv(HomeEnv, "") // HOME alone places the WhoSaidSo home here
 	root := t.TempDir()
-	return Project{ID: "team/project", Root: root, Ledger: filepath.Join(root, ".datum/events")}
+	return Project{ID: "team/project", Root: root, Ledger: filepath.Join(root, ".whosaidso/events")}
 }
 
 func commandID(n int) model.ID { return model.ID(fmt.Sprintf("%026d", n)) }
@@ -106,7 +106,7 @@ func TestCaptureSurvivesMovedAndRemovedRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	p.Root = moved
-	p.Ledger = filepath.Join(moved, ".datum/events")
+	p.Ledger = filepath.Join(moved, ".whosaidso/events")
 	if _, err := ReadIntake(p, nil); err != nil {
 		t.Fatalf("after move: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestDistinctDeclaredProjectsSharingGit(t *testing.T) {
 	for i, id := range ids {
 		root := t.TempDir()
 		putFile(t, filepath.Join(root, ".git"), []byte("gitdir: "+common+"\n"))
-		putFile(t, filepath.Join(root, "datum.toml"), []byte("id='"+string(id)+"'\nledger='.datum/events'"))
+		putFile(t, filepath.Join(root, "whosaidso.toml"), []byte("id='"+string(id)+"'\nledger='.whosaidso/events'"))
 		project, err := Discover(root)
 		if err != nil {
 			t.Fatal(err)
@@ -232,7 +232,7 @@ func TestFiveWritersNoLockAndNoPartialPackets(t *testing.T) {
 			if err != nil || len(packets) != want || len(refs) != want {
 				t.Fatalf("writers: packets=%d refs=%d want=%d err=%v", len(packets), len(refs), want, err)
 			}
-			if err := filepath.WalkDir(filepath.Join(os.Getenv("HOME"), ".datum"), func(path string, entry os.DirEntry, err error) error {
+			if err := filepath.WalkDir(filepath.Join(os.Getenv("HOME"), ".whosaidso"), func(path string, entry os.DirEntry, err error) error {
 				if err != nil {
 					return err
 				}
@@ -308,7 +308,7 @@ func TestBlobInventoryIsAnIdentitySet(t *testing.T) {
 func TestOwnerOnlyPermissions(t *testing.T) {
 	p := intakeProject(t)
 	capturedControl(t, p, commandID(1), "private source")
-	if err := filepath.WalkDir(filepath.Join(os.Getenv("HOME"), ".datum"), func(path string, entry os.DirEntry, err error) error {
+	if err := filepath.WalkDir(filepath.Join(os.Getenv("HOME"), ".whosaidso"), func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -330,7 +330,7 @@ func TestOwnerOnlyPermissions(t *testing.T) {
 }
 
 func TestIntakePermissionRecovery(t *testing.T) {
-	for _, target := range []string{"datum", "intake", "inbox", "packet", "blobs", "json", "blob"} {
+	for _, target := range []string{"whosaidso", "intake", "inbox", "packet", "blobs", "json", "blob"} {
 		t.Run(target, func(t *testing.T) {
 			p := intakeProject(t)
 			// Recovery commands must also work for homes containing shell syntax.
@@ -345,7 +345,7 @@ func TestIntakePermissionRecovery(t *testing.T) {
 			jsonPath := filepath.Join(dir, "packet.json")
 			blobPath := filepath.Join(dir, "blobs", string(model.HashBytes([]byte("source"))))
 			paths := map[string]string{
-				"datum": filepath.Join(home, ".datum"), "intake": filepath.Join(home, ".datum", "intake"),
+				"whosaidso": filepath.Join(home, ".whosaidso"), "intake": filepath.Join(home, ".whosaidso", "intake"),
 				"inbox": filepath.Dir(dir), "packet": dir, "blobs": filepath.Join(dir, "blobs"),
 				"json": jsonPath, "blob": blobPath,
 			}
@@ -723,7 +723,7 @@ func TestCrashRecovery(t *testing.T) {
 			p := intakeProject(t)
 			capturedControl(t, p, commandID(1), "control")
 			cmd := exec.Command(os.Args[0], "-test.run=^TestIntakeCrashChild$")
-			cmd.Env = append(os.Environ(), "DATUM_INTAKE_CRASH_TEST="+point)
+			cmd.Env = append(os.Environ(), "WHOSAIDSO_INTAKE_CRASH_TEST="+point)
 			if output, err := cmd.CombinedOutput(); err == nil {
 				t.Fatalf("child did not crash: %s", output)
 			} else {
@@ -766,7 +766,7 @@ func TestCrashRecovery(t *testing.T) {
 }
 
 func TestIntakeCrashChild(t *testing.T) {
-	point := os.Getenv("DATUM_INTAKE_CRASH_TEST")
+	point := os.Getenv("WHOSAIDSO_INTAKE_CRASH_TEST")
 	if point == "" {
 		return
 	}

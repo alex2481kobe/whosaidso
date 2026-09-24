@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/store"
-	"datum/internal/write"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
+	"whosaidso/internal/write"
 )
 
 // Each proof re-admits a different three-run family's proof already in the

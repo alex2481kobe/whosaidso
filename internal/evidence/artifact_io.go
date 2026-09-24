@@ -17,7 +17,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // readContent finds a copy of the pinned bytes and verifies it. Locators are
@@ -183,7 +183,7 @@ func (r *Resolver) gitBlob(ctx context.Context, pin model.GitPin) ([]byte, error
 	if got := strings.TrimSpace(string(kind)); got != "commit" {
 		return nil, fault("invalid-field", "artifact.git.commit", "pinned object is a "+got+", not a commit")
 	}
-	// Every authored path is relative to the datum root, which may sit below the
+	// Every authored path is relative to the whosaidso root, which may sit below the
 	// repository's top level. "<commit>:<path>" is read from the top level;
 	// "<commit>:./<path>" is read from the directory git runs in, the root. With
 	// ".." refused by relativePath, the lookup cannot leave the root's subtree.

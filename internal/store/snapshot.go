@@ -19,8 +19,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 // State is one selected ledger prefix and the snapshot reduced from it. Its
@@ -220,7 +220,7 @@ func decodeSelected(project Project, files []selectedFile, i int, raw []byte) (m
 
 // The prefix digest chains every file's name and content hash in sequence
 // order, so equal digests at a length mean equal prefixes byte for byte.
-func chainStart() [32]byte { return sha256.Sum256([]byte("datum-ledger-prefix/1")) }
+func chainStart() [32]byte { return sha256.Sum256([]byte("whosaidso-ledger-prefix/1")) }
 
 func chainLink(prev [32]byte, name string, hash [32]byte) [32]byte {
 	buf := make([]byte, 0, len(prev)+len(name)+1+len(hash))

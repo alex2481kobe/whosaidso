@@ -13,9 +13,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 // countScans wraps the inventory read for the rest of the test.

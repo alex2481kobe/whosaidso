@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
 const (
@@ -127,11 +127,11 @@ func Run(ctx context.Context, project store.Project, request RunRequest) (RunRes
 	// Replace inherited adapter paths so nested runs cannot overwrite a parent.
 	filtered := make([]string, 0, len(cmd.Env)+2)
 	for _, entry := range cmd.Env {
-		if !strings.HasPrefix(entry, "DATUM_RUN_DIR=") && !strings.HasPrefix(entry, "DATUM_RUN_REPORT=") {
+		if !strings.HasPrefix(entry, "WHOSAIDSO_RUN_DIR=") && !strings.HasPrefix(entry, "WHOSAIDSO_RUN_REPORT=") {
 			filtered = append(filtered, entry)
 		}
 	}
-	cmd.Env = append(filtered, "DATUM_RUN_DIR="+dir, "DATUM_RUN_REPORT="+filepath.Join(dir, "producer.json"))
+	cmd.Env = append(filtered, "WHOSAIDSO_RUN_DIR="+dir, "WHOSAIDSO_RUN_REPORT="+filepath.Join(dir, "producer.json"))
 	cmd.Stdout, cmd.Stderr, cmd.WaitDelay = outPipe.writer, errPipe.writer, runWaitDelay
 	drained := make(chan error, 2)
 	go func() { _, err := io.Copy(stdout, outPipe.reader); drained <- err }()

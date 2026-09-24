@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func TestIntakeIDsListsOnlyPublishedPackets(t *testing.T) {

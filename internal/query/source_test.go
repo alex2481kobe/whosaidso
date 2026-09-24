@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 // replayed is a Source over any prefix, so a test can hand ReadViewFrom one older

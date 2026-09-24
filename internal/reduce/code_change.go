@@ -13,7 +13,7 @@ import (
 	"path"
 	"strings"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // CodeCodeChange is a recorded code change the ledger contradicts. Admission

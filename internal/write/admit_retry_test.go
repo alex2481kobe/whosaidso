@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
 func TestAdmissionRetryNeedsNoIntake(t *testing.T) {

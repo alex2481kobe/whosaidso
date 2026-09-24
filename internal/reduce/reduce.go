@@ -1,4 +1,4 @@
-// Package reduce folds admitted bundles into the state every Datum answer is
+// Package reduce folds admitted bundles into the state every WhoSaidSo answer is
 // read from.
 //
 // This is the single point of failure the contract names. The bundles can be
@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"strings"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // ---- state ---------------------------------------------------------------

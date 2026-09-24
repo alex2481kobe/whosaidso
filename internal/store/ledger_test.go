@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // ---- shared fixtures -----------------------------------------------------
@@ -25,8 +25,8 @@ func ledgerProject(t *testing.T) Project {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	t.Setenv(HomeEnv, "") // HOME alone places the Datum home here
-	return Project{ID: "team/project", Root: root, Ledger: filepath.Join(root, ".datum", "events")}
+	t.Setenv(HomeEnv, "") // HOME alone places the WhoSaidSo home here
+	return Project{ID: "team/project", Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
 }
 
 // admissionID is a readable, deterministic ULID: 26 digits, first below '8'.

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
 // splitProject is a home repository and a different invoking checkout, each
@@ -30,7 +30,7 @@ func splitProject(t *testing.T) (p store.Project, homeHead, checkoutHead string)
 	if homeHead == checkoutHead {
 		t.Fatal("control: the two checkouts must sit at different commits")
 	}
-	p = store.Project{ID: "test/identity", Root: home, Ledger: filepath.Join(home, ".datum", "events"), Checkout: checkout}
+	p = store.Project{ID: "test/identity", Root: home, Ledger: filepath.Join(home, ".whosaidso", "events"), Checkout: checkout}
 	return p, homeHead, checkoutHead
 }
 
@@ -43,8 +43,8 @@ func TestRunIdentityRecordsTheInvokingCheckoutsHead(t *testing.T) {
 	if id.Dirty.State != model.Known || *id.Dirty.Value {
 		t.Fatalf("the clean invoking checkout is known clean: %+v", id.Dirty)
 	}
-	// The checkout's own copy of Datum's record folders is not source either.
-	proofPut(t, p.Checkout, ".datum/events/000001.json", "{}")
+	// The checkout's own copy of WhoSaidSo's record folders is not source either.
+	proofPut(t, p.Checkout, ".whosaidso/events/000001.json", "{}")
 	if id := RunExecutionIdentity(context.Background(), p); id.Dirty.State != model.Known || *id.Dirty.Value {
 		t.Fatalf("the checkout's ledger copy is a record, not source: %+v", id.Dirty)
 	}

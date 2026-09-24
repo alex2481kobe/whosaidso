@@ -5,9 +5,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 // HandbackRequest contains authored meaning, never an inferred outcome. Author

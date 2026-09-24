@@ -1,4 +1,4 @@
-// Criterion tests: archtree's readings put through Datum's own observation and
+// Criterion tests: archtree's readings put through WhoSaidSo's own observation and
 // evaluation path (internal/evidence Observe then Evaluate), exactly as a run's
 // stdout would be. A reading that only looks selectable proves nothing; these
 // assert the evaluator reaches TRUE or FALSE, never UNKNOWN. Scanner known
@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
 )
 
 const (
@@ -70,7 +70,7 @@ func fileLimit(t *testing.T, example []byte, result, identity string, max int) m
 
 func itoa(n int) string { b, _ := json.Marshal(n); return string(b) }
 
-// evaluate writes stdout where write.Run puts a run's stdout and lets Datum's
+// evaluate writes stdout where write.Run puts a run's stdout and lets WhoSaidSo's
 // resolver find, read and judge it.
 func evaluate(t *testing.T, c model.CriterionFix, stdout []byte) evidence.Evaluation {
 	t.Helper()
@@ -165,7 +165,7 @@ func TestPackagePointerSurvivesANewPackage(t *testing.T) {
 // verdict at all is.
 func TestThisModuleFileLimitIsDecidable(t *testing.T) {
 	out := archtreeJSON(t, "../..")
-	c := fileLimit(t, out, "/readings/file_lines", "production Go files in module datum", 300)
+	c := fileLimit(t, out, "/readings/file_lines", "production Go files in module whosaidso", 300)
 	ev := evaluate(t, c, out)
 	if ev.Verdict == evidence.Unknown {
 		t.Fatalf("module-wide file limit is UNKNOWN: %s", ev.Describe())

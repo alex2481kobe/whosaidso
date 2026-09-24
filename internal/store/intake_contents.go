@@ -16,7 +16,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // CapturedBlob describes bytes copied into a packet, never their original path.
@@ -39,7 +39,7 @@ func IntakeDir(project Project) (string, error) {
 	return filepath.Join(home, "intake", encoded), nil
 }
 
-// encodeProjectID names a project inside the Datum home: its intake, staging
+// encodeProjectID names a project inside the WhoSaidSo home: its intake, staging
 // and registry binding all use this one name.
 func encodeProjectID(id model.ProjectID) (string, error) {
 	if id == "" || !utf8.ValidString(string(id)) || strings.ContainsRune(string(id), 0) {

@@ -13,10 +13,10 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
-	"datum/internal/write"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
+	"whosaidso/internal/write"
 )
 
 // Contract:99,161-163,362-369: matching execution conditions include the
@@ -28,7 +28,7 @@ func TestAstraRound2ChangedExecutionSourceCannotCompare(t *testing.T) {
 			script := strings.Replace(pvProducer(pvPass), "printf '%s' '"+pvPass+"'", "cat measurement.json", 1)
 			pvPut(t, w.p.Root, "tools/run.sh", []byte(script))
 			pvPut(t, w.p.Root, "measurement.json", []byte(pvPass))
-			pvPut(t, w.p.Root, ".gitignore", []byte(".datum/\n"))
+			pvPut(t, w.p.Root, ".gitignore", []byte(".whosaidso/\n"))
 			git := func(args ...string) string {
 				t.Helper()
 				cmd := exec.Command("git", append([]string{"-C", w.p.Root, "-c", "user.name=review", "-c", "user.email=review@example.invalid", "-c", "commit.gpgsign=false"}, args...)...)

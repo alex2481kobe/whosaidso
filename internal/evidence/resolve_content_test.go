@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // ---- content pins --------------------------------------------------------
@@ -39,7 +39,7 @@ func TestResolverChecksDeclaredMediaType(t *testing.T) {
 		{"invalid UTF8 JSON", "{\"value\":\"\xff\"}", "application/json", "conflict"},
 		{"binary claiming text", "text\x00", "text/plain", "conflict"},
 		{"invalid UTF8 text", "\xff", "text/plain", "conflict"},
-		{"unsupported type", "arbitrary bytes", "application/x-datum", "unavailable"},
+		{"unsupported type", "arbitrary bytes", "application/x-whosaidso", "unavailable"},
 		{"JSON suffix is not a schema check", `{"value":1}`, "application/example+json", "unavailable"},
 		{"unverified parameters", `{"value":1}`, "application/json; profile=example", "unavailable"},
 		{"malformed media declaration", `{"value":1}`, "application/json; broken", "invalid-field"},

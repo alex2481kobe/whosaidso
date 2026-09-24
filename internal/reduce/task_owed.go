@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sort"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // witnessed checks a success closure against the acceptance criteria of the

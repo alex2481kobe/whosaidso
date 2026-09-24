@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 // Ruling R8.4 flipped this test. It was written to PROVE the hole: a +00:37
@@ -29,7 +29,7 @@ import (
 func TestInvocationTimestampIsUTCThroughLedgerPublication(t *testing.T) {
 	t.Setenv("HOME", t.TempDir()) // isolate the real intake publisher
 	root := t.TempDir()
-	project := store.Project{ID: reduce.TestProject, Root: root, Ledger: filepath.Join(root, ".datum", "events")}
+	project := store.Project{ID: reduce.TestProject, Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
 	l, env, _ := reduce.SealStart(t)
 	env.StartedAt = time.Date(2026, 9, 22, 12, 0, 0, 0, time.FixedZone("fixture", 37*60))
 	// This one bundle also fixes the claim, so the run names no criterion:

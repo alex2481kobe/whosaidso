@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 // The ruling's words carry the quote's exact whitespace: quotes are compared

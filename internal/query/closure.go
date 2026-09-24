@@ -9,8 +9,8 @@ package query
 import (
 	"fmt"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 type Edge struct {

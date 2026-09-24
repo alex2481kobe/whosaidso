@@ -1,20 +1,20 @@
 package model
 
 // This file holds the template placeholder grammar and the decoder's refusal
-// of a placeholder left in an event. `datum template` writes every unfilled
+// of a placeholder left in an event. `whosaidso template` writes every unfilled
 // field as "<kind: hint>" or "<kind>"; a string of exactly that form is never
 // an authored value, so no event carrying one decodes. The check lives in
 // DecodeEvent because every capture passes through it (CLI capture, template
 // --capture, check admission --events, run, handback, reconcile via
 // EncodeEvent, and admission's own re-decode). Rendering templates does not
-// belong here; it lives in cmd/datum.
+// belong here; it lives in cmd/whosaidso.
 
 import (
 	"fmt"
 	"strings"
 )
 
-// placeholderKinds are the kinds `datum template` writes. A string is a
+// placeholderKinds are the kinds `whosaidso template` writes. A string is a
 // placeholder only when it is wholly "<kind>" or "<kind: hint>" with one of
 // these kinds, so authored text that merely holds angle brackets decodes.
 var placeholderKinds = map[string]bool{
@@ -23,7 +23,7 @@ var placeholderKinds = map[string]bool{
 	"media-type": true, "pointer": true, "key": true, "unsupported": true,
 }
 
-// IsPlaceholder reports whether s is a placeholder `datum template` writes.
+// IsPlaceholder reports whether s is a placeholder `whosaidso template` writes.
 func IsPlaceholder(s string) bool {
 	if len(s) < 3 || s[0] != '<' || s[len(s)-1] != '>' {
 		return false

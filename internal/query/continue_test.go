@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func TestContinueComposesTheBriefAndWritesNothing(t *testing.T) {

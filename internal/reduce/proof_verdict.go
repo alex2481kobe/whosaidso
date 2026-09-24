@@ -5,7 +5,7 @@ package reduce
 // member meets, supporting or contradicting. Which member counts under which
 // verdict, and the family rules, stay in proof_admission.go and proof_family.go.
 
-import "datum/internal/model"
+import "whosaidso/internal/model"
 
 // laterCriterionRevision reports whether a revision of ref's criterion later
 // than ref's is admitted on the same claim revision. Revisions need not be

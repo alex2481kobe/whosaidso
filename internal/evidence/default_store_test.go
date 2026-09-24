@@ -39,9 +39,9 @@ func TestProductionNeverUsesTheDefaultArtifactStore(t *testing.T) {
 			}
 		}
 		// RecordDir is the one spelling of the folder name in code. The quote
-		// is part of the check: ".datum" as a Go string literal, not the
-		// ~/.datum machine directory, which store names as a path part.
-		if !strings.HasPrefix(filepath.ToSlash(path), "../../internal/evidence/") && strings.Contains(string(data), "\".datum/") {
+		// is part of the check: ".whosaidso" as a Go string literal, not the
+		// ~/.whosaidso machine directory, which store names as a path part.
+		if !strings.HasPrefix(filepath.ToSlash(path), "../../internal/evidence/") && strings.Contains(string(data), "\".whosaidso/") {
 			t.Errorf("%s spells the record folder; derive it from the project's ledger", path)
 		}
 		return nil

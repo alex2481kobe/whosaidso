@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
-	"datum/internal/write"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
+	"whosaidso/internal/write"
 )
 
 const projectID = model.ProjectID("datum/query-tests")
@@ -24,7 +24,7 @@ func testProject(t *testing.T) store.Project {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	root := t.TempDir()
-	return store.Project{ID: projectID, Root: root, Ledger: filepath.Join(root, ".datum", "events")}
+	return store.Project{ID: projectID, Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
 }
 func testScope() model.Scope {
 	return model.Scope{SourcePaths: []string{"internal/query/query.go"}, ContextRefs: []model.RecordRef{},
@@ -32,7 +32,7 @@ func testScope() model.Scope {
 }
 func testTask(n int) *model.TaskCreate {
 	return &model.TaskCreate{ID: testID(n), Provenance: model.Provenance{Author: model.Actor{ID: "author"}, SourceRefs: []model.ArtifactRef{}},
-		Spec: model.TaskSpec{Intent: "Build U09 of Datum: the first usable read slice", Subject: "Datum",
+		Spec: model.TaskSpec{Intent: "Build U09 of WhoSaidSo: the first usable read slice", Subject: "WhoSaidSo",
 			Scope: testScope(), NonGoals: []string{"change canonical state during reads"},
 			AcceptanceCriteria: []model.AcceptanceCriterion{{ID: testID(90), Revision: 1, Criterion: "text and JSON agree"}},
 			ContextRefs:        []model.RecordRef{}, ConstraintRefs: []model.RecordRef{}, Prerequisites: []model.Prerequisite{},

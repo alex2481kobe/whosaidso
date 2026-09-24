@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 // deadRun admits a passing run and a start whose observer never sealed it.

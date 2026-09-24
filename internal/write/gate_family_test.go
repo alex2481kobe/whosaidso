@@ -13,9 +13,9 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 func TestProofRefusesPendingFamilyMembersUntilAdmittedTogether(t *testing.T) {

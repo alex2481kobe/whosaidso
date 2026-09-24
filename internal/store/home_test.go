@@ -1,6 +1,6 @@
 package store
 
-// The registry's rules: DATUM_HOME moves every per-machine store together, an
+// The registry's rules: WHOSAIDSO_HOME moves every per-machine store together, an
 // unbound project refuses, a missing home refuses without fallback or
 // recreation, relocation checks continuity, symlink aliases name one home, and
 // rebinding is serialized with admission under the ledger lock.
@@ -13,25 +13,25 @@ import (
 	"sync"
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
-// homeWorld is one isolated Datum home and a project root declaring id.
+// homeWorld is one isolated WhoSaidSo home and a project root declaring id.
 func homeWorld(t *testing.T) (root string) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
-	t.Setenv(HomeEnv, filepath.Join(t.TempDir(), "datum-home"))
+	t.Setenv(HomeEnv, filepath.Join(t.TempDir(), "whosaidso-home"))
 	return homeCheckout(t, "team/project")
 }
 
-// homeCheckout is a new directory holding a datum.toml that declares id.
+// homeCheckout is a new directory holding a whosaidso.toml that declares id.
 func homeCheckout(t *testing.T, id string) string {
 	t.Helper()
 	root, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	putFile(t, filepath.Join(root, "datum.toml"), []byte("id = '"+id+"'\nledger = '.datum/events'\n"))
+	putFile(t, filepath.Join(root, "whosaidso.toml"), []byte("id = '"+id+"'\nledger = '.whosaidso/events'\n"))
 	return root
 }
 
@@ -56,7 +56,7 @@ func mustOpen(t *testing.T, cwd string) Project {
 // copyLedger copies from's ledger files into to's ledger, as a clone would.
 func copyLedger(t *testing.T, from, to string) {
 	t.Helper()
-	src, dst := filepath.Join(from, ".datum", "events"), filepath.Join(to, ".datum", "events")
+	src, dst := filepath.Join(from, ".whosaidso", "events"), filepath.Join(to, ".whosaidso", "events")
 	mustMkdirAll(t, dst)
 	entries, err := os.ReadDir(src)
 	if err != nil {
@@ -84,7 +84,7 @@ func mustMkdirAll(t *testing.T, dir string) {
 func TestHomeEnvIsolatesAllFourStores(t *testing.T) {
 	userHome := t.TempDir()
 	t.Setenv("HOME", userHome)
-	home := filepath.Join(t.TempDir(), "datum-home")
+	home := filepath.Join(t.TempDir(), "whosaidso-home")
 	t.Setenv(HomeEnv, home)
 	root := homeCheckout(t, "team/project")
 	p := mustBind(t, root, root).Project
@@ -104,18 +104,18 @@ func TestHomeEnvIsolatesAllFourStores(t *testing.T) {
 		filepath.Join(home, MachineIDFile),
 	} {
 		if _, err := os.Stat(want); err != nil {
-			t.Errorf("%s must be under DATUM_HOME: %v", want, err)
+			t.Errorf("%s must be under WHOSAIDSO_HOME: %v", want, err)
 		}
 	}
 	if !strings.HasPrefix(staging, home+string(filepath.Separator)) {
-		t.Errorf("staging %s is outside DATUM_HOME %s", staging, home)
+		t.Errorf("staging %s is outside WHOSAIDSO_HOME %s", staging, home)
 	}
-	if _, err := os.Lstat(filepath.Join(userHome, ".datum")); !os.IsNotExist(err) {
-		t.Fatalf("with DATUM_HOME set nothing may reach ~/.datum, found it: %v", err)
+	if _, err := os.Lstat(filepath.Join(userHome, ".whosaidso")); !os.IsNotExist(err) {
+		t.Fatalf("with WHOSAIDSO_HOME set nothing may reach ~/.whosaidso, found it: %v", err)
 	}
 	t.Setenv(HomeEnv, "relative/home")
 	if _, err := Home(); err == nil {
-		t.Fatal("a relative DATUM_HOME must be refused, not resolved against the cwd")
+		t.Fatal("a relative WHOSAIDSO_HOME must be refused, not resolved against the cwd")
 	}
 }
 
@@ -124,7 +124,7 @@ func TestUnboundProjectRefusesAndIsNeverBoundSilently(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		_, err := Open(root)
 		requireFault(t, err, "home-unbound")
-		if !strings.Contains(err.Error(), "datum home PATH") {
+		if !strings.Contains(err.Error(), "whosaidso home PATH") {
 			t.Fatalf("the refusal must say how to bind: %v", err)
 		}
 	}
@@ -146,12 +146,12 @@ func TestSecondCheckoutReadsAndAdmitsThroughTheHome(t *testing.T) {
 	clone := homeCheckout(t, "team/project")
 	mustBind(t, home, home)
 	p := mustOpen(t, clone)
-	if p.Root != home || p.Checkout != clone || p.Ledger != filepath.Join(home, ".datum", "events") || p.ExecRoot() != clone {
+	if p.Root != home || p.Checkout != clone || p.Ledger != filepath.Join(home, ".whosaidso", "events") || p.ExecRoot() != clone {
 		t.Fatalf("a second checkout must read and admit through the home and execute here: %+v", p)
 	}
 	admitControl(t, p, 1)
-	readControl(t, Project{ID: p.ID, Root: home, Ledger: filepath.Join(home, ".datum", "events")}, 1)
-	if _, err := os.Stat(filepath.Join(clone, ".datum")); !os.IsNotExist(err) {
+	readControl(t, Project{ID: p.ID, Root: home, Ledger: filepath.Join(home, ".whosaidso", "events")}, 1)
+	if _, err := os.Stat(filepath.Join(clone, ".whosaidso")); !os.IsNotExist(err) {
 		t.Fatalf("admission from a second checkout wrote its own ledger: %v", err)
 	}
 }
@@ -161,7 +161,7 @@ func TestMissingHomeRefusesWithoutFallbackOrRecreation(t *testing.T) {
 	clone := homeCheckout(t, "team/project")
 	mustBind(t, home, home)
 	opened := mustOpen(t, clone)
-	admitControl(t, Project{ID: "team/project", Root: clone, Ledger: filepath.Join(clone, ".datum", "events")}, 1)
+	admitControl(t, Project{ID: "team/project", Root: clone, Ledger: filepath.Join(clone, ".whosaidso", "events")}, 1)
 	if err := os.RemoveAll(home); err != nil {
 		t.Fatal(err)
 	}
@@ -174,10 +174,10 @@ func TestMissingHomeRefusesWithoutFallbackOrRecreation(t *testing.T) {
 		t.Fatalf("a deleted home was recreated: %v", err)
 	}
 	// The clone's own ledger is untouched and was never read as the home.
-	readControl(t, Project{ID: "team/project", Root: clone, Ledger: filepath.Join(clone, ".datum", "events")}, 1)
+	readControl(t, Project{ID: "team/project", Root: clone, Ledger: filepath.Join(clone, ".whosaidso", "events")}, 1)
 	// A home that now declares another project is unavailable too.
 	mustMkdirAll(t, home)
-	putFile(t, filepath.Join(home, "datum.toml"), []byte("id = 'team/other'\nledger = '.datum/events'\n"))
+	putFile(t, filepath.Join(home, "whosaidso.toml"), []byte("id = 'team/other'\nledger = '.whosaidso/events'\n"))
 	_, err = Open(clone)
 	requireFault(t, err, "home-unavailable")
 }
@@ -189,7 +189,7 @@ func TestRelocationChecksContinuity(t *testing.T) {
 
 	diverged := homeCheckout(t, "team/project")
 	copyLedger(t, old, diverged)
-	admitControl(t, Project{ID: "team/project", Root: diverged, Ledger: filepath.Join(diverged, ".datum", "events")}, 3)
+	admitControl(t, Project{ID: "team/project", Root: diverged, Ledger: filepath.Join(diverged, ".whosaidso", "events")}, 3)
 	short := homeCheckout(t, "team/project")
 	behind := homeCheckout(t, "team/project")
 	copyLedger(t, old, behind)
@@ -209,7 +209,7 @@ func TestRelocationChecksContinuity(t *testing.T) {
 	// Control: a destination that continues the old history, plus more.
 	next := homeCheckout(t, "team/project")
 	copyLedger(t, old, next)
-	admitControl(t, Project{ID: "team/project", Root: next, Ledger: filepath.Join(next, ".datum", "events")}, 5)
+	admitControl(t, Project{ID: "team/project", Root: next, Ledger: filepath.Join(next, ".whosaidso", "events")}, 5)
 	r := mustBind(t, old, next)
 	if r.Continuity != ContinuityContinued || r.Previous != old || r.Bundles != 4 {
 		t.Fatalf("relocation with continuity: %+v", r)
@@ -237,8 +237,8 @@ func TestRelocationWithTheOldHomeGone(t *testing.T) {
 	}
 	// Still validated: a gone old home does not excuse a broken destination.
 	broken := homeCheckout(t, "team/project")
-	mustMkdirAll(t, filepath.Join(broken, ".datum", "events"))
-	putFile(t, filepath.Join(broken, ".datum", "events", "junk"), []byte("x"))
+	mustMkdirAll(t, filepath.Join(broken, ".whosaidso", "events"))
+	putFile(t, filepath.Join(broken, ".whosaidso", "events", "junk"), []byte("x"))
 	if err := os.RemoveAll(moved); err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +256,7 @@ func TestRelocationToAnotherProjectIsRefused(t *testing.T) {
 		t.Fatalf("the refusal must name the declared project: %v", err)
 	}
 	escaping := homeCheckout(t, "team/project")
-	putFile(t, filepath.Join(escaping, "datum.toml"), []byte("id = 'team/project'\nledger = '../elsewhere'\n"))
+	putFile(t, filepath.Join(escaping, "whosaidso.toml"), []byte("id = 'team/project'\nledger = '../elsewhere'\n"))
 	_, err = Bind(context.Background(), root, escaping)
 	requireFault(t, err, "home-invalid")
 	if got, _, _ := Binding("team/project"); got != root {
@@ -304,7 +304,7 @@ func TestRebindInsideTheLockWindowIsCaught(t *testing.T) {
 	readControl(t, p, 1)
 	// Control: the same admission opened afterwards lands in the new home.
 	admitControl(t, mustOpen(t, old), 2)
-	readControl(t, Project{ID: p.ID, Root: next, Ledger: filepath.Join(next, ".datum", "events")}, 2)
+	readControl(t, Project{ID: p.ID, Root: next, Ledger: filepath.Join(next, ".whosaidso", "events")}, 2)
 }
 
 // TestConcurrentAdmissionAndRebindLoseNothing races admissions against a
@@ -338,7 +338,7 @@ func TestConcurrentAdmissionAndRebindLoseNothing(t *testing.T) {
 		if bindErr != nil {
 			requireFault(t, bindErr, "home-continuity")
 		}
-		final, err := ReadPrefix(Project{ID: p.ID, Root: bound, Ledger: filepath.Join(bound, ".datum", "events")})
+		final, err := ReadPrefix(Project{ID: p.ID, Root: bound, Ledger: filepath.Join(bound, ".whosaidso", "events")})
 		if err != nil {
 			t.Fatal(err)
 		}

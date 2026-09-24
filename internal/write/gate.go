@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 // gateKey follows typed references and attempt identities; bundled authority

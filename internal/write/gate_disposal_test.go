@@ -2,7 +2,7 @@ package write
 
 // Admission tests for artifact.dispose: manual disposal is recorded with its
 // loss (every record revision that becomes unverifiable) and a named authority;
-// Datum neither resolves, preserves nor deletes the disposed bytes; afterwards
+// WhoSaidSo neither resolves, preserves nor deletes the disposed bytes; afterwards
 // nothing may use the artifact as available evidence. Supersede lives in
 // gate_supersede_test.go.
 
@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 const disposalRuling = `{"ruling":"delete that run output"}`
@@ -52,7 +52,7 @@ func TestDisposalLeavesACitingProofUnverifiable(t *testing.T) {
 	if p.Support.EvidenceAvailable != reduce.TruthFalse || p.Support.Current() == reduce.TruthTrue {
 		t.Fatalf("a proof citing a disposed artifact still counts as verified: %+v", p.Support)
 	}
-	// Datum records the disposal; it does not delete the bytes itself.
+	// WhoSaidSo records the disposal; it does not delete the bytes itself.
 	if _, err := os.Stat(filepath.Join(w.f.project.Root, proofPath)); err != nil {
 		t.Fatalf("admission deleted bytes: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestDisposalNeverResolvesOrPreservesTheDisposedBytes(t *testing.T) {
 	w := newProofWorld(t, true)
 	gone := `{"bytes":"already deleted by hand"}`
 	w.f.accept(w.f.capture(nil, w.disposal(gone)))
-	if _, err := os.Stat(filepath.Join(w.f.project.Root, ".datum", "artifacts", string(model.HashBytes([]byte(gone))))); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(w.f.project.Root, ".whosaidso", "artifacts", string(model.HashBytes([]byte(gone))))); !os.IsNotExist(err) {
 		t.Fatalf("disposed bytes were preserved as evidence: %v", err)
 	}
 	if len(w.f.snapshot().ArtifactDisposals()) != 1 {
@@ -121,7 +121,7 @@ func TestDisposedArtifactIsNeverAvailableAgain(t *testing.T) {
 	w.f.refuse(w.f.request(w.f.capture(nil, cites)), "artifact-disposed")
 	// The owner then deletes the bytes by hand. The disposed member is
 	// accounted for as inconclusive, and the verifiable run still proves.
-	if err := os.Remove(filepath.Join(w.f.project.Root, ".datum", "artifacts", string(model.HashBytes([]byte(gone))))); err != nil {
+	if err := os.Remove(filepath.Join(w.f.project.Root, ".whosaidso", "artifacts", string(model.HashBytes([]byte(gone))))); err != nil {
 		t.Fatal(err)
 	}
 	w.f.accept(w.f.capture(nil, w.proof(w.criterion, map[model.InvocationRef]string{first: "inconclusive", second: "supports"})))

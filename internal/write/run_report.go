@@ -16,13 +16,13 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
-	"datum/internal/store"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
-// ProducerReport is the version 1 JSON artifact written to DATUM_RUN_REPORT.
-// DATUM_RUN_DIR is a fresh staging directory for this invocation's output
+// ProducerReport is the version 1 JSON artifact written to WHOSAIDSO_RUN_REPORT.
+// WHOSAIDSO_RUN_DIR is a fresh staging directory for this invocation's output
 // files, outside the project; each output is named in the seal by its logical
 // path in the run's own directory, <artifacts>/runs/<invocation-id>/<path>.
 // Example: {"version":1,"config_effective":{"samples":{"type":"number",
@@ -34,7 +34,7 @@ import (
 // uses model.VisualObservation availability objects. Omitted visual fields,
 // including nested availability fields, become unknown. A known limits object
 // still requires the model's still_limitations text. No value is copied from intent.
-// Outputs are regular files relative to DATUM_RUN_DIR, without symlinks or '..'.
+// Outputs are regular files relative to WHOSAIDSO_RUN_DIR, without symlinks or '..'.
 // Large visual payloads use content pins to those files. Reports are limited to
 // 1 MiB and 256 outputs. Invalid reports remain artifacts but supply no facts.
 // Isolation is always unknown because this observer does not enforce isolation.

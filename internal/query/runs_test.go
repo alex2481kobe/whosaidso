@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 func runsByID(t *testing.T, a *ShowAnswer) map[model.ID]RunView {

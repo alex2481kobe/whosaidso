@@ -22,13 +22,13 @@ import (
 	"sync"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 const (
 	cacheFile  = "snapshot"
-	cacheMagic = "datum-cache/1\n"
+	cacheMagic = "whosaidso-cache/1\n"
 	// cacheTemp prefixes an image being written. A crash can leave one; the
 	// next publisher removes those older than staleCacheTemp.
 	cacheTemp      = ".snapshot-"
@@ -36,7 +36,7 @@ const (
 )
 
 // CacheDir is the disposable snapshot cache: the sibling "cache" of the ledger
-// inside its record folder (.datum/events beside .datum/cache). Like
+// inside its record folder (.whosaidso/events beside .whosaidso/cache). Like
 // ArtifactDir it is derived from the configured ledger, never named
 // separately. It is gitignored and holds nothing a clone needs.
 func (p Project) CacheDir() string {
@@ -143,7 +143,7 @@ func decodeImage(data []byte) (cacheImage, error) {
 // readImage returns the published image if it is intact and written for this
 // project by this build. The cache folder must be a real directory and the
 // image a regular file: a symlink could point a read, or a later write, out of
-// the datum root.
+// the whosaidso root.
 func readImage(p Project, version string) (cacheImage, bool) {
 	if version == "" {
 		return cacheImage{}, false

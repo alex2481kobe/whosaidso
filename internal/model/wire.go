@@ -20,7 +20,7 @@ const WireVersion uint16 = 1
 type (
 	// ID is a 26-character uppercase ULID.
 	ID string
-	// ProjectID is the identity declared in datum.toml. Declared, never derived.
+	// ProjectID is the identity declared in whosaidso.toml. Declared, never derived.
 	ProjectID string
 	// Digest is a lowercase 64-character raw SHA-256 hex string.
 	Digest string
@@ -42,7 +42,7 @@ const (
 
 // Actor is exactly one of a known id or a stated reason the actor is unknown.
 // Unknown is a legitimate, representable answer: an absent --actor and an absent
-// DATUM_ACTOR produce the unknown branch, never a fallback to the OS username.
+// WHOSAIDSO_ACTOR produce the unknown branch, never a fallback to the OS username.
 type Actor struct {
 	ID            string `json:"id,omitempty"`
 	UnknownReason string `json:"unknown_reason,omitempty"`
@@ -66,10 +66,10 @@ type Selector struct {
 type GitPin struct {
 	ObjectFormat string `json:"object_format"` // sha1 | sha256
 	Commit       string `json:"commit"`
-	Path         string `json:"path"` // relative to the declared datum root
+	Path         string `json:"path"` // relative to the declared whosaidso root
 }
 
-// Locator says where a copy of content can be found, relative to the datum root.
+// Locator says where a copy of content can be found, relative to the whosaidso root.
 type Locator struct {
 	Path string `json:"path"`
 }

@@ -7,9 +7,9 @@ import (
 	"reflect"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 func TestTaskRevisionHoldersAndUnknownNeverBorrowNearbyActors(t *testing.T) {

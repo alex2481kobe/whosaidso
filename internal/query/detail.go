@@ -11,8 +11,8 @@ package query
 import (
 	"fmt"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 // Detail is one exact admitted revision. Exactly one of Task, Claim,

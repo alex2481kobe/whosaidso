@@ -1,6 +1,6 @@
 package query
 
-// Invariants over this repository's real ledger in .datum/events/. The ledger
+// Invariants over this repository's real ledger in .whosaidso/events/. The ledger
 // is append-only, so these tests never pin its size, head or record count;
 // they check properties that must hold of every prefix it can grow into.
 
@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 func realLedger(t *testing.T) (store.Project, reduce.Snapshot) {
@@ -23,7 +23,7 @@ func realLedger(t *testing.T) (store.Project, reduce.Snapshot) {
 	}
 	p, err := store.Discover(cwd)
 	if err != nil || p.ID != "datum/datum" {
-		t.Fatalf("the repository's own datum.toml must be discoverable from the query package, got %+v, %v", p, err)
+		t.Fatalf("the repository's own whosaidso.toml must be discoverable from the query package, got %+v, %v", p, err)
 	}
 	prefix, err := store.ReadPrefix(p)
 	if err != nil {

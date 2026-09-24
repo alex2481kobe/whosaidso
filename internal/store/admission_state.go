@@ -10,8 +10,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 type selectedHead struct {

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // The two tests here protect the deep copy from rotting rather than checking

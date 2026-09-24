@@ -6,13 +6,13 @@ package write
 // stays whoever wrote it). Also here: once an artifact is disposed, no new
 // admission may treat it as available. Replay-order rules (superseded twice,
 // cycles, a ruling needing authority) live in internal/reduce/supersede.go.
-// Datum never deletes bytes here: disposal is recorded, not performed.
+// WhoSaidSo never deletes bytes here: disposal is recorded, not performed.
 
 import (
 	"fmt"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 // gateOwnerActOperation: an authority, when present, names who ruled. Whether a

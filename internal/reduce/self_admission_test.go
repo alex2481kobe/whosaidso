@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // review builds a complete review.admit alone in its bundle: every required
@@ -124,7 +124,7 @@ func TestSelfAdmissionMalformedActorIsUnknown(t *testing.T) {
 	}
 }
 
-// Datum's own bundles 1-4 were admitted before packet authors were recorded.
+// WhoSaidSo's own bundles 1-4 were admitted before packet authors were recorded.
 // The R18.2 migration recorded each packet's author from its intake bytes,
 // verified against the digest the bundle holds, and dropped the "true" that
 // bundles 3 and 4 used to store. Self-admission is computed from that author

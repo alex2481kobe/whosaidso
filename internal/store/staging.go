@@ -7,20 +7,20 @@ import (
 	"os"
 	"path/filepath"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // MakeRunStaging creates the fresh, private directory one invocation writes
 // its outputs into while it runs, and returns its absolute path.
 //
 // Staging is per-machine working state, never a record, so it lives in the
-// per-machine Datum home beside intake (<Home>/staging/<project>/<id>), outside
+// per-machine WhoSaidSo home beside intake (<Home>/staging/<project>/<id>), outside
 // the project and its committed artifact store. Home is the one function that
 // places intake, staging, the machine id and the registry, so they can never
 // be relocated apart. A run's bytes reach
 // committed storage only through capture and admission, and only once.
 //
-// The staging directories below the Datum home are created here and must be
+// The staging directories below the WhoSaidSo home are created here and must be
 // real directories: a symlink there would turn a local capture into a write
 // somewhere else. The invocation's own directory must not exist yet.
 func MakeRunStaging(project Project, invocation model.ID) (string, error) {

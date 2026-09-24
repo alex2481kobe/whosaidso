@@ -283,7 +283,7 @@ func TestDecodeRefusesANonUTCTimestampAtAnyDepth(t *testing.T) {
 	}
 }
 
-// The refusal breaks no history: Datum's own committed ledger decodes whole.
+// The refusal breaks no history: WhoSaidSo's own committed ledger decodes whole.
 func TestCommittedLedgerIsAlreadyUTC(t *testing.T) {
 	paths, err := filepath.Glob(filepath.Join("..", "..", ".datum", "events", "*.json"))
 	if err != nil || len(paths) == 0 {

@@ -2,7 +2,7 @@ package acceptance_test
 
 // Independent review of U12's proof gate: run-directory binding of criterion
 // contract paths, rejected family members, correction, reconciliation of a
-// dead runner, and a real `datum run` through fresh processes. Every scenario
+// dead runner, and a real `whosaidso run` through fresh processes. Every scenario
 // is driven through the public capture/admit/reconcile API or the built CLI,
 // and every refusal is preceded by a control that the same fixture admits.
 
@@ -21,10 +21,10 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
-	"datum/internal/write"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
+	"whosaidso/internal/write"
 )
 
 const (
@@ -68,7 +68,7 @@ func pvNew(t *testing.T) *pvWorld {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	root := t.TempDir()
-	pvPut(t, root, "datum.toml", []byte("id = \"verify/proof\"\nledger = \".datum/events\"\n"))
+	pvPut(t, root, "whosaidso.toml", []byte("id = \"verify/proof\"\nledger = \".whosaidso/events\"\n"))
 	p, err := store.Discover(root)
 	if err != nil {
 		t.Fatal(err)
@@ -214,7 +214,7 @@ func (w *pvWorld) status() reduce.ClaimStatus {
 }
 
 func pvRunPath(id model.ID, rel string) string {
-	return ".datum/artifacts/runs/" + string(id) + "/" + rel
+	return ".whosaidso/artifacts/runs/" + string(id) + "/" + rel
 }
 
 // ---- run-directory binding -------------------------------------------------
@@ -292,9 +292,9 @@ func TestProofVerifyContractPathNamingAnotherRunNeverMatches(t *testing.T) {
 			contract := pvRunPath(other, "out/result.json")
 			switch form {
 			case "dot-segment":
-				contract = ".datum/./artifacts/runs/" + string(other) + "/out/result.json"
+				contract = ".whosaidso/./artifacts/runs/" + string(other) + "/out/result.json"
 			case "double-slash":
-				contract = ".datum//artifacts/runs/" + string(other) + "/out/result.json"
+				contract = ".whosaidso//artifacts/runs/" + string(other) + "/out/result.json"
 			}
 			w.fix(contract, []byte(pvPass))
 			// Run A declares B's file under the same spelling the criterion uses.
@@ -306,7 +306,7 @@ func TestProofVerifyContractPathNamingAnotherRunNeverMatches(t *testing.T) {
 				proofErr = w.prove(map[model.ID]string{id: "supports"})
 			}
 			if status := w.status(); status == reduce.StatusProven {
-				t.Errorf("expected run %s's observation to find nothing: the contract path %q names run %s's directory, which must never match. Got seal error %v, proof error %v, claim %s. The matcher excludes other runs by the literal prefix .datum/artifacts/runs/, not by the path it resolves to",
+				t.Errorf("expected run %s's observation to find nothing: the contract path %q names run %s's directory, which must never match. Got seal error %v, proof error %v, claim %s. The matcher excludes other runs by the literal prefix .whosaidso/artifacts/runs/, not by the path it resolves to",
 					id, contract, other, sealErr, proofErr, status)
 			}
 		})
@@ -677,13 +677,13 @@ func (w *pvWorld) admitRawEvent(raw model.Event) (model.Bundle, error) {
 	return write.Admit(context.Background(), w.p, write.AdmitRequest{CommandID: w.id(), PacketIDs: []model.ID{ref.CommandID}, Admitter: model.Actor{ID: "coordinator"}, Outcome: "accepted", Reason: "independent proof verification"})
 }
 
-// Every stored path is relative to the datum root (contract, datum.toml).
+// Every stored path is relative to the whosaidso root (contract, whosaidso.toml).
 // A git pin's path is handed to `git cat-file <commit>:<path>`, which git reads
-// relative to the repository's top level. When the datum root is a
+// relative to the repository's top level. When the whosaidso root is a
 // subdirectory of its repository, a corrective artifact therefore resolves to
-// bytes outside the datum root, and a path that is inside the root does not
+// bytes outside the whosaidso root, and a path that is inside the root does not
 // resolve at all.
-func TestProofVerifyCorrectiveGitPinResolvesInsideTheDatumRoot(t *testing.T) {
+func TestProofVerifyCorrectiveGitPinResolvesInsideTheWhoSaidSoRoot(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not installed")
 	}
@@ -693,15 +693,15 @@ func TestProofVerifyCorrectiveGitPinResolvesInsideTheDatumRoot(t *testing.T) {
 	if err := w.admit(w.lane, w.correction("support", pvPin(body, "corrections/missed.json"))); err != nil {
 		t.Fatalf("control: an in-root content-pinned correction must admit: %v", err)
 	}
-	// Place the datum root inside a repository, one level down.
+	// Place the whosaidso root inside a repository, one level down.
 	repo := t.TempDir()
 	root := filepath.Join(repo, "project")
 	if err := os.Rename(w.p.Root, root); err != nil {
 		t.Fatal(err)
 	}
-	w.p.Root, w.p.Ledger = root, filepath.Join(root, ".datum", "events")
-	outsideBody := []byte(`{"secret":"repository root, outside the datum root"}`)
-	insideBody := []byte(`{"inside":"the datum root"}`)
+	w.p.Root, w.p.Ledger = root, filepath.Join(root, ".whosaidso", "events")
+	outsideBody := []byte(`{"secret":"repository root, outside the whosaidso root"}`)
+	insideBody := []byte(`{"inside":"the whosaidso root"}`)
 	pvPut(t, repo, "secret.json", outsideBody)
 	pvPut(t, root, "corrections/inside.json", insideBody)
 	git := func(args ...string) string {
@@ -723,7 +723,7 @@ func TestProofVerifyCorrectiveGitPinResolvesInsideTheDatumRoot(t *testing.T) {
 	escapeErr := w.admit(w.lane, w.correction("support", gitPin("secret.json")))
 	insideErr := w.admit(w.lane, w.correction("support", gitPin("corrections/inside.json")))
 	if escapeErr == nil || insideErr != nil {
-		t.Errorf("expected the corrective git pin %q (no such file under datum root %s) to be refused and %q (a committed file inside it) to admit. Got escape=%v, inside=%v. The datum-root-relative path is resolved against the repository top level %s, so the correction cites bytes outside the datum root",
+		t.Errorf("expected the corrective git pin %q (no such file under whosaidso root %s) to be refused and %q (a committed file inside it) to admit. Got escape=%v, inside=%v. The whosaidso-root-relative path is resolved against the repository top level %s, so the correction cites bytes outside the whosaidso root",
 			"secret.json", root, "corrections/inside.json", escapeErr, insideErr, repo)
 	}
 }
@@ -736,36 +736,36 @@ var (
 	pvBinaryErr  error
 )
 
-func pvDatum(t *testing.T) string {
+func pvWhoSaidSo(t *testing.T) string {
 	t.Helper()
 	pvBinaryOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "datum-review-bin-")
+		dir, err := os.MkdirTemp("", "whosaidso-review-bin-")
 		if err != nil {
 			pvBinaryErr = err
 			return
 		}
-		pvBinary = filepath.Join(dir, "datum")
-		out, err := exec.Command("go", "build", "-o", pvBinary, "datum/cmd/datum").CombinedOutput()
+		pvBinary = filepath.Join(dir, "whosaidso")
+		out, err := exec.Command("go", "build", "-o", pvBinary, "whosaidso/cmd/whosaidso").CombinedOutput()
 		if err != nil {
 			pvBinaryErr = fmt.Errorf("%v: %s", err, out)
 		}
 	})
 	if pvBinaryErr != nil {
-		t.Fatalf("building the datum CLI: %v", pvBinaryErr)
+		t.Fatalf("building the whosaidso CLI: %v", pvBinaryErr)
 	}
 	return pvBinary
 }
 
 func (w *pvWorld) cli(stdin []byte, args ...string) ([]byte, error) {
 	w.t.Helper()
-	cmd := exec.Command(pvDatum(w.t), args...)
+	cmd := exec.Command(pvWhoSaidSo(w.t), args...)
 	cmd.Dir, cmd.Stdin = w.p.Root, bytes.NewReader(stdin)
-	cmd.Env = append(os.Environ(), "HOME="+os.Getenv("HOME"), "DATUM_ACTOR=lane")
+	cmd.Env = append(os.Environ(), "HOME="+os.Getenv("HOME"), "WHOSAIDSO_ACTOR=lane")
 	bindProjectHome(cmd)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
-		return stdout.Bytes(), fmt.Errorf("datum %s: %v: %s", strings.Join(args, " "), err, stderr.String())
+		return stdout.Bytes(), fmt.Errorf("whosaidso %s: %v: %s", strings.Join(args, " "), err, stderr.String())
 	}
 	return stdout.Bytes(), nil
 }
@@ -788,7 +788,7 @@ func (w *pvWorld) cliRun(script string) (model.InvocationEnvelope, []model.ID, e
 	out, err := w.cli(nil, "run", "--json", "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),
 		"--claim", string(w.claim.RecordID), "--claim-revision", "1", "--criterion-id", string(w.criterion.CriterionID), "--criterion-revision", "1", "--", "/bin/sh", "tools/run.sh")
 	var result struct {
-		// datum run prints snake_case keys (coordinator change, in the open).
+		// whosaidso run prints snake_case keys (coordinator change, in the open).
 		Envelope    model.InvocationEnvelope `json:"envelope"`
 		StartPacket model.PacketRef          `json:"start_packet"`
 		SealPacket  model.PacketRef          `json:"seal_packet"`
@@ -808,11 +808,11 @@ func (w *pvWorld) cliRun(script string) (model.InvocationEnvelope, []model.ID, e
 }
 
 func pvProducer(body string) string {
-	return "mkdir \"$DATUM_RUN_DIR/out\"\nprintf '%s' '" + body + "' > \"$DATUM_RUN_DIR/out/result.json\"\n" +
-		"printf '%s' '{\"version\":1,\"config_effective\":{},\"conditions_observed\":{},\"outputs\":[{\"path\":\"out/result.json\",\"media_type\":\"application/json\"}]}' > \"$DATUM_RUN_REPORT\"\n"
+	return "mkdir \"$WHOSAIDSO_RUN_DIR/out\"\nprintf '%s' '" + body + "' > \"$WHOSAIDSO_RUN_DIR/out/result.json\"\n" +
+		"printf '%s' '{\"version\":1,\"config_effective\":{},\"conditions_observed\":{},\"outputs\":[{\"path\":\"out/result.json\",\"media_type\":\"application/json\"}]}' > \"$WHOSAIDSO_RUN_REPORT\"\n"
 }
 
-// A real `datum run` through fresh processes reaches PROVEN, and the reading
+// A real `whosaidso run` through fresh processes reaches PROVEN, and the reading
 // is the run's own: the criterion's pinned example FAILS, so PROVEN is only
 // reachable by reading the bytes the producer wrote. A second real run that
 // fails must be dispositioned; a runner killed mid-run is reconciled through
@@ -827,7 +827,7 @@ func TestProofVerifyFreshProcessRunReachesProvenOnItsOwnBytes(t *testing.T) {
 
 	pass, packets, err := w.cliRun(pvProducer(pvPass))
 	if err != nil || len(packets) != 2 {
-		t.Fatalf("control: datum run must print its start and seal packets: %v, %v", packets, err)
+		t.Fatalf("control: whosaidso run must print its start and seal packets: %v, %v", packets, err)
 	}
 	if err := w.cliAdmit(packets...); err != nil {
 		t.Fatalf("control: the run's packets admit through the CLI: %v", err)
@@ -912,7 +912,7 @@ func TestProofVerifyFreshProcessRunReachesProvenOnItsOwnBytes(t *testing.T) {
 	v.fix("out/result.json", []byte(pvFail))
 	ok, packets, err := v.cliRun(pvProducer(pvPass))
 	if err != nil || len(packets) != 2 {
-		t.Fatalf("control: datum run must seal: %v", err)
+		t.Fatalf("control: whosaidso run must seal: %v", err)
 	}
 	if err := v.cliAdmit(packets...); err != nil {
 		t.Fatal(err)
@@ -934,7 +934,7 @@ func TestProofVerifyFreshProcessRunReachesProvenOnItsOwnBytes(t *testing.T) {
 		t.Fatalf("a real run's proof was refused through fresh processes: %v", err)
 	}
 	if status := v.status(); status != reduce.StatusProven {
-		t.Fatalf("a real datum run's proof left the claim %s", status)
+		t.Fatalf("a real whosaidso run's proof left the claim %s", status)
 	}
 }
 

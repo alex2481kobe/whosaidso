@@ -10,9 +10,9 @@ import (
 	"runtime"
 	"testing"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 func astraProofWorld(t *testing.T, example string) *pvWorld {
@@ -122,7 +122,7 @@ func TestAstraProofCapturedRunSurvivesProducerCheckoutRemoval(t *testing.T) {
 			w := astraProofWorld(t, pvFail)
 			env, packets, err := w.cliRun(pvProducer(pvPass))
 			if err != nil || env.OutputRefs.Value == nil {
-				t.Fatalf("control: a real datum run must durably capture its passing output: %v", err)
+				t.Fatalf("control: a real whosaidso run must durably capture its passing output: %v", err)
 			}
 			if removeProducer {
 				// The coordinator retains the project ledger and receives intake;

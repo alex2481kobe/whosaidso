@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // IntakeIDs lists the currently visible published packets in command-id order,

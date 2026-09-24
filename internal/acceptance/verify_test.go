@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
 )
 
 func TestVerifyExplicitUnavailableMetadataCannotBecomeAgreement(t *testing.T) {
