@@ -189,19 +189,28 @@ func admissionIDs(r AdmitRequest) ([]model.ID, error) {
 	if model.Blank(r.Reason) || len(r.PacketIDs) == 0 {
 		return nil, admissionFault("invalid-field", "request", "admission needs a reason and a nonempty packet set")
 	}
-	seen := map[model.ID]bool{}
-	ids := make([]model.ID, 0, len(r.PacketIDs))
 	for _, id := range r.PacketIDs {
 		if !model.ValidID(id) || id == r.CommandID {
 			return nil, admissionFault("invalid-field", "packet_ids", "packet ids must be ULIDs distinct from the admission id")
 		}
+	}
+	return packetSet(r.PacketIDs), nil
+}
+
+// packetSet is the packet set an admission names: each packet once, in id
+// order. Admission and its dry run (CheckAdmission) both read packets
+// through it, so naming a packet twice means the same thing to both.
+func packetSet(named []model.ID) []model.ID {
+	seen := map[model.ID]bool{}
+	ids := make([]model.ID, 0, len(named))
+	for _, id := range named {
 		if !seen[id] {
 			ids = append(ids, id)
 			seen[id] = true
 		}
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-	return ids, nil
+	return ids
 }
 
 func admissionFault(code, path, detail string) error {
