@@ -16,6 +16,8 @@ change.
    everything passes every negative case while being completely broken.
 5. Say what a measurement cannot see. An instrument without declared blind
    spots is not ready to be trusted.
+6. Tests build their own fixtures in temp directories. A test never reads or
+   writes this repository's own `.whosaidso/` record.
 
 ## Running it
 

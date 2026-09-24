@@ -1,6 +1,3 @@
-# Local coordination files are NOT in this repo - they live in the workspace
-# folder above it, which is not a git repo. Nothing here guards against them.
-
 # Go
 /whosaidso
 /dist/
