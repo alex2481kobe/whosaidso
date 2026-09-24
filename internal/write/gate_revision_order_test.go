@@ -1,10 +1,11 @@
 package write
 
-// The gate's revision ordering: a proposed event naming a record at revision r
-// is ordered before the proposed event that moves that record to r+1, for
-// every record kind; constraints that cannot all hold are a dependency cycle;
-// events inside one packet keep the author's order. Check admission must give
-// admission's verdict in every case.
+// Admission is optimistic concurrency: the gate orders a packet after the
+// packets creating what it references and otherwise keeps capture (packet id)
+// order. It never reorders packets to rescue a proposal naming a revision a
+// packet in the same set supersedes; that proposal is refused as stale and its
+// author re-captures it. Events inside one packet keep the author's order.
+// Check admission must give admission's verdict in every case.
 
 import (
 	"context"
@@ -44,38 +45,35 @@ func eventTypes(b model.Bundle, n int) []string {
 	return got
 }
 
-func TestGateOrdersReferrerBeforeTheAmendmentThatMovesItsRevision(t *testing.T) {
+func TestGateRefusesAProposalMadeStaleByAnEarlierCapture(t *testing.T) {
 	body := []byte("owner read the delivery")
-	t.Run("hold-amend-clear captured amend, clear, hold", func(t *testing.T) {
+	t.Run("hold on r1 captured after the amendment is stale", func(t *testing.T) {
 		f := newAdmissionFixture(t)
 		task := f.goodControl()
 		hold := &model.BlockerHold{Task: f.ref(task.ID, 1), BlockerID: f.id(), Reason: model.BlockerAwaitingAcceptance, Actor: f.author, Criterion: "owner reads the delivery"}
 		amend := f.capture(nil, &model.TaskAmend{Target: f.ref(task.ID, 1), Replacement: task.Spec, Provenance: task.Provenance})
 		clear := f.capture([][]byte{body}, holdIdentityClear(f.ref(task.ID, 2), hold.BlockerID, body))
 		held := f.capture(nil, hold)
-		got := eventTypes(f.admitBoth("", amend, clear, held), 3)
+		f.admitBoth("revision-conflict", amend, clear, held)
+	})
+	t.Run("hold on r1 captured before the amendment admits in capture order", func(t *testing.T) {
+		f := newAdmissionFixture(t)
+		task := f.goodControl()
+		hold := &model.BlockerHold{Task: f.ref(task.ID, 1), BlockerID: f.id(), Reason: model.BlockerAwaitingAcceptance, Actor: f.author, Criterion: "owner reads the delivery"}
+		held := f.capture(nil, hold)
+		amend := f.capture(nil, &model.TaskAmend{Target: f.ref(task.ID, 1), Replacement: task.Spec, Provenance: task.Provenance})
+		clear := f.capture([][]byte{body}, holdIdentityClear(f.ref(task.ID, 2), hold.BlockerID, body))
+		got := eventTypes(f.admitBoth("", clear, amend, held), 3)
 		if got[0] != "blocker.hold" || got[1] != "task.amend" || got[2] != "blocker.clear" {
 			t.Fatalf("admitted order %v", got)
 		}
 	})
-	t.Run("start on r1 captured after the amendment", func(t *testing.T) {
+	t.Run("start on r1 captured after the amendment is stale", func(t *testing.T) {
 		f := newAdmissionFixture(t)
 		task := f.goodControl()
 		amend := f.capture(nil, &model.TaskAmend{Target: f.ref(task.ID, 1), Replacement: task.Spec, Provenance: task.Provenance})
 		start := f.capture(nil, &model.TaskStart{Task: f.ref(task.ID, 1), Actor: f.author, AttemptID: f.id()})
-		got := eventTypes(f.admitBoth("", amend, start), 2)
-		if got[0] != "task.start" || got[1] != "task.amend" {
-			t.Fatalf("admitted order %v", got)
-		}
-	})
-	t.Run("constraints that cannot all hold are a cycle", func(t *testing.T) {
-		f := newAdmissionFixture(t)
-		task := f.goodControl()
-		hold := &model.BlockerHold{Task: f.ref(task.ID, 1), BlockerID: f.id(), Reason: model.BlockerAwaitingAcceptance, Actor: f.author, Criterion: "owner reads the delivery"}
-		amend := f.capture(nil, &model.TaskAmend{Target: f.ref(task.ID, 1), Replacement: task.Spec, Provenance: task.Provenance})
-		// The hold names r1 (before the amendment), the clear names r2 (after it).
-		both := f.capture([][]byte{body}, hold, holdIdentityClear(f.ref(task.ID, 2), hold.BlockerID, body))
-		f.admitBoth("dependency-cycle", amend, both)
+		f.admitBoth("revision-conflict", amend, start)
 	})
 	t.Run("one packet keeps the author's order", func(t *testing.T) {
 		f := newAdmissionFixture(t)
@@ -85,9 +83,9 @@ func TestGateOrdersReferrerBeforeTheAmendmentThatMovesItsRevision(t *testing.T) 
 	})
 }
 
-// The rule is not task-specific: a packet naming claim revision 1 goes before
-// the packet revising the claim to revision 2, whatever their capture order.
-func TestGateOrdersClaimReferrerBeforeClaimRevision(t *testing.T) {
+// The gate keeps capture order between a claim revision and a packet naming
+// the claim's earlier revision: a historical reference is not a dependency.
+func TestGateKeepsCaptureOrderAroundAClaimRevision(t *testing.T) {
 	f := newAdmissionFixture(t)
 	claim := f.claim()
 	f.accept(f.capture(nil, claim))
@@ -98,11 +96,11 @@ func TestGateOrdersClaimReferrerBeforeClaimRevision(t *testing.T) {
 	task.Spec.ContextRefs = []model.RecordRef{f.ref(claim.ID, 1)}
 	referrer := model.Packet{Project: f.project.ID, CommandID: f.id(), Author: f.author,
 		Events: []model.Event{admissionTestEvent(t, task)}}
-	ordered, err := gatePackets(f.project.ID, snapshot, []model.Packet{revise, referrer})
+	ordered, err := gatePackets(f.project.ID, snapshot, []model.Packet{referrer, revise})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ordered[0].CommandID != referrer.CommandID || ordered[1].CommandID != revise.CommandID {
-		t.Fatalf("order %s, %s: the claim revision went before the packet naming revision 1", ordered[0].CommandID, ordered[1].CommandID)
+	if ordered[0].CommandID != revise.CommandID || ordered[1].CommandID != referrer.CommandID {
+		t.Fatalf("order %s, %s: the gate left capture order", ordered[0].CommandID, ordered[1].CommandID)
 	}
 }

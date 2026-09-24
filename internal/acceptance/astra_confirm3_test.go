@@ -127,6 +127,23 @@ func astraConfirm3Revision(f *gateVerifyFixture, actor model.Actor, kind string)
 	return ref, revise
 }
 
+// astraConfirm3AsAdmitted renumbers groups into the order admission applies
+// them (dependencies first, otherwise capture order), keeping the same capture
+// order, so replay, check admission and admission judge the same sequence.
+func astraConfirm3AsAdmitted(groups [][]model.TypedEvent, capture, admitted string) ([][]model.TypedEvent, string) {
+	renumbered := make([][]model.TypedEvent, len(groups))
+	position := map[rune]rune{}
+	for k, digit := range admitted {
+		renumbered[k] = groups[digit-'0']
+		position[digit] = rune('0' + k)
+	}
+	out := []rune{}
+	for _, digit := range capture {
+		out = append(out, position[digit])
+	}
+	return renumbered, string(out)
+}
+
 func astraConfirm3Task(f *gateVerifyFixture, refs ...model.RecordRef) *model.TaskCreate {
 	spec := laneEReduceSpec(1)
 	spec.ContextRefs = refs
@@ -171,7 +188,19 @@ func TestAstraConfirm3HistoricalReferencesFalseCycle(t *testing.T) {
 	}
 }
 
+// Coordinator decision 2026-09-24: proposals naming a superseded revision are stale by design (optimistic concurrency); the gate does not reorder packets to rescue them.
+// Admission applies packets in capture order after their dependencies, so a
+// second amendment captured before the r2 hold makes the hold stale, and a
+// packet naming claim r1 may land after the revision to r2.
 func TestAstraConfirm3OrderingControls(t *testing.T) {
+	// Admission order for each capture order: dependencies first, otherwise
+	// capture order. In the amend chain the hold (1) and the second amendment
+	// (2) wait for the first amendment (0); with two claim revisions the r2
+	// referrer (2) waits for the revision (1).
+	admittedOrder := map[string]map[string]string{
+		"amend-chain":         {"012": "012", "021": "021", "102": "012", "120": "012", "201": "021", "210": "021"},
+		"two-claim-revisions": {"012": "012", "021": "012", "102": "102", "120": "120", "201": "012", "210": "120"},
+	}
 	for _, order := range []string{"012", "021", "102", "120", "201", "210"} {
 		for _, shape := range []string{"amend-chain", "two-claim-revisions"} {
 			t.Run(shape+"/"+order, func(t *testing.T) {
@@ -191,7 +220,13 @@ func TestAstraConfirm3OrderingControls(t *testing.T) {
 					hold := &model.BlockerHold{Task: r2, BlockerID: f.id(), Reason: model.BlockerResume, Actor: actor, Criterion: "resume approved"}
 					groups = [][]model.TypedEvent{{revise}, {hold}, {&a2}}
 				}
-				astraConfirm3Probe(f, actor, groups, order, "", "")
+				groups, capture := astraConfirm3AsAdmitted(groups, order, admittedOrder[shape][order])
+				want := ""
+				if shape == "amend-chain" && admittedOrder[shape][order] != "012" {
+					// The second amendment went first, so the hold names a superseded revision.
+					want = "revision-conflict"
+				}
+				astraConfirm3Probe(f, actor, groups, capture, want, want)
 			})
 		}
 	}
@@ -204,6 +239,10 @@ func TestAstraConfirm3OrderingControls(t *testing.T) {
 	})
 }
 
+// Coordinator decision 2026-09-24: proposals naming a superseded revision are stale by design (optimistic concurrency); the gate does not reorder packets to rescue them.
+// A proof captured after its claim's revision still judges a valid historical
+// claim revision and lands after it; one captured after its criterion's fix no
+// longer judges the current criterion and is refused.
 func TestAstraConfirm3ProofRevisionOrdering(t *testing.T) {
 	for _, mode := range []string{"claim", "claim-with-new-context", "criterion-2", "criterion-7"} {
 		for _, shape := range []string{"merged", "already-admitted", "01", "10"} {
@@ -245,6 +284,13 @@ func TestAstraConfirm3ProofRevisionOrdering(t *testing.T) {
 						t.Fatal(err)
 					}
 					groups, capture = [][]model.TypedEvent{remaining}, "0"
+					if mode == "criterion-2" || mode == "criterion-7" {
+						want = "invalid-transition"
+					}
+				}
+				if shape == "10" && mode != "claim-with-new-context" {
+					// No dependency between proof and revision: capture order stands.
+					groups, capture = astraConfirm3AsAdmitted(groups, capture, "10")
 					if mode == "criterion-2" || mode == "criterion-7" {
 						want = "invalid-transition"
 					}

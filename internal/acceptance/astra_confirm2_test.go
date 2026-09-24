@@ -154,7 +154,12 @@ func (w *astraConfirm2World) probe(groups [][]model.TypedEvent, replay []model.T
 	}
 }
 
+// Coordinator decision 2026-09-24: proposals naming a superseded revision are stale by design (optimistic concurrency); the gate does not reorder packets to rescue them.
+// Captured after the amendment, the r1 hold is refused as stale; admission,
+// check admission and replay of the order admission applies (the clear waits
+// for the amendment and the hold, otherwise capture order) agree.
 func TestAstraConfirm2HoldAmendClearCaptureOrders(t *testing.T) {
+	admitted := map[string]string{"HAC": "HAC", "HCA": "HAC", "AHC": "AHC", "ACH": "AHC", "CHA": "HAC", "CAH": "AHC"}
 	for _, order := range []string{"HAC", "HCA", "AHC", "ACH", "CHA", "CAH"} {
 		t.Run(order, func(t *testing.T) {
 			w := astraConfirm2New(t)
@@ -163,7 +168,14 @@ func TestAstraConfirm2HoldAmendClearCaptureOrders(t *testing.T) {
 			for i := range order {
 				groups = append(groups, []model.TypedEvent{events[order[i]]})
 			}
-			w.probe(groups, []model.TypedEvent{events['H'], events['A'], events['C']}, "")
+			replay, want := []model.TypedEvent{}, ""
+			for i := range admitted[order] {
+				replay = append(replay, events[admitted[order][i]])
+			}
+			if admitted[order] != "HAC" {
+				want = reduce.CodeRevisionConflict
+			}
+			w.probe(groups, replay, want)
 		})
 	}
 	t.Run("one-packet", func(t *testing.T) {
