@@ -26,13 +26,13 @@ func closureWorld(t *testing.T) (*ContinueAnswer, func(limit int) *ContinueAnswe
 	p := testProject(t)
 	foreign := model.RecordRef{Project: "other/project", RecordID: testID(900), Revision: 1}
 	appendEvents(t, p, 100,
-		&model.DecisionOpen{ID: testID(31), Provenance: prov("lane-c"), Spec: decisionSpec()},
-		&model.DecisionOpen{ID: testID(32), Provenance: prov("lane-c"), Spec: decisionSpec()},
-		&model.ClaimAssert{ID: testID(20), Provenance: prov("lane-e"), Spec: claimSpec()},
-		&model.ClaimAssert{ID: testID(21), Provenance: prov("lane-e"), Spec: claimSpec()},
-		&model.ClaimAssert{ID: testID(40), Provenance: prov("lane-e"), Spec: claimSpec()},
-		&model.ClaimAssert{ID: testID(41), Provenance: prov("lane-e"), Spec: claimSpec()},
-		&model.ClaimAssert{ID: testID(42), Provenance: prov("lane-e"), Spec: claimSpec()})
+		&model.DecisionOpen{ID: testID(31), Provenance: prov("agent-c"), Spec: decisionSpec()},
+		&model.DecisionOpen{ID: testID(32), Provenance: prov("agent-c"), Spec: decisionSpec()},
+		&model.ClaimAssert{ID: testID(20), Provenance: prov("agent-e"), Spec: claimSpec()},
+		&model.ClaimAssert{ID: testID(21), Provenance: prov("agent-e"), Spec: claimSpec()},
+		&model.ClaimAssert{ID: testID(40), Provenance: prov("agent-e"), Spec: claimSpec()},
+		&model.ClaimAssert{ID: testID(41), Provenance: prov("agent-e"), Spec: claimSpec()},
+		&model.ClaimAssert{ID: testID(42), Provenance: prov("agent-e"), Spec: claimSpec()})
 	appendEvents(t, p, 101, taskWith(3, func(s *model.TaskSpec) {
 		s.ConstraintRefs = []model.RecordRef{testRef(31, 1), testRef(20, 1)}
 	}))

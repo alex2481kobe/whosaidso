@@ -35,24 +35,24 @@ func e2eRuling(t *testing.T, root, path, body string) model.Authority {
 func TestCLISupersededRecordStaysInShowAndHistory(t *testing.T) {
 	root, _ := cliFixture(t)
 	authority := e2eRuling(t, root, "rulings/supersede.json", `{"ruling":"the second question replaces the first"}`)
-	lane := model.Provenance{SourceRefs: []model.ArtifactRef{}}
+	agent := model.Provenance{SourceRefs: []model.ArtifactRef{}}
 	open := func(id int, question string) *model.DecisionOpen {
-		return &model.DecisionOpen{ID: cliID(id), Provenance: lane, Spec: model.DecisionSpec{Question: question, Options: []string{"yes", "no"}, WaitingActor: model.Actor{ID: "owner"}, Scope: authority.Scope}}
+		return &model.DecisionOpen{ID: cliID(id), Provenance: agent, Spec: model.DecisionSpec{Question: question, Options: []string{"yes", "no"}, WaitingActor: model.Actor{ID: "owner"}, Scope: authority.Scope}}
 	}
 	old, replacement := model.RecordRef{Project: "test/cli", RecordID: cliID(10), Revision: 1}, model.RecordRef{Project: "test/cli", RecordID: cliID(11), Revision: 1}
 	ruling := &model.DecisionDispose{Decision: old, Disposition: "approved", Quote: "the second question replaces the first", Scope: authority.Scope, Authority: authority}
 	for i, event := range []model.TypedEvent{open(10, "ship revision one"), open(11, "ship revision two"), ruling} {
-		if err := e2eAdmitOne(t, root, event, 20+2*i, 21+2*i, "lane"); err != nil {
+		if err := e2eAdmitOne(t, root, event, 20+2*i, 21+2*i, "agent"); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// An owner ruling is affected, so the supersession needs its authority.
 	supersede := &model.Supersede{Prior: old, Replacement: replacement, Reason: "the owner restated the question"}
-	if err := e2eAdmitOne(t, root, supersede, 30, 31, "agent-sol"); err == nil || !strings.Contains(err.Error(), "authority-unavailable") {
+	if err := e2eAdmitOne(t, root, supersede, 30, 31, "recorder"); err == nil || !strings.Contains(err.Error(), "authority-unavailable") {
 		t.Fatalf("superseding a ruling without authority: %v", err)
 	}
 	supersede.Authority = &authority
-	if err := e2eAdmitOne(t, root, supersede, 32, 33, "agent-sol"); err != nil {
+	if err := e2eAdmitOne(t, root, supersede, 32, 33, "recorder"); err != nil {
 		t.Fatal(err)
 	}
 	show := readProcess(t, root, nil, "show", string(old.RecordID))
@@ -72,7 +72,7 @@ func TestCLISupersededRecordStaysInShowAndHistory(t *testing.T) {
 	for _, e := range history.Events {
 		seen[e.Event.Type] = e.Author.Author.ID
 	}
-	if seen["decision.open"] != "lane" || seen["decision.dispose"] != "lane" || seen["supersede"] != "agent-sol" {
+	if seen["decision.open"] != "agent" || seen["decision.dispose"] != "agent" || seen["supersede"] != "recorder" {
 		t.Fatalf("history lost the superseded record's events or authors: %v", seen)
 	}
 	t.Logf("whosaidso history %s:\n%s", old.RecordID, readProcess(t, root, nil, "history", string(old.RecordID)))
@@ -96,9 +96,9 @@ func TestCLIDisposedArtifactLeavesItsProofUnverifiable(t *testing.T) {
 	if _, err := e2eInvoke(t, root, nil, "admit", "--command-id", string(cliID(900)), "--actor", "coordinator", "--outcome", "accepted", "--reason", "run", string(run.StartPacket.CommandID), string(run.SealPacket.CommandID)); err != nil {
 		t.Fatal(err)
 	}
-	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Verdict: model.VerdictSupports, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "lane"}, Reason: "the run passed"},
+	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Verdict: model.VerdictSupports, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "agent"}, Reason: "the run passed"},
 		Evidence: []model.ObservationDisposition{{InvocationRef: model.InvocationRef{Project: "test/cli", InvocationID: run.Envelope.InvocationID}, Disposition: "supports", Reason: "passed"}}}
-	if err := e2eAdmitOne(t, root, proof, 901, 902, "lane"); err != nil {
+	if err := e2eAdmitOne(t, root, proof, 901, 902, "agent"); err != nil {
 		t.Fatal(err)
 	}
 	var output model.ArtifactRef
@@ -110,7 +110,7 @@ func TestCLIDisposedArtifactLeavesItsProofUnverifiable(t *testing.T) {
 	dispose := &model.ArtifactDispose{Artifact: output, Digest: output.Content.SHA256, PreviousLocation: ".whosaidso/artifacts/" + string(output.Content.SHA256),
 		SupportLoss: []model.SupportLoss{{Target: criterion.Claim, Reason: "its only supporting run output is deleted"}},
 		Authority:   e2eRuling(t, root, "rulings/dispose.json", `{"ruling":"delete that run output"}`)}
-	if err := e2eAdmitOne(t, root, dispose, 903, 904, "agent-sol"); err != nil {
+	if err := e2eAdmitOne(t, root, dispose, 903, 904, "recorder"); err != nil {
 		t.Fatal(err)
 	}
 	show := readProcess(t, root, nil, "show", string(criterion.Claim.RecordID))

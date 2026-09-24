@@ -20,9 +20,9 @@ func lossLedger(t *testing.T) *ledgerBuilder {
 	claim := ref(newID("CMA1"), 1)
 	x, y := ref(newID("SPX"), 1), ref(newID("SPY"), 1)
 	d := ref(newID("DCN"), 1)
-	l.add(t, &model.ClaimAssert{ID: x.RecordID, Provenance: provenance("lane-a"), Spec: claimSpec()},
-		&model.ClaimAssert{ID: y.RecordID, Provenance: provenance("lane-a"), Spec: claimSpec()},
-		&model.DecisionOpen{ID: d.RecordID, Provenance: provenance("lane-a"), Spec: decisionSpec()})
+	l.add(t, &model.ClaimAssert{ID: x.RecordID, Provenance: provenance("agent-a"), Spec: claimSpec()},
+		&model.ClaimAssert{ID: y.RecordID, Provenance: provenance("agent-a"), Spec: claimSpec()},
+		&model.DecisionOpen{ID: d.RecordID, Provenance: provenance("agent-a"), Spec: decisionSpec()})
 	l.add(t, &model.Supersede{Prior: x, Replacement: y, Reason: "y restates x"}, withdrawal())
 	l.add(t, &model.DecisionDispose{Decision: d, Disposition: "approved", Quote: "yes", Scope: testScope(), Authority: rulingAuthority("owner")},
 		&model.Correction{Target: model.CorrectionTarget{Kind: "record", Record: &claim}, AffectedRevisions: []model.RecordRef{claim}, Reason: "counterexample", CorrectiveRef: blobRef("counterexample")})
@@ -109,7 +109,7 @@ func TestTwoAppliesOntoOneSnapshotShareNoInventory(t *testing.T) {
 			one.out = append([]model.Bundle(nil), l.out...)
 			two.out = append([]model.Bundle(nil), l.out...)
 			// The withdrawal is the second event; the correction the first.
-			b1 := one.add(t, &model.ClaimAssert{ID: newID("SPZ"), Provenance: provenance("lane-a"), Spec: claimSpec()}, withdrawal())
+			b1 := one.add(t, &model.ClaimAssert{ID: newID("SPZ"), Provenance: provenance("agent-a"), Spec: claimSpec()}, withdrawal())
 			b2 := two.add(t, &model.Correction{Target: model.CorrectionTarget{Kind: "record", Record: &claim}, AffectedRevisions: []model.RecordRef{claim}, Reason: "new counterexample", CorrectiveRef: blobRef("new")})
 			s1, err := Apply(base, b1)
 			if err != nil {

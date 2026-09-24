@@ -84,7 +84,7 @@ func TestFreshProcessesExplainAdmittedWhoSaidSoConstructionTaskAndSource(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	readProcess(t, root, input, "capture", "--command-id", string(cliID(3)), "--actor", "lane", "--blob", path)
+	readProcess(t, root, input, "capture", "--command-id", string(cliID(3)), "--actor", "agent", "--blob", path)
 	// R19: intake pending is a section of todo.
 	pending := readJSON[query.TodoAnswer](t, readProcess(t, root, nil, "todo", "--json"))
 	if len(pending.PacketsNotAccepted) != 1 || pending.PacketsNotAccepted[0].Disposition != "pending" || pending.Watermark.Sequence != 0 {
@@ -135,13 +135,13 @@ func TestFreshProcessesExplainAdmittedWhoSaidSoConstructionTaskAndSource(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	readProcess(t, root, finding, "capture", "--command-id", string(cliID(31)), "--actor", "lane")
+	readProcess(t, root, finding, "capture", "--command-id", string(cliID(31)), "--actor", "agent")
 	readProcess(t, root, nil, "admit", "--command-id", string(cliID(32)), "--actor", "reviewer", "--outcome", "accepted", "--reason", "record finding without claiming measurement", string(cliID(31)))
 	found := readJSON[query.ShowAnswer](t, readProcess(t, root, nil, "show", "--json", string(cliID(30))))
 	if found.Records[0].Claim.Status != reduce.StatusUnmeasured || found.Watermark.Sequence != 2 {
 		t.Fatalf("new finding must enter through capture/admit as UNMEASURED CLAIM at watermark 2, got %+v", found)
 	}
-	readProcess(t, root, finding, "capture", "--command-id", string(cliID(33)), "--actor", "lane")
+	readProcess(t, root, finding, "capture", "--command-id", string(cliID(33)), "--actor", "agent")
 	readProcess(t, root, nil, "admit", "--command-id", string(cliID(34)), "--actor", "reviewer", "--outcome", "rejected", "--reason", "duplicate assertion", string(cliID(33)))
 	rejected := readJSON[query.TodoAnswer](t, readProcess(t, root, nil, "todo", "--json"))
 	if len(rejected.PacketsNotAccepted) != 1 || rejected.PacketsNotAccepted[0].Disposition != "rejected" || rejected.Watermark.Sequence != 3 || !strings.Contains(rejected.PacketsNotAccepted[0].Review.Reason, "duplicate assertion") {

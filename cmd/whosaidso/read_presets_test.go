@@ -60,7 +60,7 @@ func TestReadCLIBriefIsTheDefault(t *testing.T) {
 	root, data := cliFixture(t)
 	cliControl(t, root, data)
 	out := readProcess(t, root, nil, "todo")
-	want := []byte("ready: 1\n  TASK " + string(cliID(1)) + " rev 1 READY next lane\n    exercise the CLI\n")
+	want := []byte("ready: 1\n  TASK " + string(cliID(1)) + " rev 1 READY next agent\n    exercise the CLI\n")
 	if !bytes.Contains(out, want) || !bytes.HasPrefix(out, []byte("todo test/cli KNOWN | watermark sequence 1 ")) || bytes.Contains(out, []byte(`"fact"`)) {
 		t.Fatalf("todo must default to the brief, opening with its watermark and one block per record, got\n%s", out)
 	}

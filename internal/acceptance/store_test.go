@@ -70,7 +70,7 @@ func stInbox(t *testing.T, p store.Project) string {
 func stRequest(id model.ID, body string, source int) store.IntakeRequest {
 	return store.IntakeRequest{
 		CommandID: id,
-		Author:    model.Actor{ID: "lane-e"},
+		Author:    model.Actor{ID: "agent-e"},
 		Blobs:     []io.Reader{strings.NewReader(body)},
 		BuildEvents: func(blobs []store.CapturedBlob) ([]model.Event, error) {
 			if len(blobs) != 1 {
@@ -99,7 +99,7 @@ func stRequest(id model.ID, body string, source int) store.IntakeRequest {
 func mustEncode(payload model.TypedEvent) model.Event {
 	e, err := model.EncodeEvent(payload)
 	if err != nil {
-		panic("lane E fixture is invalid: " + err.Error())
+		panic("agent E fixture is invalid: " + err.Error())
 	}
 	return e
 }
@@ -130,7 +130,7 @@ func stEntries(t *testing.T, inbox string) []string {
 
 func TestIntakeCapturesOnePacketWithItsBlobsAndReadsItBackVerified(t *testing.T) {
 	home := stHome(t)
-	project := stDiscover(t, "datum/acceptance", ".whosaidso/events")
+	project := stDiscover(t, "example/acceptance", ".whosaidso/events")
 
 	if want := filepath.Join(project.Root, ".whosaidso", "events"); project.Ledger != want {
 		t.Fatalf("relative ledger resolved to %q, want %q", project.Ledger, want)
@@ -174,20 +174,20 @@ func TestIntakeCapturesOnePacketWithItsBlobsAndReadsItBackVerified(t *testing.T)
 func TestConfigNearestRootWins(t *testing.T) {
 	stHome(t)
 	outer := t.TempDir()
-	stWriteConfig(t, outer, "datum/outer", ".whosaidso/events")
-	inner := filepath.Join(outer, "lane", "worktree")
+	stWriteConfig(t, outer, "example/outer", ".whosaidso/events")
+	inner := filepath.Join(outer, "agent", "worktree")
 	if err := os.MkdirAll(inner, 0700); err != nil {
 		t.Fatal(err)
 	}
 
 	// Control: with no nearer config the outer one wins, and with one it loses.
 	p, err := store.Discover(inner)
-	if err != nil || p.ID != "datum/outer" {
+	if err != nil || p.ID != "example/outer" {
 		t.Fatalf("control: the outer config must win from a nested directory: %+v, %v", p, err)
 	}
-	stWriteConfig(t, inner, "datum/inner", ".whosaidso/events")
+	stWriteConfig(t, inner, "example/inner", ".whosaidso/events")
 	p, err = store.Discover(inner)
-	if err != nil || p.ID != "datum/inner" {
+	if err != nil || p.ID != "example/inner" {
 		t.Fatalf("control: the nearest config must win: %+v, %v", p, err)
 	}
 	if want := filepath.Join(inner, ".whosaidso", "events"); p.Ledger != want {
@@ -210,7 +210,7 @@ func TestConfigNearestRootWins(t *testing.T) {
 func TestConfigLedgerLeavingItsRootContradictsTheCommittedLedgerRule(t *testing.T) {
 	stHome(t)
 	// Control: an ordinary relative ledger resolves under its own root.
-	inside := stDiscover(t, "datum/inside", ".whosaidso/events")
+	inside := stDiscover(t, "example/inside", ".whosaidso/events")
 	if rel, err := filepath.Rel(inside.Root, inside.Ledger); err != nil || rel != filepath.Join(".whosaidso", "events") {
 		t.Fatalf("control: a relative ledger must land under its root, got %q, %v", rel, err)
 	}
@@ -228,7 +228,7 @@ func TestConfigLedgerLeavingItsRootContradictsTheCommittedLedgerRule(t *testing.
 	for _, e := range escapes {
 		t.Run(e.name, func(t *testing.T) {
 			root := t.TempDir()
-			stWriteConfig(t, root, "datum/escape", e.ledger)
+			stWriteConfig(t, root, "example/escape", e.ledger)
 			p, err := store.Discover(root)
 			if err != nil {
 				return
@@ -237,7 +237,7 @@ func TestConfigLedgerLeavingItsRootContradictsTheCommittedLedgerRule(t *testing.
 			if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 				t.Errorf("ledger %q declared as %q resolves outside its own root %q, "+
 					"so it lives in no working tree and cannot be committed with the project. "+
-					"lane B asserts this behaviour deliberately, so this needs an owner ruling",
+					"agent B asserts this behaviour deliberately, so this needs an owner ruling",
 					p.Ledger, e.ledger, p.Root)
 			}
 		})
@@ -247,7 +247,7 @@ func TestConfigLedgerLeavingItsRootContradictsTheCommittedLedgerRule(t *testing.
 func TestConfigRefusesAnIdentityOrLedgerThatRendersAsNothing(t *testing.T) {
 	stHome(t)
 	// Control: a real identity and a real ledger are accepted.
-	if p := stDiscover(t, "datum/acceptance", ".whosaidso/events"); p.ID != "datum/acceptance" {
+	if p := stDiscover(t, "example/acceptance", ".whosaidso/events"); p.ID != "example/acceptance" {
 		t.Fatalf("control: %+v", p)
 	}
 
@@ -255,7 +255,7 @@ func TestConfigRefusesAnIdentityOrLedgerThatRendersAsNothing(t *testing.T) {
 		for _, key := range []string{"id", "ledger"} {
 			t.Run(key+"/"+blank.name, func(t *testing.T) {
 				root := t.TempDir()
-				id, ledger := "datum/acceptance", ".whosaidso/events"
+				id, ledger := "example/acceptance", ".whosaidso/events"
 				if key == "id" {
 					id = blank.text
 				} else {
@@ -281,22 +281,22 @@ func TestConfigRefusesAnIdentityOrLedgerThatRendersAsNothing(t *testing.T) {
 func TestConfigRefusesKeysThatOnlyLookLikeTheTwoItAccepts(t *testing.T) {
 	stHome(t)
 	cases := []struct{ name, body string }{
-		{"a capitalised id", "ID = 'datum/x'\nledger = '.whosaidso/events'\n"},
-		{"a capitalised ledger", "id = 'datum/x'\nLedger = '.whosaidso/events'\n"},
-		{"an all caps pair", "ID = 'datum/x'\nLEDGER = '.whosaidso/events'\n"},
-		{"a key inside a table header", "[project]\nid = 'datum/x'\nledger = '.whosaidso/events'\n"},
-		{"a duplicate id", "id = 'datum/x'\nid = 'datum/y'\nledger = '.whosaidso/events'\n"},
-		{"a duplicate id spelled through a quoted key", "id = 'datum/x'\n\"id\" = 'datum/y'\nledger = '.whosaidso/events'\n"},
-		{"a multi-line basic string", "id = \"\"\"datum/x\"\"\"\nledger = '.whosaidso/events'\n"},
-		{"a multi-line literal string", "id = '''datum/x'''\nledger = '.whosaidso/events'\n"},
-		{"trailing content after the value", "id = 'datum/x' and more\nledger = '.whosaidso/events'\n"},
-		{"a third key", "id = 'datum/x'\nledger = '.whosaidso/events'\nactor = 'lane-e'\n"},
+		{"a capitalised id", "ID = 'example/x'\nledger = '.whosaidso/events'\n"},
+		{"a capitalised ledger", "id = 'example/x'\nLedger = '.whosaidso/events'\n"},
+		{"an all caps pair", "ID = 'example/x'\nLEDGER = '.whosaidso/events'\n"},
+		{"a key inside a table header", "[project]\nid = 'example/x'\nledger = '.whosaidso/events'\n"},
+		{"a duplicate id", "id = 'example/x'\nid = 'example/y'\nledger = '.whosaidso/events'\n"},
+		{"a duplicate id spelled through a quoted key", "id = 'example/x'\n\"id\" = 'example/y'\nledger = '.whosaidso/events'\n"},
+		{"a multi-line basic string", "id = \"\"\"example/x\"\"\"\nledger = '.whosaidso/events'\n"},
+		{"a multi-line literal string", "id = '''example/x'''\nledger = '.whosaidso/events'\n"},
+		{"trailing content after the value", "id = 'example/x' and more\nledger = '.whosaidso/events'\n"},
+		{"a third key", "id = 'example/x'\nledger = '.whosaidso/events'\nactor = 'agent-e'\n"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			root := t.TempDir()
 			if err := os.WriteFile(filepath.Join(root, "whosaidso.toml"), []byte(
-				"id = 'datum/control'\nledger = '.whosaidso/events'\n"), 0600); err != nil {
+				"id = 'example/control'\nledger = '.whosaidso/events'\n"), 0600); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := store.Discover(root); err != nil {
@@ -325,8 +325,8 @@ func TestIntakeDistinctProjectIdsNeverShareAnInbox(t *testing.T) {
 
 	// Control: two plainly different ids get two inboxes, and each reads back
 	// only its own packet even though one Git checkout could hold both.
-	alpha := stDiscover(t, "datum/alpha", ".whosaidso/events")
-	beta := stDiscover(t, "datum/beta", ".whosaidso/events")
+	alpha := stDiscover(t, "example/alpha", ".whosaidso/events")
+	beta := stDiscover(t, "example/beta", ".whosaidso/events")
 	if stInbox(t, alpha) == stInbox(t, beta) {
 		t.Fatalf("control: two obviously different ids already share an inbox")
 	}
@@ -348,8 +348,8 @@ func TestIntakeDistinctProjectIdsNeverShareAnInbox(t *testing.T) {
 		// and macOS compares path components without regard to case, so the
 		// injective property is a true fact about the wrong object. This pair
 		// was found by exhaustive search over short ids.
-		one := stDiscover(t, "datum/aaa", ".whosaidso/events")
-		two := stDiscover(t, "datum/aaG", ".whosaidso/events")
+		one := stDiscover(t, "examples/aaa", ".whosaidso/events")
+		two := stDiscover(t, "examples/aaG", ".whosaidso/events")
 		dirOne, dirTwo := stInbox(t, one), stInbox(t, two)
 		// The original form of this attack asserted the two names differ only in
 		// case, which was the precondition for the collision. The encoding is
@@ -361,11 +361,11 @@ func TestIntakeDistinctProjectIdsNeverShareAnInbox(t *testing.T) {
 			t.Fatalf("two distinct declared ids share one inbox once the filesystem folds case: %s and %s",
 				filepath.Base(dirOne), filepath.Base(dirTwo))
 		}
-		if _, err := store.WriteIntake(context.Background(), one, stRequest("", "source for datum/aaa", 3)); err != nil {
-			t.Fatalf("capture for datum/aaa: %v", err)
+		if _, err := store.WriteIntake(context.Background(), one, stRequest("", "source for examples/aaa", 3)); err != nil {
+			t.Fatalf("capture for examples/aaa: %v", err)
 		}
-		if _, err := store.WriteIntake(context.Background(), two, stRequest("", "source for datum/aaG", 4)); err != nil {
-			t.Fatalf("capture for datum/aaG: %v", err)
+		if _, err := store.WriteIntake(context.Background(), two, stRequest("", "source for examples/aaG", 4)); err != nil {
+			t.Fatalf("capture for examples/aaG: %v", err)
 		}
 		for _, p := range []store.Project{one, two} {
 			packets, err := store.ReadIntake(p, nil)
@@ -392,15 +392,15 @@ func TestIntakeDistinctProjectIdsNeverShareAnInbox(t *testing.T) {
 		}
 		base := filepath.Join(home, ".whosaidso", "intake")
 		hostile := []struct{ name, id string }{
-			{"a slash", "datum/lane/a"},
+			{"a slash", "example/sub/a"},
 			{"a parent hop", "../../etc"},
 			{"a bare parent hop", ".."},
 			{"a current directory", "."},
 			{"a leading dash", "-rf"},
-			{"a newline", "datum/a\nledger"},
-			{"a tab and a quote", "datum/\ta\"b"},
+			{"a newline", "example/a\nledger"},
+			{"a tab and a quote", "example/\ta\"b"},
 			{"an absolute path", "/etc/passwd"},
-			{"a windows separator", `datum\lane`},
+			{"a windows separator", `example\sub`},
 		}
 		for _, h := range hostile {
 			t.Run(h.name, func(t *testing.T) {
@@ -433,8 +433,8 @@ func TestIntakeDistinctProjectIdsNeverShareAnInbox(t *testing.T) {
 
 func TestIntakeCapturedSourceOutlivesTheWorktreeItCameFrom(t *testing.T) {
 	stHome(t)
-	project := stDiscover(t, "datum/lane-worktree", ".whosaidso/events")
-	ref, err := store.WriteIntake(context.Background(), project, stRequest("", "the lane's only copy of this source", 6))
+	project := stDiscover(t, "example/worktree", ".whosaidso/events")
+	ref, err := store.WriteIntake(context.Background(), project, stRequest("", "the agent's only copy of this source", 6))
 	if err != nil {
 		t.Fatalf("control capture: %v", err)
 	}
@@ -461,7 +461,7 @@ func TestIntakeCapturedSourceOutlivesTheWorktreeItCameFrom(t *testing.T) {
 
 func TestIntakeFiveConcurrentWritersPublishWithoutALockOrAPartialPacket(t *testing.T) {
 	stHome(t)
-	project := stDiscover(t, "datum/five-writers", ".whosaidso/events")
+	project := stDiscover(t, "example/five-writers", ".whosaidso/events")
 	if _, err := store.WriteIntake(context.Background(), project, stRequest("", "first source", 1)); err != nil {
 		t.Fatalf("control capture: %v", err)
 	}
@@ -532,7 +532,7 @@ func TestIntakeFiveConcurrentWritersPublishWithoutALockOrAPartialPacket(t *testi
 
 func TestIntakeRetryWithDifferentBytesUnderOneCommandIdIsAConflict(t *testing.T) {
 	stHome(t)
-	project := stDiscover(t, "datum/retry", ".whosaidso/events")
+	project := stDiscover(t, "example/retry", ".whosaidso/events")
 	id := recID(100)
 
 	first, err := store.WriteIntake(context.Background(), project, stRequest(id, "the original source", 1))
@@ -639,7 +639,7 @@ func TestIntakeBlobNameMustEqualItsOwnContentHash(t *testing.T) {
 	for _, c := range tamper {
 		t.Run(c.name, func(t *testing.T) {
 			stHome(t)
-			project := stDiscover(t, "datum/blobs", ".whosaidso/events")
+			project := stDiscover(t, "example/blobs", ".whosaidso/events")
 			ref, err := store.WriteIntake(context.Background(), project, stRequest("", "the source bytes as captured", 1))
 			if err != nil {
 				t.Fatalf("control capture: %v", err)
@@ -696,7 +696,7 @@ func (r *stCancelOnEOF) Read(p []byte) (int, error) {
 
 func TestIntakeInterruptedPublishIsNeverVisibleAsACompletePacket(t *testing.T) {
 	stHome(t)
-	project := stDiscover(t, "datum/interrupted", ".whosaidso/events")
+	project := stDiscover(t, "example/interrupted", ".whosaidso/events")
 	good, err := store.WriteIntake(context.Background(), project, stRequest("", "a source that was fully captured", 1))
 	if err != nil {
 		t.Fatalf("control capture: %v", err)

@@ -17,7 +17,7 @@ import (
 // boundary untrusted bytes cross. A fixture that the wire layer would refuse is
 // not a fixture, it is a test passing on input the system can never see.
 
-const testProject = model.ProjectID("datum/reduce-fixtures")
+const testProject = model.ProjectID("example/reduce-fixtures")
 
 var baseTime = time.Date(2026, 9, 21, 9, 0, 0, 0, time.UTC)
 
@@ -313,8 +313,8 @@ func mustReplay(t *testing.T, bundles []model.Bundle) Snapshot {
 func goodLedger(t *testing.T) *ledgerBuilder {
 	t.Helper()
 	l := newLedger()
-	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
-	l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "lane-a"}, AttemptID: newID("ATTA")})
+	l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
+	l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID("ATTA")})
 	return l
 }
 
@@ -380,7 +380,7 @@ func TestReplayRefusesBrokenLedgers(t *testing.T) {
 			return bs
 		}},
 		{"foreign project", CodeProjectMismatch, func(bs []model.Bundle) []model.Bundle {
-			bs[1].Project = "datum/somewhere-else"
+			bs[1].Project = "example/somewhere-else"
 			return bs
 		}},
 		{"unknown wire version", CodeUnknownVersion, func(bs []model.Bundle) []model.Bundle {
@@ -433,7 +433,7 @@ func TestApplyDoesNotTouchItsInput(t *testing.T) {
 		Task:         ref(newID("TSKA"), 1),
 		AttemptID:    newID("ATTA"),
 		Outcome:      model.AttemptStopped,
-		Reason:       "the lane ran out of budget",
+		Reason:       "the agent ran out of budget",
 		NextAction:   "resume with a fresh attempt",
 		DeliveryRefs: []model.ArtifactRef{},
 	})
@@ -461,7 +461,7 @@ func TestFailedApplyReturnsNoState(t *testing.T) {
 
 	bad := l.add(t, &model.TaskStart{
 		Task:      ref(newID("TSKA"), 1),
-		Actor:     model.Actor{ID: "lane-b"},
+		Actor:     model.Actor{ID: "agent-b"},
 		AttemptID: newID("ATTB"),
 	})
 	out, err := Apply(s, bad)
@@ -478,10 +478,10 @@ func TestFailedApplyReturnsNoState(t *testing.T) {
 
 func TestStaleAmendmentIsATypedConflict(t *testing.T) {
 	l := newLedger()
-	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+	l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 	// Control: the first amendment at the current revision is accepted.
 	l.add(t, &model.TaskAmend{
-		Provenance:  provenance("lane-a"),
+		Provenance:  provenance("agent-a"),
 		Target:      ref(newID("TSKA"), 1),
 		Replacement: taskSpec(withIntent("first amendment wins")),
 	})
@@ -492,7 +492,7 @@ func TestStaleAmendmentIsATypedConflict(t *testing.T) {
 
 	// The second amendment expects the same revision and must lose.
 	stale := l.add(t, &model.TaskAmend{
-		Provenance:  provenance("lane-b"),
+		Provenance:  provenance("agent-b"),
 		Target:      ref(newID("TSKA"), 1),
 		Replacement: taskSpec(withIntent("second amendment loses")),
 	})
@@ -519,19 +519,19 @@ func TestStaleRevisionOfEveryRecordKindIsATypedConflict(t *testing.T) {
 		revise func(target model.RecordRef) model.TypedEvent
 	}{
 		{"claim", func(id model.ID) model.TypedEvent {
-			return &model.ClaimAssert{Provenance: provenance("lane-a"), ID: id, Spec: claimSpec()}
+			return &model.ClaimAssert{Provenance: provenance("agent-a"), ID: id, Spec: claimSpec()}
 		}, func(target model.RecordRef) model.TypedEvent {
-			return &model.ClaimRevise{Provenance: provenance("lane-a"), Target: target, Replacement: claimSpec()}
+			return &model.ClaimRevise{Provenance: provenance("agent-a"), Target: target, Replacement: claimSpec()}
 		}},
 		{"decision", func(id model.ID) model.TypedEvent {
-			return &model.DecisionOpen{Provenance: provenance("lane-a"), ID: id, Spec: decisionSpec()}
+			return &model.DecisionOpen{Provenance: provenance("agent-a"), ID: id, Spec: decisionSpec()}
 		}, func(target model.RecordRef) model.TypedEvent {
-			return &model.DecisionRevise{Provenance: provenance("lane-a"), Target: target, Replacement: decisionSpec()}
+			return &model.DecisionRevise{Provenance: provenance("agent-a"), Target: target, Replacement: decisionSpec()}
 		}},
 		{"instrument", func(id model.ID) model.TypedEvent {
-			return &model.InstrumentDeclare{Provenance: provenance("lane-a"), ID: id, Spec: proofInstrument()}
+			return &model.InstrumentDeclare{Provenance: provenance("agent-a"), ID: id, Spec: proofInstrument()}
 		}, func(target model.RecordRef) model.TypedEvent {
-			return &model.InstrumentRevise{Provenance: provenance("lane-a"), Target: target, Replacement: proofInstrument()}
+			return &model.InstrumentRevise{Provenance: provenance("agent-a"), Target: target, Replacement: proofInstrument()}
 		}},
 	} {
 		t.Run(tc.kind, func(t *testing.T) {
@@ -557,14 +557,14 @@ func TestStaleRevisionOfEveryRecordKindIsATypedConflict(t *testing.T) {
 func TestLedgerSequenceDecidesWhichAmendmentLoses(t *testing.T) {
 	build := func(first, second string) error {
 		l := newLedger()
-		l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+		l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 		l.add(t, &model.TaskAmend{
-			Provenance:  provenance("lane-a"),
+			Provenance:  provenance("agent-a"),
 			Target:      ref(newID("TSKA"), 1),
 			Replacement: taskSpec(withIntent(first)),
 		})
 		l.add(t, &model.TaskAmend{
-			Provenance:  provenance("lane-b"),
+			Provenance:  provenance("agent-b"),
 			Target:      ref(newID("TSKA"), 1),
 			Replacement: taskSpec(withIntent(second)),
 		})
@@ -572,8 +572,8 @@ func TestLedgerSequenceDecidesWhichAmendmentLoses(t *testing.T) {
 		return err
 	}
 
-	a := wantConflict(t, build("lane a first", "lane b second"))
-	b := wantConflict(t, build("lane b first", "lane a second"))
+	a := wantConflict(t, build("agent a first", "agent b second"))
+	b := wantConflict(t, build("agent b first", "agent a second"))
 	if a.Sequence != 3 || b.Sequence != 3 {
 		t.Fatalf("the rejection is not at the later bundle: %d and %d", a.Sequence, b.Sequence)
 	}
@@ -587,15 +587,15 @@ func TestLedgerSequenceDecidesWhichAmendmentLoses(t *testing.T) {
 
 func TestStaleTaskRevisionOnAttemptEvents(t *testing.T) {
 	l := newLedger()
-	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+	l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 	// Control: starting at the current revision works.
-	l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "lane-a"}, AttemptID: newID("ATTA")})
+	l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID("ATTA")})
 	s := mustReplay(t, l.bundles())
 
 	amend := l.add(t, &model.TaskAmend{
 		Provenance:  provenance("coordinator"),
 		Target:      ref(newID("TSKA"), 1),
-		Replacement: taskSpec(withIntent("the contract moved under the lane")),
+		Replacement: taskSpec(withIntent("the contract moved under the agent")),
 	})
 	s, err := Apply(s, amend)
 	if err != nil {
@@ -623,7 +623,7 @@ func TestAttemptIdentityCollisionIsAProjectWideFault(t *testing.T) {
 		for _, terminal := range []bool{false, true} {
 			t.Run(fmt.Sprintf("takeover=%t/terminal=%t", takeover, terminal), func(t *testing.T) {
 				l := goodLedger(t)
-				l.add(t, &model.TaskCreate{Provenance: provenance("lane-b"), ID: newID("TSKB"), Spec: taskSpec()})
+				l.add(t, &model.TaskCreate{Provenance: provenance("agent-b"), ID: newID("TSKB"), Spec: taskSpec()})
 				if terminal {
 					l.add(t, &model.AttemptTerminal{
 						Task: ref(newID("TSKA"), 1), AttemptID: newID("ATTA"),
@@ -632,18 +632,18 @@ func TestAttemptIdentityCollisionIsAProjectWideFault(t *testing.T) {
 					})
 				}
 				if takeover {
-					l.add(t, &model.TaskStart{Task: ref(newID("TSKB"), 1), Actor: model.Actor{ID: "lane-b"}, AttemptID: newID("ATTB")})
+					l.add(t, &model.TaskStart{Task: ref(newID("TSKB"), 1), Actor: model.Actor{ID: "agent-b"}, AttemptID: newID("ATTB")})
 				}
 				before := mustReplay(t, l.bundles())
 				unchanged := mustReplay(t, l.bundles())
 				event := func(id model.ID) model.TypedEvent {
 					if takeover {
 						return &model.TaskTakeover{
-							Task: ref(newID("TSKB"), 1), Actor: model.Actor{ID: "lane-c"},
+							Task: ref(newID("TSKB"), 1), Actor: model.Actor{ID: "agent-c"},
 							AttemptID: id, PriorAttemptID: newID("ATTB"), StoppedConfirmationRef: blobRef("stopped"),
 						}
 					}
-					return &model.TaskStart{Task: ref(newID("TSKB"), 1), Actor: model.Actor{ID: "lane-c"}, AttemptID: id}
+					return &model.TaskStart{Task: ref(newID("TSKB"), 1), Actor: model.Actor{ID: "agent-c"}, AttemptID: id}
 				}
 				controlLedger := *l
 				control, err := Apply(before, controlLedger.add(t, event(newID("ATTC"))))
@@ -655,7 +655,7 @@ func TestAttemptIdentityCollisionIsAProjectWideFault(t *testing.T) {
 				}
 				// An earlier valid event must also be rolled back on collision.
 				bundle := l.add(t,
-					&model.TaskCreate{Provenance: provenance("lane-c"), ID: newID("TSKC"), Spec: taskSpec()},
+					&model.TaskCreate{Provenance: provenance("agent-c"), ID: newID("TSKC"), Spec: taskSpec()},
 					event(newID("ATTA")),
 				)
 				after, err := Apply(before, bundle)
@@ -684,7 +684,7 @@ func TestUnknownReferencesAreRefused(t *testing.T) {
 	}{
 		{"start on an unadmitted task", CodeUnknownReference, func(t *testing.T) []model.Bundle {
 			l := newLedger()
-			l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "lane-a"}, AttemptID: newID("ATTA")})
+			l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID("ATTA")})
 			return l.bundles()
 		}},
 		{"terminal for an unadmitted attempt", CodeUnknownReference, func(t *testing.T) []model.Bundle {
@@ -699,7 +699,7 @@ func TestUnknownReferencesAreRefused(t *testing.T) {
 		{"takeover of an unadmitted attempt", CodeUnknownReference, func(t *testing.T) []model.Bundle {
 			l := goodLedger(t)
 			l.add(t, &model.TaskTakeover{
-				Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "lane-b"},
+				Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-b"},
 				AttemptID: newID("ATTB"), PriorAttemptID: newID("ATTZ"),
 				StoppedConfirmationRef: blobRef("stopped"),
 			})
@@ -718,12 +718,12 @@ func TestUnknownReferencesAreRefused(t *testing.T) {
 			l := goodLedger(t)
 			spec := taskSpec()
 			spec.ContextRefs = []model.RecordRef{ref(newID("TSKA"), 9)}
-			l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKB"), Spec: spec})
+			l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKB"), Spec: spec})
 			return l.bundles()
 		}},
 		{"second record under one id", CodeDuplicateRecord, func(t *testing.T) []model.Bundle {
 			l := goodLedger(t)
-			l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+			l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 			return l.bundles()
 		}},
 		{"second receipt on one attempt", CodeInvalidTransition, func(t *testing.T) []model.Bundle {
@@ -757,7 +757,7 @@ func TestUnknownReferencesAreRefused(t *testing.T) {
 			l := goodLedger(t)
 			hold := &model.BlockerHold{
 				Task: ref(newID("TSKA"), 1), BlockerID: newID("HDA1"),
-				Reason: model.BlockerResume, Actor: model.Actor{ID: "lane-a"},
+				Reason: model.BlockerResume, Actor: model.Actor{ID: "agent-a"},
 				Criterion: "the fixture harness is restored",
 			}
 			l.add(t, hold)
@@ -772,17 +772,17 @@ func TestUnknownReferencesAreRefused(t *testing.T) {
 		{"authoring into another project", CodeInvalidField, func(t *testing.T) []model.Bundle {
 			l := goodLedger(t)
 			l.add(t, &model.TaskStart{
-				Task:      model.RecordRef{Project: "datum/elsewhere", RecordID: newID("TSKA"), Revision: 1},
-				Actor:     model.Actor{ID: "lane-a"},
+				Task:      model.RecordRef{Project: "example/elsewhere", RecordID: newID("TSKA"), Revision: 1},
+				Actor:     model.Actor{ID: "agent-a"},
 				AttemptID: newID("ATTB"),
 			})
 			return l.bundles()
 		}},
 		{"prerequisite pointed at the wrong kind", CodeInvalidField, func(t *testing.T) []model.Bundle {
 			l := newLedger()
-			l.add(t, &model.ClaimAssert{Provenance: provenance("lane-a"), ID: newID("CMA1"), Spec: claimSpec()})
+			l.add(t, &model.ClaimAssert{Provenance: provenance("agent-a"), ID: newID("CMA1"), Spec: claimSpec()})
 			l.add(t, &model.TaskCreate{
-				Provenance: provenance("lane-a"), ID: newID("TSKA"),
+				Provenance: provenance("agent-a"), ID: newID("TSKA"),
 				Spec: taskSpec(withPrerequisite("task-success", ref(newID("CMA1"), 1), "forbid", nil)),
 			})
 			return l.bundles()
@@ -830,24 +830,24 @@ func TestReplayIsDeterministic(t *testing.T) {
 // amendment genuinely conflicts and must produce a defined rejection instead.
 func TestIndependentEventsReorderFreely(t *testing.T) {
 	forward := newLedger()
-	forward.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
-	forward.add(t, &model.TaskCreate{Provenance: provenance("lane-b"), ID: newID("TSKB"), Spec: taskSpec()})
-	forward.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "lane-a"}, AttemptID: newID("ATTA")})
+	forward.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
+	forward.add(t, &model.TaskCreate{Provenance: provenance("agent-b"), ID: newID("TSKB"), Spec: taskSpec()})
+	forward.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID("ATTA")})
 	forward.add(t, &model.BlockerHold{
 		Task: ref(newID("TSKB"), 1), BlockerID: newID("HDB1"),
-		Reason: model.BlockerResume, Actor: model.Actor{ID: "lane-b"},
+		Reason: model.BlockerResume, Actor: model.Actor{ID: "agent-b"},
 		Criterion: "the upstream harness is repaired",
 	})
 
 	swapped := newLedger()
-	swapped.add(t, &model.TaskCreate{Provenance: provenance("lane-b"), ID: newID("TSKB"), Spec: taskSpec()})
-	swapped.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+	swapped.add(t, &model.TaskCreate{Provenance: provenance("agent-b"), ID: newID("TSKB"), Spec: taskSpec()})
+	swapped.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 	swapped.add(t, &model.BlockerHold{
 		Task: ref(newID("TSKB"), 1), BlockerID: newID("HDB1"),
-		Reason: model.BlockerResume, Actor: model.Actor{ID: "lane-b"},
+		Reason: model.BlockerResume, Actor: model.Actor{ID: "agent-b"},
 		Criterion: "the upstream harness is repaired",
 	})
-	swapped.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "lane-a"}, AttemptID: newID("ATTA")})
+	swapped.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID("ATTA")})
 
 	a := statuses(mustReplay(t, forward.bundles()))
 	b := statuses(mustReplay(t, swapped.bundles()))
@@ -886,8 +886,8 @@ func closeSuccess(task model.ID, rev model.Revision) *model.TaskClose {
 func closedTaskLedger(t *testing.T) *ledgerBuilder {
 	t.Helper()
 	l := newLedger()
-	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
-	l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "lane-a"}, AttemptID: newID("ATTA")})
+	l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
+	l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID("ATTA")})
 	l.add(t, &model.AttemptTerminal{
 		Task: ref(newID("TSKA"), 1), AttemptID: newID("ATTA"),
 		Outcome: model.AttemptSuccess, Reason: "the reducer folds the four statuses",
@@ -906,19 +906,19 @@ func goldenLedger(t *testing.T) *ledgerBuilder {
 
 	// TSKB depends on TSKA at the revision that was closed and witnessed.
 	l.add(t, &model.TaskCreate{
-		Provenance: provenance("lane-b"), ID: newID("TSKB"),
+		Provenance: provenance("agent-b"), ID: newID("TSKB"),
 		Spec: taskSpec(
 			withIntent("consume the closed dependency"),
-			withNextActor(model.Actor{ID: "lane-b"}),
+			withNextActor(model.Actor{ID: "agent-b"}),
 			withPrerequisite("task-success", ref(newID("TSKA"), 1), "forbid", nil),
 		),
 	})
 
 	// TSKC is live, TSKD waits on it.
-	l.add(t, &model.TaskCreate{Provenance: provenance("lane-c"), ID: newID("TSKC"), Spec: taskSpec(withIntent("run the harness"))})
-	l.add(t, &model.TaskStart{Task: ref(newID("TSKC"), 1), Actor: model.Actor{ID: "lane-c"}, AttemptID: newID("ATTC")})
+	l.add(t, &model.TaskCreate{Provenance: provenance("agent-c"), ID: newID("TSKC"), Spec: taskSpec(withIntent("run the harness"))})
+	l.add(t, &model.TaskStart{Task: ref(newID("TSKC"), 1), Actor: model.Actor{ID: "agent-c"}, AttemptID: newID("ATTC")})
 	l.add(t, &model.TaskCreate{
-		Provenance: provenance("lane-d"), ID: newID("TSKD"),
+		Provenance: provenance("agent-d"), ID: newID("TSKD"),
 		Spec: taskSpec(
 			withIntent("wait on the live task"),
 			withPrerequisite("task-success", ref(newID("TSKC"), 1), "forbid", nil),
@@ -926,8 +926,8 @@ func goldenLedger(t *testing.T) *ledgerBuilder {
 	})
 
 	// TSKE succeeded but nobody accepted it.
-	l.add(t, &model.TaskCreate{Provenance: provenance("lane-e"), ID: newID("TSKE"), Spec: taskSpec(withIntent("hand back without acceptance"))})
-	l.add(t, &model.TaskStart{Task: ref(newID("TSKE"), 1), Actor: model.Actor{ID: "lane-e"}, AttemptID: newID("ATTE")})
+	l.add(t, &model.TaskCreate{Provenance: provenance("agent-e"), ID: newID("TSKE"), Spec: taskSpec(withIntent("hand back without acceptance"))})
+	l.add(t, &model.TaskStart{Task: ref(newID("TSKE"), 1), Actor: model.Actor{ID: "agent-e"}, AttemptID: newID("ATTE")})
 	l.add(t, &model.AttemptTerminal{
 		Task: ref(newID("TSKE"), 1), AttemptID: newID("ATTE"),
 		Outcome: model.AttemptSuccess, Reason: "the work is done",

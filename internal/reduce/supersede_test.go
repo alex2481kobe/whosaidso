@@ -16,7 +16,7 @@ func supersedeLedger(t *testing.T) (*ledgerBuilder, model.RecordRef, model.Recor
 	l := newLedger()
 	a, b, c := ref(newID("SPA"), 1), ref(newID("SPB"), 1), ref(newID("SPC"), 1)
 	for _, r := range []model.RecordRef{a, b, c} {
-		l.add(t, &model.ClaimAssert{ID: r.RecordID, Provenance: provenance("lane"), Spec: claimSpec()})
+		l.add(t, &model.ClaimAssert{ID: r.RecordID, Provenance: provenance("agent"), Spec: claimSpec()})
 	}
 	return l, a, b, c
 }
@@ -55,8 +55,8 @@ func TestSupersedeOnceAndNeverIntoACycle(t *testing.T) {
 func TestSupersedeOwnerRulingNeedsNamedAuthority(t *testing.T) {
 	l := newLedger()
 	d, e := ref(newID("SPD"), 1), ref(newID("SPE"), 1)
-	l.add(t, &model.DecisionOpen{ID: d.RecordID, Provenance: provenance("lane"), Spec: decisionSpec()},
-		&model.DecisionOpen{ID: e.RecordID, Provenance: provenance("lane"), Spec: decisionSpec()})
+	l.add(t, &model.DecisionOpen{ID: d.RecordID, Provenance: provenance("agent"), Spec: decisionSpec()},
+		&model.DecisionOpen{ID: e.RecordID, Provenance: provenance("agent"), Spec: decisionSpec()})
 	// No ruling yet: nothing an owner ruled is affected.
 	free := *l
 	free.out = append([]model.Bundle(nil), l.out...)

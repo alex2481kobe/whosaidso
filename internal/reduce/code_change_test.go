@@ -32,8 +32,8 @@ func codeChangeLedger(t *testing.T, failedEnv, passedEnv func(model.InvocationEn
 	t.Helper()
 	l := goodLedger(t)
 	claim := ref(newID("CMA1"), 1)
-	l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("lane-a"), Spec: proofInstrument()},
-		&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("lane-a"), Spec: claimSpec()}, fixProofCriterion(claim))
+	l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("agent-a"), Spec: proofInstrument()},
+		&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("agent-a"), Spec: claimSpec()}, fixProofCriterion(claim))
 	failed := failedEnv(atHead(proofEnvelope(claim, newID("RNA0")), oldHead))
 	passed := passedEnv(atHead(proofEnvelope(claim, newID("RNA1")), newHead))
 	l.add(t, &model.InvocationStart{Envelope: failed}, &model.InvocationStart{Envelope: passed})

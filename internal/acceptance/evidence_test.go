@@ -574,7 +574,7 @@ func evidenceCriterion() model.CriterionFix {
 	population := evidenceContent(evidenceBody)
 	population.Selector = model.Selector{Kind: "json-pointer", Pointer: "/population"}
 	return model.CriterionFix{
-		Claim:       model.RecordRef{Project: "datum/lane-e-evidence", RecordID: "00000000000000000000000001", Revision: 1},
+		Claim:       model.RecordRef{Project: "example/evidence", RecordID: "00000000000000000000000001", Revision: 1},
 		CriterionID: "00000000000000000000000002", Revision: 1,
 		Expression: model.CriterionExpression{
 			ResultSelector: result, Unit: "mm",
@@ -582,7 +582,7 @@ func evidenceCriterion() model.CriterionFix {
 			Operator:   model.Less, Target: evidenceNumber("0.05"), Reducer: model.All,
 		},
 		Policy: model.EvaluationPolicy{Inclusion: "entire-criterion-family", Retry: "retain-all"},
-		Author: model.Actor{ID: "lane-e"}, SourceRefs: []model.ArtifactRef{},
+		Author: model.Actor{ID: "agent-e"}, SourceRefs: []model.ArtifactRef{},
 	}
 }
 

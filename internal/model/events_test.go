@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const schemaProject ProjectID = "datum/schema"
+const schemaProject ProjectID = "example/schema"
 
 func schemaID(n int) ID { return ID(fmt.Sprintf("%026d", n)) }
 
@@ -67,8 +67,8 @@ func schemaEvents() []TypedEvent {
 	return []TypedEvent{
 		&TaskCreate{ID: schemaID(1), Spec: schemaTask(), Provenance: schemaProvenance()},
 		&TaskAmend{Target: schemaRef(1), Replacement: schemaTask(), Provenance: schemaProvenance()},
-		&TaskStart{Task: schemaRef(1), Actor: Actor{ID: "lane-a"}, AttemptID: schemaID(10)},
-		&TaskTakeover{Task: schemaRef(1), Actor: Actor{ID: "lane-b"}, AttemptID: schemaID(10), PriorAttemptID: schemaID(12), StoppedConfirmationRef: schemaArtifact()},
+		&TaskStart{Task: schemaRef(1), Actor: Actor{ID: "agent-a"}, AttemptID: schemaID(10)},
+		&TaskTakeover{Task: schemaRef(1), Actor: Actor{ID: "agent-b"}, AttemptID: schemaID(10), PriorAttemptID: schemaID(12), StoppedConfirmationRef: schemaArtifact()},
 		&AttemptTerminal{Task: schemaRef(1), AttemptID: schemaID(10), Outcome: AttemptRunnerDied, Reason: "observer died", NextAction: "reconcile missing terminal observation", DeliveryRefs: []ArtifactRef{}, CommitsDenied: true, ReconciliationOwed: true},
 		&TaskClose{Task: schemaRef(1), Outcome: ClosureSuccess, Authority: ptr(schemaAuthority()), AcceptanceWitnessRefs: []AcceptanceWitness{{CriterionID: schemaID(3), CriterionRevision: 1, WitnessRef: schemaArtifact()}}, DeliveryWitnessRefs: []ArtifactRef{schemaArtifact()}},
 		&BlockerHold{Task: schemaRef(1), BlockerID: schemaID(13), Reason: BlockerAwaitingAcceptance, Actor: Actor{ID: "owner"}, Criterion: "owner has accepted the witnessed result"},
@@ -89,7 +89,7 @@ func schemaEvents() []TypedEvent {
 		&InstrumentRevise{Target: schemaRef(1), Replacement: schemaInstrument(), Provenance: schemaProvenance()},
 		&TrustWithdraw{Instrument: schemaRef(1), Scope: schemaScope(), RevalidationCondition: "bind validation to the repaired implementation"},
 		&ReviewAdmit{Packets: []PacketRef{{CommandID: schemaID(16), Digest: HashBytes([]byte("packet"))}}, Outcome: "accepted", Actor: Actor{ID: "coordinator"}, Reason: "reviewed against the current record",
-			Authors: map[ID]Actor{schemaID(16): {ID: "lane-a"}}, CapturedAt: map[ID]Availability[time.Time]{schemaID(16): {State: Unknown, Reason: "not recorded"}}, EventPackets: []ID{}},
+			Authors: map[ID]Actor{schemaID(16): {ID: "agent-a"}}, CapturedAt: map[ID]Availability[time.Time]{schemaID(16): {State: Unknown, Reason: "not recorded"}}, EventPackets: []ID{}},
 		&ArtifactDispose{Artifact: schemaArtifact(), Digest: schemaArtifact().Content.SHA256, PreviousLocation: ".whosaidso/artifacts/source.json", SupportLoss: []SupportLoss{{Target: schemaRef(1), Reason: "the observation is no longer verifiable"}}, Authority: schemaAuthority()},
 	}
 }

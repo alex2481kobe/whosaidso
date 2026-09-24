@@ -16,10 +16,10 @@ func TestPrerequisiteReasonsFollowNumericIndexOrder(t *testing.T) {
 	opts := []taskOpt{}
 	for i := 0; i < 12; i++ {
 		id := newID(fmt.Sprintf("DEP%d", i))
-		l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: id, Spec: taskSpec()})
+		l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: id, Spec: taskSpec()})
 		opts = append(opts, withPrerequisite("task-success", ref(id, 1), "forbid", nil))
 	}
-	l.add(t, &model.TaskCreate{Provenance: provenance("lane-b"), ID: newID("PRNT"), Spec: taskSpec(opts...)})
+	l.add(t, &model.TaskCreate{Provenance: provenance("agent-b"), ID: newID("PRNT"), Spec: taskSpec(opts...)})
 	p := projectTask(t, l, newID("PRNT"))
 	if len(p.Reasons) != 12 {
 		t.Fatalf("control: twelve unmet prerequisites must give twelve reasons, got %d", len(p.Reasons))

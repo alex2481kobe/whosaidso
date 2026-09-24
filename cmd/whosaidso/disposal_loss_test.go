@@ -41,21 +41,21 @@ func disposalWorld(t *testing.T) (string, model.ArtifactRef, []model.RecordRef) 
 	if _, err := e2eInvoke(t, root, nil, "admit", "--command-id", string(cliID(900)), "--actor", "coordinator", "--outcome", "accepted", "--reason", "run", string(run.StartPacket.CommandID), string(run.SealPacket.CommandID)); err != nil {
 		t.Fatal(err)
 	}
-	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Verdict: model.VerdictSupports, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "lane"}, Reason: "the run passed"},
+	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Verdict: model.VerdictSupports, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "agent"}, Reason: "the run passed"},
 		Evidence: []model.ObservationDisposition{{InvocationRef: model.InvocationRef{Project: "test/cli", InvocationID: run.Envelope.InvocationID}, Disposition: "supports", Reason: "passed"}}}
-	if err := e2eAdmitOne(t, root, proof, 901, 902, "lane"); err != nil {
+	if err := e2eAdmitOne(t, root, proof, 901, 902, "agent"); err != nil {
 		t.Fatal(err)
 	}
-	lane := model.Provenance{SourceRefs: []model.ArtifactRef{}}
+	agent := model.Provenance{SourceRefs: []model.ArtifactRef{}}
 	open := func(id int, context model.RecordRef) *model.DecisionOpen {
 		scope := model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{context}, AppliesWhen: "this fixture", Limitations: "not a real ledger"}
-		return &model.DecisionOpen{ID: cliID(id), Provenance: lane, Spec: model.DecisionSpec{Question: "ship on this claim?", Options: []string{"yes", "no"}, WaitingActor: model.Actor{ID: "owner"}, Scope: scope}}
+		return &model.DecisionOpen{ID: cliID(id), Provenance: agent, Spec: model.DecisionSpec{Question: "ship on this claim?", Options: []string{"yes", "no"}, WaitingActor: model.Actor{ID: "owner"}, Scope: scope}}
 	}
 	first, second := model.RecordRef{Project: "test/cli", RecordID: cliID(910), Revision: 1}, model.RecordRef{Project: "test/cli", RecordID: cliID(911), Revision: 1}
-	if err := e2eAdmitOne(t, root, open(910, criterion.Claim), 912, 913, "lane"); err != nil {
+	if err := e2eAdmitOne(t, root, open(910, criterion.Claim), 912, 913, "agent"); err != nil {
 		t.Fatal(err)
 	}
-	if err := e2eAdmitOne(t, root, open(911, first), 914, 915, "lane"); err != nil {
+	if err := e2eAdmitOne(t, root, open(911, first), 914, 915, "agent"); err != nil {
 		t.Fatal(err)
 	}
 	for _, out := range *run.Envelope.Outputs.Value {
@@ -146,12 +146,12 @@ func TestCLIDisposalLossListIsExactlyWhatAdmissionRequires(t *testing.T) {
 	// surplus the gate would not have asked for.
 	for i := range listed {
 		short := append(append([]model.RecordRef{}, listed[:i]...), listed[i+1:]...)
-		err := e2eAdmitOne(t, root, dispose(short), 920+2*i, 921+2*i, "agent-sol")
+		err := e2eAdmitOne(t, root, dispose(short), 920+2*i, 921+2*i, "recorder")
 		if err == nil || !strings.Contains(err.Error(), "loss-unaccounted") {
 			t.Fatalf("support_loss without %+v must be refused as loss-unaccounted, got %v", listed[i], err)
 		}
 	}
-	if err := e2eAdmitOne(t, root, dispose(listed), 990, 991, "agent-sol"); err != nil {
+	if err := e2eAdmitOne(t, root, dispose(listed), 990, 991, "recorder"); err != nil {
 		t.Fatalf("the printed support_loss list must be admitted as a disposal's list: %v", err)
 	}
 }

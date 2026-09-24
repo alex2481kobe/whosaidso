@@ -9,7 +9,7 @@ import (
 )
 
 func TestIsPlaceholderExactForms(t *testing.T) {
-	for _, s := range []string{"<text>", "<text: authored words, not blank>", "<one of: git | content>", "<actor-id: who, e.g. coordinator>", "<key: a name>", "<unsupported>"} {
+	for _, s := range []string{"<text>", "<text: authored words, not blank>", "<one of: git | content>", "<actor-id: who, e.g. reviewer>", "<key: a name>", "<unsupported>"} {
 		if !IsPlaceholder(s) {
 			t.Errorf("%q is a placeholder the template writes", s)
 		}

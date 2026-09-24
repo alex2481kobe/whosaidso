@@ -84,7 +84,7 @@ func TestProofDifferentMachinesAreNotComparable(t *testing.T) {
 				env.ExecutionSourceIdentity.MachineID = recKnown(machine)
 				// Coordinator decision 2026-09-23: only a known equal HEAD with clean checkouts (or equal pins) establishes equal source.
 				env.ExecutionSourceIdentity.Head, env.ExecutionSourceIdentity.Dirty = recKnown(model.GitHead{ObjectFormat: "sha1", Commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}), recKnown(false)
-				w.mustAdmit(w.lane, &model.InvocationStart{Envelope: env}, w.seal(env, w.produce(id, []byte(pvPass), "out/result.json")))
+				w.mustAdmit(w.agent, &model.InvocationStart{Envelope: env}, w.seal(env, w.produce(id, []byte(pvPass), "out/result.json")))
 				members[id] = "supports"
 			}
 			if !different {

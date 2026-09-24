@@ -25,7 +25,7 @@ func reviewFixture() *ReviewAdmit {
 			{CommandID: schemaID(3), Digest: HashBytes([]byte("third"))},
 		},
 		Actor: Actor{ID: "reviewer"}, Outcome: "accepted", Reason: "  exact words\n\t",
-		Authors: map[ID]Actor{schemaID(1): {ID: "reviewer"}, schemaID(2): {ID: "lane-b"}, schemaID(3): {UnknownReason: "not recorded"}},
+		Authors: map[ID]Actor{schemaID(1): {ID: "reviewer"}, schemaID(2): {ID: "agent-b"}, schemaID(3): {UnknownReason: "not recorded"}},
 		CapturedAt: map[ID]Availability[time.Time]{
 			schemaID(1): {State: Known, Value: &at}, schemaID(2): {State: Known, Value: &at},
 			schemaID(3): {State: Unknown, Reason: "not recorded"},

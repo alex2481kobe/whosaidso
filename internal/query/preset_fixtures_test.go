@@ -62,7 +62,7 @@ func criterionFix(claim int) *model.CriterionFix {
 			Population: model.Population{Identity: "all cases", Selector: testArtifact(), Denominator: "all cases"},
 			Operator:   model.Equal, Target: model.Scalar{Type: "number", Number: &n}, Reducer: model.All},
 		Policy: model.EvaluationPolicy{Inclusion: "entire-criterion-family", Retry: "retain-all"},
-		Author: model.Actor{ID: "lane-a"}, SourceRefs: []model.ArtifactRef{}}
+		Author: model.Actor{ID: "agent-a"}, SourceRefs: []model.ArtifactRef{}}
 }
 func envelope(id, attempt, instrument, claim int, inputs ...model.ArtifactRef) model.InvocationEnvelope {
 	criterion := notKnown[model.CriterionRef]("no criterion named")
@@ -98,14 +98,14 @@ func presetWorld(t *testing.T, p store.Project) {
 	t.Helper()
 	readyControl(t, p)
 	appendEvents(t, p, 101, admitted(101,
-		&model.InstrumentDeclare{ID: testID(10), Provenance: prov("lane-a"), Spec: instrumentSpec(true)},
-		&model.InstrumentDeclare{ID: testID(11), Provenance: prov("lane-a"), Spec: instrumentSpec(false)},
-		&model.ClaimAssert{ID: testID(20), Provenance: prov("lane-e"), Spec: claimSpec("VERIFIED")},
-		&model.ClaimAssert{ID: testID(21), Provenance: prov("lane-e"), Spec: claimSpec()},
-		&model.ClaimAssert{ID: testID(22), Provenance: prov("lane-e"), Spec: claimSpec()},
+		&model.InstrumentDeclare{ID: testID(10), Provenance: prov("agent-a"), Spec: instrumentSpec(true)},
+		&model.InstrumentDeclare{ID: testID(11), Provenance: prov("agent-a"), Spec: instrumentSpec(false)},
+		&model.ClaimAssert{ID: testID(20), Provenance: prov("agent-e"), Spec: claimSpec("VERIFIED")},
+		&model.ClaimAssert{ID: testID(21), Provenance: prov("agent-e"), Spec: claimSpec()},
+		&model.ClaimAssert{ID: testID(22), Provenance: prov("agent-e"), Spec: claimSpec()},
 		criterionFix(21), criterionFix(22),
-		&model.DecisionOpen{ID: testID(30), Provenance: prov("lane-c"), Spec: decisionSpec()},
-		&model.DecisionOpen{ID: testID(31), Provenance: prov("lane-c"), Spec: decisionSpec()})...)
+		&model.DecisionOpen{ID: testID(30), Provenance: prov("agent-c"), Spec: decisionSpec()},
+		&model.DecisionOpen{ID: testID(31), Provenance: prov("agent-c"), Spec: decisionSpec()})...)
 	appendEvents(t, p, 102, &model.TaskStart{Task: testRef(1, 1), AttemptID: testID(70), Actor: model.Actor{ID: "worker"}})
 	inside := envelope(50, 70, 10, 21, gitInput("internal/query/query.go"))
 	outside := envelope(51, 70, 10, 22, gitInput("internal/query/query.go"), gitInput("internal/reduce/task.go"))
@@ -138,7 +138,7 @@ func admittedAs(n int, as map[int]string, events ...model.TypedEvent) []model.Ty
 		Authors: map[model.ID]model.Actor{}, CapturedAt: map[model.ID]model.Availability[time.Time]{}}
 	for i, e := range events {
 		packet := testID(n*100 + i)
-		author := model.Actor{ID: "lane-a"}
+		author := model.Actor{ID: "agent-a"}
 		switch e := e.(type) {
 		case *model.CriterionFix:
 			author = e.Author

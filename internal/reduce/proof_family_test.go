@@ -16,8 +16,8 @@ func familyLedger(t *testing.T, sealSecond bool) (*ledgerBuilder, model.RecordRe
 	t.Helper()
 	l := goodLedger(t)
 	claim := ref(newID("CMA1"), 1)
-	l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("lane-a"), Spec: proofInstrument()},
-		&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("lane-a"), Spec: claimSpec()}, fixProofCriterion(claim))
+	l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("agent-a"), Spec: proofInstrument()},
+		&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("agent-a"), Spec: claimSpec()}, fixProofCriterion(claim))
 	failed, passed := proofEnvelope(claim, newID("RNA0")), proofEnvelope(claim, newID("RNA1"))
 	l.add(t, &model.InvocationStart{Envelope: failed}, &model.InvocationStart{Envelope: passed})
 	l.add(t, sealProof(passed, 0))
@@ -127,7 +127,7 @@ func TestProofFamilyClosureCoversLaterEventsInTheSameBundle(t *testing.T) {
 	packet := model.PacketRef{CommandID: newID("PKR9"), Digest: model.HashBytes([]byte("late rejected packet"))}
 	judged := attributeFixture(99, []model.TypedEvent{admitProof(claim, newID("RNA1"))})
 	l.add(t, append(judged, &model.ReviewAdmit{Packets: []model.PacketRef{packet}, Outcome: "rejected", Actor: model.Actor{ID: "reviewer"}, Reason: "not canonical",
-		Authors: map[model.ID]model.Actor{packet.CommandID: {ID: "lane-a"}}, CapturedAt: map[model.ID]model.Availability[time.Time]{packet.CommandID: knownAt(baseTime)}, EventPackets: []model.ID{},
+		Authors: map[model.ID]model.Actor{packet.CommandID: {ID: "agent-a"}}, CapturedAt: map[model.ID]model.Availability[time.Time]{packet.CommandID: knownAt(baseTime)}, EventPackets: []model.ID{},
 		Invocations: []model.ReviewedInvocation{{Packet: packet.CommandID, Event: "invocation.start", InvocationID: late.InvocationID, CriterionRef: late.CriterionRef, EnvelopeDigest: model.HashBytes([]byte("start"))}}})...)
 	wantBoth(t, l, CodeRejectedFamilyMember)
 }
@@ -138,8 +138,8 @@ func rejectedLedgerBase(t *testing.T) (*ledgerBuilder, model.RecordRef, model.In
 	t.Helper()
 	l := goodLedger(t)
 	claim := ref(newID("CMA1"), 1)
-	l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("lane-a"), Spec: proofInstrument()},
-		&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("lane-a"), Spec: claimSpec()}, fixProofCriterion(claim))
+	l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("agent-a"), Spec: proofInstrument()},
+		&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("agent-a"), Spec: claimSpec()}, fixProofCriterion(claim))
 	passed := proofEnvelope(claim, newID("RNA1"))
 	l.add(t, &model.InvocationStart{Envelope: passed})
 	l.add(t, sealProof(passed, 0))
@@ -161,7 +161,7 @@ func rejectRun(t *testing.T, l *ledgerBuilder, env model.InvocationEnvelope, exi
 	}
 	packet := model.PacketRef{CommandID: newID("PKR1"), Digest: model.HashBytes([]byte("rejected run"))}
 	l.add(t, &model.ReviewAdmit{Packets: []model.PacketRef{packet}, Outcome: "rejected", Actor: model.Actor{ID: "reviewer"}, Reason: "turned away",
-		Authors: map[model.ID]model.Actor{packet.CommandID: {ID: "lane-a"}}, CapturedAt: map[model.ID]model.Availability[time.Time]{packet.CommandID: knownAt(baseTime)}, EventPackets: []model.ID{},
+		Authors: map[model.ID]model.Actor{packet.CommandID: {ID: "agent-a"}}, CapturedAt: map[model.ID]model.Availability[time.Time]{packet.CommandID: knownAt(baseTime)}, EventPackets: []model.ID{},
 		Invocations: []model.ReviewedInvocation{
 			{Packet: packet.CommandID, Event: "invocation.start", InvocationID: env.InvocationID, CriterionRef: env.CriterionRef, EnvelopeDigest: startDigest},
 			{Packet: packet.CommandID, Event: "invocation.seal", InvocationID: env.InvocationID, CriterionRef: env.CriterionRef, EnvelopeDigest: sealDigest},
@@ -251,8 +251,8 @@ func TestProofEarlierRevisionNeverSupports(t *testing.T) {
 			claim := ref(newID("CMA1"), 1)
 			second := fixProofCriterion(claim)
 			second.Revision = 2
-			l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("lane-a"), Spec: proofInstrument()},
-				&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("lane-a"), Spec: claimSpec()}, fixProofCriterion(claim))
+			l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("agent-a"), Spec: proofInstrument()},
+				&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("agent-a"), Spec: claimSpec()}, fixProofCriterion(claim))
 			l.add(t, second)
 			rev2 := model.CriterionRef{Claim: claim, CriterionID: second.CriterionID, Revision: 2}
 			old := proofEnvelope(claim, newID("RNA2")) // revision 1, started after revision 2

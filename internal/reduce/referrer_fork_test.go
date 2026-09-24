@@ -18,7 +18,7 @@ import (
 func citing(id string, target model.RecordRef) *model.ClaimAssert {
 	spec := claimSpec()
 	spec.Scope.ContextRefs = []model.RecordRef{target}
-	return &model.ClaimAssert{ID: newID(id), Provenance: provenance("lane-a"), Spec: spec}
+	return &model.ClaimAssert{ID: newID(id), Provenance: provenance("agent-a"), Spec: spec}
 }
 
 func allReferrers(s Snapshot) map[model.RecordRef][]Referrer {
@@ -48,7 +48,7 @@ func TestMutatingAnApplyResultNeverChangesItsInput(t *testing.T) {
 			two.out = append([]model.Bundle(nil), l.out...)
 			// The citations sit at different event indexes, so a shared slot
 			// would show up as the wrong origin.
-			r1, err := Apply(base, one.add(t, &model.ClaimAssert{ID: newID("FAA"), Provenance: provenance("lane-a"), Spec: claimSpec()}, citing("FAB", claim)))
+			r1, err := Apply(base, one.add(t, &model.ClaimAssert{ID: newID("FAA"), Provenance: provenance("agent-a"), Spec: claimSpec()}, citing("FAB", claim)))
 			if err != nil {
 				t.Fatal(err)
 			}

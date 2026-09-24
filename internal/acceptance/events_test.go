@@ -43,7 +43,7 @@ var evClosedSet = []model.EventType{
 }
 
 func recStart() *model.TaskStart {
-	return &model.TaskStart{Task: recRef(recID(1), 2), Actor: recActor("lane-e"), AttemptID: recID(70)}
+	return &model.TaskStart{Task: recRef(recID(1), 2), Actor: recActor("agent-e"), AttemptID: recID(70)}
 }
 
 func recPointerRef(d model.Digest, pointer string) model.ArtifactRef {
@@ -75,8 +75,8 @@ func recCriterionFix() *model.CriterionFix {
 			Reducer:  model.All,
 		},
 		Policy:     model.EvaluationPolicy{Inclusion: "entire-criterion-family", Retry: "retain-all"},
-		Author:     recActor("lane-e"),
-		SourceRefs: []model.ArtifactRef{recGit("documentation/design/research/DATUM-CONTRACT.md")},
+		Author:     recActor("agent-e"),
+		SourceRefs: []model.ArtifactRef{recGit("docs/contract.md")},
 	}
 }
 
@@ -158,8 +158,8 @@ func evAll() []model.TypedEvent {
 		&model.TaskAmend{Provenance: recProvenance(), Target: recRef(recID(1), 2), Replacement: recTaskSpec()},
 		recStart(),
 		&model.TaskTakeover{
-			Task: recRef(recID(1), 2), Actor: recActor("lane-b"), AttemptID: recID(71),
-			PriorAttemptID: recID(70), StoppedConfirmationRef: recGit(".whosaidso/handback/lane-e.json"),
+			Task: recRef(recID(1), 2), Actor: recActor("agent-b"), AttemptID: recID(71),
+			PriorAttemptID: recID(70), StoppedConfirmationRef: recGit(".whosaidso/handback/agent-e.json"),
 		},
 		&model.AttemptTerminal{
 			Task: recRef(recID(1), 2), AttemptID: recID(70), Outcome: model.AttemptNoReading,
@@ -214,7 +214,7 @@ func evAll() []model.TypedEvent {
 			Outcome: "correction-requested", Actor: recActor("coordinator"),
 			Reason: "the packet cites a revision that was never admitted",
 			// R18.2: every review carries authors, captured_at and event_packets.
-			Authors:    map[model.ID]model.Actor{recID(94): recActor("lane")},
+			Authors:    map[model.ID]model.Actor{recID(94): recActor("agent")},
 			CapturedAt: map[model.ID]model.Availability[time.Time]{recID(94): {State: model.Unknown, Reason: "not recorded"}}, EventPackets: []model.ID{},
 		},
 		&model.ArtifactDispose{
@@ -338,7 +338,7 @@ func TestEventsDataMustBeOneAccountableObjectWithNoUnknownOrRepeatedKeys(t *test
 	}
 
 	t.Run("a case variant of a known field name", func(t *testing.T) {
-		aliased := recDrop(t, recSet(t, good, "Actor", map[string]any{"id": "lane-e"}), "actor")
+		aliased := recDrop(t, recSet(t, good, "Actor", map[string]any{"id": "agent-e"}), "actor")
 		recMustRefuse(t, "task.start whose actor key is spelled Actor", aliased)
 	})
 	t.Run("an unknown nested field", func(t *testing.T) {
@@ -418,7 +418,7 @@ func TestEventsSealAndBlockerClearMustLinkTheirOwnSubject(t *testing.T) {
 	})
 	t.Run("seal naming another project", func(t *testing.T) {
 		recMustRefuse(t, "invocation.seal whose start_ref names a different project",
-			recSet(t, seal, "start_ref.project", "datum/elsewhere"))
+			recSet(t, seal, "start_ref.project", "example/elsewhere"))
 	})
 	t.Run("clear naming another blocker", func(t *testing.T) {
 		recMustRefuse(t, "blocker.clear whose hold_ref names a different blocker",
@@ -430,8 +430,8 @@ func TestEventsSealAndBlockerClearMustLinkTheirOwnSubject(t *testing.T) {
 	})
 	t.Run("takeover reusing the prior attempt id", func(t *testing.T) {
 		takeover := recEncode(t, &model.TaskTakeover{
-			Task: recRef(recID(1), 2), Actor: recActor("lane-b"), AttemptID: recID(71),
-			PriorAttemptID: recID(70), StoppedConfirmationRef: recGit(".whosaidso/handback/lane-e.json"),
+			Task: recRef(recID(1), 2), Actor: recActor("agent-b"), AttemptID: recID(71),
+			PriorAttemptID: recID(70), StoppedConfirmationRef: recGit(".whosaidso/handback/agent-e.json"),
 		})
 		recMustRefuse(t, "task.takeover whose new attempt reuses the prior attempt id",
 			recSet(t, takeover, "attempt_id", string(recID(70))))

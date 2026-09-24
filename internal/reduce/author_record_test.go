@@ -17,7 +17,7 @@ func authoredDispose(t *testing.T, l *ledgerBuilder, d model.RecordRef, eventPac
 	t.Helper()
 	packet := newID("PKTD")
 	review := &model.ReviewAdmit{Packets: []model.PacketRef{{CommandID: packet, Digest: newDigest("dispose")}}, Outcome: "accepted",
-		Actor: model.Actor{ID: "coordinator"}, Reason: "reviewed", Authors: map[model.ID]model.Actor{packet: {ID: "lane-c2"}},
+		Actor: model.Actor{ID: "coordinator"}, Reason: "reviewed", Authors: map[model.ID]model.Actor{packet: {ID: "agent-c2"}},
 		CapturedAt: map[model.ID]model.Availability[time.Time]{packet: knownAt(baseTime)}, EventPackets: eventPackets}
 	if eventPackets == nil {
 		review.EventPackets = []model.ID{packet}
@@ -33,7 +33,7 @@ func TestDispositionCarriesItsRecordedPacketAuthor(t *testing.T) {
 	b, packet := authoredDispose(t, l, d, nil)
 	s := mustReplay(t, l.out)
 	p, _ := s.DecisionAt(d)
-	want := PacketAuthor{Packet: packet, Author: model.Actor{ID: "lane-c2"}}
+	want := PacketAuthor{Packet: packet, Author: model.Actor{ID: "agent-c2"}}
 	if len(p.Dispositions) != 1 || p.Dispositions[0].Author != want {
 		t.Fatalf("disposition author = %+v, want %+v", p.Dispositions, want)
 	}

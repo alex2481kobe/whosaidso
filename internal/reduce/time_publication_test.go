@@ -58,7 +58,7 @@ func TestInvocationTimestampIsUTCThroughLedgerPublication(t *testing.T) {
 	// Exercise packet encoding/decoding as well as bundle encoding/decoding.
 	packetBytes, err := model.Encode(model.Packet{
 		Version: model.WireVersion, Project: project.ID, CommandID: reduce.NewID("PKT1"),
-		RequestDigest: reduce.NewDigest("zone packet"), Author: model.Actor{ID: "lane-a"}, // it carries lane-a's criterion
+		RequestDigest: reduce.NewDigest("zone packet"), Author: model.Actor{ID: "agent-a"}, // it carries lane-a's criterion
 		CapturedAt: env.StartedAt, Events: events,
 	})
 	if err != nil {
@@ -152,7 +152,7 @@ func TestInvocationTimestampIsUTCThroughLedgerPublication(t *testing.T) {
 	fork := reduce.NewFixtureLedger()
 	fork.After(bundle)
 	after, err := reduce.Apply(before, fork.Add(t, &model.TaskCreate{
-		ID: reduce.NewID("TSKB"), Provenance: reduce.FixtureProvenance("lane-b"), Spec: reduce.FixtureTaskSpec(),
+		ID: reduce.NewID("TSKB"), Provenance: reduce.FixtureProvenance("agent-b"), Spec: reduce.FixtureTaskSpec(),
 	}))
 	if err != nil {
 		t.Fatal(err)

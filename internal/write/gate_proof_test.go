@@ -242,7 +242,7 @@ func TestProofRequiresANamedJudgmentByItsAuthor(t *testing.T) {
 	proof.Judgment.Actor = model.Actor{UnknownReason: "nobody named"}
 	w.f.refuse(w.f.request(w.f.captureRaw(proof)), "invalid-field")
 	w.f.author = model.Actor{UnknownReason: "packet author not recorded"}
-	proof.Judgment.Actor = model.Actor{ID: "lane-c2"}
+	proof.Judgment.Actor = model.Actor{ID: "agent-c2"}
 	w.f.refuse(w.f.request(w.f.capture(nil, proof)), "attribution-mismatch")
 	if w.status(t) != reduce.StatusMeasured {
 		t.Fatal("an unnamed judgment reached PROVEN")

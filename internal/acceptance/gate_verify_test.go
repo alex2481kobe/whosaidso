@@ -361,7 +361,7 @@ func gateVerifyU11(t *testing.T, f *gateVerifyFixture, a model.Actor, start *mod
 		t.Fatalf("U11: takeover with resolvable prior-writer confirmation must admit: %v", err)
 	}
 	terminal := &model.AttemptTerminal{Task: start.Task, AttemptID: takeover.AttemptID, Outcome: model.AttemptBlockedMidTask,
-		Reason: "lane reached a boundary", NextAction: "owner supplies a resolution", DeliveryRefs: []model.ArtifactRef{}}
+		Reason: "agent reached a boundary", NextAction: "owner supplies a resolution", DeliveryRefs: []model.ArtifactRef{}}
 	refuse(terminal, "missing-hold", "attempt.terminal")
 	hold := &model.BlockerHold{Task: start.Task, BlockerID: f.id(), Reason: model.BlockerResume, Actor: a, Criterion: "owner resolves the boundary"}
 	bundle, err := f.admit(a, a, terminal, hold)

@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	critProject    = model.ProjectID("datum/datum")
+	critProject    = model.ProjectID("example/example")
 	critClaim      = model.ID("01ARZ3NDEKTSV4RRFFQ69G5FAV")
 	critID         = model.ID("01ARZ3NDEKTSV4RRFFQ69G5FAW")
 	critAttempt    = model.ID("01ARZ3NDEKTSV4RRFFQ69G5FBV")
@@ -58,7 +58,7 @@ func atMost(t *testing.T, example []byte, result, popPtr, unit, identity, max st
 			Reducer:  model.All,
 		},
 		Policy:     model.EvaluationPolicy{Inclusion: "entire-criterion-family", Retry: "retain-all"},
-		Author:     model.Actor{ID: "bench-instrument-lane"},
+		Author:     model.Actor{ID: "bench-instrument-agent"},
 		SourceRefs: []model.ArtifactRef{},
 	}
 	if err := model.ValidateSchema(c); err != nil {

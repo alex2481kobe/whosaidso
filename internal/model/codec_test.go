@@ -50,9 +50,9 @@ func TestDecodeBundleWritableSequence(t *testing.T) {
 // injects. Every refusal case below starts from bytes that are known to pass.
 func validPacketJSON(inject string) string {
 	d := string(HashBytes([]byte("authored input")))
-	body := `"version":1,"project":"datum/datum",` +
+	body := `"version":1,"project":"example/example",` +
 		`"command_id":"01K5V8Q1110000000000000000","request_digest":"` + d + `",` +
-		`"author":{"id":"lane-a"},"captured_at":"2026-09-22T01:02:03Z",` +
+		`"author":{"id":"agent-a"},"captured_at":"2026-09-22T01:02:03Z",` +
 		`"events":[{"type":"task.create","data":{"intent":"x"}}]`
 	if inject != "" {
 		body = inject + "," + body
@@ -85,13 +85,13 @@ func TestStrictDecodeRefuses(t *testing.T) {
 		{"event data is not an object", strings.Replace(validPacketJSON(""),
 			`"data":{"intent":"x"}`, `"data":[1,2]`, 1), "invalid-field"},
 		{"actor is both known and unknown", strings.Replace(validPacketJSON(""),
-			`"author":{"id":"lane-a"}`, `"author":{"id":"lane-a","unknown_reason":"r"}`, 1), "invalid-field"},
+			`"author":{"id":"agent-a"}`, `"author":{"id":"agent-a","unknown_reason":"r"}`, 1), "invalid-field"},
 		{"actor is neither", strings.Replace(validPacketJSON(""),
-			`"author":{"id":"lane-a"}`, `"author":{}`, 1), "invalid-field"},
+			`"author":{"id":"agent-a"}`, `"author":{}`, 1), "invalid-field"},
 		{"lowercase id", strings.Replace(validPacketJSON(""),
 			`"01K5V8Q1110000000000000000"`, `"01k5v8q1110000000000000000"`, 1), "invalid-field"},
 		{"uppercase digest", strings.Replace(validPacketJSON(""), d, strings.ToUpper(d), 1), "invalid-field"},
-		{"empty project", strings.Replace(validPacketJSON(""), `"project":"datum/datum"`, `"project":""`, 1), "invalid-field"},
+		{"empty project", strings.Replace(validPacketJSON(""), `"project":"example/example"`, `"project":""`, 1), "invalid-field"},
 	}
 
 	for _, c := range cases {
@@ -226,7 +226,7 @@ func TestEncodeWritesOneInstantAsOneSpelling(t *testing.T) {
 			t.Errorf("%s: EncodeEvent rewrote the caller's value instead of a private copy", zone)
 		}
 		packet, err := Encode(Packet{Version: WireVersion, Project: schemaProject, CommandID: schemaID(20),
-			RequestDigest: HashBytes([]byte("r")), Author: Actor{ID: "lane-a"},
+			RequestDigest: HashBytes([]byte("r")), Author: Actor{ID: "agent-a"},
 			CapturedAt: seal.Envelope.StartedAt, Events: []Event{event}})
 		if err != nil {
 			t.Fatal(err)

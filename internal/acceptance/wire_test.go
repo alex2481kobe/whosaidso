@@ -28,13 +28,13 @@ const wireDigest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789ab
 
 // Handwritten controls do not depend on Encode agreeing with Decode.
 const wirePacket = `{
-  "version":1,"project":"datum/acceptance",
+  "version":1,"project":"example/acceptance",
   "command_id":"` + wirePacketID + `","request_digest":"` + wireDigest + `",
-  "author":{"id":"lane-e"},"captured_at":"2026-09-21T12:34:56Z",
+  "author":{"id":"agent-e"},"captured_at":"2026-09-21T12:34:56Z",
   "events":[{"type":"task.create","data":{}}]
 }`
 const wireBundle = `{
-  "version":1,"project":"datum/acceptance","sequence":1,
+  "version":1,"project":"example/acceptance","sequence":1,
   "command_id":"` + wireAdmissionID + `","request_digest":"` + wireDigest + `",
   "admitter":{"id":"coordinator"},"recorded_at":"2026-09-21T12:34:56Z",
   "packets":[{"command_id":"` + wirePacketID + `","digest":"` + wireDigest + `"}],
@@ -182,7 +182,7 @@ func TestWireStrictDecodersRejectSingleDefectsAtEveryDepth(t *testing.T) {
 		{"deep_duplicate_empty_key", `"data":{}`, `"data":{"a":[{"b":{"":1,"":2}}]}`},
 		{"unknown_envelope_field", `"version":1`, `"version":1,"surprise":true`},
 		{"unknown_case_variant_field", `"version":1`, `"VERSION":1`},
-		{"case_alias_overwrites_same_envelope_field", `"project":"datum/acceptance"`, `"project":"datum/acceptance","PROJECT":"impostor"`},
+		{"case_alias_overwrites_same_envelope_field", `"project":"example/acceptance"`, `"project":"example/acceptance","PROJECT":"impostor"`},
 		{"case_alias_overwrites_event_type", `"type":"task.create"`, `"type":"task.create","TYPE":"source.intake"`},
 		{"unknown_event_envelope_field", `"type":"task.create"`, `"type":"task.create","surprise":true`},
 		{"unknown_version", `"version":1`, `"version":2`},
@@ -233,7 +233,7 @@ func TestWireStrictDecodersRejectSingleDefectsAtEveryDepth(t *testing.T) {
 }
 
 func TestWireActorUnionAndKnownUnknownComparisonCannotInventIdentity(t *testing.T) {
-	known := model.Actor{ID: "lane-e"}
+	known := model.Actor{ID: "agent-e"}
 	unknown := model.Actor{UnknownReason: "not supplied"}
 	for _, tc := range []struct {
 		name string
@@ -259,7 +259,7 @@ func TestWireActorUnionAndKnownUnknownComparisonCannotInventIdentity(t *testing.
 		})
 	}
 	for _, bundle := range []bool{false, true} {
-		kind, input, old := "packet", wirePacket, `{"id":"lane-e"}`
+		kind, input, old := "packet", wirePacket, `{"id":"agent-e"}`
 		if bundle {
 			kind, input, old = "bundle", wireBundle, `{"id":"coordinator"}`
 		}
@@ -544,7 +544,7 @@ func TestWireDisagreeingCorroborationRemainsVisible(t *testing.T) {
 	}
 	blob := gitObjectID("blob", gitBytes)
 	tree := gitObjectID("tree", append([]byte("100644 copy.txt\x00"), blob...))
-	commit := gitObjectID("commit", []byte(fmt.Sprintf("tree %x\nauthor Lane E <lane-e@example.invalid> 0 +0000\ncommitter Lane E <lane-e@example.invalid> 0 +0000\n\nWire attack\n", tree)))
+	commit := gitObjectID("commit", []byte(fmt.Sprintf("tree %x\nauthor Test <test@example.invalid> 0 +0000\ncommitter Test <test@example.invalid> 0 +0000\n\nWire attack\n", tree)))
 	gitSum, contentSum := sha256.Sum256(gitBytes), sha256.Sum256(contentBytes)
 	if gitSum == contentSum {
 		t.Fatal("attack control must describe different bytes")

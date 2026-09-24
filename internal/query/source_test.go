@@ -142,7 +142,7 @@ func TestPendingReportsTheFirstMismatchInEventOrder(t *testing.T) {
 	refs := []model.PacketRef{high, low}
 	appendEvents(t, p, 101, &model.ReviewAdmit{Packets: refs, Outcome: "rejected",
 		Actor: model.Actor{ID: "reviewer"}, Reason: "listed out of id order",
-		Authors: authoredBy("lane-a", refs), CapturedAt: uncaptured(refs), EventPackets: []model.ID{}})
+		Authors: authoredBy("agent-a", refs), CapturedAt: uncaptured(refs), EventPackets: []model.ID{}})
 	if a := todoOf(t, p); len(a.PacketsNotAccepted) != 2 {
 		t.Fatalf("control: both rejected packets pend, got %+v", a.PacketsNotAccepted)
 	}

@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	projectID   = model.ProjectID("datum")
+	projectID   = model.ProjectID("example")
 	claimID     = model.ID("01ARZ3NDEKTSV4RRFFQ69G5FAV")
 	criterionID = model.ID("01ARZ3NDEKTSV4RRFFQ69G5FAW")
 	attemptID   = model.ID("01ARZ3NDEKTSV4RRFFQ69G5FBV")
@@ -57,7 +57,7 @@ func testCriterion(t *testing.T) model.CriterionFix {
 			Reducer:  model.All,
 		},
 		Policy:     model.EvaluationPolicy{Inclusion: "entire-criterion-family", Retry: "retain-all"},
-		Author:     model.Actor{ID: "lane-d"},
+		Author:     model.Actor{ID: "agent-d"},
 		SourceRefs: []model.ArtifactRef{},
 	}
 	if err := model.ValidateSchema(c); err != nil {

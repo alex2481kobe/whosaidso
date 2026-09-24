@@ -44,7 +44,7 @@ func TestHandbackNineHonestOutcomes(t *testing.T) {
 			f, task, r := handbackControl(t)
 			r.Outcome, r.CommitsDenied = outcome, true
 			if outcome == model.AttemptBlockedMidTask || outcome == model.AttemptOutOfScope {
-				r.Holds = []HandbackHold{{BlockerID: f.id(), Reason: model.BlockerResume, Actor: f.author, Criterion: "owner assigns work to the appropriate lane"}}
+				r.Holds = []HandbackHold{{BlockerID: f.id(), Reason: model.BlockerResume, Actor: f.author, Criterion: "owner assigns work to the appropriate agent"}}
 			}
 			packet := captureHandback(t, f, r)
 			before, _ := f.snapshot().Task(reduce.Ident{Project: f.project.ID, ID: task.ID})
@@ -185,7 +185,7 @@ func TestHandbackAtomicHoldRefusals(t *testing.T) {
 				extra = append(extra, f.capture(nil, hold, &model.TaskAmend{Target: hold.Task, Replacement: task.Spec, Provenance: task.Provenance}))
 				code = "invalid-transition"
 			case "wrong-author":
-				r.Author.ID = "another lane"
+				r.Author.ID = "another agent"
 				code = "attribution-mismatch"
 			case "wrong-revision":
 				f.accept(f.capture(nil, &model.TaskAmend{Target: hold.Task, Replacement: task.Spec, Provenance: task.Provenance}))

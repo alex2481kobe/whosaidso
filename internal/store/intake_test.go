@@ -47,7 +47,7 @@ func blobOf(source string) CapturedBlob {
 func requestFor(id model.ID, source string) IntakeRequest {
 	return IntakeRequest{
 		CommandID: id,
-		Author:    model.Actor{ID: "lane-b"},
+		Author:    model.Actor{ID: "agent-b"},
 		Blobs:     []io.Reader{strings.NewReader(source)},
 		BuildEvents: func(blobs []CapturedBlob) ([]model.Event, error) {
 			event, err := sourceIntakeEvent(blobs[0], commandID(900))
@@ -250,7 +250,7 @@ func TestFiveWritersNoLockAndNoPartialPackets(t *testing.T) {
 func TestRetryAndChangedRequestRefusals(t *testing.T) {
 	mutations := map[string]func(*IntakeRequest){
 		"bytes":  func(r *IntakeRequest) { r.Blobs = []io.Reader{strings.NewReader("changed bytes")} },
-		"author": func(r *IntakeRequest) { r.Author.ID = "another-lane" },
+		"author": func(r *IntakeRequest) { r.Author.ID = "another-agent" },
 		"events": func(r *IntakeRequest) {
 			r.BuildEvents = func(blobs []CapturedBlob) ([]model.Event, error) {
 				event, err := sourceIntakeEvent(blobs[0], commandID(901))

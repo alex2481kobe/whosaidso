@@ -80,7 +80,7 @@ func outsideProofSetup(t *testing.T, events []model.TypedEvent, withCriterion bo
 	}
 	at := time.Date(2026, 9, 22, 12, 0, 20, 0, time.UTC)
 	return reduceAdmitted(t, model.Bundle{},
-		reducePacket(t, 2101, "lane-e", at, records...), reducePacket(t, 2102, "runner", at.Add(20*time.Second), starts...))
+		reducePacket(t, 2101, "agent-e", at, records...), reducePacket(t, 2102, "runner", at.Add(20*time.Second), starts...))
 }
 
 // outsideProofRun admits the run and the proof after previous: the start is
@@ -95,7 +95,7 @@ func outsideProofRun(t *testing.T, previous model.Bundle, env model.InvocationEn
 	}
 	packets := []model.Packet{reducePacket(t, 2103, "runner", env.StartedAt.Add(5*time.Second), &model.InvocationStart{Envelope: env})}
 	if len(late) != 0 {
-		packets = append(packets, reducePacket(t, 2104, "lane-e", env.StartedAt.Add(7*time.Second), late...))
+		packets = append(packets, reducePacket(t, 2104, "agent-e", env.StartedAt.Add(7*time.Second), late...))
 	}
 	judged := reducePacket(t, 2106, "reviewer", env.StartedAt.Add(30*time.Second))
 	judged.Events = append(judged.Events, proof)

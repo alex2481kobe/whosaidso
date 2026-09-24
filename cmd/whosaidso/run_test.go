@@ -63,7 +63,7 @@ func e2eInvoke(t *testing.T, root string, events []model.TypedEvent, args ...str
 	}
 	command := exec.Command(binary, append([]string{"-test.run=^TestWhoSaidSoMainProcess$", "--"}, withJSON(args)...)...)
 	command.Dir, command.Stdin = root, bytes.NewReader(input)
-	command.Env = append(os.Environ(), "WHOSAIDSO_MAIN_TEST_PROCESS=1", "WHOSAIDSO_ACTOR=lane")
+	command.Env = append(os.Environ(), "WHOSAIDSO_MAIN_TEST_PROCESS=1", "WHOSAIDSO_ACTOR=agent")
 	var stdout, stderr bytes.Buffer
 	command.Stdout, command.Stderr = &stdout, &stderr
 	if err := command.Run(); err != nil {
@@ -95,12 +95,12 @@ func e2eWorld(t *testing.T) (string, model.CriterionRef, model.RecordRef, model.
 			t.Fatal(err)
 		}
 	}
-	lane := model.Provenance{SourceRefs: []model.ArtifactRef{}}
+	agent := model.Provenance{SourceRefs: []model.ArtifactRef{}}
 	scope := model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this fixture", Limitations: "not a real ledger"}
-	task := &model.TaskCreate{ID: next(), Provenance: lane, Spec: model.TaskSpec{Intent: "measure", Subject: "pose sweep", Scope: scope, NonGoals: []string{"production writes"},
-		AcceptanceCriteria: []model.AcceptanceCriterion{{ID: next(), Revision: 1, Criterion: "measured"}}, ContextRefs: []model.RecordRef{}, ConstraintRefs: []model.RecordRef{}, Prerequisites: []model.Prerequisite{}, NextActor: model.Actor{ID: "lane"}}}
-	claim := &model.ClaimAssert{ID: next(), Provenance: lane, Spec: model.ClaimSpec{Assertion: "every pose is below 0.05 mm", Falsifier: "a pose reaches 0.05 mm", Scope: scope, ExternalRefs: []model.ExternalReference{}}}
-	instrument := &model.InstrumentDeclare{ID: next(), Provenance: lane, Spec: model.InstrumentSpec{QuestionAnswered: "pose penetration depth", BlindTo: "unmeasured poses",
+	task := &model.TaskCreate{ID: next(), Provenance: agent, Spec: model.TaskSpec{Intent: "measure", Subject: "pose sweep", Scope: scope, NonGoals: []string{"production writes"},
+		AcceptanceCriteria: []model.AcceptanceCriterion{{ID: next(), Revision: 1, Criterion: "measured"}}, ContextRefs: []model.RecordRef{}, ConstraintRefs: []model.RecordRef{}, Prerequisites: []model.Prerequisite{}, NextActor: model.Actor{ID: "agent"}}}
+	claim := &model.ClaimAssert{ID: next(), Provenance: agent, Spec: model.ClaimSpec{Assertion: "every pose is below 0.05 mm", Falsifier: "a pose reaches 0.05 mm", Scope: scope, ExternalRefs: []model.ExternalReference{}}}
+	instrument := &model.InstrumentDeclare{ID: next(), Provenance: agent, Spec: model.InstrumentSpec{QuestionAnswered: "pose penetration depth", BlindTo: "unmeasured poses",
 		NotAnswered: "production behaviour", ConfigSurface: []string{}, DangerousDefaults: []string{}, ValidRange: "the fixture sweep",
 		ImplementationRef: e2ePin(e2eScript, "tools/measure.sh", "text/plain"),
 		Validation:        e2eKnown(model.InstrumentValidation{Ref: e2ePin(`{"validated":"against a known pose sweep"}`, "validation/measure.json", "application/json"), Version: "v1"})}}
@@ -109,13 +109,13 @@ func e2eWorld(t *testing.T) (string, model.CriterionRef, model.RecordRef, model.
 	result.Selector, population.Selector = model.Selector{Kind: "json-pointer", Pointer: "/results"}, model.Selector{Kind: "json-pointer", Pointer: "/population"}
 	target := json.Number("0.05")
 	claimRef := model.RecordRef{Project: "test/cli", RecordID: claim.ID, Revision: 1}
-	fix := &model.CriterionFix{Claim: claimRef, CriterionID: next(), Revision: 1, Author: model.Actor{ID: "lane"}, SourceRefs: []model.ArtifactRef{},
+	fix := &model.CriterionFix{Claim: claimRef, CriterionID: next(), Revision: 1, Author: model.Actor{ID: "agent"}, SourceRefs: []model.ArtifactRef{},
 		Expression: model.CriterionExpression{ResultSelector: result, Unit: "mm", Population: model.Population{Identity: "pose sweep", Selector: population, Denominator: "poses"},
 			Operator: model.Less, Target: model.Scalar{Type: "number", Number: &target}, Reducer: model.All},
 		Policy: model.EvaluationPolicy{Inclusion: "entire-criterion-family", Retry: "retain-all"}}
 	admit(fix)
 	attempt := next()
-	admit(&model.TaskStart{Task: model.RecordRef{Project: "test/cli", RecordID: task.ID, Revision: 1}, Actor: model.Actor{ID: "lane"}, AttemptID: attempt})
+	admit(&model.TaskStart{Task: model.RecordRef{Project: "test/cli", RecordID: task.ID, Revision: 1}, Actor: model.Actor{ID: "agent"}, AttemptID: attempt})
 	return root, model.CriterionRef{Claim: claimRef, CriterionID: fix.CriterionID, Revision: 1}, model.RecordRef{Project: "test/cli", RecordID: instrument.ID, Revision: 1}, attempt
 }
 
@@ -188,7 +188,7 @@ func TestCLIFreshProcessesRunToProven(t *testing.T) {
 	if status := e2eStatus(t, root, criterion.Claim); status != reduce.StatusMeasured {
 		t.Fatalf("admitted run left the claim %s", status)
 	}
-	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Verdict: model.VerdictSupports, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "lane"}, Reason: "the run passed"},
+	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Verdict: model.VerdictSupports, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "agent"}, Reason: "the run passed"},
 		Evidence: []model.ObservationDisposition{{InvocationRef: model.InvocationRef{Project: "test/cli", InvocationID: result.Envelope.InvocationID}, Disposition: "supports", Reason: "passed"}}}
 	if _, err := e2eInvoke(t, root, []model.TypedEvent{proof}, "capture", "--command-id", string(cliID(901))); err != nil {
 		t.Fatal(err)
@@ -233,7 +233,7 @@ func TestCLIFreshProcessesCaptureAdmitProofToProven(t *testing.T) {
 	if _, err := e2eInvoke(t, root, nil, "admit", "--command-id", string(cliID(703)), "--actor", "coordinator", "--outcome", "accepted", "--reason", "run", string(cliID(701)), string(cliID(702))); err != nil {
 		t.Fatal(err)
 	}
-	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Verdict: model.VerdictSupports, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "lane"}, Reason: "the complete family passes"},
+	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Verdict: model.VerdictSupports, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "agent"}, Reason: "the complete family passes"},
 		Evidence: []model.ObservationDisposition{{InvocationRef: model.InvocationRef{Project: "test/cli", InvocationID: env.InvocationID}, Disposition: "supports", Reason: "passed"}}}
 	if _, err := e2eInvoke(t, root, []model.TypedEvent{proof}, "capture", "--command-id", string(cliID(704))); err != nil {
 		t.Fatal(err)
@@ -284,7 +284,7 @@ func TestCLIRunKeepsArtifactsBesideAConfiguredLedger(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(moved, "artifacts", string(model.HashBytes([]byte(e2ePass))))); err != nil {
 		t.Fatalf("admission must store the run's output beside the configured ledger: %v", err)
 	}
-	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Verdict: model.VerdictSupports, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "lane"}, Reason: "the run passed"},
+	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Verdict: model.VerdictSupports, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "agent"}, Reason: "the run passed"},
 		Evidence: []model.ObservationDisposition{{InvocationRef: model.InvocationRef{Project: "test/cli", InvocationID: result.Envelope.InvocationID}, Disposition: "supports", Reason: "passed"}}}
 	if _, err := e2eInvoke(t, root, []model.TypedEvent{proof}, "capture", "--command-id", string(cliID(901))); err != nil {
 		t.Fatal(err)
@@ -351,7 +351,7 @@ func TestCLIFreshProcessesReconcileADeadRunner(t *testing.T) {
 	prefix, _ := store.ReadPrefix(project)
 	snapshot, err := reduce.Replay(prefix)
 	inv, ok := snapshot.Invocation(reduce.InvocationKey{Project: "test/cli", InvocationID: env.InvocationID})
-	if err != nil || !ok || inv.Seal == nil || inv.Seal.Outcome.State != model.Unknown || inv.Seal.Outputs.State != model.Unknown || !strings.Contains(inv.Seal.Outcome.Reason, "lane") {
+	if err != nil || !ok || inv.Seal == nil || inv.Seal.Outcome.State != model.Unknown || inv.Seal.Outputs.State != model.Unknown || !strings.Contains(inv.Seal.Outcome.Reason, "agent") {
 		t.Fatalf("reconciliation seal missing or carrying a reading: %+v, %v", inv.Seal, err)
 	}
 	if status := e2eStatus(t, root, criterion.Claim); status != reduce.StatusUnmeasured {

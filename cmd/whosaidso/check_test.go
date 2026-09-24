@@ -80,7 +80,7 @@ func checkSealedRun(t *testing.T, root string, criterion model.CriterionRef, ins
 
 func checkProofFile(t *testing.T, criterion model.CriterionRef, member model.InvocationRef, disposition string) (string, *model.ProofAdmit) {
 	t.Helper()
-	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Verdict: model.VerdictSupports, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "lane"}, Reason: "judged"},
+	proof := &model.ProofAdmit{Claim: criterion.Claim, CriterionRef: criterion, Verdict: model.VerdictSupports, Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "agent"}, Reason: "judged"},
 		Evidence: []model.ObservationDisposition{{InvocationRef: member, Disposition: disposition, Reason: "reviewed"}}}
 	event, err := model.EncodeEvent(proof)
 	if err != nil {

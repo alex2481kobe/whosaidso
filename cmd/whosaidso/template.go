@@ -181,7 +181,7 @@ func templateString(field reflect.StructField) string {
 	}
 	switch field.Name {
 	case "ID":
-		return "<actor-id: who, e.g. coordinator>"
+		return "<actor-id: who, e.g. reviewer>"
 	case "UnknownReason":
 		return "<text: why the actor is unknown>"
 	case "Path", "PreviousLocation", "SourcePaths":

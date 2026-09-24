@@ -27,7 +27,7 @@ func TestCLIShowAndHistoryNameTheRulingsPacketAuthor(t *testing.T) {
 	for i, step := range []struct {
 		event  model.TypedEvent
 		author string
-	}{{open, "lane"}, {dispose, "agent-sol"}} {
+	}{{open, "agent"}, {dispose, "recorder"}} {
 		packet, admission := string(cliID(20+2*i)), string(cliID(21+2*i))
 		if _, err := e2eInvoke(t, root, []model.TypedEvent{step.event}, "capture", "--command-id", packet, "--actor", step.author); err != nil {
 			t.Fatal(err)
@@ -39,7 +39,7 @@ func TestCLIShowAndHistoryNameTheRulingsPacketAuthor(t *testing.T) {
 	show := string(readProcess(t, root, nil, "show", "--json", string(decision))) // R19: --full is removed; --json is complete
 	// The record's own fact (decision.open, by lane) and its disposition (by
 	// agent-sol, recording the owner's words) each name their packet.
-	for _, want := range []string{`"packet": "` + string(cliID(20)) + `"`, `"id": "agent-sol"`, `"packet": "` + string(cliID(22)) + `"`, `"quote": "ship revision one"`} {
+	for _, want := range []string{`"packet": "` + string(cliID(20)) + `"`, `"id": "recorder"`, `"packet": "` + string(cliID(22)) + `"`, `"quote": "ship revision one"`} {
 		if !strings.Contains(show, want) {
 			t.Fatalf("whosaidso show lacks %s beside the authority and quote:\n%s", want, show)
 		}
@@ -54,7 +54,7 @@ func TestCLIShowAndHistoryNameTheRulingsPacketAuthor(t *testing.T) {
 			openAuthor = e.Author.Author.ID
 		}
 	}
-	if disposeAuthor != "agent-sol" || openAuthor != "lane" {
-		t.Fatalf("history authors: dispose %q, open %q; want agent-sol and lane", disposeAuthor, openAuthor)
+	if disposeAuthor != "recorder" || openAuthor != "agent" {
+		t.Fatalf("history authors: dispose %q, open %q; want recorder and agent", disposeAuthor, openAuthor)
 	}
 }

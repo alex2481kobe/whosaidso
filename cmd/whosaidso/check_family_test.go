@@ -37,7 +37,7 @@ func familyRun(t *testing.T, f boundFixture, criterionRevision string, admit boo
 	if admit {
 		args = append(args, "--admit", "--reason", "fixture run")
 	}
-	out, errs, code := cliRun(t, f.root, nil, "lane", append(args, "--", "/bin/sh", "tools/measure.sh")...)
+	out, errs, code := cliRun(t, f.root, nil, "agent", append(args, "--", "/bin/sh", "tools/measure.sh")...)
 	m := familyAck.FindStringSubmatch(out)
 	if code != 0 || m == nil {
 		t.Fatalf("run: %d %q %q", code, out, errs)
@@ -58,7 +58,7 @@ func TestFamilyListsWhatTheGateCountsAndItsProofAdmits(t *testing.T) {
 		t.Fatalf("rejecting the run: %s", errs)
 	}
 
-	out, errs, code := cliRun(t, f.root, nil, "lane", "check", "admission", "--family", string(f.claim), "--json")
+	out, errs, code := cliRun(t, f.root, nil, "agent", "check", "admission", "--family", string(f.claim), "--json")
 	var answer struct {
 		Result    string             `json:"result"`
 		Criterion model.CriterionRef `json:"criterion"`
@@ -119,7 +119,7 @@ func TestFamilyListsWhatTheGateCountsAndItsProofAdmits(t *testing.T) {
 			t.Errorf("a family list missing %s must be a mismatch naming it: %v, %v", missing, mismatch, err)
 		}
 	}
-	if text, _, code := cliRun(t, f.root, nil, "lane", "check", "admission", "--family", string(f.claim)); code != 0 || !strings.HasPrefix(text, "proof family at watermark") || !strings.Contains(text, "3 member(s)") {
+	if text, _, code := cliRun(t, f.root, nil, "agent", "check", "admission", "--family", string(f.claim)); code != 0 || !strings.HasPrefix(text, "proof family at watermark") || !strings.Contains(text, "3 member(s)") {
 		t.Fatalf("the text answer opens with its scope: %d %s", code, text)
 	}
 
@@ -138,7 +138,7 @@ func TestFamilyListsWhatTheGateCountsAndItsProofAdmits(t *testing.T) {
 	args = append(args, disposition(exact, "supports")...)
 	args = append(args, disposition(rejected, "inapplicable")...)
 	for _, dropped := range all {
-		printed, _, _ := cliRun(t, f.root, nil, "lane", args...)
+		printed, _, _ := cliRun(t, f.root, nil, "agent", args...)
 		var tree []map[string]any
 		if err := json.Unmarshal([]byte(printed), &tree); err != nil {
 			t.Fatal(err)
@@ -157,11 +157,11 @@ func TestFamilyListsWhatTheGateCountsAndItsProofAdmits(t *testing.T) {
 		if err := os.WriteFile(file, short, 0600); err != nil {
 			t.Fatal(err)
 		}
-		if out, errs, code := cliRun(t, f.root, nil, "lane", "check", "admission", "--events", file); code != 1 || !strings.Contains(out, string(dropped)) {
+		if out, errs, code := cliRun(t, f.root, nil, "agent", "check", "admission", "--events", file); code != 1 || !strings.Contains(out, string(dropped)) {
 			t.Errorf("a proof omitting %s must be refused by the gate, naming it: %d %s %s", dropped, code, out, errs)
 		}
 	}
-	if out, errs, code := cliRun(t, f.root, nil, "lane", append(args, "--capture", "--admit", "--reason", "family drafted by whosaidso")...); code != 0 {
+	if out, errs, code := cliRun(t, f.root, nil, "agent", append(args, "--capture", "--admit", "--reason", "family drafted by whosaidso")...); code != 0 {
 		t.Fatalf("the drafted proof, judged, must admit: %d %s %s", code, out, errs)
 	}
 	claim := model.RecordRef{Project: "test/cli", RecordID: f.claim, Revision: 1}
@@ -188,7 +188,7 @@ func TestTemplateExamplePinsACriterion(t *testing.T) {
 	}
 	args := []string{"template", "criterion.fix", "--claim", string(f.claim), "--example", "out/run.json=" + example,
 		"--pin", "expression.result_selector=out/run.json#/results", "--pin", "expression.population.selector=out/run.json#/population"}
-	printed, errs, code := cliRun(t, f.root, nil, "lane", args...)
+	printed, errs, code := cliRun(t, f.root, nil, "agent", args...)
 	if code != 0 {
 		t.Fatalf("%d %s", code, errs)
 	}
@@ -202,14 +202,14 @@ func TestTemplateExamplePinsACriterion(t *testing.T) {
 		t.Fatalf("the example pin must carry the file's bytes under the output name: %+v\n%s", result.Content, errs)
 	}
 	for _, bad := range [][]string{{"--example", "out/other.json=" + example}, {"--pin", "expression.result_selector=out/run.json@HEAD"}} {
-		if _, _, code := cliRun(t, f.root, nil, "lane", append(append([]string{}, args...), bad...)...); code != 2 {
+		if _, _, code := cliRun(t, f.root, nil, "agent", append(append([]string{}, args...), bad...)...); code != 2 {
 			t.Errorf("%v must be a usage error, got %d", bad, code)
 		}
 	}
 	judged := append(args, "--set", "expression.unit=mm", "--set", "expression.population.identity=pose sweep", "--set", "expression.population.denominator=poses",
 		"--set", "expression.operator=lt", "--set", `expression.target={"type":"number","number":0.05}`, "--set", "expression.reducer=all", "--set", "source_refs=[]",
 		"--capture", "--admit", "--reason", "criterion pinned from its example")
-	if out, errs, code := cliRun(t, f.root, nil, "lane", judged...); code != 0 {
+	if out, errs, code := cliRun(t, f.root, nil, "agent", judged...); code != 0 {
 		t.Fatalf("the example-pinned criterion must admit: %d %s %s", code, out, errs)
 	}
 }

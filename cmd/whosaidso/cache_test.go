@@ -119,7 +119,7 @@ func TestCLIAnswersAreByteIdenticalWhateverTheCacheHolds(t *testing.T) {
 	}
 	if err := e2eAdmitOne(t, root, &model.DecisionOpen{ID: cliID(990), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.DecisionSpec{Question: "keep the cache?", Options: []string{"yes", "no"}, WaitingActor: model.Actor{ID: "owner"},
-			Scope: model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this fixture", Limitations: "not a real ledger"}}}, 991, 992, "lane"); err != nil {
+			Scope: model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this fixture", Limitations: "not a real ledger"}}}, 991, 992, "agent"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Remove(image); err != nil {
@@ -153,7 +153,7 @@ func TestCLIAHistoricalEditIsNeverAnsweredFromTheCache(t *testing.T) {
 	root, data := cliFixture(t)
 	cliControl(t, root, data)
 	if err := e2eAdmitOne(t, root, &model.TaskStart{Task: model.RecordRef{Project: "test/cli", RecordID: cliID(1), Revision: 1},
-		Actor: model.Actor{ID: "lane"}, AttemptID: cliID(700)}, 701, 702, "lane"); err != nil {
+		Actor: model.Actor{ID: "agent"}, AttemptID: cliID(700)}, 701, 702, "agent"); err != nil {
 		t.Fatal(err)
 	}
 	before := string(readProcess(t, root, nil, "show", "--json", string(cliID(1))))
@@ -207,8 +207,8 @@ func TestCLIConcurrentProcessesNeverAnswerStale(t *testing.T) {
 					Spec: model.TaskSpec{Intent: fmt.Sprintf("concurrent task %d", n), Subject: "cache", NonGoals: []string{"none"},
 						Scope:              model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this fixture", Limitations: "synthetic"},
 						AcceptanceCriteria: []model.AcceptanceCriterion{{ID: cliID(n + 1), Revision: 1, Criterion: "reads"}}, ContextRefs: []model.RecordRef{},
-						ConstraintRefs: []model.RecordRef{}, Prerequisites: []model.Prerequisite{}, NextActor: model.Actor{ID: "lane"}}}
-				if err := e2eAdmitOne(t, root, task, n+2, n+3, "lane"); err != nil {
+						ConstraintRefs: []model.RecordRef{}, Prerequisites: []model.Prerequisite{}, NextActor: model.Actor{ID: "agent"}}}
+				if err := e2eAdmitOne(t, root, task, n+2, n+3, "agent"); err != nil {
 					errs <- err
 				}
 			}

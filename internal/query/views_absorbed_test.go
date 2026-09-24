@@ -34,7 +34,7 @@ func TestInstrumentsShowEveryFieldAndUnknownValidationFirst(t *testing.T) {
 		t.Fatalf("unrecorded validation must read UNKNOWN with its own reason, got %+v", bad.Validation)
 	}
 	if bad.BlindTo != "generated code" || bad.NotAnswered == "" || bad.QuestionAnswered == "" || len(bad.DangerousDefaults) != 1 ||
-		len(bad.ConfigSurface) != 1 || bad.ValidRange == "" || bad.ImplementationRef.Kind == "" || bad.Author != (model.Actor{ID: "lane-a"}) {
+		len(bad.ConfigSurface) != 1 || bad.ValidRange == "" || bad.ImplementationRef.Kind == "" || bad.Author != (model.Actor{ID: "agent-a"}) {
 		t.Fatalf("every declared instrument field must be shown, got %+v", bad)
 	}
 	if good.Trust != reduce.TruthFalse || len(good.Withdrawals) != 1 || bad.Trust != reduce.TruthUnknown {
@@ -127,7 +127,7 @@ func TestTodoLimitNeverHidesABlocker(t *testing.T) {
 		&model.BlockerHold{Task: testRef(2, 1), BlockerID: testID(80), Reason: model.BlockerResume,
 			Actor: model.Actor{ID: "owner"}, Criterion: "resume is authorized"},
 		&model.TaskStart{Task: testRef(5, 1), AttemptID: testID(71), Actor: model.Actor{ID: "worker"}},
-		&model.DecisionOpen{ID: testID(30), Provenance: prov("lane-c"), Spec: decisionSpec()})
+		&model.DecisionOpen{ID: testID(30), Provenance: prov("agent-c"), Spec: decisionSpec()})
 	appendEvents(t, p, 102, admittedAs(102, map[int]string{0: "worker"}, &model.AttemptTerminal{Task: testRef(5, 1), AttemptID: testID(71), Outcome: model.AttemptSuccess,
 		Reason: "done", NextAction: "owner accepts or rejects", DeliveryRefs: []model.ArtifactRef{testArtifact()}})...)
 	for _, limit := range []int{0, 1, 2} {

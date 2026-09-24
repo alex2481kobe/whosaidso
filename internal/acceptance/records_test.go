@@ -22,7 +22,7 @@ import (
 	"whosaidso/internal/model"
 )
 
-const recProject = model.ProjectID("datum/acceptance")
+const recProject = model.ProjectID("example/acceptance")
 
 var recWhen = time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC)
 
@@ -83,14 +83,14 @@ func recScope(context model.ID) model.Scope {
 func recAuthority(context model.ID) model.Authority {
 	return model.Authority{
 		Actor:     recActor("owner"),
-		SourceRef: recGit("OWNER-RULINGS-DATUM.md"),
+		SourceRef: recGit("docs/decisions.md"),
 		Selector:  model.Selector{Kind: "json-pointer", Pointer: "/rulings/3"},
 		Scope:     recScope(context),
 	}
 }
 
 func recProvenance() model.Provenance {
-	return model.Provenance{SourceRefs: []model.ArtifactRef{recGit("documentation/design/research/BUILD-PLAN-DATUM.md")}}
+	return model.Provenance{SourceRefs: []model.ArtifactRef{recGit("docs/plan.md")}}
 }
 
 func recTaskSpec() model.TaskSpec {

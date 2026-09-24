@@ -51,7 +51,7 @@ func wantClosedBothWays(t *testing.T, l *ledgerBuilder, closure *model.TaskClose
 }
 
 func consumer(opts ...taskOpt) *model.TaskCreate {
-	return &model.TaskCreate{Provenance: provenance("lane-b"), ID: newID("TSKB"), Spec: taskSpec(opts...)}
+	return &model.TaskCreate{Provenance: provenance("agent-b"), ID: newID("TSKB"), Spec: taskSpec(opts...)}
 }
 
 func closeWith(outcome model.ClosureOutcome) *model.TaskClose {
@@ -158,7 +158,7 @@ func TestSuccessCloseHonoursAPermittedWaiver(t *testing.T) {
 func TestSuccessCloseRefusesAPrerequisiteCycle(t *testing.T) {
 	cycle := func(t *testing.T) *ledgerBuilder {
 		l := newLedger()
-		l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+		l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 		l.add(t, consumer(withPrerequisite("task-success", ref(newID("TSKA"), 1), "forbid", nil)))
 		l.add(t, &model.TaskAmend{Provenance: provenance("coordinator"), Target: ref(newID("TSKA"), 1),
 			Replacement: taskSpec(

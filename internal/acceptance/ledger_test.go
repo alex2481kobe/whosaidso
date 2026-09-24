@@ -18,13 +18,13 @@ import (
 func ledgerProject(t *testing.T) store.Project {
 	t.Helper()
 	root := t.TempDir()
-	return store.Project{ID: "datum/lane-e-ledger", Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
+	return store.Project{ID: "example/ledger", Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
 }
 
 func ledgerID(n int) model.ID { return model.ID(fmt.Sprintf("%026d", n)) }
 
 func ledgerDigest(n int) model.Digest {
-	return model.HashBytes([]byte(fmt.Sprintf("lane-e-ledger-request-%d", n)))
+	return model.HashBytes([]byte(fmt.Sprintf("agent-e-ledger-request-%d", n)))
 }
 
 func ledgerProposal(n int) func([]model.Bundle) (model.Bundle, error) {

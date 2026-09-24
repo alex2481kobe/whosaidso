@@ -149,7 +149,7 @@ func TestReadVerifyClaimHistoryIncludesReceiptsExplicitlyNamingItsCriterion(t *t
 			records = append(records, e)
 		}
 	}
-	readVerifyAdmitted(t, p, 100, reducePacket(t, 2201, "lane-e", time.Time{}, records...), reducePacket(t, 2202, "runner", time.Time{}, starts...))
+	readVerifyAdmitted(t, p, 100, reducePacket(t, 2201, "agent-e", time.Time{}, records...), reducePacket(t, 2202, "runner", time.Time{}, starts...))
 	prefix, err := store.ReadPrefix(p)
 	if err != nil || len(prefix) == 0 {
 		t.Fatalf("control criterion bundle must be published: %v", err)
@@ -341,7 +341,7 @@ func TestReadVerifyLaterAdmissionDoesNotDispositionAnEarlierPrefix(t *testing.T)
 		t.Fatal(err)
 	}
 	ref, err := store.WriteIntake(context.Background(), p, store.IntakeRequest{
-		CommandID: reduceID(1002), Author: model.Actor{ID: "lane-e"}, Events: []model.Event{event}})
+		CommandID: reduceID(1002), Author: model.Actor{ID: "agent-e"}, Events: []model.Event{event}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -33,7 +33,7 @@ func runTestProject(t *testing.T) store.Project {
 	if err := os.Mkdir(root, 0700); err != nil {
 		t.Fatal(err)
 	}
-	return store.Project{ID: "datum/run-test", Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
+	return store.Project{ID: "example/run-test", Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
 }
 
 func runTestNumber(s string) model.Scalar {
@@ -45,10 +45,10 @@ func runTestRequest(root, mode string, args ...string) RunRequest {
 	ref := model.ArtifactRef{Kind: "content", Content: &model.ContentPin{SHA256: model.HashBytes([]byte("fixture")), Length: 7, MediaType: "text/plain", Locators: []model.Locator{{Path: "fixture"}}}, Selector: model.Selector{Kind: "whole"}}
 	argv := append([]string{os.Args[0], "-test.run=^TestRunChildProcess$", "--", mode}, args...)
 	return RunRequest{
-		Author: model.Actor{ID: "lane-c"}, AttemptID: runTestID(2),
-		InstrumentRef:           model.RecordRef{Project: "datum/run-test", RecordID: runTestID(3), Revision: 1},
+		Author: model.Actor{ID: "agent-c"}, AttemptID: runTestID(2),
+		InstrumentRef:           model.RecordRef{Project: "example/run-test", RecordID: runTestID(3), Revision: 1},
 		Instrument:              model.InstrumentSpec{QuestionAnswered: "what did the process observe", BlindTo: "unreported configuration", NotAnswered: "task completion", ConfigSurface: []string{"samples", "seed"}, DangerousDefaults: []string{}, ValidRange: "fixture inputs", ImplementationRef: ref, Validation: runUnknown[model.InstrumentValidation]()},
-		ExecutionSourceIdentity: model.ExecutionIdentity{Project: "datum/run-test", MachineID: runUnknown[model.ID](), SourceRefs: []model.ArtifactRef{ref}, Head: runUnknown[model.GitHead](), Dirty: runUnknown[bool]()},
+		ExecutionSourceIdentity: model.ExecutionIdentity{Project: "example/run-test", MachineID: runUnknown[model.ID](), SourceRefs: []model.ArtifactRef{ref}, Head: runUnknown[model.GitHead](), Dirty: runUnknown[bool]()},
 		Argv:                    argv, Dir: root, ConfigRequested: map[string]model.Scalar{"samples": runTestNumber("64"), "seed": runTestNumber("99")},
 		ConditionsDeclared: map[string]model.Scalar{"idle": {Type: "bool", Bool: runTestPtr(true)}},
 	}
@@ -300,7 +300,7 @@ func TestRunCommandFailureDoesNotEndAttempt(t *testing.T) {
 	}
 	afterTask, _ := after.Task(reduce.Ident{Project: project.ID, ID: taskRef.RecordID})
 	if afterTask.Status != reduce.StatusInFlight || len(afterTask.LiveAttempts) != 1 {
-		t.Fatalf("failure ended lane: %+v", afterTask)
+		t.Fatalf("failure ended agent: %+v", afterTask)
 	}
 }
 
@@ -677,7 +677,7 @@ func TestRunChildProcess(t *testing.T) {
 	}
 	mode := args[0]
 	if mode == "observer" {
-		project := store.Project{ID: "datum/run-test", Root: args[1]}
+		project := store.Project{ID: "example/run-test", Root: args[1]}
 		_, err := Run(context.Background(), project, runTestRequest(project.Root, "block", args[2]))
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -696,7 +696,7 @@ func TestRunChildProcess(t *testing.T) {
 	}
 	switch mode {
 	case "ok", "fail":
-		packets, err := store.ReadIntake(store.Project{ID: "datum/run-test"}, nil)
+		packets, err := store.ReadIntake(store.Project{ID: "example/run-test"}, nil)
 		if err != nil {
 			os.Exit(93)
 		}

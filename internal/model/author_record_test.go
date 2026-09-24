@@ -13,7 +13,7 @@ import (
 func authoredReview() *ReviewAdmit {
 	e := reviewFixture()
 	e.Authors = map[ID]Actor{
-		schemaID(1): {ID: "reviewer"}, schemaID(2): {ID: "lane-b"}, schemaID(3): {UnknownReason: "captured without identity"},
+		schemaID(1): {ID: "reviewer"}, schemaID(2): {ID: "agent-b"}, schemaID(3): {UnknownReason: "captured without identity"},
 	}
 	e.EventPackets = []ID{schemaID(2), schemaID(1), schemaID(2)}
 	return e
@@ -36,7 +36,7 @@ func TestReviewAuthorsRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(raw.Data, &wire); err != nil {
 		t.Fatal(err)
 	}
-	if wire.Authors[string(schemaID(2))].ID != "lane-b" || len(wire.EventPackets) != 3 {
+	if wire.Authors[string(schemaID(2))].ID != "agent-b" || len(wire.EventPackets) != 3 {
 		t.Fatalf("public wire spelling changed: %s", raw.Data)
 	}
 }
@@ -50,7 +50,7 @@ func TestReviewAuthorsInvalidSchema(t *testing.T) {
 		{"missing packet", func(e *ReviewAdmit) { delete(e.Authors, schemaID(2)) }},
 		{"wrong packet", func(e *ReviewAdmit) {
 			delete(e.Authors, schemaID(2))
-			e.Authors[schemaID(4)] = Actor{ID: "lane-b"}
+			e.Authors[schemaID(4)] = Actor{ID: "agent-b"}
 		}},
 		{"blank actor", func(e *ReviewAdmit) { e.Authors[schemaID(1)] = Actor{} }},
 		{"both branches", func(e *ReviewAdmit) { e.Authors[schemaID(1)] = Actor{ID: "a", UnknownReason: "b"} }},

@@ -18,7 +18,7 @@ import (
 
 func TestNoCacheReadsTheLedgerPastATamperedImage(t *testing.T) {
 	root, data := cliFixture(t)
-	if _, errs, code := cliRun(t, root, data, "lane", "capture", "--command-id", string(cliID(3))); code != 0 {
+	if _, errs, code := cliRun(t, root, data, "agent", "capture", "--command-id", string(cliID(3))); code != 0 {
 		t.Fatalf("control capture: %d %s", code, errs)
 	}
 	if _, errs, code := cliRun(t, root, nil, "coordinator", "admit", "--command-id", string(cliID(4)), "--outcome", "accepted", "--reason", "fixture", string(cliID(3))); code != 0 {

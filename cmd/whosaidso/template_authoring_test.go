@@ -84,7 +84,7 @@ func TestAmendFromAddsAnOmittedOptionalKey(t *testing.T) {
 	f := boundWorld(t)
 	base := []string{"task.amend", "--from", string(f.task), "--set", "provenance.source_refs=[]"}
 	for _, bad := range []string{"replacement.bogus=1", "replacement.progress.bogus=x", "bogus.progress=x"} {
-		if _, errs, code := cliRun(t, f.root, nil, "lane", append(append([]string{"template"}, base...), "--set", bad)...); code != 2 || !strings.Contains(errs, "has no field") {
+		if _, errs, code := cliRun(t, f.root, nil, "agent", append(append([]string{"template"}, base...), "--set", bad)...); code != 2 || !strings.Contains(errs, "has no field") {
 			t.Errorf("--set %s is no schema path and must be refused: %d %s", bad, code, errs)
 		}
 	}
@@ -103,7 +103,7 @@ func TestAmendFromAddsAnOmittedOptionalKey(t *testing.T) {
 
 func TestPinOutsideTheProjectTravelsAsABlob(t *testing.T) {
 	f := boundWorld(t)
-	boundCapture(t, f.root, "blocker.hold", "--task", string(f.task), "--set", "reason=resume", "--set", `actor={"id":"lane"}`, "--set", "criterion=the review exists")
+	boundCapture(t, f.root, "blocker.hold", "--task", string(f.task), "--set", "reason=resume", "--set", `actor={"id":"agent"}`, "--set", "criterion=the review exists")
 	hold := string(openHold(t, boundSnapshot(t, f.root), f.task))
 	outside := filepath.Join(filepath.Dir(f.root), "review.txt")
 	if err := os.WriteFile(outside, []byte("reviewed outside the repo\n"), 0600); err != nil {
@@ -132,7 +132,7 @@ func TestPinAppendsOneListElement(t *testing.T) {
 		!isPlaceholder(boundAt(d, "acceptance_witness_refs[1].criterion_id").(string)) || boundAt(d, "acceptance_witness_refs[0].criterion_id") != string(f.ac) {
 		t.Fatalf("[1] must append one skeleton element holding the pin, [0] unchanged: %v", w)
 	}
-	_, errs, code := cliRun(t, f.root, nil, "lane", "template", "task.close", "--task", string(f.task), "--pin", "acceptance_witness_refs[2].witness_ref=out/result.json")
+	_, errs, code := cliRun(t, f.root, nil, "agent", "template", "task.close", "--task", string(f.task), "--pin", "acceptance_witness_refs[2].witness_ref=out/result.json")
 	if code != 2 || !strings.Contains(errs, "acceptance_witness_refs has 1 element(s); a path can add only acceptance_witness_refs[1]") {
 		t.Fatalf("a pin two past the end must be refused clearly: %d %s", code, errs)
 	}
@@ -142,7 +142,7 @@ func TestNotesAreReadFromTheFinalTree(t *testing.T) {
 	f := boundWorld(t)
 	notes := func(args ...string) string {
 		t.Helper()
-		_, errs, code := cliRun(t, f.root, nil, "lane", append([]string{"template"}, args...)...)
+		_, errs, code := cliRun(t, f.root, nil, "agent", append([]string{"template"}, args...)...)
 		if code != 0 {
 			t.Fatalf("%v: %d %s", args, code, errs)
 		}
@@ -164,7 +164,7 @@ func TestNotesAreReadFromTheFinalTree(t *testing.T) {
 		t.Errorf("an absent optional key is noted as addable, and no delete note for a key not there:\n%s", amend)
 	}
 	for _, event := range templateEvents {
-		out, _, _ := cliRun(t, f.root, nil, "lane", "template", string(event.EventType()))
+		out, _, _ := cliRun(t, f.root, nil, "agent", "template", string(event.EventType()))
 		if m := regexp.MustCompile(`existing (0|[^;]*_)[;>]`).FindString(out); m != "" {
 			t.Errorf("%s names an id's noun as %q", event.EventType(), m)
 		}

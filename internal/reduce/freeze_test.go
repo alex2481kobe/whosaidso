@@ -19,8 +19,8 @@ func freezeLedger(t *testing.T) (*ledgerBuilder, model.RecordRef, time.Time) {
 	t.Helper()
 	l := goodLedger(t)
 	claim := ref(newID("CMA1"), 1)
-	fixed := l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("lane-a"), Spec: proofInstrument()},
-		&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("lane-a"), Spec: claimSpec()}, fixProofCriterion(claim))
+	fixed := l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("agent-a"), Spec: proofInstrument()},
+		&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("agent-a"), Spec: claimSpec()}, fixProofCriterion(claim))
 	return l, claim, fixed.RecordedAt
 }
 
@@ -30,7 +30,7 @@ func freezeLedger(t *testing.T) (*ledgerBuilder, model.RecordRef, time.Time) {
 func startReview(n int, captured *time.Time) *model.ReviewAdmit {
 	packet := newID("PKTF")
 	review := &model.ReviewAdmit{Packets: []model.PacketRef{{CommandID: packet, Digest: newDigest("freeze")}}, Outcome: "accepted",
-		Actor: model.Actor{ID: "coordinator"}, Reason: "freeze fixture", Authors: map[model.ID]model.Actor{packet: {ID: "lane-a"}}, EventPackets: []model.ID{}}
+		Actor: model.Actor{ID: "coordinator"}, Reason: "freeze fixture", Authors: map[model.ID]model.Actor{packet: {ID: "agent-a"}}, EventPackets: []model.ID{}}
 	for i := 0; i < n; i++ {
 		review.EventPackets = append(review.EventPackets, packet)
 	}
@@ -119,8 +119,8 @@ func TestCriterionInTheSameBundleIsNotFrozen(t *testing.T) {
 	for _, synthetic := range []bool{false, true} {
 		l := goodLedger(t)
 		claim := ref(newID("CMA1"), 1)
-		l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("lane-a"), Spec: proofInstrument()},
-			&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("lane-a"), Spec: claimSpec()})
+		l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("agent-a"), Spec: proofInstrument()},
+			&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("agent-a"), Spec: claimSpec()})
 		env := proofEnvelope(claim, newID("RNA"))
 		captured := env.StartedAt.Add(time.Minute)
 		b := l.add(t, fixProofCriterion(claim), &model.InvocationStart{Envelope: env}, startReview(2, &captured))

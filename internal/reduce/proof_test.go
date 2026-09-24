@@ -40,7 +40,7 @@ func fixProofCriterion(claim model.RecordRef) *model.CriterionFix {
 			Operator:   model.Equal, Target: model.Scalar{Type: "number", Number: &n}, Reducer: model.All,
 		},
 		Policy: model.EvaluationPolicy{Inclusion: "entire-criterion-family", Retry: "retain-all"},
-		Author: model.Actor{ID: "lane-a"}, SourceRefs: []model.ArtifactRef{blobRef("criterion")},
+		Author: model.Actor{ID: "agent-a"}, SourceRefs: []model.ArtifactRef{blobRef("criterion")},
 	}
 }
 
@@ -81,8 +81,8 @@ func proofLedger(t *testing.T, proven bool) *ledgerBuilder {
 	t.Helper()
 	l := goodLedger(t)
 	claim := ref(newID("CMA1"), 1)
-	l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("lane-a"), Spec: proofInstrument()},
-		&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("lane-a"), Spec: claimSpec()}, fixProofCriterion(claim))
+	l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("agent-a"), Spec: proofInstrument()},
+		&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("agent-a"), Spec: claimSpec()}, fixProofCriterion(claim))
 	env := proofEnvelope(claim, newID("RNA"))
 	l.add(t, &model.InvocationStart{Envelope: env})
 	l.add(t, sealProof(env, 0))
@@ -126,7 +126,7 @@ func TestClaimAchievementAndRevision(t *testing.T) {
 	}
 	replacement := claimSpec()
 	replacement.Assertion = "a different assertion needs its own observations"
-	l.add(t, &model.ClaimRevise{Target: claim, Provenance: provenance("lane-a"), Replacement: replacement})
+	l.add(t, &model.ClaimRevise{Target: claim, Provenance: provenance("agent-a"), Replacement: replacement})
 	revised := mustReplay(t, l.out)
 	current, ok := revised.Claim(ident(claim))
 	if !ok || current.Claim.Revision != 2 || current.Status != StatusUnmeasured || len(current.Proofs) != 0 {
@@ -216,7 +216,7 @@ func TestWithdrawnInstrument(t *testing.T) {
 	if supportNow(t, before, claim).Current() != TruthTrue {
 		t.Fatal("Apply mutated prior snapshot")
 	}
-	l.add(t, &model.InstrumentRevise{Target: ref(newID("HNSS"), 1), Provenance: provenance("lane-a"), Replacement: proofInstrument()})
+	l.add(t, &model.InstrumentRevise{Target: ref(newID("HNSS"), 1), Provenance: provenance("agent-a"), Replacement: proofInstrument()})
 	revised := mustReplay(t, l.out)
 	instrument, _ = revised.Instrument(ident(ref(newID("HNSS"), 1)))
 	if instrument.Instrument.Revision != 2 || instrument.Support.ActiveTrust != TruthTrue {
@@ -255,7 +255,7 @@ func TestTransitiveCorrectionCycle(t *testing.T) {
 	for _, pair := range [][2]model.RecordRef{{b, a}, {c, b}} {
 		spec := claimSpec()
 		spec.Scope.ContextRefs = []model.RecordRef{pair[1]}
-		l.add(t, &model.ClaimAssert{ID: pair[0].RecordID, Provenance: provenance("lane-a"), Spec: spec}, fixProofCriterion(pair[0]))
+		l.add(t, &model.ClaimAssert{ID: pair[0].RecordID, Provenance: provenance("agent-a"), Spec: spec}, fixProofCriterion(pair[0]))
 		env := proofEnvelope(pair[0], pair[0].RecordID)
 		l.add(t, &model.InvocationStart{Envelope: env}, sealProof(env, 0), admitProof(pair[0], env.InvocationID))
 	}
@@ -402,22 +402,22 @@ func TestRefusesUnscopedDecisionAndWrongKindWithdrawal(t *testing.T) {
 func TestGoldenNineMeanings(t *testing.T) {
 	l := proofLedger(t, true)
 	l.add(t,
-		&model.TaskCreate{ID: newID("TSKB"), Provenance: provenance("lane-a"), Spec: taskSpec()},
-		&model.TaskCreate{ID: newID("TSKC"), Provenance: provenance("lane-a"), Spec: taskSpec(withPrerequisite("task-success", ref(newID("TSKA"), 1), "forbid", nil))},
-		&model.TaskCreate{ID: newID("TSKD"), Provenance: provenance("lane-a"), Spec: taskSpec()},
+		&model.TaskCreate{ID: newID("TSKB"), Provenance: provenance("agent-a"), Spec: taskSpec()},
+		&model.TaskCreate{ID: newID("TSKC"), Provenance: provenance("agent-a"), Spec: taskSpec(withPrerequisite("task-success", ref(newID("TSKA"), 1), "forbid", nil))},
+		&model.TaskCreate{ID: newID("TSKD"), Provenance: provenance("agent-a"), Spec: taskSpec()},
 		closeSuccess(newID("TSKD"), 1),
-		&model.ClaimAssert{ID: newID("CMA2"), Provenance: provenance("lane-a"), Spec: claimSpec()},
-		&model.ClaimAssert{ID: newID("CMA3"), Provenance: provenance("lane-a"), Spec: claimSpec()},
+		&model.ClaimAssert{ID: newID("CMA2"), Provenance: provenance("agent-a"), Spec: claimSpec()},
+		&model.ClaimAssert{ID: newID("CMA3"), Provenance: provenance("agent-a"), Spec: claimSpec()},
 		fixProofCriterion(ref(newID("CMA3"), 1)),
-		&model.DecisionOpen{ID: newID("DCSA"), Provenance: provenance("lane-a"), Spec: decisionSpec()},
-		&model.DecisionOpen{ID: newID("DCSB"), Provenance: provenance("lane-a"), Spec: decisionSpec()},
+		&model.DecisionOpen{ID: newID("DCSA"), Provenance: provenance("agent-a"), Spec: decisionSpec()},
+		&model.DecisionOpen{ID: newID("DCSB"), Provenance: provenance("agent-a"), Spec: decisionSpec()},
 		&model.DecisionDispose{Decision: ref(newID("DCSB"), 1), Disposition: "rejected", Quote: "rejected", Scope: testScope(), Authority: rulingAuthority("owner")},
 	)
 	env := proofEnvelope(ref(newID("CMA3"), 1), newID("RNB"))
 	l.add(t, &model.InvocationStart{Envelope: env}, sealProof(env, 2))
 	for i, outcome := range []string{"accepted", "rejected", "correction-requested"} {
 		id := []model.ID{newID("PKTA"), newID("PKTB"), newID("PKTC")}[i]
-		l.add(t, review(outcome, model.Actor{ID: "reviewer"}, "explicit review result", []model.PacketRef{{CommandID: id, Digest: newDigest(outcome)}}, model.Actor{ID: "lane-a"}))
+		l.add(t, review(outcome, model.Actor{ID: "reviewer"}, "explicit review result", []model.PacketRef{{CommandID: id, Digest: newDigest(outcome)}}, model.Actor{ID: "agent-a"}))
 	}
 	s := mustReplay(t, l.out)
 	got := []string{}
@@ -476,14 +476,14 @@ func TestTypedCorrectionsAndLateDependents(t *testing.T) {
 			l.add(t, &model.Correction{Target: target, AffectedRevisions: []model.RecordRef{claim}, Reason: "the cited premise is false", CorrectiveRef: blobRef("corrective")})
 			spec := claimSpec()
 			spec.Scope.ContextRefs = []model.RecordRef{claim}
-			l.add(t, &model.ClaimAssert{ID: newID("CMA2"), Provenance: provenance("lane-a"), Spec: spec})
+			l.add(t, &model.ClaimAssert{ID: newID("CMA2"), Provenance: provenance("agent-a"), Spec: spec})
 			s := mustReplay(t, l.out)
 			for _, ref := range []model.RecordRef{claim, ref(newID("CMA2"), 1)} {
 				if supportNow(t, s, ref).CorrectionFree != TruthFalse {
 					t.Fatal("typed correction missed dependent")
 				}
 			}
-			l.add(t, &model.ClaimRevise{Target: claim, Provenance: provenance("lane-a"), Replacement: claimSpec()})
+			l.add(t, &model.ClaimRevise{Target: claim, Provenance: provenance("agent-a"), Replacement: claimSpec()})
 			p := wantClaim(t, mustReplay(t, l.out), ref(claim.RecordID, 2), StatusUnmeasured)
 			if p.Support.CorrectionFree != TruthTrue {
 				t.Fatal("replacement inherited prior correction through its expected revision")
@@ -495,7 +495,7 @@ func TestTypedCorrectionsAndLateDependents(t *testing.T) {
 func TestLossReachesClosedHistoryWithoutReopeningIt(t *testing.T) {
 	l := proofLedger(t, true)
 	claim := ref(newID("CMA1"), 1)
-	l.add(t, &model.TaskCreate{ID: newID("TSKB"), Provenance: provenance("lane-a"), Spec: taskSpec(withPrerequisite("claim-proof", claim, "forbid", nil))}, closeSuccess(newID("TSKB"), 1))
+	l.add(t, &model.TaskCreate{ID: newID("TSKB"), Provenance: provenance("agent-a"), Spec: taskSpec(withPrerequisite("claim-proof", claim, "forbid", nil))}, closeSuccess(newID("TSKB"), 1))
 	before := mustReplay(t, l.out)
 	p, _ := before.Task(ident(ref(newID("TSKB"), 1)))
 	if p.Status != StatusClosed || p.Outcome != model.ClosureSuccess {
@@ -555,7 +555,7 @@ func TestUnvalidatedAndForeignInstrumentsCannotProve(t *testing.T) {
 			if name == "unvalidated" {
 				instrument := proofInstrument()
 				instrument.Validation = proofUnknown[model.InstrumentValidation]()
-				raw, err := model.EncodeEvent(&model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("lane-a"), Spec: instrument})
+				raw, err := model.EncodeEvent(&model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("agent-a"), Spec: instrument})
 				if err != nil {
 					t.Fatal(err)
 				}

@@ -91,13 +91,13 @@ func TestCLIUnboundProjectRefusesReadsAndAdmission(t *testing.T) {
 	t.Setenv("WHOSAIDSO_HOME", filepath.Join(t.TempDir(), "unbound-home"))
 	for _, args := range [][]string{{"show"}, {"todo"}, {"history"}, {"admit", "--outcome", "accepted", "--reason", "r", string(cliID(3))},
 		{"capture", "--admit", "--reason", "r", "--events", "-"}} {
-		_, errOut, code := cliRun(t, root, input, "lane", args...)
+		_, errOut, code := cliRun(t, root, input, "agent", args...)
 		if code != 1 || !strings.Contains(errOut, "not bound") || !strings.Contains(errOut, "whosaidso home PATH") {
 			t.Fatalf("%v in an unbound project must refuse and say how to bind, got %d %q", args, code, errOut)
 		}
 	}
 	// Plain capture routes intake by the declared id and needs no home.
-	if out, errOut, code := cliRun(t, root, input, "lane", "capture", "--events", "-"); code != 0 || !strings.HasPrefix(out, "captured ") {
+	if out, errOut, code := cliRun(t, root, input, "agent", "capture", "--events", "-"); code != 0 || !strings.HasPrefix(out, "captured ") {
 		t.Fatalf("control: plain capture: %d %q %q", code, out, errOut)
 	}
 	out, _, code := cliRun(t, root, nil, "", "home")
@@ -128,7 +128,7 @@ func TestCLISecondWorktreeReadsAndAdmitsThroughTheHome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, errOut, code := cliRun(t, root, input, "lane", "capture", "--admit", "--reason", "first", "--events", "-"); code != 0 {
+	if _, errOut, code := cliRun(t, root, input, "agent", "capture", "--admit", "--reason", "first", "--events", "-"); code != 0 {
 		t.Fatalf("control: admit in the home: %s", errOut)
 	}
 	homeGit(t, root, "init", "--quiet")
@@ -139,7 +139,7 @@ func TestCLISecondWorktreeReadsAndAdmitsThroughTheHome(t *testing.T) {
 	if homeLedgerFiles(t, worktree) != 1 {
 		t.Fatal("control: the worktree carries its own copy of the first bundle")
 	}
-	out, errOut, code := cliRun(t, worktree, homeTask(t, input, 11), "lane", "capture", "--admit", "--reason", "second", "--events", "-")
+	out, errOut, code := cliRun(t, worktree, homeTask(t, input, 11), "agent", "capture", "--admit", "--reason", "second", "--events", "-")
 	if code != 0 || !strings.Contains(out, "admitted") {
 		t.Fatalf("admit from the worktree: %d %q %q", code, out, errOut)
 	}
@@ -174,7 +174,7 @@ func TestCLIMissingHomeRefuses(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{{"show"}, {"capture", "--admit", "--reason", "r", "--events", "-"}} {
-		_, errOut, code := cliRun(t, clone, input, "lane", args...)
+		_, errOut, code := cliRun(t, clone, input, "agent", args...)
 		if code != 1 || !strings.Contains(errOut, "unavailable") {
 			t.Fatalf("%v with the home gone must refuse, got %d %q", args, code, errOut)
 		}
@@ -197,7 +197,7 @@ func TestCLIMissingHomeRefuses(t *testing.T) {
 
 func TestCLIRelocation(t *testing.T) {
 	root, input := cliFixture(t)
-	if _, errOut, code := cliRun(t, root, input, "lane", "capture", "--admit", "--reason", "first", "--events", "-"); code != 0 {
+	if _, errOut, code := cliRun(t, root, input, "agent", "capture", "--admit", "--reason", "first", "--events", "-"); code != 0 {
 		t.Fatalf("control: %s", errOut)
 	}
 	parent, err := filepath.EvalSymlinks(t.TempDir())
@@ -256,7 +256,7 @@ func TestCLICaptureAdmitReadsSourcesFromTheInvokingCheckout(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(clone, "ruling.txt"), body, 0600); err != nil {
 		t.Fatal(err)
 	}
-	out, errOut, code := cliRun(t, clone, sourceEvents(t, body, "ruling.txt"), "lane", "capture", "--admit", "--reason", "source from here", "--events", "-")
+	out, errOut, code := cliRun(t, clone, sourceEvents(t, body, "ruling.txt"), "agent", "capture", "--admit", "--reason", "source from here", "--events", "-")
 	if code != 0 || !strings.HasPrefix(out, "captured ") {
 		t.Fatalf("the source must be read from the invoking checkout, not the home: %d %q %q", code, out, errOut)
 	}
@@ -277,7 +277,7 @@ func TestCLIHomeRefusesToBindWhatItCannotServe(t *testing.T) {
 	}
 	// Loose intake permissions: a captured packet's directory made 0755.
 	unbound("loose")
-	if _, errs, code := cliRun(t, root, input, "lane", "capture", "--command-id", string(cliID(60))); code != 0 {
+	if _, errs, code := cliRun(t, root, input, "agent", "capture", "--command-id", string(cliID(60))); code != 0 {
 		t.Fatalf("control: plain capture: %d %s", code, errs)
 	}
 	project, err := store.Discover(root)

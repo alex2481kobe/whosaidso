@@ -102,7 +102,7 @@ func TestClosedUnionsAndExactReferences(t *testing.T) {
 			requireSchemaRefusal(t, mutateSchema(t, raw, "spec.validation", val, false), "invalid-field")
 		})
 	}
-	for _, actor := range []Actor{{}, {ID: " "}, {UnknownReason: "\n"}, {ID: "lane", UnknownReason: "also unknown"}} {
+	for _, actor := range []Actor{{}, {ID: " "}, {UnknownReason: "\n"}, {ID: "agent", UnknownReason: "also unknown"}} {
 		r := requireSchemaGood(t, schemaEvents()[2])
 		requireSchemaRefusal(t, mutateSchema(t, r, "actor", actor, false), "invalid-field")
 	}

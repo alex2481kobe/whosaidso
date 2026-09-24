@@ -128,7 +128,7 @@ func TestCLIHandbackRefusesMissingMeaning(t *testing.T) {
 				if flag == "--actor" && !strings.Contains(value, "-") {
 					return
 				}
-				args := append(append([]string(nil), control...), "--actor", "lane")
+				args := append(append([]string(nil), control...), "--actor", "agent")
 				args[i+1] = value
 				if value == "omitted" {
 					args = append(args[:i], args[i+2:]...)

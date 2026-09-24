@@ -16,10 +16,10 @@ import (
 // heldThenAmended holds HDA1 on TSKA revision 1, then amends TSKA to revision 2.
 func heldThenAmended(t *testing.T) *ledgerBuilder {
 	l := newLedger()
-	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+	l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 	l.add(t, &model.BlockerHold{Task: ref(newID("TSKA"), 1), BlockerID: newID("HDA1"),
 		Reason: model.BlockerAwaitingAcceptance, Actor: model.Actor{ID: "owner"}, Criterion: "owner reads the delivery"})
-	l.add(t, &model.TaskAmend{Provenance: provenance("lane-a"), Target: ref(newID("TSKA"), 1), Replacement: taskSpec()})
+	l.add(t, &model.TaskAmend{Provenance: provenance("agent-a"), Target: ref(newID("TSKA"), 1), Replacement: taskSpec()})
 	return l
 }
 
@@ -81,7 +81,7 @@ func TestHoldClearRefusals(t *testing.T) {
 			return []model.TypedEvent{clearAt(newID("TSKA"), 2, newID("HDA9"))}
 		}, func(t *testing.T, err error) { wantFault(t, err, CodeUnknownReference) }},
 		{"held-on-another-task", func(t *testing.T, l *ledgerBuilder) []model.TypedEvent {
-			l.add(t, &model.TaskCreate{Provenance: provenance("lane-b"), ID: newID("TSKB"), Spec: taskSpec()})
+			l.add(t, &model.TaskCreate{Provenance: provenance("agent-b"), ID: newID("TSKB"), Spec: taskSpec()})
 			return []model.TypedEvent{clearAt(newID("TSKB"), 1, newID("HDA1"))}
 		}, func(t *testing.T, err error) { wantFault(t, err, CodeUnknownReference) }},
 		{"already-cleared", func(t *testing.T, l *ledgerBuilder) []model.TypedEvent {

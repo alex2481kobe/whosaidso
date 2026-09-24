@@ -21,7 +21,7 @@ func TestCheckAdmissionTakesCapturesBlob(t *testing.T) {
 	result, population := e2ePin(example, "example/stdout.json", "application/json"), e2ePin(example, "example/stdout.json", "application/json")
 	result.Selector, population.Selector = model.Selector{Kind: "json-pointer", Pointer: "/results"}, model.Selector{Kind: "json-pointer", Pointer: "/population"}
 	target := json.Number("0.05")
-	fix := &model.CriterionFix{Claim: criterion.Claim, CriterionID: cliID(900), Revision: 1, Author: model.Actor{ID: "lane"}, SourceRefs: []model.ArtifactRef{},
+	fix := &model.CriterionFix{Claim: criterion.Claim, CriterionID: cliID(900), Revision: 1, Author: model.Actor{ID: "agent"}, SourceRefs: []model.ArtifactRef{},
 		Expression: model.CriterionExpression{ResultSelector: result, Unit: "mm", Population: model.Population{Identity: "pose sweep", Selector: population, Denominator: "poses"},
 			Operator: model.Less, Target: model.Scalar{Type: "number", Number: &target}, Reducer: model.All},
 		Policy: model.EvaluationPolicy{Inclusion: "entire-criterion-family", Retry: "retain-all"}}

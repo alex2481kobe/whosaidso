@@ -18,7 +18,7 @@ func accepterChangeNew(t *testing.T) *gateVerifyFixture {
 	t.Helper()
 	root := t.TempDir()
 	t.Setenv(store.HomeEnv, filepath.Join(t.TempDir(), "machine"))
-	pvPut(t, root, "whosaidso.toml", []byte("id = 'datum/acceptance'\nledger = '.whosaidso/events'\n"))
+	pvPut(t, root, "whosaidso.toml", []byte("id = 'example/acceptance'\nledger = '.whosaidso/events'\n"))
 	if _, err := store.Bind(context.Background(), root, root); err != nil {
 		t.Fatal(err)
 	}
@@ -30,12 +30,12 @@ func accepterChangeNew(t *testing.T) *gateVerifyFixture {
 }
 
 // accepterChangeTask admits a task naming reviewer as its accepter, authored by lane.
-func accepterChangeTask(t *testing.T, f *gateVerifyFixture, lane, reviewer model.Actor) (model.RecordRef, model.TaskSpec) {
+func accepterChangeTask(t *testing.T, f *gateVerifyFixture, agent, reviewer model.Actor) (model.RecordRef, model.TaskSpec) {
 	t.Helper()
 	spec := reduceSpec(1)
 	spec.Accepter = &reviewer
 	create := &model.TaskCreate{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Spec: spec}
-	if _, err := f.admit(lane, lane, create); err != nil {
+	if _, err := f.admit(agent, agent, create); err != nil {
 		t.Fatalf("control: a task naming its accepter must admit: %v", err)
 	}
 	return model.RecordRef{Project: f.p.ID, RecordID: create.ID, Revision: 1}, spec
@@ -47,31 +47,31 @@ func accepterChangeAmend(ref model.RecordRef, author model.Actor, replacement mo
 }
 
 func TestAccepterAmendmentCannotRemoveTheAccepterThenClose(t *testing.T) {
-	lane, reviewer := model.Actor{ID: "lane-b-audit"}, model.Actor{ID: "lane-b-reviewer"}
+	agent, reviewer := model.Actor{ID: "agent-b-audit"}, model.Actor{ID: "agent-b-reviewer"}
 	for _, change := range []string{"remove", "replace"} {
 		t.Run(change, func(t *testing.T) {
 			f := accepterChangeNew(t)
-			ref, spec := accepterChangeTask(t, f, lane, reviewer)
+			ref, spec := accepterChangeTask(t, f, agent, reviewer)
 			replacement := spec
 			replacement.Accepter = nil
 			if change == "replace" {
-				replacement.Accepter = &lane
+				replacement.Accepter = &agent
 			}
-			if _, err := f.admit(lane, lane, accepterChangeAmend(ref, lane, replacement)); recCode(err) != reduce.CodeAccepterMismatch {
+			if _, err := f.admit(agent, agent, accepterChangeAmend(ref, agent, replacement)); recCode(err) != reduce.CodeAccepterMismatch {
 				t.Fatalf("expected an amendment by %s that would %s accepter %s to be refused (%s); got %v. Anyone who may amend could otherwise name no one and close the task",
-					lane.ID, change, reviewer.ID, reduce.CodeAccepterMismatch, err)
+					agent.ID, change, reviewer.ID, reduce.CodeAccepterMismatch, err)
 			}
 			// The accepter still stands: the lane cannot close the task either way.
 			withdraw := &model.TaskClose{Task: ref, Outcome: model.ClosureWithdrawn,
 				AcceptanceWitnessRefs: []model.AcceptanceWitness{}, DeliveryWitnessRefs: []model.ArtifactRef{}}
-			if _, err := f.admit(lane, lane, withdraw); recCode(err) != reduce.CodeAccepterMismatch {
-				t.Fatalf("expected the lane's closure of a task naming %s to be refused; got %v", reviewer.ID, err)
+			if _, err := f.admit(agent, agent, withdraw); recCode(err) != reduce.CodeAccepterMismatch {
+				t.Fatalf("expected the agent's closure of a task naming %s to be refused; got %v", reviewer.ID, err)
 			}
 			// Controls: another author may still amend what is not the accepter,
 			// and the accepter may hand the task over itself.
 			clearer := spec
 			clearer.Intent = "preserve the admitted task obligation, stated more clearly"
-			if _, err := f.admit(lane, lane, accepterChangeAmend(ref, lane, clearer)); err != nil {
+			if _, err := f.admit(agent, agent, accepterChangeAmend(ref, agent, clearer)); err != nil {
 				t.Fatalf("control: an amendment keeping the accepter must admit for any author: %v", err)
 			}
 			ref.Revision = 2
@@ -86,8 +86,8 @@ func TestAccepterAmendmentCannotRemoveTheAccepterThenClose(t *testing.T) {
 // accepter handed over, re-attributed to another packet author, is refused.
 func TestAccepterReplayRefusesAReattributedHandover(t *testing.T) {
 	f := accepterChangeNew(t)
-	lane, reviewer := model.Actor{ID: "lane-b-audit"}, model.Actor{ID: "lane-b-reviewer"}
-	ref, spec := accepterChangeTask(t, f, lane, reviewer)
+	agent, reviewer := model.Actor{ID: "agent-b-audit"}, model.Actor{ID: "agent-b-reviewer"}
+	ref, spec := accepterChangeTask(t, f, agent, reviewer)
 	replacement := spec
 	replacement.Accepter = nil
 	if _, err := f.admit(reviewer, reviewer, accepterChangeAmend(ref, reviewer, replacement)); err != nil {
@@ -108,12 +108,12 @@ func TestAccepterReplayRefusesAReattributedHandover(t *testing.T) {
 		}
 		if review, ok := e.(*model.ReviewAdmit); ok {
 			for packet := range review.Authors {
-				review.Authors[packet] = lane
+				review.Authors[packet] = agent
 			}
 			last.Events[i] = recEncode(t, review)
 		}
 	}
 	if _, err := reduce.Replay(prefix); recCode(err) != reduce.CodeAccepterMismatch {
-		t.Errorf("expected replay to refuse the accepter's removal by %s as admission would; got %v", lane.ID, err)
+		t.Errorf("expected replay to refuse the accepter's removal by %s as admission would; got %v", agent.ID, err)
 	}
 }

@@ -27,7 +27,7 @@ func TestCLIHomeRefusesAHomeMissingKeptArtifacts(t *testing.T) {
 	}
 	body := []byte("the owner's words, kept by admission in the artifact store")
 	proofWrite(t, root, "ruling.txt", string(body))
-	if _, errs, code := cliRun(t, root, sourceEvents(t, body, "ruling.txt"), "lane", "capture", "--admit", "--reason", "owner source", "--events", "-"); code != 0 {
+	if _, errs, code := cliRun(t, root, sourceEvents(t, body, "ruling.txt"), "agent", "capture", "--admit", "--reason", "owner source", "--events", "-"); code != 0 {
 		t.Fatalf("control: the source admits: %d %s", code, errs)
 	}
 	digest := string(model.HashBytes(body))

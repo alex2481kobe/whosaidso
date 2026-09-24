@@ -18,8 +18,8 @@ func configLedger(t *testing.T) *ledgerBuilder {
 	l := goodLedger(t)
 	instrument, claim := proofInstrument(), ref(newID("CMA1"), 1)
 	instrument.ConfigSurface = []string{"samples"}
-	l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("lane-a"), Spec: instrument},
-		&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("lane-a"), Spec: claimSpec()}, fixProofCriterion(claim))
+	l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("agent-a"), Spec: instrument},
+		&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("agent-a"), Spec: claimSpec()}, fixProofCriterion(claim))
 	return l
 }
 
@@ -95,7 +95,7 @@ func TestInvocationConfigNamesTheExactInstrumentRevision(t *testing.T) {
 		l := configLedger(t)
 		revised := proofInstrument()
 		revised.ConfigSurface = []string{"samples", "mode"}
-		l.add(t, &model.InstrumentRevise{Target: ref(newID("HNSS"), 1), Provenance: provenance("lane-a"), Replacement: revised})
+		l.add(t, &model.InstrumentRevise{Target: ref(newID("HNSS"), 1), Provenance: provenance("agent-a"), Replacement: revised})
 		atTwo := configEnvelope("RNC", "mode")
 		atTwo.InstrumentRef.Revision = 2
 		control := *l

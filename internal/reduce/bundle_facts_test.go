@@ -40,8 +40,8 @@ func sameBundleLedger(t *testing.T, order string) (*ledgerBuilder, Snapshot, mod
 	t.Helper()
 	l := goodLedger(t)
 	claim := ref(newID("CMA1"), 1)
-	l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("lane-a"), Spec: proofInstrument()},
-		&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("lane-a"), Spec: claimSpec()}, fixProofCriterion(claim))
+	l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("agent-a"), Spec: proofInstrument()},
+		&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("agent-a"), Spec: claimSpec()}, fixProofCriterion(claim))
 	before := mustReplay(t, l.out)
 	env := proofEnvelope(claim, newID("RNA"))
 	events := map[byte]model.TypedEvent{'s': &model.InvocationStart{Envelope: env}, 'e': sealProof(env, 0), 'p': admitProof(claim, env.InvocationID)}

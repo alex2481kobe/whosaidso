@@ -37,10 +37,10 @@ func samplePacket(t *testing.T, commandID ID) Packet {
 	t.Helper()
 	return Packet{
 		Version:       WireVersion,
-		Project:       "datum/datum",
+		Project:       "example/example",
 		CommandID:     commandID,
 		RequestDigest: HashBytes([]byte("authored input")),
-		Author:        Actor{ID: "lane-a"},
+		Author:        Actor{ID: "agent-a"},
 		CapturedAt:    testClock,
 		Events: []Event{
 			{Type: "task.create", Data: json.RawMessage(`{"intent":"build the wire boundary"}`)},
@@ -187,7 +187,7 @@ func TestSameActorNeverMatchesTwoUnknowns(t *testing.T) {
 	if !SameActor(Actor{ID: "coordinator"}, Actor{ID: "coordinator"}) {
 		t.Error("identical known ids are the same actor")
 	}
-	if SameActor(Actor{ID: "lane-a"}, Actor{ID: "lane-b"}) {
+	if SameActor(Actor{ID: "agent-a"}, Actor{ID: "agent-b"}) {
 		t.Error("different ids are different actors")
 	}
 }

@@ -280,7 +280,7 @@ func TestRevisionOrderProof(t *testing.T) {
 					if mode == "claim-with-new-context" {
 						revision, remaining = groups[0], groups[1]
 					}
-					if _, err := f.admit(w.lane, w.lane, revision...); err != nil {
+					if _, err := f.admit(w.agent, w.agent, revision...); err != nil {
 						t.Fatal(err)
 					}
 					groups, capture = [][]model.TypedEvent{remaining}, "0"
@@ -295,7 +295,7 @@ func TestRevisionOrderProof(t *testing.T) {
 						want = "invalid-transition"
 					}
 				}
-				revisionOrderProbe(f, w.lane, groups, capture, want, want)
+				revisionOrderProbe(f, w.agent, groups, capture, want, want)
 			})
 		}
 	}

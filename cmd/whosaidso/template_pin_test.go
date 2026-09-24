@@ -43,7 +43,7 @@ func TestPinsMatchRealBytesAndGitObjects(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(f.root, "notes", "raw.bin"), []byte{0, 1, 2, 0xff}, 0600); err != nil {
 		t.Fatal(err)
 	}
-	boundCapture(t, f.root, "blocker.hold", "--task", string(f.task), "--set", "reason=resume", "--set", `actor={"id":"lane"}`, "--set", "criterion=the fixture output exists")
+	boundCapture(t, f.root, "blocker.hold", "--task", string(f.task), "--set", "reason=resume", "--set", `actor={"id":"agent"}`, "--set", "criterion=the fixture output exists")
 	hold := string(openHold(t, boundSnapshot(t, f.root), f.task))
 
 	for file, media := range map[string]string{"out/result.json": "application/json", "notes/plain.txt": "text/plain", "notes/raw.bin": "application/octet-stream"} {
@@ -92,7 +92,7 @@ func TestPinsMatchRealBytesAndGitObjects(t *testing.T) {
 		{[]string{"claim.assert", "--pin", "provenance.source_refs[0]=tools/measure.sh@no-such-rev"}, 1},
 		{[]string{"claim.assert", "--pin", "provenance.source_refs[0]=out/result.json"}, 0},
 	} {
-		if _, errs, code := cliRun(t, f.root, nil, "lane", append([]string{"template"}, tc.args...)...); code != tc.code {
+		if _, errs, code := cliRun(t, f.root, nil, "agent", append([]string{"template"}, tc.args...)...); code != tc.code {
 			t.Errorf("%v: exit %d, want %d: %s", tc.args, code, tc.code, errs)
 		}
 	}

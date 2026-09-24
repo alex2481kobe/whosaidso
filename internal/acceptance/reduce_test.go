@@ -11,7 +11,7 @@ import (
 	"whosaidso/internal/reduce"
 )
 
-const reduceProject = model.ProjectID("datum/lane-e-reduce")
+const reduceProject = model.ProjectID("example/reduce")
 
 func reduceID(n int) model.ID {
 	return model.ID(fmt.Sprintf("00000000000000000000%06d", n))
@@ -288,7 +288,7 @@ func TestReducerReturnedTerminalCannotAddReconciliationDebtToAnotherSnapshot(t *
 	// worker's reviewed packet instead of an unattributed bundle. The assertion is unchanged.
 	captured := recWhen.Add(time.Hour)
 	first := reduceAdmitted(t, model.Bundle{},
-		reducePacket(t, 2101, "lane-e", captured, reduceCreate(1, reduceSpec(1))),
+		reducePacket(t, 2101, "agent-e", captured, reduceCreate(1, reduceSpec(1))),
 		reducePacket(t, 2102, "worker", captured,
 			&model.TaskStart{Task: reduceRef(1, 1), Actor: model.Actor{ID: "worker"}, AttemptID: reduceID(70)},
 			&model.AttemptTerminal{Task: reduceRef(1, 1), AttemptID: reduceID(70), Outcome: model.AttemptNoReading,
@@ -442,7 +442,7 @@ func TestReducerAttemptIDReuseCannotSilentlyReassignInvocationOwnership(t *testi
 	// the invocations carry the capture stamps replay freezes them against.
 	captured := recWhen.Add(time.Hour)
 	first := reduceAdmitted(t, model.Bundle{},
-		reducePacket(t, 2001, "lane-e", captured, reduceCreate(1, reduceSpec(1)), reduceCreate(2, reduceSpec(1))),
+		reducePacket(t, 2001, "agent-e", captured, reduceCreate(1, reduceSpec(1)), reduceCreate(2, reduceSpec(1))),
 		reducePacket(t, 2002, "worker-a", captured,
 			&model.TaskStart{Task: reduceRef(1, 1), Actor: model.Actor{ID: "worker-a"}, AttemptID: reduceID(70)}, reduceInvocation(70, 81)))
 	before := reduceReplay(t, first)

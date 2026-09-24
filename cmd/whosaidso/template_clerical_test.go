@@ -23,7 +23,7 @@ import (
 func TestTaskStartActorIsThePacketAuthor(t *testing.T) {
 	f := boundWorld(t)
 	data := boundPrint(t, f.root, "task.start", "--task", string(f.task))
-	if actor, ok := boundAt(data, "actor").(map[string]any); !ok || len(actor) != 1 || actor["id"] != "lane" {
+	if actor, ok := boundAt(data, "actor").(map[string]any); !ok || len(actor) != 1 || actor["id"] != "agent" {
 		t.Fatalf("task.start must fill actor with the packet author only: %v", boundAt(data, "actor"))
 	}
 	// Control: an unknown author fills nothing; the choice is still the author's.
@@ -33,7 +33,7 @@ func TestTaskStartActorIsThePacketAuthor(t *testing.T) {
 	}
 	// --set actor.id chooses the id member: unknown_reason goes, and the event
 	// captures (the strict decoder refuses an actor holding both members).
-	out, errs, code := cliRun(t, f.root, nil, "", "template", "task.start", "--task", string(f.task), "--set", "actor.id=lane", "--actor", "lane", "--capture")
+	out, errs, code := cliRun(t, f.root, nil, "", "template", "task.start", "--task", string(f.task), "--set", "actor.id=agent", "--actor", "agent", "--capture")
 	if code != 0 {
 		t.Fatalf("--set actor.id must choose the id member and capture: %d %s %s", code, out, errs)
 	}
@@ -46,8 +46,8 @@ func TestTaskStartActorIsThePacketAuthor(t *testing.T) {
 		t.Fatalf("the captured packet: %v", err)
 	}
 	var start model.TaskStart
-	if err := json.Unmarshal(packets[0].Packet.Events[0].Data, &start); err != nil || start.Actor != (model.Actor{ID: "lane"}) {
-		t.Fatalf("captured actor %+v (%v), want exactly id lane", start.Actor, err)
+	if err := json.Unmarshal(packets[0].Packet.Events[0].Data, &start); err != nil || start.Actor != (model.Actor{ID: "agent"}) {
+		t.Fatalf("captured actor %+v (%v), want exactly id agent", start.Actor, err)
 	}
 }
 
@@ -56,7 +56,7 @@ func TestTaskStartActorIsThePacketAuthor(t *testing.T) {
 // the gate.
 func TestSetChoosesAUnionMember(t *testing.T) {
 	f := boundWorld(t)
-	boundCapture(t, f.root, "blocker.hold", "--task", string(f.task), "--set", "reason=resume", "--set", "actor.id=lane", "--set", "criterion=the fixture output exists")
+	boundCapture(t, f.root, "blocker.hold", "--task", string(f.task), "--set", "reason=resume", "--set", "actor.id=agent", "--set", "criterion=the fixture output exists")
 	hold := openHold(t, boundSnapshot(t, f.root), f.task)
 	content := `{"sha256":"` + string(model.HashBytes([]byte(e2ePass))) + `","length":` + fmt.Sprint(len(e2ePass)) + `,"media_type":"application/json","locators":[{"path":"out/result.json"}]}`
 	// A member's own key sets the tag: content chooses kind content, pointer json-pointer.
@@ -77,8 +77,8 @@ func TestSetChoosesAUnionMember(t *testing.T) {
 	}
 	boundCapture(t, f.root, "blocker.clear", "--hold", string(hold), "--set", "resolving_witness.content="+content, "--set", "resolving_witness.selector.kind=whole")
 	// Two filled members: no choice is made for the author; both stay.
-	out, errs, code := cliRun(t, f.root, nil, "", "template", "task.start", "--task", string(f.task), "--set", "actor.id=lane", "--set", "actor.unknown_reason=not sure")
-	if code != 0 || !strings.Contains(out, `"id": "lane"`) || !strings.Contains(out, `"unknown_reason": "not sure"`) {
+	out, errs, code := cliRun(t, f.root, nil, "", "template", "task.start", "--task", string(f.task), "--set", "actor.id=agent", "--set", "actor.unknown_reason=not sure")
+	if code != 0 || !strings.Contains(out, `"id": "agent"`) || !strings.Contains(out, `"unknown_reason": "not sure"`) {
 		t.Fatalf("two filled members must both stay for the gate: %d %s %s", code, out, errs)
 	}
 }
@@ -99,11 +99,11 @@ func TestHandbackAndCloseNeedOnlyJudgment(t *testing.T) {
 	if data := boundPrint(t, f.root, append(close, "--set", "authority=null")...); boundAt(data, "authority") != nil {
 		t.Fatalf("--set authority=null must omit the key: %v", data)
 	}
-	if _, errs, code := cliRun(t, f.root, nil, "lane", "template", "task.close", "--set", "outcome=null"); code != 2 || !strings.Contains(errs, "omits only an optional key") {
+	if _, errs, code := cliRun(t, f.root, nil, "agent", "template", "task.close", "--set", "outcome=null"); code != 2 || !strings.Contains(errs, "omits only an optional key") {
 		t.Fatalf("null on a required key must be refused: %d %s", code, errs)
 	}
 	// An optional key the author began to fill is not silently dropped.
-	if _, errs, code := cliRun(t, f.root, nil, "lane", append(append([]string{"template"}, close...), "--set", "authority.actor.id=lane", "--capture")...); code != 1 || !strings.Contains(errs, "authority.source_ref") {
+	if _, errs, code := cliRun(t, f.root, nil, "agent", append(append([]string{"template"}, close...), "--set", "authority.actor.id=agent", "--capture")...); code != 1 || !strings.Contains(errs, "authority.source_ref") {
 		t.Fatalf("a half-filled authority must be refused, not omitted: %d %s", code, errs)
 	}
 	boundCapture(t, f.root, close...)
@@ -116,7 +116,7 @@ func TestHandbackAndCloseNeedOnlyJudgment(t *testing.T) {
 // array included; a criterion.fix past revision 1 creates no id.
 func TestCaptureNamesTheIDsItsEventsCreate(t *testing.T) {
 	root, data := cliFixture(t)
-	_, errs, code := cliRun(t, root, data, "lane", "capture")
+	_, errs, code := cliRun(t, root, data, "agent", "capture")
 	if code != 0 || !strings.Contains(errs, "new      task.create id = "+string(cliID(1))+"\n") ||
 		!strings.Contains(errs, "new      task.create spec.acceptance_criteria[0].id = "+string(cliID(2))+"\n") {
 		t.Fatalf("capture must name the task and criterion ids it creates: %d %q", code, errs)
@@ -126,14 +126,14 @@ func TestCaptureNamesTheIDsItsEventsCreate(t *testing.T) {
 		t.Fatalf("every acceptance criterion's id is named: %s", got)
 	}
 	f := boundWorld(t)
-	printed, _, code := cliRun(t, f.root, nil, "lane", "template", "criterion.fix", "--criterion", string(f.criterion), "--set", "source_refs=[]")
+	printed, _, code := cliRun(t, f.root, nil, "agent", "template", "criterion.fix", "--criterion", string(f.criterion), "--set", "source_refs=[]")
 	if code != 0 {
 		t.Fatal("control: the revision-2 criterion prints")
 	}
-	if _, errs, code := cliRun(t, f.root, []byte(printed), "lane", "capture"); code != 0 || strings.Contains(errs, "new ") {
+	if _, errs, code := cliRun(t, f.root, []byte(printed), "agent", "capture"); code != 0 || strings.Contains(errs, "new ") {
 		t.Fatalf("a later criterion revision reuses its id, so none is new: %d %q", code, errs)
 	}
-	printed, _, _ = cliRun(t, f.root, nil, "lane", "template", "criterion.fix", "--claim", string(f.claim))
+	printed, _, _ = cliRun(t, f.root, nil, "agent", "template", "criterion.fix", "--claim", string(f.claim))
 	tree, err := templateValue([]byte(printed))
 	if err != nil {
 		t.Fatal(err)

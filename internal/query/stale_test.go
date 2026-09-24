@@ -24,8 +24,8 @@ func staleWorld(t *testing.T) store.Project {
 	p := testProject(t)
 	readyControl(t, p)
 	appendEvents(t, p, 101, admitted(101,
-		&model.InstrumentDeclare{ID: testID(10), Provenance: prov("lane-a"), Spec: instrumentSpec(true)},
-		&model.ClaimAssert{ID: testID(21), Provenance: prov("lane-e"), Spec: claimSpec()}, criterionFix(21))...)
+		&model.InstrumentDeclare{ID: testID(10), Provenance: prov("agent-a"), Spec: instrumentSpec(true)},
+		&model.ClaimAssert{ID: testID(21), Provenance: prov("agent-e"), Spec: claimSpec()}, criterionFix(21))...)
 	appendEvents(t, p, 102, &model.TaskStart{Task: testRef(1, 1), AttemptID: testID(70), Actor: model.Actor{ID: "worker"}})
 	return p
 }

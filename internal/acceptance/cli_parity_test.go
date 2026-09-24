@@ -46,7 +46,7 @@ func cliParityNew(t *testing.T) *gateVerifyFixture {
 	root := t.TempDir()
 	t.Setenv(store.HomeEnv, filepath.Join(root, "machine"))
 	t.Setenv("WHOSAIDSO_ACTOR", "holder")
-	pvPut(t, root, "whosaidso.toml", []byte("id = 'datum/acceptance'\nledger = '.whosaidso/events'\n"))
+	pvPut(t, root, "whosaidso.toml", []byte("id = 'example/acceptance'\nledger = '.whosaidso/events'\n"))
 	if _, err := store.Bind(context.Background(), root, root); err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,7 @@ func TestCacheCannotForgeLedgerFact(t *testing.T) {
 func TestHomeConfigChangeCannotLoseAdmission(t *testing.T) {
 	f := cliParityNew(t)
 	f.control()
-	pvPut(t, f.p.Root, "whosaidso.toml", []byte("id = 'datum/acceptance'\nledger = '.relocated/events'\n"))
+	pvPut(t, f.p.Root, "whosaidso.toml", []byte("id = 'example/acceptance'\nledger = '.relocated/events'\n"))
 	c := f.claim(model.Actor{ID: "holder"})
 	b, err := f.admit(model.Actor{ID: "holder"}, model.Actor{ID: "holder"}, c)
 	if err != nil {

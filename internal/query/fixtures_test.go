@@ -14,7 +14,7 @@ import (
 	"whosaidso/internal/write"
 )
 
-const projectID = model.ProjectID("datum/query-tests")
+const projectID = model.ProjectID("example/query-tests")
 
 func testID(n int) model.ID { return model.ID(fmt.Sprintf("%026d", n)) }
 func testRef(n int, revision model.Revision) model.RecordRef {

@@ -11,7 +11,7 @@ import (
 )
 
 func TestAmendmentKeepsTheNamedAccepter(t *testing.T) {
-	owner, laneA := model.Actor{ID: "owner"}, model.Actor{ID: "lane-a"}
+	owner, agentA := model.Actor{ID: "owner"}, model.Actor{ID: "agent-a"}
 	for _, tc := range []struct {
 		name          string
 		before, after *model.Actor
@@ -19,25 +19,25 @@ func TestAmendmentKeepsTheNamedAccepter(t *testing.T) {
 		author        string // "" leaves the amendment's packet author unknown
 		code          string
 	}{
-		{"control: another author keeps the accepter", &owner, &owner, "a clearer intent", "lane-a", ""},
+		{"control: another author keeps the accepter", &owner, &owner, "a clearer intent", "agent-a", ""},
 		{"control: the accepter removes itself", &owner, nil, "", "owner", ""},
-		{"control: the accepter hands over", &owner, &laneA, "", "owner", ""},
-		{"control: any author names one where none was", nil, &laneA, "", "lane-a", ""},
-		{"another author removes the accepter", &owner, nil, "", "lane-a", CodeAccepterMismatch},
-		{"another author replaces the accepter", &owner, &laneA, "", "lane-a", CodeAccepterMismatch},
+		{"control: the accepter hands over", &owner, &agentA, "", "owner", ""},
+		{"control: any author names one where none was", nil, &agentA, "", "agent-a", ""},
+		{"another author removes the accepter", &owner, nil, "", "agent-a", CodeAccepterMismatch},
+		{"another author replaces the accepter", &owner, &agentA, "", "agent-a", CodeAccepterMismatch},
 		{"an unknown author removes the accepter", &owner, nil, "", "", CodeAccepterMismatch},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			spec := taskSpec()
 			spec.Accepter = tc.before
 			l := newLedger()
-			l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: spec})
+			l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: spec})
 			next := taskSpec()
 			next.Accepter = tc.after
 			if tc.intent != "" {
 				next.Intent = tc.intent
 			}
-			amend := &model.TaskAmend{Provenance: provenance("lane-a"), Target: ref(newID("TSKA"), 1), Replacement: next}
+			amend := &model.TaskAmend{Provenance: provenance("agent-a"), Target: ref(newID("TSKA"), 1), Replacement: next}
 			l.add(t, authored(l.seq+1, []model.TypedEvent{amend}, tc.author)...)
 			wantBoth(t, l, tc.code)
 		})
@@ -47,7 +47,7 @@ func TestAmendmentKeepsTheNamedAccepter(t *testing.T) {
 	spec.Accepter = &owner
 	l := newLedger()
 	l.bare = true
-	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: spec})
-	l.add(t, &model.TaskAmend{Provenance: provenance("lane-a"), Target: ref(newID("TSKA"), 1), Replacement: taskSpec()})
+	l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: spec})
+	l.add(t, &model.TaskAmend{Provenance: provenance("agent-a"), Target: ref(newID("TSKA"), 1), Replacement: taskSpec()})
 	wantBoth(t, l, CodeAccepterMismatch)
 }

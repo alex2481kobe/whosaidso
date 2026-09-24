@@ -57,7 +57,7 @@ func procWait(t *testing.T, ready func() bool) {
 // result. The lookup must survive loss of the producer's machine-local inbox.
 func TestStoreRetrySurvivesIntakeLoss(t *testing.T) {
 	w := flowNew(t)
-	args := procAdmission(w, w.capture(flowLane, procClaim(w)))
+	args := procAdmission(w, w.capture(flowAgent, procClaim(w)))
 	want, err := w.cli(nil, args...)
 	if err != nil {
 		t.Fatalf("control: initial admission: %v", err)
@@ -93,7 +93,7 @@ func TestStoreRetrySurvivesIntakeLoss(t *testing.T) {
 // including the admission lock, not merely the spelling in whosaidso.toml.
 func TestStoreLockCannotCreateOutsideRoot(t *testing.T) {
 	w := flowNew(t)
-	w.mustAdmit(flowLane, procClaim(w)) // passing ordinary-lock control
+	w.mustAdmit(flowAgent, procClaim(w)) // passing ordinary-lock control
 	before := w.ledger()
 	lock := filepath.Join(w.root, ".whosaidso/events/.lock")
 	if err := os.Remove(lock); err != nil {
@@ -103,7 +103,7 @@ func TestStoreLockCannotCreateOutsideRoot(t *testing.T) {
 	if err := os.Symlink(outside, lock); err != nil {
 		t.Fatal(err)
 	}
-	args := procAdmission(w, w.capture(flowLane, procClaim(w)))
+	args := procAdmission(w, w.capture(flowAgent, procClaim(w)))
 	// ReadDir's dotfile omission is intentional; do not follow this dangling
 	// lock through flowWorld.ledger while establishing the pre-admission bytes.
 	_, err := w.cli(nil, args...)
@@ -138,7 +138,7 @@ func TestStoreConcurrentProcesses(t *testing.T) {
 		}
 		packet := w.id()
 		// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
-		capture := []string{"capture", "--json", "--actor", flowLane, "--command-id", string(packet), "--events", "-"}
+		capture := []string{"capture", "--json", "--actor", flowAgent, "--command-id", string(packet), "--events", "-"}
 		admit := procAdmission(w, packet)
 		go func() {
 			<-gate
@@ -223,10 +223,10 @@ func TestStoreKilledAdmissionAndNestedGit(t *testing.T) {
 	pin := pvPin([]byte(`{"scope":"inside"}`), "evidence.json")
 	pin.Kind, pin.Git = "git", &model.GitPin{ObjectFormat: git("rev-parse", "--show-object-format"), Commit: git("rev-parse", "HEAD"), Path: "evidence.json"}
 	claim.Provenance.SourceRefs = []model.ArtifactRef{pin}
-	w.mustAdmit(flowLane, claim)
+	w.mustAdmit(flowAgent, claim)
 	before := w.ledger()
 	claim.ID = w.id()
-	args := procAdmission(w, w.capture(flowLane, claim))
+	args := procAdmission(w, w.capture(flowAgent, claim))
 	shim := t.TempDir()
 	realGit, err := exec.LookPath("git")
 	if err != nil {
@@ -277,7 +277,7 @@ func TestStoreKilledAdmissionAndNestedGit(t *testing.T) {
 func TestStoreKilledAcknowledgement(t *testing.T) {
 	w := flowNew(t)
 	claim := procClaim(w)
-	args := procAdmission(w, w.capture(flowLane, claim))
+	args := procAdmission(w, w.capture(flowAgent, claim))
 	r, output, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)

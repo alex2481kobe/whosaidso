@@ -122,7 +122,7 @@ func TestContinueShowsEveryAmendmentOfThePlanWithItsReview(t *testing.T) {
 		changes []string
 	}{
 		{2, first, "item two leaves the plan", []string{
-			`removed prerequisites[` + string(testID(2)) + `] {"kind":"task-success","target":{"project":"datum/query-tests","record_id":"` + string(testID(2)) + `","revision":1},"waiver_policy":"forbid"}`}},
+			`removed prerequisites[` + string(testID(2)) + `] {"kind":"task-success","target":{"project":"example/query-tests","record_id":"` + string(testID(2)) + `","revision":1},"waiver_policy":"forbid"}`}},
 		{3, second, "the plan follows item three", []string{
 			`changed acceptance_criteria[` + string(testID(90)) + `].criterion "text and JSON agree" "text and JSON agree exactly"`,
 			`changed acceptance_criteria[` + string(testID(90)) + `].revision 1 2`,
@@ -131,7 +131,7 @@ func TestContinueShowsEveryAmendmentOfThePlanWithItsReview(t *testing.T) {
 			`changed intent "Build U09 of WhoSaidSo: the first usable read slice" "Build U09, amended"`,
 			`added non_goals "rewrite the ledger"`,
 			`changed prerequisites[` + string(testID(3)) + `].target.revision 1 2`,
-			`added prerequisites[` + string(testID(4)) + `] {"kind":"task-success","target":{"project":"datum/query-tests","record_id":"` + string(testID(4)) + `","revision":1},"waiver_policy":"forbid"}`}},
+			`added prerequisites[` + string(testID(4)) + `] {"kind":"task-success","target":{"project":"example/query-tests","record_id":"` + string(testID(4)) + `","revision":1},"waiver_policy":"forbid"}`}},
 		{4, third, "anyone may accept", []string{`removed accepter.id "owner"`}},
 	}
 	for i, w := range want {

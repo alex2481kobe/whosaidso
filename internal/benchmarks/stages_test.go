@@ -192,7 +192,7 @@ func BenchmarkProofWithoutRetainedIntake(b *testing.B) {
 	f := getFixture(b, 10000)
 	dir, err := store.IntakeDir(f.Project)
 	must(b, err)
-	saved := dir + "-astraeff-saved"
+	saved := dir + "-bench-saved"
 	must(b, os.Rename(dir, saved))
 	defer func() { must(b, os.RemoveAll(dir)); must(b, os.Rename(saved, dir)) }()
 	benchAdmit(b, f, true)

@@ -44,13 +44,13 @@ func TestTheFourStatuses(t *testing.T) {
 	}{
 		{"created and unobstructed", StatusReady, func(t *testing.T) *ledgerBuilder {
 			l := newLedger()
-			l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+			l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 			return l
 		}, newID("TSKA")},
 
 		{"held open", StatusBlocked, func(t *testing.T) *ledgerBuilder {
 			l := newLedger()
-			l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+			l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 			l.add(t, &model.BlockerHold{
 				Task: ref(newID("TSKA"), 1), BlockerID: newID("HDA1"),
 				Reason: model.BlockerPrerequisite, Actor: model.Actor{ID: "owner"},
@@ -65,7 +65,7 @@ func TestTheFourStatuses(t *testing.T) {
 
 		{"closed cancelled needs no witness", StatusClosed, func(t *testing.T) *ledgerBuilder {
 			l := newLedger()
-			l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+			l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 			l.add(t, &model.TaskClose{
 				Task: ref(newID("TSKA"), 1), Outcome: model.ClosureCancelled,
 				Authority:             closeAuthority(),
@@ -92,7 +92,7 @@ func TestTheFourStatuses(t *testing.T) {
 func TestClosedIsNeverReadAlone(t *testing.T) {
 	for _, outcome := range []model.ClosureOutcome{model.ClosureCancelled, model.ClosureWithdrawn, model.ClosureWaived} {
 		l := newLedger()
-		l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+		l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 		l.add(t, &model.TaskClose{
 			Task: ref(newID("TSKA"), 1), Outcome: outcome,
 			Authority:             closeAuthority(),
@@ -117,7 +117,7 @@ func blockedOverReadyLedger(t *testing.T) *ledgerBuilder {
 	t.Helper()
 	l := closedTaskLedger(t) // TSKA closes successfully, so the dependency is TRUE
 	l.add(t, &model.TaskCreate{
-		Provenance: provenance("lane-b"), ID: newID("TSKB"),
+		Provenance: provenance("agent-b"), ID: newID("TSKB"),
 		Spec: taskSpec(
 			withIntent("dispatchable except for what is owed"),
 			withPrerequisite("task-success", ref(newID("TSKA"), 1), "forbid", nil),
@@ -141,7 +141,7 @@ func TestMustProduceBlocked(t *testing.T) {
 	}
 
 	l := blockedOverReadyLedger(t)
-	l.add(t, &model.TaskStart{Task: ref(newID("TSKB"), 1), Actor: model.Actor{ID: "lane-b"}, AttemptID: newID("ATTB")})
+	l.add(t, &model.TaskStart{Task: ref(newID("TSKB"), 1), Actor: model.Actor{ID: "agent-b"}, AttemptID: newID("ATTB")})
 	l.add(t, &model.AttemptTerminal{
 		Task: ref(newID("TSKB"), 1), AttemptID: newID("ATTB"),
 		Outcome:            model.AttemptRunnerDied,
@@ -174,7 +174,7 @@ func TestMustProduceBlocked(t *testing.T) {
 // rule is a real gate and not a permanent block.
 func TestReconciliationIsDischargedByAnAdmittedClear(t *testing.T) {
 	l := blockedOverReadyLedger(t)
-	l.add(t, &model.TaskStart{Task: ref(newID("TSKB"), 1), Actor: model.Actor{ID: "lane-b"}, AttemptID: newID("ATTB")})
+	l.add(t, &model.TaskStart{Task: ref(newID("TSKB"), 1), Actor: model.Actor{ID: "agent-b"}, AttemptID: newID("ATTB")})
 	l.add(t, &model.AttemptTerminal{
 		Task: ref(newID("TSKB"), 1), AttemptID: newID("ATTB"),
 		Outcome: model.AttemptRunnerDied, Reason: "the observer died", NextAction: "reconcile",
@@ -213,7 +213,7 @@ func TestAnOpenHoldOfAnyReasonBlocks(t *testing.T) {
 	for _, reason := range reasons {
 		t.Run(string(reason), func(t *testing.T) {
 			l := newLedger()
-			l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+			l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 			if p := projectTask(t, l, newID("TSKA")); p.Status != StatusReady {
 				t.Fatalf("control: status = %q, want READY", p.Status)
 			}
@@ -249,15 +249,15 @@ func TestAnOpenHoldOfAnyReasonBlocks(t *testing.T) {
 
 func TestMultipleAttemptsAreAllRetained(t *testing.T) {
 	l := newLedger()
-	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
-	l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "lane-a"}, AttemptID: newID("ATTA")})
+	l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
+	l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID("ATTA")})
 	l.add(t, &model.AttemptTerminal{
 		Task: ref(newID("TSKA"), 1), AttemptID: newID("ATTA"),
 		Outcome: model.AttemptHarnessBroken, Reason: "the fixture harness does not build",
 		NextAction: "repair the harness and retry", DeliveryRefs: []model.ArtifactRef{},
 	})
 	// A second start is legitimate once the first attempt has its receipt.
-	l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "lane-a"}, AttemptID: newID("ATTB")})
+	l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID("ATTB")})
 
 	p := projectTask(t, l, newID("TSKA"))
 	if p.Status != StatusInFlight {
@@ -283,9 +283,9 @@ func TestMultipleAttemptsAreAllRetained(t *testing.T) {
 func TestTakeoverDoesNotEraseTheOldAttempt(t *testing.T) {
 	l := goodLedger(t) // TSKA with live attempt ATTA held by lane-a
 	l.add(t, &model.TaskTakeover{
-		Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "lane-b"},
+		Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-b"},
 		AttemptID: newID("ATTB"), PriorAttemptID: newID("ATTA"),
-		StoppedConfirmationRef: blobRef("lane-a-stopped"),
+		StoppedConfirmationRef: blobRef("agent-a-stopped"),
 	})
 
 	p := projectTask(t, l, newID("TSKA"))
@@ -303,7 +303,7 @@ func TestTakeoverDoesNotEraseTheOldAttempt(t *testing.T) {
 		t.Fatalf("live attempts = %d, want both the abandoned and the new one visible", len(p.LiveAttempts))
 	}
 	taken := p.Attempts[1]
-	if !taken.Takeover || taken.PriorAttempt != newID("ATTA") || taken.Actor.ID != "lane-b" {
+	if !taken.Takeover || taken.PriorAttempt != newID("ATTA") || taken.Actor.ID != "agent-b" {
 		t.Fatalf("takeover attempt = %+v", taken)
 	}
 }
@@ -318,11 +318,11 @@ func TestASecondStartOverALiveAttemptIsRefused(t *testing.T) {
 		Outcome: model.AttemptStopped, Reason: "stopped cleanly", NextAction: "restart",
 		DeliveryRefs: []model.ArtifactRef{},
 	})
-	control.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "lane-b"}, AttemptID: newID("ATTB")})
+	control.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-b"}, AttemptID: newID("ATTB")})
 	mustReplay(t, control.bundles())
 
 	l := goodLedger(t)
-	l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "lane-b"}, AttemptID: newID("ATTB")})
+	l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-b"}, AttemptID: newID("ATTB")})
 	_, err := Replay(l.bundles())
 	wantFault(t, err, CodeInvalidTransition)
 }
@@ -334,8 +334,8 @@ func TestASecondStartOverALiveAttemptIsRefused(t *testing.T) {
 // CLOSED here is a task nobody ever accepts.
 func TestTerminalSuccessWithoutClosureIsAwaitingAcceptance(t *testing.T) {
 	l := newLedger()
-	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
-	l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "lane-a"}, AttemptID: newID("ATTA")})
+	l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
+	l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID("ATTA")})
 	l.add(t, &model.AttemptTerminal{
 		Task: ref(newID("TSKA"), 1), AttemptID: newID("ATTA"),
 		Outcome: model.AttemptSuccess, Reason: "the unit is built and checked",
@@ -372,8 +372,8 @@ func TestHonestNonSuccessStopsTheAttemptWithoutOwingAcceptance(t *testing.T) {
 	for _, outcome := range outcomes {
 		t.Run(string(outcome), func(t *testing.T) {
 			l := newLedger()
-			l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
-			l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "lane-a"}, AttemptID: newID("ATTA")})
+			l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
+			l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID("ATTA")})
 			l.add(t, &model.AttemptTerminal{
 				Task: ref(newID("TSKA"), 1), AttemptID: newID("ATTA"),
 				Outcome: outcome, Reason: "an honest stop with no measurement invented",
@@ -392,8 +392,8 @@ func TestHonestNonSuccessStopsTheAttemptWithoutOwingAcceptance(t *testing.T) {
 // on the task, because a commit is not the task's to make.
 func TestCommitsDeniedIsCarriedNotHidden(t *testing.T) {
 	l := newLedger()
-	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
-	l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "lane-a"}, AttemptID: newID("ATTA")})
+	l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
+	l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID("ATTA")})
 	l.add(t, &model.AttemptTerminal{
 		Task: ref(newID("TSKA"), 1), AttemptID: newID("ATTA"),
 		Outcome: model.AttemptStopped, Reason: "the durable ledger is written, the commit is not",
@@ -414,14 +414,14 @@ func TestCommitsDeniedIsCarriedNotHidden(t *testing.T) {
 func TestStaleAcceptanceWitnessDoesNotClose(t *testing.T) {
 	build := func(witnessRevision model.Revision) *ledgerBuilder {
 		l := newLedger()
-		l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+		l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 		l.add(t, &model.TaskAmend{
 			Provenance: provenance("coordinator"), Target: ref(newID("TSKA"), 1),
 			Replacement: taskSpec(withCriteria(model.AcceptanceCriterion{
 				ID: newID("ACCA"), Revision: 2, Criterion: "the acceptance bar was raised",
 			})),
 		})
-		l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 2), Actor: model.Actor{ID: "lane-a"}, AttemptID: newID("ATTA")})
+		l.add(t, &model.TaskStart{Task: ref(newID("TSKA"), 2), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID("ATTA")})
 		l.add(t, &model.AttemptTerminal{
 			Task: ref(newID("TSKA"), 2), AttemptID: newID("ATTA"),
 			Outcome: model.AttemptSuccess, Reason: "done", NextAction: "accept",
@@ -465,7 +465,7 @@ func TestSuccessClosureNeedsADeliveryWitness(t *testing.T) {
 	}
 
 	l := newLedger()
-	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+	l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 	l.add(t, &model.TaskClose{
 		Task: ref(newID("TSKA"), 1), Outcome: model.ClosureSuccess,
 		Authority: closeAuthority(),
@@ -515,7 +515,7 @@ func TestDependencyRequiresCurrentAndRequiredRevisionWitnesses(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			l := newLedger()
-			l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+			l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 			l.add(t, &model.TaskAmend{
 				Provenance: provenance("coordinator"), Target: ref(newID("TSKA"), 1),
 				Replacement: taskSpec(withCriteria(model.AcceptanceCriterion{
@@ -530,7 +530,7 @@ func TestDependencyRequiresCurrentAndRequiredRevisionWitnesses(t *testing.T) {
 				})
 			}
 			l.add(t, closure, &model.TaskCreate{
-				Provenance: provenance("lane-b"), ID: newID("TSKB"),
+				Provenance: provenance("agent-b"), ID: newID("TSKB"),
 				Spec: taskSpec(withPrerequisite("task-success", ref(newID("TSKA"), tc.required), "forbid", nil)),
 			})
 			s := mustReplay(t, l.bundles())
@@ -550,13 +550,13 @@ func TestDependencyRequiresCurrentAndRequiredRevisionWitnesses(t *testing.T) {
 func TestDependencyRuleRejectsEveryNonSuccessClosure(t *testing.T) {
 	build := func(outcome model.ClosureOutcome, witnesses []model.AcceptanceWitness, delivery []model.ArtifactRef) *ledgerBuilder {
 		l := newLedger()
-		l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+		l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 		l.add(t, &model.TaskClose{
 			Task: ref(newID("TSKA"), 1), Outcome: outcome,
 			Authority: closeAuthority(), AcceptanceWitnessRefs: witnesses, DeliveryWitnessRefs: delivery,
 		})
 		l.add(t, &model.TaskCreate{
-			Provenance: provenance("lane-b"), ID: newID("TSKB"),
+			Provenance: provenance("agent-b"), ID: newID("TSKB"),
 			Spec: taskSpec(withPrerequisite("task-success", ref(newID("TSKA"), 1), "forbid", nil)),
 		})
 		return l
@@ -595,27 +595,27 @@ func TestUnresolvedDependenciesAreUnknownNeverTrue(t *testing.T) {
 		{"cross-project target", func(t *testing.T) *ledgerBuilder {
 			l := newLedger()
 			l.add(t, &model.TaskCreate{
-				Provenance: provenance("lane-b"), ID: newID("TSKB"),
+				Provenance: provenance("agent-b"), ID: newID("TSKB"),
 				Spec: taskSpec(withPrerequisite("task-success",
-					model.RecordRef{Project: "datum/other", RecordID: newID("TSKZ"), Revision: 1}, "forbid", nil)),
+					model.RecordRef{Project: "example/other", RecordID: newID("TSKZ"), Revision: 1}, "forbid", nil)),
 			})
 			return l
 		}},
 		{"cross-project claim proof", func(t *testing.T) *ledgerBuilder {
 			l := newLedger()
 			l.add(t, &model.TaskCreate{
-				Provenance: provenance("lane-b"), ID: newID("TSKB"),
+				Provenance: provenance("agent-b"), ID: newID("TSKB"),
 				Spec: taskSpec(withPrerequisite("claim-proof",
-					model.RecordRef{Project: "datum/other", RecordID: newID("CMA1"), Revision: 1}, "forbid", nil)),
+					model.RecordRef{Project: "example/other", RecordID: newID("CMA1"), Revision: 1}, "forbid", nil)),
 			})
 			return l
 		}},
 		{"cross-project decision approval", func(t *testing.T) *ledgerBuilder {
 			l := newLedger()
 			l.add(t, &model.TaskCreate{
-				Provenance: provenance("lane-b"), ID: newID("TSKB"),
+				Provenance: provenance("agent-b"), ID: newID("TSKB"),
 				Spec: taskSpec(withPrerequisite("decision-approved",
-					model.RecordRef{Project: "datum/other", RecordID: newID("DCS1"), Revision: 1}, "forbid", nil)),
+					model.RecordRef{Project: "example/other", RecordID: newID("DCS1"), Revision: 1}, "forbid", nil)),
 			})
 			return l
 		}},
@@ -633,7 +633,7 @@ func TestUnresolvedDependenciesAreUnknownNeverTrue(t *testing.T) {
 			if p.Prerequisites[0].Detail == "" {
 				t.Fatal("UNKNOWN carries no stated reason")
 			}
-			want := "project datum/other's ledger is not read here"
+			want := "project example/other's ledger is not read here"
 			if p.Prerequisites[0].Detail != want {
 				t.Fatalf("detail = %q, want %q", p.Prerequisites[0].Detail, want)
 			}
@@ -646,7 +646,7 @@ func TestUnresolvedDependenciesAreUnknownNeverTrue(t *testing.T) {
 
 func TestAnEmptyPrerequisiteSetIsVacuouslyTrue(t *testing.T) {
 	l := newLedger()
-	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+	l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 	p := projectTask(t, l, newID("TSKA"))
 	if len(p.Prerequisites) != 0 {
 		t.Fatalf("fixture has %d prerequisites", len(p.Prerequisites))
@@ -666,7 +666,7 @@ func TestWaiverCountsOnlyWhereTheConsumerPermitsIt(t *testing.T) {
 	build := func(policy string, auth *model.Authority) *ledgerBuilder {
 		l := newLedger()
 		// TSKA is closed CANCELLED, so the dependency is definitely FALSE.
-		l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+		l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 		l.add(t, &model.TaskClose{
 			Task: ref(newID("TSKA"), 1), Outcome: model.ClosureCancelled,
 			Authority:             closeAuthority(),
@@ -674,7 +674,7 @@ func TestWaiverCountsOnlyWhereTheConsumerPermitsIt(t *testing.T) {
 			DeliveryWitnessRefs:   []model.ArtifactRef{},
 		})
 		l.add(t, &model.TaskCreate{
-			Provenance: provenance("lane-b"), ID: newID("TSKB"),
+			Provenance: provenance("agent-b"), ID: newID("TSKB"),
 			Spec: taskSpec(withPrerequisite("task-success", ref(newID("TSKA"), 1), policy, auth)),
 		})
 		return l
@@ -709,7 +709,7 @@ func TestWaiverCountsOnlyWhereTheConsumerPermitsIt(t *testing.T) {
 func TestAWaiverDoesNotWaiveAnyoneElsesDependency(t *testing.T) {
 	auth := rulingAuthority("owner")
 	l := newLedger()
-	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
+	l.add(t, &model.TaskCreate{Provenance: provenance("agent-a"), ID: newID("TSKA"), Spec: taskSpec()})
 	l.add(t, &model.TaskClose{
 		Task: ref(newID("TSKA"), 1), Outcome: model.ClosureCancelled,
 		Authority:             closeAuthority(),
@@ -717,11 +717,11 @@ func TestAWaiverDoesNotWaiveAnyoneElsesDependency(t *testing.T) {
 		DeliveryWitnessRefs:   []model.ArtifactRef{},
 	})
 	l.add(t, &model.TaskCreate{
-		Provenance: provenance("lane-b"), ID: newID("TSKB"),
+		Provenance: provenance("agent-b"), ID: newID("TSKB"),
 		Spec: taskSpec(withPrerequisite("task-success", ref(newID("TSKA"), 1), "allow-with-authority", &auth)),
 	})
 	l.add(t, &model.TaskCreate{
-		Provenance: provenance("lane-c"), ID: newID("TSKC"),
+		Provenance: provenance("agent-c"), ID: newID("TSKC"),
 		Spec: taskSpec(withPrerequisite("task-success", ref(newID("TSKA"), 1), "forbid", nil)),
 	})
 

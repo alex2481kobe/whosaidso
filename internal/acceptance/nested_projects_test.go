@@ -110,7 +110,7 @@ func (m *nestMachine) admit(dir string, events ...model.TypedEvent) error {
 	if err != nil {
 		m.t.Fatal(err)
 	}
-	out, _, err := m.cli(dir, nil, body, "capture", "--json", "--actor", flowLane, "--command-id", string(m.id()), "--events", "-")
+	out, _, err := m.cli(dir, nil, body, "capture", "--json", "--actor", flowAgent, "--command-id", string(m.id()), "--events", "-")
 	if err != nil {
 		m.t.Fatalf("control: capture writes intake: %v", err)
 	}
@@ -195,7 +195,7 @@ func nestTaskEvent(m *nestMachine, project model.ProjectID, intent string, prere
 	}
 	spec := model.TaskSpec{Intent: intent, Subject: "the nested fixture", Scope: nestScope, NonGoals: []string{"production writes"},
 		AcceptanceCriteria: []model.AcceptanceCriterion{{ID: m.id(), Revision: 1, Criterion: "the fixture file is delivered"}},
-		ContextRefs:        []model.RecordRef{}, ConstraintRefs: []model.RecordRef{}, Prerequisites: prereqs, NextActor: model.Actor{ID: flowLane}}
+		ContextRefs:        []model.RecordRef{}, ConstraintRefs: []model.RecordRef{}, Prerequisites: prereqs, NextActor: model.Actor{ID: flowAgent}}
 	create := &model.TaskCreate{ID: m.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Spec: spec}
 	return create, model.RecordRef{Project: project, RecordID: create.ID, Revision: 1}
 }
@@ -222,8 +222,8 @@ func (m *nestMachine) closedTask(dir string, project model.ProjectID, witness mo
 	create, ref := nestTaskEvent(m, project, "deliver the pinned file")
 	m.mustAdmit(dir, create)
 	attempt := m.id()
-	m.mustAdmit(dir, &model.TaskStart{Task: ref, Actor: model.Actor{ID: flowLane}, AttemptID: attempt})
-	out := m.must(dir, "handback", "--json", "--command-id", string(m.id()), "--actor", flowLane, "--attempt-id", string(attempt),
+	m.mustAdmit(dir, &model.TaskStart{Task: ref, Actor: model.Actor{ID: flowAgent}, AttemptID: attempt})
+	out := m.must(dir, "handback", "--json", "--command-id", string(m.id()), "--actor", flowAgent, "--attempt-id", string(attempt),
 		"--outcome", "success", "--reason", "the file is committed", "--next-action", "accept it")
 	if err := m.review(dir, flowPacket(m.t, []byte(out))); err != nil {
 		m.t.Fatalf("control: the success receipt admits: %v", err)
@@ -350,7 +350,7 @@ func (m *nestMachine) resolves(dir string, pins []model.ArtifactRef) {
 		if err != nil {
 			m.t.Fatal(err)
 		}
-		if out, _, err := m.cli(dir, nil, body, "check", "admission", "--actor", flowLane, "--events", "-"); err != nil {
+		if out, _, err := m.cli(dir, nil, body, "check", "admission", "--actor", flowAgent, "--events", "-"); err != nil {
 			described, _ := json.Marshal(pin)
 			m.t.Errorf("pin %s no longer resolves from %s: %v\n%s", described, dir, err, out)
 		}
@@ -752,7 +752,7 @@ func TestNestedMoveKeepsCitedArtifacts(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			out, _, err := m.cli(a.wtFoo, nil, raw, "capture", "--json", "--actor", flowLane, "--command-id", string(m.id()), "--blob", outside, "--events", "-")
+			out, _, err := m.cli(a.wtFoo, nil, raw, "capture", "--json", "--actor", flowAgent, "--command-id", string(m.id()), "--blob", outside, "--events", "-")
 			if err != nil {
 				t.Fatalf("control: %v", err)
 			}

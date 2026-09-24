@@ -77,7 +77,7 @@ func TestDecisionDisposeRecordsTheRulingAndItsRealAuthor(t *testing.T) {
 				t.Fatalf("packet author missing: %+v", r.Authors)
 			}
 			for _, p := range r.Packets {
-				if author := r.Authors[p.CommandID]; author.ID != "lane-c2" {
+				if author := r.Authors[p.CommandID]; author.ID != "agent-c2" {
 					t.Fatalf("packet author rewritten or missing: %+v", author)
 				}
 				// C39: the comparison is computed from the recorded author.

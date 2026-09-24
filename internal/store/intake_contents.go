@@ -47,7 +47,7 @@ func encodeProjectID(id model.ProjectID) (string, error) {
 	}
 	// Lowercase hex, not base64. base64 IS injective over byte strings, which is
 	// a true measurement of the wrong property: the inbox is a filesystem PATH,
-	// and macOS APFS folds case, so "datum/aaa" and "datum/aaG" encode to names
+	// and macOS APFS folds case, so "examples/aaa" and "examples/aaG" encode to names
 	// differing only in case and become ONE directory. Both projects' packets
 	// land together and then neither can read its own. Found by lane E.
 	//

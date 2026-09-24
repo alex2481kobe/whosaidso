@@ -94,9 +94,9 @@ func TestSourceCaptureCannotBypassDurability(t *testing.T) {
 			body := []byte(`{"message":"words that must survive capture"}`)
 			pin := pvPin(body, "missing-source.json")
 			source := &model.SourceIntake{SourceID: w.id(), OriginalDigest: pin.Content.SHA256, Length: pin.Content.Length,
-				SourceRef: pin, Speaker: w.lane, Referents: []model.RecordRef{w.claim}}
+				SourceRef: pin, Speaker: w.agent, Referents: []model.RecordRef{w.claim}}
 			events := []model.Event{recEncode(t, source)}
-			r := store.IntakeRequest{CommandID: w.id(), Author: w.lane, Events: events}
+			r := store.IntakeRequest{CommandID: w.id(), Author: w.agent, Events: events}
 			if route == "control" {
 				r.Blobs = []io.Reader{bytes.NewReader(body)}
 			} else if route == "build-events" {
@@ -135,18 +135,18 @@ func TestTakeoverCannotBypassReady(t *testing.T) {
 				if err := w.review("accepted", packet); err != nil {
 					t.Fatalf("control: terminate the prior attempt: %v", err)
 				}
-				w.mustAdmit(flowLane, &model.BlockerHold{Task: task.ref, BlockerID: w.id(), Reason: model.BlockerAwaitingAcceptance,
-					Actor: model.Actor{ID: flowLane}, Criterion: "owner accepts before any further work"})
-				start := &model.TaskStart{Task: task.ref, Actor: model.Actor{ID: flowLane}, AttemptID: w.id()}
-				if err := w.review("accepted", w.capture(flowLane, start)); err == nil {
+				w.mustAdmit(flowAgent, &model.BlockerHold{Task: task.ref, BlockerID: w.id(), Reason: model.BlockerAwaitingAcceptance,
+					Actor: model.Actor{ID: flowAgent}, Criterion: "owner accepts before any further work"})
+				start := &model.TaskStart{Task: task.ref, Actor: model.Actor{ID: flowAgent}, AttemptID: w.id()}
+				if err := w.review("accepted", w.capture(flowAgent, start)); err == nil {
 					t.Fatal("control: ordinary start must refuse the unresolved hold")
 				}
 			}
 			body := []byte(`{"stopped":true}`)
 			w.put("stopped.json", body)
-			event := &model.TaskTakeover{Task: task.ref, Actor: model.Actor{ID: flowLane}, AttemptID: w.id(),
+			event := &model.TaskTakeover{Task: task.ref, Actor: model.Actor{ID: flowAgent}, AttemptID: w.id(),
 				PriorAttemptID: task.attempt, StoppedConfirmationRef: pvPin(body, "stopped.json")}
-			err := w.review("accepted", w.capture(flowLane, event))
+			err := w.review("accepted", w.capture(flowAgent, event))
 			if !blocked && err != nil {
 				t.Fatalf("control: a takeover with no outstanding hold must admit: %v", err)
 			}
@@ -161,8 +161,8 @@ func TestTakeoverCannotBypassReady(t *testing.T) {
 // requiring access to this machine's intake. Permissions do not change content.
 func TestRetryDoesNotNeedReadableIntake(t *testing.T) {
 	w := pvNew(t)
-	r := write.AdmitRequest{CommandID: w.id(), PacketIDs: []model.ID{w.capture(w.lane, &model.InvocationStart{Envelope: w.start(w.id(), false)})},
-		Admitter: w.lane, Outcome: "accepted", Reason: "retry the same review"}
+	r := write.AdmitRequest{CommandID: w.id(), PacketIDs: []model.ID{w.capture(w.agent, &model.InvocationStart{Envelope: w.start(w.id(), false)})},
+		Admitter: w.agent, Outcome: "accepted", Reason: "retry the same review"}
 	want, err := write.Admit(context.Background(), w.p, r)
 	if err != nil {
 		t.Fatal(err)
@@ -206,11 +206,11 @@ func TestRetryDoesNotNeedReadableIntake(t *testing.T) {
 func TestReplayChecksInstrumentConfigNames(t *testing.T) {
 	w := pvNew(t)
 	env := w.start(w.id(), false)
-	w.mustAdmit(w.lane, &model.InvocationStart{Envelope: env}, w.seal(env, []model.RunOutput{}...))
+	w.mustAdmit(w.agent, &model.InvocationStart{Envelope: env}, w.seal(env, []model.RunOutput{}...))
 	badEnv := w.start(w.id(), false)
 	bad := w.seal(badEnv, []model.RunOutput{}...)
 	bad.Envelope.ConfigEffective = recKnown(map[string]model.Availability[model.Scalar]{"undeclared-camera": recKnown(evidenceNumber("1"))})
-	if err := w.admit(w.lane, &model.InvocationStart{Envelope: badEnv}, bad); recCode(err) != "invalid-field" || !strings.Contains(err.Error(), "config_effective") {
+	if err := w.admit(w.agent, &model.InvocationStart{Envelope: badEnv}, bad); recCode(err) != "invalid-field" || !strings.Contains(err.Error(), "config_effective") {
 		t.Fatalf("control: admission must refuse the undeclared effective knob: %v", err)
 	}
 	prefix, err := store.ReadPrefix(w.p)

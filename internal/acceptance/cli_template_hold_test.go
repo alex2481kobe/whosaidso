@@ -182,7 +182,7 @@ func TestCLITemplateRetryAndHoldCapture(t *testing.T) {
 	t.Run("proof-endpoints-only-capture-admit", func(t *testing.T) {
 		t.Setenv(store.HomeEnv, filepath.Join(t.TempDir(), "cli-hold-home"))
 		t.Setenv(store.NoCacheEnv, "1")
-		t.Setenv("WHOSAIDSO_ACTOR", "lane")
+		t.Setenv("WHOSAIDSO_ACTOR", "agent")
 		w := pvNew(t)
 		if _, err := store.Bind(context.Background(), w.p.Root, w.p.Root); err != nil {
 			t.Fatal(err)
@@ -191,7 +191,7 @@ func TestCLITemplateRetryAndHoldCapture(t *testing.T) {
 		record, _ := w.snapshot().Record(w.claim)
 		spec := *record.Claim
 		spec.Scope.SourcePaths = []string{"step.go"}
-		w.mustAdmit(w.lane, &model.ClaimRevise{Target: w.claim, Replacement: spec, Provenance: record.Provenance})
+		w.mustAdmit(w.agent, &model.ClaimRevise{Target: w.claim, Replacement: spec, Provenance: record.Provenance})
 		w.claim.Revision = 2
 		pvPut(t, w.p.Root, "out/result.json", []byte(pvFail))
 		w.fix("out/result.json", []byte(pvFail))
@@ -211,7 +211,7 @@ func TestCLITemplateRetryAndHoldCapture(t *testing.T) {
 			env.ExecutionSourceIdentity.Dirty = recKnown(false)
 			seal := w.seal(env, w.produce(env.InvocationID, []byte(result), "out/result.json"))
 			seal.Envelope.Isolation = recKnown(model.IsolationClean)
-			w.mustAdmit(w.lane, &model.InvocationStart{Envelope: env}, seal)
+			w.mustAdmit(w.agent, &model.InvocationStart{Envelope: env}, seal)
 		}
 		args := []string{"template", "proof.admit", "--claim", string(w.claim.RecordID), "--set", "evidence[0].disposition=inapplicable", "--set", "evidence[0].reason=scoped implementation changed", "--set", "evidence[0].code_change.from.commit=" + commits[0], "--set", "evidence[0].code_change.to.commit=" + commits[1], "--set", "evidence[1].disposition=supports", "--set", "evidence[1].reason=passing remeasurement", "--set", "judgment.reason=whole family reviewed", "--set", "verdict=supports", "--capture", "--admit", "--reason", "endpoint-only proof"}
 		if out, errs, err := cliHoldRun(t, f, bin, nil, args...); err != nil {

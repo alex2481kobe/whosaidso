@@ -253,8 +253,8 @@ func benchLedger(b *testing.B, tasks int) []model.Bundle {
 	}
 	for i := 0; i < tasks; i++ {
 		id := newID(fmt.Sprintf("TK%03d", i))
-		emit(&model.TaskCreate{Provenance: provenance("lane-a"), ID: id, Spec: taskSpec()})
-		emit(&model.TaskStart{Task: ref(id, 1), Actor: model.Actor{ID: "lane-a"}, AttemptID: newID(fmt.Sprintf("AT%03d", i))})
+		emit(&model.TaskCreate{Provenance: provenance("agent-a"), ID: id, Spec: taskSpec()})
+		emit(&model.TaskStart{Task: ref(id, 1), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID(fmt.Sprintf("AT%03d", i))})
 	}
 	return out
 }

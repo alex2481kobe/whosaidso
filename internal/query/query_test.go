@@ -91,7 +91,7 @@ func TestPendingHonorsReviewEventsWithoutEnvelopePackets(t *testing.T) {
 			bundle := appendEvents(t, p, 101, &model.ReviewAdmit{
 				Packets: refs, Outcome: outcome,
 				Actor: model.Actor{ID: "reviewer"}, Reason: "admitted event is authoritative",
-				Authors: authoredBy("lane-a", refs), CapturedAt: uncaptured(refs), EventPackets: []model.ID{}})
+				Authors: authoredBy("agent-a", refs), CapturedAt: uncaptured(refs), EventPackets: []model.ID{}})
 			if len(bundle.Packets) != 0 {
 				t.Fatal("fixture must omit envelope packet references")
 			}

@@ -37,7 +37,7 @@ type pvWorld struct {
 	t          *testing.T
 	p          store.Project
 	n          int
-	lane       model.Actor
+	agent      model.Actor
 	claim      model.RecordRef
 	instrument model.RecordRef
 	attempt    model.ID
@@ -76,24 +76,24 @@ func pvNew(t *testing.T) *pvWorld {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := &pvWorld{t: t, p: p, n: 100, lane: model.Actor{ID: "lane"}}
+	w := &pvWorld{t: t, p: p, n: 100, agent: model.Actor{ID: "agent"}}
 	impl, validation := []byte(`{"tool":"measure"}`), []byte(`{"validated":"against a known pose sweep"}`)
 	pvPut(t, root, "tools/measure.json", impl)
 	pvPut(t, root, "validation/measure.json", validation)
 	prov := model.Provenance{SourceRefs: []model.ArtifactRef{}}
 	scope := model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this fixture", Limitations: "not a real ledger"}
 	task := &model.TaskCreate{ID: w.id(), Provenance: prov, Spec: model.TaskSpec{Intent: "measure", Subject: "pose sweep", Scope: scope, NonGoals: []string{"production writes"},
-		AcceptanceCriteria: []model.AcceptanceCriterion{{ID: w.id(), Revision: 1, Criterion: "measured"}}, ContextRefs: []model.RecordRef{}, ConstraintRefs: []model.RecordRef{}, Prerequisites: []model.Prerequisite{}, NextActor: w.lane}}
+		AcceptanceCriteria: []model.AcceptanceCriterion{{ID: w.id(), Revision: 1, Criterion: "measured"}}, ContextRefs: []model.RecordRef{}, ConstraintRefs: []model.RecordRef{}, Prerequisites: []model.Prerequisite{}, NextActor: w.agent}}
 	claim := &model.ClaimAssert{ID: w.id(), Provenance: prov, Spec: model.ClaimSpec{Assertion: "every pose is below 0.05 mm", Falsifier: "a pose reaches 0.05 mm", Scope: scope, ExternalRefs: []model.ExternalReference{}}}
 	instrument := &model.InstrumentDeclare{ID: w.id(), Provenance: prov, Spec: model.InstrumentSpec{QuestionAnswered: "pose penetration depth", BlindTo: "unmeasured poses",
 		NotAnswered: "production behaviour", ConfigSurface: []string{}, DangerousDefaults: []string{}, ValidRange: "the fixture sweep",
 		ImplementationRef: pvPin(impl, "tools/measure.json"),
 		Validation:        recKnown(model.InstrumentValidation{Ref: pvPin(validation, "validation/measure.json"), Version: "v1"})}}
-	w.mustAdmit(w.lane, task, claim, instrument)
+	w.mustAdmit(w.agent, task, claim, instrument)
 	w.claim = model.RecordRef{Project: p.ID, RecordID: claim.ID, Revision: 1}
 	w.instrument = model.RecordRef{Project: p.ID, RecordID: instrument.ID, Revision: 1}
 	w.attempt = w.id()
-	w.mustAdmit(w.lane, &model.TaskStart{Task: model.RecordRef{Project: p.ID, RecordID: task.ID, Revision: 1}, Actor: w.lane, AttemptID: w.attempt})
+	w.mustAdmit(w.agent, &model.TaskStart{Task: model.RecordRef{Project: p.ID, RecordID: task.ID, Revision: 1}, Actor: w.agent, AttemptID: w.attempt})
 	return w
 }
 
@@ -147,11 +147,11 @@ func (w *pvWorld) fix(contractPath string, example []byte) {
 	result, population := pvPin(example, contractPath), pvPin(example, contractPath)
 	result.Selector, population.Selector = model.Selector{Kind: "json-pointer", Pointer: "/results"}, model.Selector{Kind: "json-pointer", Pointer: "/population"}
 	target := json.Number("0.05")
-	fix := &model.CriterionFix{Claim: w.claim, CriterionID: w.id(), Revision: 1, Author: w.lane, SourceRefs: []model.ArtifactRef{},
+	fix := &model.CriterionFix{Claim: w.claim, CriterionID: w.id(), Revision: 1, Author: w.agent, SourceRefs: []model.ArtifactRef{},
 		Expression: model.CriterionExpression{ResultSelector: result, Unit: "mm", Population: model.Population{Identity: "pose sweep", Selector: population, Denominator: "poses"},
 			Operator: model.Less, Target: model.Scalar{Type: "number", Number: &target}, Reducer: model.All},
 		Policy: model.EvaluationPolicy{Inclusion: "entire-criterion-family", Retry: "retain-all"}}
-	w.mustAdmit(w.lane, fix)
+	w.mustAdmit(w.agent, fix)
 	w.criterion = model.CriterionRef{Claim: w.claim, CriterionID: fix.CriterionID, Revision: 1}
 	// The criterion's admitting bundle must be recorded strictly before any start.
 	time.Sleep(2 * time.Millisecond)
@@ -187,7 +187,7 @@ func (w *pvWorld) run(criterion bool, outputs func(id model.ID) []model.RunOutpu
 	w.t.Helper()
 	id := w.id()
 	env := w.start(id, criterion)
-	return id, w.admit(w.lane, &model.InvocationStart{Envelope: env}, w.seal(env, outputs(id)...))
+	return id, w.admit(w.agent, &model.InvocationStart{Envelope: env}, w.seal(env, outputs(id)...))
 }
 
 func (w *pvWorld) proof(members map[model.ID]string) *model.ProofAdmit {
@@ -196,12 +196,12 @@ func (w *pvWorld) proof(members map[model.ID]string) *model.ProofAdmit {
 		evidence = append(evidence, model.ObservationDisposition{InvocationRef: model.InvocationRef{Project: w.p.ID, InvocationID: id}, Disposition: disposition, Reason: "dispositioned by the reviewer"})
 	}
 	// R14.1: a new proof states its verdict.
-	return &model.ProofAdmit{Claim: w.claim, CriterionRef: w.criterion, Evidence: evidence, Judgment: model.ResponsibleJudgment{Actor: w.lane, Reason: "the complete family satisfies the frozen criterion"}, Verdict: "supports"}
+	return &model.ProofAdmit{Claim: w.claim, CriterionRef: w.criterion, Evidence: evidence, Judgment: model.ResponsibleJudgment{Actor: w.agent, Reason: "the complete family satisfies the frozen criterion"}, Verdict: "supports"}
 }
 
 func (w *pvWorld) prove(members map[model.ID]string) error {
 	w.t.Helper()
-	return w.admit(w.lane, w.proof(members))
+	return w.admit(w.agent, w.proof(members))
 }
 
 func (w *pvWorld) snapshot() reduce.Snapshot {
@@ -384,10 +384,10 @@ func TestProofVerifyRejectedRunStaysInTheFamily(t *testing.T) {
 				seal := w.seal(env, w.produce(failed, []byte(pvFail), "out/result.json"))
 				var packet model.ID
 				if packing == "seal-only" {
-					w.mustAdmit(w.lane, &model.InvocationStart{Envelope: env})
-					packet = w.capture(w.lane, seal)
+					w.mustAdmit(w.agent, &model.InvocationStart{Envelope: env})
+					packet = w.capture(w.agent, seal)
 				} else {
-					packet = w.capture(w.lane, &model.InvocationStart{Envelope: env}, seal)
+					packet = w.capture(w.agent, &model.InvocationStart{Envelope: env}, seal)
 				}
 				if err := w.review(outcome, packet); err != nil {
 					t.Fatalf("control: the reviewer may turn the packet away: %v", err)
@@ -396,7 +396,7 @@ func TestProofVerifyRejectedRunStaysInTheFamily(t *testing.T) {
 				members := map[model.ID]string{good: "supports"}
 				if packing == "seal-only" {
 					// Bury the real seal under an attributed UNKNOWN one.
-					ref, err := write.Reconcile(context.Background(), w.p, write.ReconcileRequest{Author: w.lane, InvocationID: failed, Reason: "runner presumed dead"})
+					ref, err := write.Reconcile(context.Background(), w.p, write.ReconcileRequest{Author: w.agent, InvocationID: failed, Reason: "runner presumed dead"})
 					if err != nil {
 						t.Fatalf("control: a rejected seal is not pending, so reconciliation captures: %v", err)
 					}
@@ -422,11 +422,11 @@ func TestProofVerifyRejectedRunStaysInTheFamily(t *testing.T) {
 		again := w.id()
 		env := w.start(again, true)
 		seal := w.seal(env, w.produce(again, []byte(pvPass), "out/result.json"))
-		if err := w.review("rejected", w.capture(w.lane, &model.InvocationStart{Envelope: env}, seal)); err != nil {
+		if err := w.review("rejected", w.capture(w.agent, &model.InvocationStart{Envelope: env}, seal)); err != nil {
 			t.Fatal(err)
 		}
 		// The identical start and seal are later admitted from a fresh packet.
-		w.mustAdmit(w.lane, &model.InvocationStart{Envelope: env}, seal)
+		w.mustAdmit(w.agent, &model.InvocationStart{Envelope: env}, seal)
 		if err := w.prove(map[model.ID]string{again: "supports"}); err != nil || w.status() != reduce.StatusProven {
 			t.Errorf("expected PROVEN once the ledger holds the identical run, got %v, %s", err, w.status())
 		}
@@ -445,16 +445,16 @@ func TestProofVerifyReconciliationRules(t *testing.T) {
 	reconcile := func(author model.Actor, id model.ID, reason string) (model.PacketRef, error) {
 		return write.Reconcile(ctx, w.p, write.ReconcileRequest{Author: author, InvocationID: id, Reason: reason})
 	}
-	if _, err := reconcile(w.lane, dead, "runner host lost power"); err == nil {
+	if _, err := reconcile(w.agent, dead, "runner host lost power"); err == nil {
 		t.Error("reconcile captured a seal for an invocation whose start was never admitted")
 	}
-	w.mustAdmit(w.lane, &model.InvocationStart{Envelope: env})
+	w.mustAdmit(w.agent, &model.InvocationStart{Envelope: env})
 	for name, author := range map[string]model.Actor{"blank-id": {ID: " "}, "unknown": {UnknownReason: "not recorded"}} {
 		if _, err := reconcile(author, dead, "runner host lost power"); err == nil {
 			t.Errorf("reconcile accepted an unidentified author (%s)", name)
 		}
 	}
-	if _, err := reconcile(w.lane, dead, " "); err == nil {
+	if _, err := reconcile(w.agent, dead, " "); err == nil {
 		t.Error("reconcile accepted a blank reason")
 	}
 	// The gate, not only write.Reconcile, refuses a reading on an UNKNOWN
@@ -477,7 +477,7 @@ func TestProofVerifyReconciliationRules(t *testing.T) {
 		case "conditions_observed":
 			bad.Envelope.ConditionsObserved = recKnown(map[string]model.Availability[model.Scalar]{})
 		}
-		packet := w.capture(w.lane, &bad)
+		packet := w.capture(w.agent, &bad)
 		if err := w.review("accepted", packet); recCode(err) != "reconciliation-reading" {
 			t.Errorf("expected reconciliation-reading for an UNKNOWN-outcome seal carrying %s, got %v", field, err)
 		}
@@ -486,7 +486,7 @@ func TestProofVerifyReconciliationRules(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ref, err := reconcile(w.lane, dead, "runner host lost power")
+	ref, err := reconcile(w.agent, dead, "runner host lost power")
 	if err != nil {
 		t.Fatalf("control: an admitted, unsealed invocation reconciles: %v", err)
 	}
@@ -508,7 +508,7 @@ func TestProofVerifyReconciliationRules(t *testing.T) {
 	if err := w.review("accepted", ref.CommandID); err != nil {
 		t.Fatalf("control: the reconciliation seal admits: %v", err)
 	}
-	if _, err := reconcile(w.lane, dead, "again"); err == nil {
+	if _, err := reconcile(w.agent, dead, "again"); err == nil {
 		t.Error("reconcile captured a second seal for an already sealed invocation")
 	}
 	inv, _ := w.snapshot().Invocation(reduce.InvocationKey{Project: w.p.ID, InvocationID: dead})
@@ -533,32 +533,32 @@ func TestProofVerifyReconciliationRefusedWhileARealSealIsPending(t *testing.T) {
 			w.fix("out/result.json", []byte(pvPass))
 			id := w.id()
 			env := w.start(id, true)
-			w.mustAdmit(w.lane, &model.InvocationStart{Envelope: env})
+			w.mustAdmit(w.agent, &model.InvocationStart{Envelope: env})
 			real := w.seal(env, w.produce(id, []byte(pvFail), "out/result.json"))
 			var unknown, realPacket model.ID
 			switch route {
 			case "control":
-				w.capture(w.lane, real)
-				if _, err := write.Reconcile(context.Background(), w.p, write.ReconcileRequest{Author: w.lane, InvocationID: id, Reason: "presumed dead"}); err == nil {
+				w.capture(w.agent, real)
+				if _, err := write.Reconcile(context.Background(), w.p, write.ReconcileRequest{Author: w.agent, InvocationID: id, Reason: "presumed dead"}); err == nil {
 					t.Fatal("control: write.Reconcile must refuse while the real seal is pending")
 				}
 				return
 			case "reconcile-then-real-seal":
-				ref, err := write.Reconcile(context.Background(), w.p, write.ReconcileRequest{Author: w.lane, InvocationID: id, Reason: "presumed dead"})
+				ref, err := write.Reconcile(context.Background(), w.p, write.ReconcileRequest{Author: w.agent, InvocationID: id, Reason: "presumed dead"})
 				if err != nil {
 					t.Fatalf("control: nothing is pending yet, so reconciliation captures: %v", err)
 				}
 				unknown = ref.CommandID
-				realPacket = w.capture(w.lane, real) // the slow runner's real seal arrives
+				realPacket = w.capture(w.agent, real) // the slow runner's real seal arrives
 			case "hand-captured-unknown-seal":
-				realPacket = w.capture(w.lane, real)
+				realPacket = w.capture(w.agent, real)
 				hand := w.seal(env)
 				hand.Envelope.Outcome = recUnknown[model.ProcessOutcome]("observer died")
 				hand.Envelope.ObservedAt = recUnknown[time.Time]("observer died")
 				hand.Envelope.Outputs = recUnknown[[]model.RunOutput]("observer died")
 				hand.Envelope.ConfigEffective = recUnknown[map[string]model.Availability[model.Scalar]]("observer died")
 				hand.Envelope.ConditionsObserved = recUnknown[map[string]model.Availability[model.Scalar]]("observer died")
-				unknown = w.capture(w.lane, hand)
+				unknown = w.capture(w.agent, hand)
 			}
 			err := w.review("accepted", unknown)
 			if err == nil {
@@ -615,7 +615,7 @@ func TestProofVerifyCorrectionInvalidatesProofTransitively(t *testing.T) {
 				// its proof's observations, not listed.
 				c.AffectedRevisions = []model.RecordRef{w.instrument}
 			}
-			if err := w.admit(w.lane, c); err != nil {
+			if err := w.admit(w.agent, c); err != nil {
 				t.Fatalf("control: a typed correction with a resolvable corrective artifact must admit: %v", err)
 			}
 			p, _ := w.snapshot().ClaimAt(w.claim)
@@ -686,7 +686,7 @@ func recEncodeLoose(t *testing.T, e model.TypedEvent) model.Event {
 
 func (w *pvWorld) admitRawEvent(raw model.Event) (model.Bundle, error) {
 	w.t.Helper()
-	ref, err := store.WriteIntake(context.Background(), w.p, store.IntakeRequest{CommandID: w.id(), Author: w.lane, Events: []model.Event{raw}})
+	ref, err := store.WriteIntake(context.Background(), w.p, store.IntakeRequest{CommandID: w.id(), Author: w.agent, Events: []model.Event{raw}})
 	if err != nil {
 		return model.Bundle{}, err
 	}
@@ -706,7 +706,7 @@ func TestProofVerifyCorrectiveGitPinResolvesInsideTheWhoSaidSoRoot(t *testing.T)
 	w, _ := pvProven(t)
 	body := []byte(`{"missed":"pose-c"}`)
 	pvPut(t, w.p.Root, "corrections/missed.json", body)
-	if err := w.admit(w.lane, w.correction("support", pvPin(body, "corrections/missed.json"))); err != nil {
+	if err := w.admit(w.agent, w.correction("support", pvPin(body, "corrections/missed.json"))); err != nil {
 		t.Fatalf("control: an in-root content-pinned correction must admit: %v", err)
 	}
 	// Place the whosaidso root inside a repository, one level down.
@@ -736,8 +736,8 @@ func TestProofVerifyCorrectiveGitPinResolvesInsideTheWhoSaidSoRoot(t *testing.T)
 	gitPin := func(p string) model.ArtifactRef {
 		return model.ArtifactRef{Kind: "git", Git: &model.GitPin{ObjectFormat: "sha1", Commit: commit, Path: p}, Selector: model.Selector{Kind: "whole"}}
 	}
-	escapeErr := w.admit(w.lane, w.correction("support", gitPin("secret.json")))
-	insideErr := w.admit(w.lane, w.correction("support", gitPin("corrections/inside.json")))
+	escapeErr := w.admit(w.agent, w.correction("support", gitPin("secret.json")))
+	insideErr := w.admit(w.agent, w.correction("support", gitPin("corrections/inside.json")))
 	if escapeErr == nil || insideErr != nil {
 		t.Errorf("expected the corrective git pin %q (no such file under whosaidso root %s) to be refused and %q (a committed file inside it) to admit. Got escape=%v, inside=%v. The whosaidso-root-relative path is resolved against the repository top level %s, so the correction cites bytes outside the whosaidso root",
 			"secret.json", root, "corrections/inside.json", escapeErr, insideErr, repo)
@@ -776,7 +776,7 @@ func (w *pvWorld) cli(stdin []byte, args ...string) ([]byte, error) {
 	w.t.Helper()
 	cmd := exec.Command(pvWhoSaidSo(w.t), args...)
 	cmd.Dir, cmd.Stdin = w.p.Root, bytes.NewReader(stdin)
-	cmd.Env = append(os.Environ(), "HOME="+os.Getenv("HOME"), "WHOSAIDSO_ACTOR=lane")
+	cmd.Env = append(os.Environ(), "HOME="+os.Getenv("HOME"), "WHOSAIDSO_ACTOR=agent")
 	bindProjectHome(cmd)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
@@ -987,11 +987,11 @@ func TestProofVerifyNewCriterionRevisionCannotEraseCounterevidence(t *testing.T)
 	result, population := pvPin([]byte(pvPass), "out/result.json"), pvPin([]byte(pvPass), "out/result.json")
 	result.Selector, population.Selector = model.Selector{Kind: "json-pointer", Pointer: "/results"}, model.Selector{Kind: "json-pointer", Pointer: "/population"}
 	target := json.Number("0.05")
-	fix := &model.CriterionFix{Claim: w.claim, CriterionID: first.CriterionID, Revision: 2, Author: w.lane, SourceRefs: []model.ArtifactRef{},
+	fix := &model.CriterionFix{Claim: w.claim, CriterionID: first.CriterionID, Revision: 2, Author: w.agent, SourceRefs: []model.ArtifactRef{},
 		Expression: model.CriterionExpression{ResultSelector: result, Unit: "mm", Population: model.Population{Identity: "pose sweep", Selector: population, Denominator: "poses"},
 			Operator: model.Less, Target: model.Scalar{Type: "number", Number: &target}, Reducer: model.All},
 		Policy: model.EvaluationPolicy{Inclusion: "entire-criterion-family", Retry: "retain-all"}}
-	if err := w.admit(w.lane, fix); err != nil {
+	if err := w.admit(w.agent, fix); err != nil {
 		t.Skipf("a second revision of the criterion is not admissible here (%v); nothing to probe", err)
 	}
 	w.criterion = model.CriterionRef{Claim: w.claim, CriterionID: first.CriterionID, Revision: 2}

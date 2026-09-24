@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "project": "datum/acceptance",
+  "project": "example/acceptance",
   "command_id": "01K5V8Q1110000000000000000",
   "request_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  "author": {"id": "lane-e"},
+  "author": {"id": "agent-e"},
   "captured_at": "2026-09-21T12:34:56Z",
   "events": [{"type": "task.create", "data": {"source": {"kind": "git", "content": {"sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "length": 2, "media_type": "application/json", "locators": [{"path": "evidence.json"}]}, "selector": {"kind": "whole"}}}}]
 }
