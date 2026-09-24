@@ -34,7 +34,8 @@ func (s *state) checkReceiptAuthor(b model.Bundle, idx int, holder model.Actor) 
 }
 
 // checkHandbackHold is the stopped-handback rule. A blocked-mid-task receipt
-// needs an open hold on the same task revision in its own bundle; an
+// needs an open hold on the same task in its own bundle, matched by task record
+// id because a hold belongs to the task and survives amendments; an
 // out-of-scope receipt needs a resume hold naming the actor who takes it up,
 // and may not amend its own task in that bundle (reassignment, never a quiet
 // scope change). A hold admitted earlier does not count, and neither does one
@@ -60,7 +61,7 @@ func (s *state) checkHandbackHold(b model.Bundle, idx int, e *model.AttemptTermi
 	}
 	for _, event := range s.bundle.events {
 		hold, ok := event.(*model.BlockerHold)
-		if !ok || hold.Task != e.Task || cleared[hold.BlockerID] {
+		if !ok || hold.Task.Project != e.Task.Project || hold.Task.RecordID != e.Task.RecordID || cleared[hold.BlockerID] {
 			continue
 		}
 		if !outOfScope || hold.Reason == model.BlockerResume && !model.Blank(hold.Actor.ID) {
