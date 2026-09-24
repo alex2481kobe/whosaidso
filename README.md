@@ -96,7 +96,7 @@ interface or a callback.
 whosaidso
 |-- cmd/
 |   `-- whosaidso      whole command surface: the write side that captures and admits, and the read side that answers from what was admitted
-|          24 files, tested -- uses evidence, model, query, reduce, store, write
+|          25 files, tested -- uses evidence, model, query, reduce, store, ui, write
 |-- internal/
 |   |-- acceptance     (tests only, no production code)
 |   |      tests only
@@ -111,7 +111,9 @@ whosaidso
 |   |-- reduce         folds admitted bundles into the state every WhoSaidSo answer is read from
 |   |      27 files, tested -- uses model
 |   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
-|   |      18 files, tested -- uses model, reduce
+|   |      19 files, tested -- uses model, reduce
+|   |-- ui             serves `whosaidso ui`: a local, short-lived, read-only viewer
+|   |      2 files, tested -- uses model, query, store
 |   `-- write          joins immutable capture to canonical state through one admission gate
 |          19 files, tested -- uses evidence, model, reduce, store
 `-- tools/

@@ -55,6 +55,7 @@ Look records up with whosaidso show --json ID.
   whosaidso show [RECORD_ID]       one record; bare: summary and every record
   whosaidso history [RECORD_ID]    admitted events in order, and reviews
 A source's source_id reads with show and history too; bare show lists sources.
+whosaidso ui shows the same four answers in a browser, read-only.
 
 Every answer opens with its watermark (ledger sequence, bundles, events and
 head bundle): quote it with any status you report. result is KNOWN, or

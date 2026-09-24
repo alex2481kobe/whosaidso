@@ -60,6 +60,13 @@ recorded revisions. A review.admit row's author is the reviewer it records.
 --self-admitted cannot be combined with an ID; false excludes unknown, and
 an unknown author stays UNKNOWN.
 `, define: viewVerb("history")},
+		{name: "ui", summary: "a local, read-only viewer of the views in a browser", detail: `Serves todo, show, continue and history as a web page on a random
+127.0.0.1 port, for as long as the command runs (Ctrl-C stops it). The URL
+it prints carries a one-time token; the page reads with GET only and writes
+nothing. Every screen is the --json answer of the same view. Run inside a
+bound project it opens that project; elsewhere it lists every project this
+machine's home binds, an unavailable home with its reason.
+`, define: uiVerb},
 		{name: "capture", summary: "write a packet to immutable intake; publishes nothing", detail: `Reads a JSON array of typed events (whosaidso template makes one). A
 source.intake is captured with its original bytes, from its reference or
 from --blob; capture refuses a source whose bytes it cannot save. Prints
