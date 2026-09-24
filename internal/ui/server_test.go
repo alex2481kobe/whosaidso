@@ -131,15 +131,21 @@ func TestViewerRefusesEveryMethodButGet(t *testing.T) {
 
 func TestStaticFilesAreServedWithTheirTypes(t *testing.T) {
 	host, token := testUI(t, &stubWorld{})
+	// The types are stated here, not read from the table they check.
+	types := map[string]string{".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml", ".ico": "image/svg+xml"}
 	for path, file := range staticFiles {
 		want, err := files.ReadFile(file[0])
 		if err != nil {
 			t.Fatal(err)
 		}
+		kind := types[path[strings.LastIndex(path, "."):]]
 		got, header, body := do(t, host, probe{"GET", path, host, "", ""})
-		if got != 200 || header.Get("Content-Type") != file[1] || body != string(want) || header.Get("X-Content-Type-Options") != "nosniff" {
-			t.Errorf("%s: %d %q, want 200 %q with its embedded bytes", path, got, header.Get("Content-Type"), file[1])
+		if got != 200 || kind == "" || header.Get("Content-Type") != kind || body != string(want) || header.Get("X-Content-Type-Options") != "nosniff" {
+			t.Errorf("%s: %d %q, want 200 %q with its embedded bytes", path, got, header.Get("Content-Type"), kind)
 		}
+	}
+	if len(staticFiles) != 10 {
+		t.Fatalf("every embedded file but the page is served: %d paths", len(staticFiles))
 	}
 	got, header, body := do(t, host, probe{"GET", "/?token=" + token, host, "", ""})
 	if got != 200 || header.Get("Content-Type") != "text/html; charset=utf-8" || !strings.Contains(body, `src="/ui.js"`) ||
