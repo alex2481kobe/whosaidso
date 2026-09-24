@@ -308,9 +308,9 @@ func TestFalseReasonNamesTheFailingMember(t *testing.T) {
 	for _, tc := range []struct{ name, members, want string }{
 		{"path", `{"path":"a.go","value":0.01},{"path":"internal/reduce/task.go","value":0.90}`, "internal/reduce/task.go: 0.90 does not satisfy lt 0.05"},
 		{"id when no path", `{"id":"pose-7","value":0.01},{"id":"pose-8","value":0.90}`, "pose-8: 0.90 does not satisfy lt 0.05"},
-		{"index without an identifier", `{"value":0.01},{"value":0.90}`, "value 1 does not satisfy the criterion"},
-		{"bare numbers keep the index", `0.01,0.90`, "value 1 does not satisfy the criterion"},
-		{"a blank path is no identifier", `{"path":"a.go","value":0.01},{"path":" ","value":0.90}`, "value 1 does not satisfy the criterion"},
+		{"index without an identifier", `{"value":0.01},{"value":0.90}`, "member 1: 0.90 does not satisfy lt 0.05"},
+		{"bare numbers keep the index", `0.01,0.90`, "member 1: 0.90 does not satisfy lt 0.05"},
+		{"a blank path is no identifier", `{"path":"a.go","value":0.01},{"path":" ","value":0.90}`, "member 1: 0.90 does not satisfy lt 0.05"},
 		{"a name that could fake the reason is quoted", `{"path":"a.go","value":0.01},{"path":"x: 0 satisfies","value":0.90}`, `"x: 0 satisfies": 0.90 does not satisfy lt 0.05`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

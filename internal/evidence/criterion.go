@@ -215,12 +215,13 @@ func evaluateMember(c model.CriterionFix, o Observation) MemberResult {
 		held, err := model.CompareScalars(v, op, target)
 		if err != nil {
 			if absent == "" {
-				absent = fmt.Sprintf("value %d is not comparable with the target: %s", i, err.Error())
+				absent = fmt.Sprintf("member %d: %s is not comparable with the target: %s", i, scalarText(v), err.Error())
 			}
 			continue
 		}
 		if c.Expression.Reducer == model.All && !held {
-			m.Verdict, m.Reason = False, fmt.Sprintf("value %d does not satisfy the criterion", i)
+			// An unnamed member is named by its index, never read as a value.
+			m.Verdict, m.Reason = False, fmt.Sprintf("member %d: %s does not satisfy %s %s", i, scalarText(v), op, scalarText(target))
 			if i < len(o.Result.MemberNames) && o.Result.MemberNames[i] != "" {
 				m.Reason = fmt.Sprintf("%s: %s does not satisfy %s %s", printable(o.Result.MemberNames[i]), scalarText(v), op, scalarText(target))
 			}
