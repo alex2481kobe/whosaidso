@@ -42,7 +42,8 @@ func richRequests() []ViewRequest {
 	return []ViewRequest{{View: "show"}, {View: "show", ID: testID(1)}, {View: "show", ID: testID(999)}, {View: "history"},
 		{View: "history", ID: testID(31)}, {View: "history", SelfAdmitted: model.SelfAdmissionUnknown},
 		{View: "show", Kind: "instrument"}, {View: "show", Kind: "claim"}, {View: "todo"}, {View: "todo", Limit: 1},
-		{View: "continue", ID: testID(1), Observed: richObservation()}, {View: "continue", ID: testID(22), Limit: 1}}
+		{View: "continue", ID: testID(1), Observed: richObservation()}, {View: "continue", ID: testID(22), Limit: 1},
+		{View: "show", ID: testID(50)}, {View: "history", ID: testID(50)}, {View: "continue", ID: testID(50)}}
 }
 
 func rendered(t *testing.T, a ViewAnswer) string {

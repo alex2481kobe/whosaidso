@@ -6,7 +6,7 @@ package query
 // claim standing, decision rulings, instrument validation and trust). A
 // claim names its observation runs by id; the answer carries each run's body
 // once, in its runs section. Which records a view selects lives in the view
-// files; this file only describes one exact revision.
+// files; this file only describes one exact revision, or one admitted source.
 
 import (
 	"fmt"
@@ -125,6 +125,32 @@ func (d *detailer) detail(fact reduce.Record) (Detail, []Attention) {
 		}
 	}
 	return v, notes
+}
+
+// SourceDetail is one admitted source.intake, read by its source id: what was
+// said (speaker, order, referents, digest, length and the pinned bytes'
+// source_ref), and who captured and who admitted it, as a record's detail says.
+type SourceDetail struct {
+	reduce.Source
+	Author       reduce.PacketAuthor `json:"author"`
+	AdmittedBy   any                 `json:"admitted_by"`
+	SelfAdmitted string              `json:"self_admitted"`
+}
+
+func sourceDetail(s reduce.Snapshot, src reduce.Source) SourceDetail {
+	v := SourceDetail{Source: src, Author: s.EventAuthor(src.Origin)}
+	v.AdmittedBy, v.SelfAdmitted = admission(s, v.Author)
+	return v
+}
+
+// sourceOf finds the admitted source whose source id is id.
+func sourceOf(all []reduce.Source, id reduce.Ident) (reduce.Source, bool) {
+	for _, src := range all {
+		if src.Key.Project == id.Project && src.Key.Source == id.ID {
+			return src, true
+		}
+	}
+	return reduce.Source{}, false
 }
 
 // admission names the actor whose review admitted the packet that carried the

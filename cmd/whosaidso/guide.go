@@ -26,7 +26,8 @@ required, each a quoted string on its own line (# starts a comment):
   id = 'animation/toy'          # the project id every record names
   ledger = '.whosaidso/events'  # the ledger folder, inside the checkout
 Bind the checkout holding the live ledger once per machine:
-whosaidso home PATH (whosaidso help home).
+whosaidso home PATH (whosaidso help home). WHOSAIDSO_HOME, when set, must be
+an absolute path.
 Set WHOSAIDSO_ACTOR to your name; --actor overrides it; a missing actor is
 recorded unknown, never guessed. Ids: whosaidso id prints one, whosaidso id 5 five.
 Never hand-write an id.
@@ -37,8 +38,9 @@ Writing is two acts: capture, then admit the packet id it prints.
   whosaidso admit --outcome accepted --reason "why this is right" PACKET
 or both at once: whosaidso capture --events task.json --admit --reason "...".
 A template fills what WhoSaidSo can compute (whosaidso help template); give the
-rest with --set and capture it in one step:
-  whosaidso template blocker.clear --hold HOLD --set resolving_witness=... \
+rest with --set PATH=VALUE, a reference with --pin PATH=FILE, and capture it
+in one step (HOLD is the blocker_id a blocker.hold prints):
+  whosaidso template blocker.clear --hold HOLD --pin resolving_witness=EVIDENCE \
       --capture --admit --reason "..."
 Common records: task.create (new work; one task per piece of work),
 task.start (take an attempt; keep its attempt_id for run and handback),
@@ -52,6 +54,7 @@ Look records up with whosaidso show --json ID.
   whosaidso continue RECORD_ID     resume any record (a plan: its items)
   whosaidso show [RECORD_ID]       one record; bare: summary and every record
   whosaidso history [RECORD_ID]    admitted events in order, and reviews
+A source's source_id reads with show and history too; bare show lists sources.
 
 Every answer opens with its watermark (ledger sequence, bundles, events and
 head bundle): quote it with any status you report. result is KNOWN, or
@@ -113,11 +116,12 @@ On someone else's word, cite them as the close's authority: capture their
 message as a source.intake (whosaidso help sources), then set authority.actor.id
 to them, --pin authority.source_ref to the same file, and name the task
 revision in authority.scope.context_refs.
-Not accepted yet: record why as a hold, and clear it when that is met:
+Not accepted yet: record why as a hold (it prints blocker_id = HOLD), and
+clear it when that is met:
   whosaidso template blocker.hold --task T --set reason=awaiting-acceptance \
       --set actor.id=WHO --set criterion="not accepted because ...; \
       accepted when ..." --capture --admit --reason "..."
-  whosaidso template blocker.clear --hold H --pin resolving_witness=EVIDENCE \
+  whosaidso template blocker.clear --hold HOLD --pin resolving_witness=EVIDENCE \
       --capture --admit --reason "..."
 A success close is refused while any hold on the task is open (a clear
 earlier in the same bundle counts); cancelled, withdrawn and waived still
@@ -167,14 +171,35 @@ becomes, by judgment: a task.create for work it asks for, a task.amend
 --pin 'replacement.progress.witness_refs[0]=PATH'), or a claim with its
 falsifier. The home's staging/ folder holds runs' outputs, not notes.
 `},
-	{"proof", "criterion first, the whole family, a verdict", `1. Fix the criterion (criterion.fix) and admit it in an EARLIER bundle than
+	{"proof", "criterion first, the whole family, a verdict", `A proof needs an instrument I (a validated one for PROVEN) and a claim C.
+Each capture prints "minted id = ID": that ID is I, or C. TOOL is the
+instrument's implementation file, VALIDATION the file that validated it:
+  whosaidso template instrument.declare --set 'spec.question_answered=...' \
+      --set 'spec.blind_to=...' --set 'spec.not_answered=...' \
+      --set 'spec.valid_range=...' --set spec.config_surface=[] \
+      --set spec.dangerous_defaults=[] --set provenance.source_refs=[] \
+      --pin spec.implementation_ref=TOOL --pin spec.validation.value.ref=VALIDATION \
+      --set spec.validation.value.version=... --capture --admit --reason "..."
+  whosaidso template claim.assert --set 'spec.assertion=...' \
+      --set 'spec.falsifier=...' --set 'spec.scope.applies_when=...' \
+      --set 'spec.scope.limitations=...' --set spec.scope.source_paths=[] \
+      --set spec.scope.context_refs=[] --set spec.external_refs=[] \
+      --set provenance.source_refs=[] --capture --admit --reason "..."
+Or print either to a file (whosaidso template claim.assert > claim.json),
+fill it, then capture and admit it as whosaidso help loop shows.
+1. Fix the criterion (criterion.fix) and admit it in an EARLIER bundle than
    any run it judges; freezing is checked against WhoSaidSo's capture stamp, not
    the started_at you write. Dry-run it first: whosaidso check criterion.
-   whosaidso template criterion.fix --claim C --example stdout=FILE
-   --pin expression.result_selector=stdout#/PTR pins an example run output
-   (an example, never an observation). The unit, population identity and
-   denominator are filled when the example states each one alike; operator,
-   target and reducer are yours.
+   whosaidso template criterion.fix --claim C --example stdout=FILE \
+       --pin expression.result_selector=stdout#/PTR \
+       --pin expression.population.selector=stdout#/PTR > crit.json
+   pins an example run output (an example, never an observation): the
+   result selector reads the value, the population selector the members it
+   must cover (the same pointer when the result is one reading). The unit,
+   population identity and denominator are filled when the example states
+   each one alike; operator, target and reducer are yours. Its capture needs
+   the example's bytes, --blob FILE (the template prints it):
+   whosaidso capture --events crit.json --blob FILE --admit --reason "..."
    What a selector reads: at a JSON pointer, a bare value, or an object whose
    "value" (one reading) or "values" (a set; each a value or an object with
    its own "value") is compared. That object, else its parent, states what
@@ -212,10 +237,11 @@ falsifier. The home's staging/ folder holds runs' outputs, not notes.
    including rejected runs and earlier revisions, each with a disposition,
    and states verdict: supports or refutes. whosaidso check admission --family C
    lists that family as the gate counts it, with each run's criterion
-   verdict, and prints a proof skeleton (whosaidso template proof.admit --claim C
-   fills the same); each disposition, reason, the judgment and the verdict
-   are yours. Dry-run it with whosaidso check admission --events proof.json,
-   then capture and admit it.
+   verdict, and prints a proof skeleton; this writes the same to a file:
+   whosaidso template proof.admit --claim C > proof.json
+   Each disposition, reason, the judgment and the verdict are yours. Dry-run
+   it with whosaidso check admission --events proof.json, then capture and
+   admit it: whosaidso capture --events proof.json --admit --reason "...".
 PROVEN needs a validated instrument (R9). A FAILING member can only be
 contradicts, or inapplicable with a code_change git verifies over the
 claim's scope (R14.2); you choose its two commits, and the template fills
@@ -241,8 +267,9 @@ An observer that died before sealing: whosaidso reconcile --invocation-id ID
       disposal-loss preview at watermark W: admission recomputes and stays
       the authority; reasons are yours to write
 Each prints that scope first. None writes anything. Exit status: 0 TRUE,
-would-admit or a listed family; 1 FALSE, would-refuse or a family the gate
-disagrees with; 3 UNKNOWN. A TRUE criterion preview is not an admission.
+would-admit, a listed family or check disposal's list (it has no FALSE);
+1 FALSE, would-refuse or a family the gate disagrees with; 2 usage; 3
+UNKNOWN. A TRUE criterion preview is not an admission.
 WhoSaidSo never deletes bytes (R11.1): an artifact.dispose records the loss,
 and check disposal lists what it must account for.
 `},

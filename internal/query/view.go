@@ -120,16 +120,25 @@ func view(project store.Project, r ViewRequest, source Source) (ViewAnswer, erro
 	s := source.Snapshot()
 	h := ViewHeader{View: r.View, Project: project.ID, Watermark: watermarkOf(s), Result: "KNOWN"}
 	var root reduce.Record
+	var intake *reduce.Source // r.ID names an admitted source, not a record
 	if r.ID != "" {
 		var ok bool
-		if root, ok = s.Current(reduce.Ident{Project: project.ID, ID: r.ID}); !ok {
-			h.Result, h.Reason = "UNKNOWN", fmt.Sprintf("no admitted record %s in this project at this watermark", r.ID)
+		id := reduce.Ident{Project: project.ID, ID: r.ID}
+		if root, ok = s.Current(id); !ok {
+			if src, found := sourceOf(s.Sources(), id); found {
+				intake = &src
+			} else {
+				h.Result, h.Reason = "UNKNOWN", fmt.Sprintf("no admitted record %s in this project at this watermark", r.ID)
+			}
 		}
 	}
 	switch r.View {
 	case "todo":
 		return todoView(project, s, h, r.Limit)
 	case "continue":
+		if intake != nil {
+			h.Result, h.Reason = "UNKNOWN", fmt.Sprintf("%s is an admitted source, not a record to resume: show %s or history %s reads it", r.ID, r.ID, r.ID)
+		}
 		if h.Result == "UNKNOWN" {
 			return &ContinueAnswer{ViewHeader: h, Records: map[string]Detail{}, Attention: []Attention{}}, nil
 		}
@@ -137,6 +146,9 @@ func view(project store.Project, r ViewRequest, source Source) (ViewAnswer, erro
 	case "show":
 		if h.Result == "UNKNOWN" {
 			return &ShowAnswer{ViewHeader: h, Records: []Detail{}, Attention: []Attention{}}, nil
+		}
+		if intake != nil {
+			return &ShowAnswer{ViewHeader: h, Records: []Detail{}, Sources: &[]SourceDetail{sourceDetail(s, *intake)}, Attention: []Attention{}}, nil
 		}
 		if r.ID != "" {
 			return showOne(s, h, root, r.Stale), nil

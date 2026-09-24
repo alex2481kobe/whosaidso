@@ -6,6 +6,7 @@ package query
 // unsealed runs included; it absorbs the old state preset. --kind restricts
 // bare show to one kind, and for instruments keeps their validation and trust
 // attention (the old instruments preset). --stale adds the stale-claims check.
+// show SOURCE_ID describes one admitted source.intake; bare show lists them all.
 
 import (
 	"sort"
@@ -16,11 +17,12 @@ import (
 
 type ShowAnswer struct {
 	ViewHeader
-	Summary   *Summary      `json:"summary,omitempty"` // bare show only
-	Records   []Detail      `json:"records"`
-	Runs      *[]RunDetail  `json:"runs,omitempty"` // every run bare; the runs its claims observe otherwise
-	Attention []Attention   `json:"attention"`
-	Stale     *StaleSection `json:"stale,omitempty"` // with --stale only
+	Summary   *Summary        `json:"summary,omitempty"` // bare show only
+	Records   []Detail        `json:"records"`
+	Runs      *[]RunDetail    `json:"runs,omitempty"`    // every run bare; the runs its claims observe otherwise
+	Sources   *[]SourceDetail `json:"sources,omitempty"` // every source bare (all kinds); show SOURCE_ID: that one
+	Attention []Attention     `json:"attention"`
+	Stale     *StaleSection   `json:"stale,omitempty"` // with --stale only
 }
 
 // StaleSection is the stale-claims check with the blind spot it cannot see past.
@@ -41,6 +43,7 @@ type Summary struct {
 	Decisions   *map[string]int `json:"decisions,omitempty"`   // by status
 	Instruments *map[string]int `json:"instruments,omitempty"` // by validation and by trust
 	Runs        *RunCounts      `json:"runs,omitempty"`
+	Sources     *int            `json:"sources,omitempty"` // all kinds only
 	Owed        *OwedCounts     `json:"owed,omitempty"`
 	Attention   int             `json:"attention"`
 }
@@ -186,6 +189,11 @@ func showAll(s reduce.Snapshot, h ViewHeader, kind model.Kind, stale *StaleGit) 
 	}
 	if kind == "" {
 		sum.Owed = owed
+		sources := []SourceDetail{}
+		for _, src := range d.sources {
+			sources = append(sources, sourceDetail(s, src))
+		}
+		a.Sources, sum.Sources = &sources, &[]int{len(sources)}[0]
 	}
 	a.Summary = sum
 	if stale != nil {

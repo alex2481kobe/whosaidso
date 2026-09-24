@@ -71,6 +71,9 @@ func historyOrigins(s reduce.Snapshot, id reduce.Ident) map[reduce.Origin]bool {
 			origins[edge.Origin] = true
 		}
 	}
+	if src, ok := sourceOf(s.Sources(), id); ok {
+		origins[src.Origin] = true
+	}
 	for _, invocation := range s.Invocations() {
 		criterion := invocation.Start.CriterionRef.Value
 		namesClaim := criterion != nil && criterion.Claim.Project == id.Project && criterion.Claim.RecordID == id.ID

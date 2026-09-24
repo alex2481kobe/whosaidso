@@ -178,6 +178,9 @@ func (t *boundTemplate) fill(b templateBinds) error {
 		if err != nil {
 			return usageError("whosaidso template: --set %s: %v", path, err)
 		}
+		if _, whole := v.(templateObject); !whole && v != nil && t.refSlot(path) == nil {
+			return usageError("whosaidso template %s: --set %s: %s is a reference: use --pin %s=PATH", t.event, path, path, path)
+		}
 		if v == nil {
 			if err := t.omit(path); err != nil {
 				return err
