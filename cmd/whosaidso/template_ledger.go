@@ -283,6 +283,9 @@ func (t *boundTemplate) bindCriterionFix(claim, criterion model.ID) error {
 			}
 		}
 	}
+	if criterion == "" {
+		return nil // a fresh criterion's revision 1 is already filled (templateMintRevisions)
+	}
 	next := write.NextCriterionRevision(criteria, ref, id)
 	return t.put("revision", revisionNumber(next), fmt.Sprintf("the next revision of %s on claim revision %d", id, ref.Revision))
 }

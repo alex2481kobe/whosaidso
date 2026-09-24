@@ -1,5 +1,9 @@
 package acceptance_test
 
+// Coordinator edit 2026-09-24 (principles audit item 8, owner-approved fixes): todo's
+// intake_pending list holds every packet not accepted (unreviewed, correction
+// requested, rejected), so it is renamed packets_not_accepted; contents unchanged.
+
 // U14 independent end-to-end flows. Every step runs the built `whosaidso` binary
 // in a fresh process, inside a temp project with its own whosaidso.toml and its
 // own HOME (so its own intake), and every fact is read back through the read
@@ -853,7 +857,7 @@ func TestFlowCriterionFrozenIsCheckedAgainstTheCaptureNotTheAuthoredStart(t *tes
 		t.Fatal(err)
 	}
 	var captured string
-	for _, p := range flowList(w.read("todo"), "intake_pending") { // R19: intake pending is a todo section
+	for _, p := range flowList(w.read("todo"), "packets_not_accepted") { // R19: intake pending is a todo section
 		if flowStr(p, "command_id") == string(datedPacket) {
 			captured = flowStr(p, "packet", "captured_at")
 		}
@@ -980,7 +984,7 @@ func TestFlowRecovery(t *testing.T) {
 	}
 	// Its intent was persisted before launch and is pending in intake.
 	var deadStart, dead model.ID
-	for _, p := range flowList(w.read("todo"), "intake_pending") { // R19: intake pending is a todo section
+	for _, p := range flowList(w.read("todo"), "packets_not_accepted") { // R19: intake pending is a todo section
 		for _, e := range flowList(p, "packet", "events") {
 			if flowStr(e, "type") == "invocation.start" && flowStr(p, "disposition") == "pending" {
 				deadStart, dead = model.ID(flowStr(p, "command_id")), model.ID(flowStr(e, "data", "envelope", "invocation_id"))

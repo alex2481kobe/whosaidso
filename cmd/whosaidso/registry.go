@@ -31,10 +31,11 @@ func init() {
 		{name: "todo", summary: "everything owed, in flight first", detail: `Sections: in flight (with each task's runs), awaiting acceptance (with its
 accepter, or anyone), blocked (typed reasons, who it waits on), ready (the
 only section --limit cuts), open decisions, intake by what its review says
-is owed: unreviewed packets await review; correction-requested ones await
-their author's corrected packet; rejected ones owe nothing and are only
+is owed: unreviewed packets await review; correction-requested ones are
+listed (whether a corrected packet answered the request is not recorded);
+rejected ones owe nothing and are only
 counted (whosaidso history lists their reviews), attention. --json keeps every
-packet not accepted in intake_pending, each with its disposition, and
+packet not accepted in packets_not_accepted, each with its disposition, and
 totals counts intake_unreviewed, intake_correction_requested and
 intake_rejected.
 `, define: viewVerb("todo")},
@@ -156,7 +157,9 @@ a ledger inside it and a readable history. A home every read would refuse
 is not bound: intake that is not owner-only, or a ledger this binary cannot
 decode, is refused with that reason. Binding again elsewhere is the
 move: while the old home exists, PATH's history must continue it bundle for
-bundle; when it is gone, continuity: not-compared is printed.
+bundle; when it is gone, continuity: not-compared is printed. An entry that
+cannot be read is replaced, and says so (continuity:
+unreadable-binding-replaced).
 `, define: homeVerb},
 		{name: "id", args: "[N]", summary: "print N fresh record ids (default one)", detail: `Use it rather than inventing an id: hand-typed Crockford base32 parses and
 means nothing.

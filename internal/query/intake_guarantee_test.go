@@ -86,7 +86,7 @@ func readsFail(t *testing.T, p store.Project, want string) {
 func TestReadIntakeGuaranteePerPacket(t *testing.T) {
 	t.Run("control", func(t *testing.T) {
 		p, _ := intakeTrio(t)
-		intake := todoOf(t, p).IntakePending
+		intake := todoOf(t, p).PacketsNotAccepted
 		if len(intake) != 2 || intake[0].Disposition != "rejected" || intake[1].Disposition != "pending" ||
 			intake[0].Packet == nil || intake[1].Packet == nil || intake[0].Review == nil ||
 			intake[0].Packet.CommandID != testID(1001) || intake[1].Packet.CommandID != testID(1002) {
@@ -159,7 +159,7 @@ func TestReadIntakeGuaranteePerPacket(t *testing.T) {
 	t.Run("accepted blob tampered is left to full verification", func(t *testing.T) {
 		p, trio := intakeTrio(t)
 		tamper(t, trio["accepted"].blob)
-		intake := todoOf(t, p).IntakePending
+		intake := todoOf(t, p).PacketsNotAccepted
 		if len(intake) != 2 || intake[0].CommandID == testID(1000) || intake[1].CommandID == testID(1000) {
 			t.Fatalf("todo must still drop the accepted packet, never present it: %+v", intake)
 		}

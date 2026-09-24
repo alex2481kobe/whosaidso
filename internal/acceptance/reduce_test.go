@@ -283,10 +283,16 @@ func TestReducerReturnedTaskSpecCannotRewriteAnEarlierApplySnapshot(t *testing.T
 }
 
 func TestReducerReturnedTerminalCannotAddReconciliationDebtToAnotherSnapshot(t *testing.T) {
-	first := laneEReduceBundle(t, model.Bundle{}, laneEReduceCreate(1, laneEReduceSpec(1)),
-		&model.TaskStart{Task: laneEReduceRef(1, 1), Actor: model.Actor{ID: "worker"}, AttemptID: laneEReduceID(70)},
-		&model.AttemptTerminal{Task: laneEReduceRef(1, 1), AttemptID: laneEReduceID(70), Outcome: model.AttemptNoReading,
-			Reason: "no measurement was produced", NextAction: "run the repaired instrument", DeliveryRefs: []model.ArtifactRef{}},
+	// Coordinator edit 2026-09-24 (fix-correct, handback parity): the reducer now
+	// requires a terminal receipt in its holder's packet, so the receipt travels in
+	// worker's reviewed packet instead of an unattributed bundle. The assertion is unchanged.
+	captured := recWhen.Add(time.Hour)
+	first := laneEReduceAdmitted(t, model.Bundle{},
+		laneEReducePacket(t, 2101, "lane-e", captured, laneEReduceCreate(1, laneEReduceSpec(1))),
+		laneEReducePacket(t, 2102, "worker", captured,
+			&model.TaskStart{Task: laneEReduceRef(1, 1), Actor: model.Actor{ID: "worker"}, AttemptID: laneEReduceID(70)},
+			&model.AttemptTerminal{Task: laneEReduceRef(1, 1), AttemptID: laneEReduceID(70), Outcome: model.AttemptNoReading,
+				Reason: "no measurement was produced", NextAction: "run the repaired instrument", DeliveryRefs: []model.ArtifactRef{}}),
 	)
 	before := laneEReduceReplay(t, first)
 	after, err := reduce.Apply(before, laneEReduceBundle(t, first, laneEReduceCreate(2, laneEReduceSpec(1))))
@@ -388,7 +394,10 @@ func TestReducerIndependentEventOrderDoesNotMoveTaskAnswers(t *testing.T) {
 		}
 		first := laneEReduceBundle(t, model.Bundle{}, create...)
 		second := laneEReduceBundle(t, first, start...)
-		return laneEReduceReplay(t, first, second, laneEReduceBundle(t, second, finish...))
+		// Coordinator edit 2026-09-24 (fix-correct, handback parity): the terminal
+		// receipt travels in its holder worker-a's reviewed packet. Order is unchanged.
+		finished := laneEReduceAdmitted(t, second, laneEReducePacket(t, 2201, "worker-a", recWhen.Add(time.Hour), finish...))
+		return laneEReduceReplay(t, first, second, finished)
 	}
 	left, right := build(false), build(true)
 	for _, n := range []int{1, 2} {

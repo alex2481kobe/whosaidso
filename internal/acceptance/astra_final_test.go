@@ -168,8 +168,21 @@ func TestAstraFinalCacheCannotForgeLedgerFact(t *testing.T) {
 	if !ok || rec.Claim.Assertion != c.Spec.Assertion {
 		t.Fatal("full replay control lost the original")
 	}
-	if code != 0 || !bytes.Equal(got, want) {
-		t.Errorf("expected cached CLI answer to equal full replay (%q); exit=%d, fabricated assertion visible=%t. Editing only cache bytes plus its checksum changes an admitted fact", rec.Claim.Assertion, code, bytes.Contains(got, []byte("cache says invented!")))
+	// Coordinator edit 2026-09-24, owner ruling R22.3: a cache rewritten together
+	// with its public checksum is a documented blind spot of the default read
+	// (no lightweight check without a secret or a full replay can detect it).
+	// The ruled defense is WHOSAIDSO_NO_CACHE=1, which reads the whole ledger; the
+	// original assertion that the default path resists forgery became this one.
+	if code != 0 {
+		t.Fatalf("default read over a forged cache must still answer, exit %d", code)
+	}
+	t.Logf("default read over the forged cache shows the fabricated assertion: %t (blind spot, R22.3)",
+		bytes.Contains(got, []byte("cache says invented!")))
+	t.Setenv("WHOSAIDSO_NO_CACHE", "1")
+	checked, code := astraFinalCLI(t, f, "show", string(c.ID), "--json")
+	if code != 0 || !bytes.Equal(checked, want) || bytes.Contains(checked, []byte("cache says invented!")) {
+		t.Errorf("WHOSAIDSO_NO_CACHE=1 must answer from the ledger alone (%q) over a forged cache; exit=%d, fabricated assertion visible=%t",
+			rec.Claim.Assertion, code, bytes.Contains(checked, []byte("cache says invented!")))
 	}
 }
 

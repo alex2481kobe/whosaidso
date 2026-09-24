@@ -110,8 +110,8 @@ func TestPendingReportsTheFirstMismatchInLedgerOrder(t *testing.T) {
 	late, early := capturePacket(t, p, 5), capturePacket(t, p, 3)
 	reviewPacket(t, p, 101, late, "rejected")
 	reviewPacket(t, p, 102, early, "rejected")
-	if a := todoOf(t, p); len(a.IntakePending) != 2 || a.IntakePending[0].CommandID != early.CommandID {
-		t.Fatalf("control: both rejected packets pend, sorted by id, got %+v", a.IntakePending)
+	if a := todoOf(t, p); len(a.PacketsNotAccepted) != 2 || a.PacketsNotAccepted[0].CommandID != early.CommandID {
+		t.Fatalf("control: both rejected packets pend, sorted by id, got %+v", a.PacketsNotAccepted)
 	}
 	dir, err := store.IntakeDir(p)
 	if err != nil {
@@ -142,8 +142,8 @@ func TestPendingReportsTheFirstMismatchInEventOrder(t *testing.T) {
 	appendEvents(t, p, 101, &model.ReviewAdmit{Packets: refs, Outcome: "rejected",
 		Actor: model.Actor{ID: "reviewer"}, Reason: "listed out of id order",
 		Authors: authoredBy("lane-a", refs), CapturedAt: uncaptured(refs), EventPackets: []model.ID{}})
-	if a := todoOf(t, p); len(a.IntakePending) != 2 {
-		t.Fatalf("control: both rejected packets pend, got %+v", a.IntakePending)
+	if a := todoOf(t, p); len(a.PacketsNotAccepted) != 2 {
+		t.Fatalf("control: both rejected packets pend, got %+v", a.PacketsNotAccepted)
 	}
 	dir, err := store.IntakeDir(p)
 	if err != nil {

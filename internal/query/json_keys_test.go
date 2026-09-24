@@ -71,7 +71,7 @@ func TestEveryJSONAnswerKeyIsSnakeCase(t *testing.T) {
 		ViewRequest{View: "show", Stale: richStale()}, ViewRequest{View: "continue", ID: testID(10)})
 	// Control: the fixture really carries the facts whose keys were Go-cased.
 	show, history := view_(t, p, ViewRequest{View: "show"}).(*ShowAnswer), historyOf(t, p, "")
-	if len(show.Records) < 10 || len(history.Reviews) == 0 || len(todoOf(t, p).IntakePending) != 2 {
+	if len(show.Records) < 10 || len(history.Reviews) == 0 || len(todoOf(t, p).PacketsNotAccepted) != 2 {
 		t.Fatalf("control: the rich fixture must hold records, reviews and intake, got %d records, %d reviews", len(show.Records), len(history.Reviews))
 	}
 	for _, r := range requests {
@@ -95,7 +95,7 @@ func TestEveryJSONAnswerKeyIsSnakeCase(t *testing.T) {
 		}
 		root, _ := v.(map[string]any)
 		reviews, _ := root["reviews"].([]any)
-		intake, _ := root["intake_pending"].([]any)
+		intake, _ := root["packets_not_accepted"].([]any)
 		for _, packet := range intake {
 			if review := packet.(map[string]any)["review"]; review != nil {
 				reviews = append(reviews, review)

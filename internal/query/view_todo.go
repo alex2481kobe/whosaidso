@@ -20,7 +20,7 @@ type TodoAnswer struct {
 	Blocked            []TodoTask             `json:"blocked"`
 	Ready              []TodoTask             `json:"ready"`
 	OpenDecisions      []Detail               `json:"open_decisions"`
-	IntakePending      []Packet               `json:"intake_pending"`
+	PacketsNotAccepted []Packet               `json:"packets_not_accepted"`
 	Attention          []Attention            `json:"attention"`
 	Totals             TodoTotals             `json:"totals"`
 	Omitted            map[string]LimitReport `json:"omitted"`
@@ -39,7 +39,7 @@ type TodoTask struct {
 
 // TodoTotals counts each owed task identity once, whichever section holds it;
 // Ready counts every READY task, including any the limit omitted. The intake
-// counts split intake_pending by what the ledger's review says: an unreviewed
+// counts split packets_not_accepted by what the ledger's review says: an unreviewed
 // packet awaits review, a correction-requested one had a correction asked for
 // (the ledger does not link a corrected packet to the request, so whether one
 // answered it is UNKNOWN, never assumed owed or done), and a rejected one owes
@@ -89,7 +89,7 @@ func todoView(project store.Project, s reduce.Snapshot, h ViewHeader, limit int)
 		return nil, err
 	}
 	a := &TodoAnswer{ViewHeader: h, InFlight: []TodoTask{}, AwaitingAcceptance: []TodoTask{}, Blocked: []TodoTask{},
-		Ready: []TodoTask{}, OpenDecisions: []Detail{}, IntakePending: intake, Attention: []Attention{}}
+		Ready: []TodoTask{}, OpenDecisions: []Detail{}, PacketsNotAccepted: intake, Attention: []Attention{}}
 	d := newDetailer(s)
 	owed := []Attention{}
 	flying := map[reduce.Ident]int{}
@@ -144,7 +144,7 @@ func todoView(project store.Project, s reduce.Snapshot, h ViewHeader, limit int)
 	a.Omitted = map[string]LimitReport{"ready": report}
 	a.Totals = TodoTotals{InFlight: len(a.InFlight), AwaitingAcceptance: len(a.AwaitingAcceptance), Blocked: len(a.Blocked),
 		Ready: report.Offered, OpenDecisions: len(a.OpenDecisions)}
-	for _, p := range a.IntakePending {
+	for _, p := range a.PacketsNotAccepted {
 		switch p.Disposition {
 		case "pending":
 			a.Totals.IntakeUnreviewed++

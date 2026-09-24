@@ -87,7 +87,7 @@ func TestFreshProcessesExplainAdmittedWhoSaidSoConstructionTaskAndSource(t *test
 	readProcess(t, root, input, "capture", "--command-id", string(cliID(3)), "--actor", "lane", "--blob", path)
 	// R19: intake pending is a section of todo.
 	pending := readJSON[query.TodoAnswer](t, readProcess(t, root, nil, "todo", "--json"))
-	if len(pending.IntakePending) != 1 || pending.IntakePending[0].Disposition != "pending" || pending.Watermark.Sequence != 0 {
+	if len(pending.PacketsNotAccepted) != 1 || pending.PacketsNotAccepted[0].Disposition != "pending" || pending.Watermark.Sequence != 0 {
 		t.Fatalf("control captured U09 must be visible before admission at watermark 0, got %+v", pending)
 	}
 	readProcess(t, root, nil, "admit", "--command-id", string(cliID(4)), "--actor", "reviewer", "--outcome", "accepted", "--reason", "admit U09 construction obligation and source", string(cliID(3)))
@@ -144,7 +144,7 @@ func TestFreshProcessesExplainAdmittedWhoSaidSoConstructionTaskAndSource(t *test
 	readProcess(t, root, finding, "capture", "--command-id", string(cliID(33)), "--actor", "lane")
 	readProcess(t, root, nil, "admit", "--command-id", string(cliID(34)), "--actor", "reviewer", "--outcome", "rejected", "--reason", "duplicate assertion", string(cliID(33)))
 	rejected := readJSON[query.TodoAnswer](t, readProcess(t, root, nil, "todo", "--json"))
-	if len(rejected.IntakePending) != 1 || rejected.IntakePending[0].Disposition != "rejected" || rejected.Watermark.Sequence != 3 || !strings.Contains(rejected.IntakePending[0].Review.Reason, "duplicate assertion") {
+	if len(rejected.PacketsNotAccepted) != 1 || rejected.PacketsNotAccepted[0].Disposition != "rejected" || rejected.Watermark.Sequence != 3 || !strings.Contains(rejected.PacketsNotAccepted[0].Review.Reason, "duplicate assertion") {
 		t.Fatalf("rejected finding must remain explainable at watermark 3, got %+v", rejected)
 	}
 }

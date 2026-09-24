@@ -25,6 +25,13 @@ import (
 // amendment it carries has a recorded review.
 func admitAs(t *testing.T, p store.Project, n int, reason string, events ...model.TypedEvent) model.ID {
 	t.Helper()
+	return admitWrittenBy(t, p, n, "author", reason, events...)
+}
+
+// admitWrittenBy is admitAs with a chosen packet author: only the named
+// accepter may write an amendment that removes or changes the accepter.
+func admitWrittenBy(t *testing.T, p store.Project, n int, author, reason string, events ...model.TypedEvent) model.ID {
+	t.Helper()
 	raw := []model.Event{}
 	for _, e := range events {
 		encoded, err := model.EncodeEvent(e)
@@ -34,7 +41,7 @@ func admitAs(t *testing.T, p store.Project, n int, reason string, events ...mode
 		raw = append(raw, encoded)
 	}
 	ref, err := store.WriteIntake(context.Background(), p, store.IntakeRequest{CommandID: testID(n),
-		Author: model.Actor{ID: "author"}, Events: raw})
+		Author: model.Actor{ID: author}, Events: raw})
 	if err != nil {
 		t.Fatalf("control capture must succeed: %v", err)
 	}
@@ -92,8 +99,11 @@ func planWorld(t *testing.T, p store.Project) (model.ID, model.ID, model.ID) {
 		&model.TaskAmend{Target: testRef(5, 2), ExpectedRevision: 2, Replacement: r3, Provenance: plan.Provenance})
 	r4 := r3
 	r4.Accepter = nil
-	third := admitAs(t, p, 400, "anyone may accept",
-		&model.TaskAmend{Target: testRef(5, 3), ExpectedRevision: 3, Replacement: r4, Provenance: plan.Provenance})
+	// Coordinator merge edit 2026-09-24: the accepter-change rule (fix-correct) lets
+	// only the named accepter remove it, so owner writes this amendment.
+	third := admitWrittenBy(t, p, 400, "owner", "anyone may accept",
+		&model.TaskAmend{Target: testRef(5, 3), ExpectedRevision: 3, Replacement: r4,
+			Provenance: model.Provenance{Author: model.Actor{ID: "owner"}, SourceRefs: plan.Provenance.SourceRefs}})
 	return first, second, third
 }
 

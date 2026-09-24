@@ -49,23 +49,23 @@ func TestPendingRetainsRejectionsCorrectionsAndMissingLocalPackets(t *testing.T)
 		refs = append(refs, capturePacket(t, p, n))
 	}
 	control := todoOf(t, p)
-	if len(control.IntakePending) != 4 || control.IntakePending[0].Disposition != "pending" || control.Watermark.Sequence != 1 {
+	if len(control.PacketsNotAccepted) != 4 || control.PacketsNotAccepted[0].Disposition != "pending" || control.Watermark.Sequence != 1 {
 		t.Fatalf("control four captures must be pending without advancing ledger, got %+v", control)
 	}
 	for i, outcome := range []string{"accepted", "rejected", "correction-requested"} {
 		reviewPacket(t, p, 200+i, refs[i], outcome)
 	}
 	a := todoOf(t, p)
-	if len(a.IntakePending) != 3 || a.Watermark.Sequence != 4 {
+	if len(a.PacketsNotAccepted) != 3 || a.Watermark.Sequence != 4 {
 		t.Fatalf("expected rejected, correction-requested and unreviewed packets at sequence 4, got %+v", a)
 	}
 	for i, want := range []string{"rejected", "correction-requested", "pending"} {
-		if a.IntakePending[i].Disposition != want || a.IntakePending[i].Packet == nil {
-			t.Fatalf("packet %d must retain bytes and disposition %s, got %+v; review must not erase proposals", i, want, a.IntakePending[i])
+		if a.PacketsNotAccepted[i].Disposition != want || a.PacketsNotAccepted[i].Packet == nil {
+			t.Fatalf("packet %d must retain bytes and disposition %s, got %+v; review must not erase proposals", i, want, a.PacketsNotAccepted[i])
 		}
 	}
-	if a.IntakePending[0].Review.Actor.ID != "reviewer" || a.IntakePending[0].Review.Reason == "" || a.IntakePending[0].Review.Packet != refs[1] {
-		t.Fatalf("rejection must explain who rejected which bytes and why, got %+v", a.IntakePending[0])
+	if a.PacketsNotAccepted[0].Review.Actor.ID != "reviewer" || a.PacketsNotAccepted[0].Review.Reason == "" || a.PacketsNotAccepted[0].Review.Packet != refs[1] {
+		t.Fatalf("rejection must explain who rejected which bytes and why, got %+v", a.PacketsNotAccepted[0])
 	}
 	dir, err := store.IntakeDir(p)
 	if err != nil {
@@ -75,8 +75,8 @@ func TestPendingRetainsRejectionsCorrectionsAndMissingLocalPackets(t *testing.T)
 		t.Fatal(err)
 	}
 	a = todoOf(t, p)
-	if len(a.IntakePending) != 3 || a.IntakePending[0].Disposition != "rejected" || a.IntakePending[0].Unavailable == nil || a.IntakePending[0].Unavailable.State != "UNKNOWN" || a.IntakePending[0].Packet != nil {
-		t.Fatalf("missing local intake must preserve the canonical rejection with UNKNOWN bytes, got %+v", a.IntakePending)
+	if len(a.PacketsNotAccepted) != 3 || a.PacketsNotAccepted[0].Disposition != "rejected" || a.PacketsNotAccepted[0].Unavailable == nil || a.PacketsNotAccepted[0].Unavailable.State != "UNKNOWN" || a.PacketsNotAccepted[0].Packet != nil {
+		t.Fatalf("missing local intake must preserve the canonical rejection with UNKNOWN bytes, got %+v", a.PacketsNotAccepted)
 	}
 }
 
@@ -112,15 +112,15 @@ func TestPendingHonorsReviewEventsWithoutEnvelopePackets(t *testing.T) {
 					t.Fatalf("expected successful review at watermark 2, got %+v", a)
 				}
 				if outcome == "accepted" {
-					if len(a.IntakePending) != 0 {
-						t.Fatalf("accepted packets must leave pending, got %+v", a.IntakePending)
+					if len(a.PacketsNotAccepted) != 0 {
+						t.Fatalf("accepted packets must leave pending, got %+v", a.PacketsNotAccepted)
 					}
 				} else {
-					if len(a.IntakePending) != 2 {
-						t.Fatalf("both reviews must survive missing=%t, got %+v", missing, a.IntakePending)
+					if len(a.PacketsNotAccepted) != 2 {
+						t.Fatalf("both reviews must survive missing=%t, got %+v", missing, a.PacketsNotAccepted)
 					}
 					for i, ref := range []model.PacketRef{first, second} {
-						packet := a.IntakePending[i]
+						packet := a.PacketsNotAccepted[i]
 						if packet.CommandID != ref.CommandID || packet.Disposition != outcome || packet.Review == nil ||
 							packet.Review.Packet != ref || packet.Review.Outcome != outcome || packet.Review.Actor.ID != "reviewer" ||
 							packet.Review.Reason != "admitted event is authoritative" || packet.Review.Origin != (reduce.Origin{Sequence: 2, EventIndex: 0}) {

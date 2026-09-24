@@ -1,5 +1,9 @@
 package acceptance_test
 
+// Coordinator edit 2026-09-24 (principles audit item 8, owner-approved fixes): todo's
+// intake_pending list holds every packet not accepted (unreviewed, correction
+// requested, rejected), so it is renamed packets_not_accepted; contents unchanged.
+
 import (
 	"bytes"
 	"context"
@@ -207,11 +211,11 @@ func TestReadVerifyPendingCannotIgnoreAReplayedReviewMissingFromEnvelopePackets(
 			readVerifyAppend(t, p, 101, []model.PacketRef{control}, review(control))
 			a := readVerifyPending(t, p)
 			if outcome == "accepted" {
-				if len(a.IntakePending) != 0 {
-					t.Fatalf("control accepted packet must leave pending, got %+v", a.IntakePending)
+				if len(a.PacketsNotAccepted) != 0 {
+					t.Fatalf("control accepted packet must leave pending, got %+v", a.PacketsNotAccepted)
 				}
-			} else if len(a.IntakePending) != 1 || a.IntakePending[0].Disposition != outcome {
-				t.Fatalf("control matching envelope and event must show %s, got %+v", outcome, a.IntakePending)
+			} else if len(a.PacketsNotAccepted) != 1 || a.PacketsNotAccepted[0].Disposition != outcome {
+				t.Fatalf("control matching envelope and event must show %s, got %+v", outcome, a.PacketsNotAccepted)
 			}
 
 			target := capture(3)
@@ -227,7 +231,7 @@ func TestReadVerifyPendingCannotIgnoreAReplayedReviewMissingFromEnvelopePackets(
 				return
 			}
 			a = v.(*query.TodoAnswer)
-			for _, packet := range a.IntakePending {
+			for _, packet := range a.PacketsNotAccepted {
 				if packet.CommandID == target.CommandID && (outcome == "accepted" || packet.Disposition != outcome || packet.Review == nil) {
 					t.Errorf("pending at watermark %d reports packet %s as %s with review %+v, but the same prefix replays review.admit=%s. Want that disposition (or exclusion for accepted), or an explicit inconsistent-ledger error. A canonical review cannot depend on its packet ID also appearing in bundle.Packets", a.Watermark.Sequence, target.CommandID, packet.Disposition, packet.Review, outcome)
 				}
@@ -247,7 +251,7 @@ func TestReadVerifyPendingCannotIgnoreAReplayedReviewMissingFromEnvelopePackets(
 				return
 			}
 			a = v.(*query.TodoAnswer)
-			for _, packet := range a.IntakePending {
+			for _, packet := range a.PacketsNotAccepted {
 				if packet.CommandID == target.CommandID && packet.Disposition == outcome && packet.Unavailable != nil && packet.Unavailable.State == "UNKNOWN" {
 					return
 				}
@@ -342,7 +346,7 @@ func TestReadVerifyLaterAdmissionDoesNotDispositionAnEarlierPrefix(t *testing.T)
 		t.Fatal(err)
 	}
 	control := readVerifyPending(t, p)
-	if control.Watermark.Sequence != 1 || len(control.IntakePending) != 1 || control.IntakePending[0].Disposition != "pending" {
+	if control.Watermark.Sequence != 1 || len(control.PacketsNotAccepted) != 1 || control.PacketsNotAccepted[0].Disposition != "pending" {
 		t.Fatalf("control packet must be pending before admission at watermark 1, got %+v", control)
 	}
 	// Freeze only the ledger. Both projects retain the same logical identity
@@ -372,7 +376,7 @@ func TestReadVerifyLaterAdmissionDoesNotDispositionAnEarlierPrefix(t *testing.T)
 		t.Fatalf("control packet must pass the real admission gate: %v", err)
 	}
 	later := readVerifyPending(t, p)
-	if later.Watermark.Sequence != 2 || len(later.IntakePending) != 0 {
+	if later.Watermark.Sequence != 2 || len(later.PacketsNotAccepted) != 0 {
 		t.Fatalf("later prefix must exclude the accepted packet at watermark 2, got %+v", later)
 	}
 	earlier := readVerifyPending(t, frozen)

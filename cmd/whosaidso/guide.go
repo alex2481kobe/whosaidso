@@ -69,7 +69,7 @@ deleting it changes no answer. Its blind spot: a cache edited on purpose,
 with its checksum recomputed, can change what reads display (the ledger,
 the authority, is untouched). For final acceptance or any check that
 matters, set WHOSAIDSO_NO_CACHE=1: reads replay the whole ledger and neither
-read nor write the cache.
+read nor write the cache; any other value is refused.
 `},
 	{"admit", "admission is the review; any actor; self-admission", `  whosaidso admit --outcome accepted|rejected|correction-requested --reason TEXT PACKET ...
 Any actor may admit. Admitting your own packet is allowed and recorded:
@@ -83,9 +83,12 @@ printed and the exit status is 4 (partial success).
 `},
 	{"accept", "closing a task: witnesses, outcomes, withheld acceptance", `A success handback closes the attempt, not the task: the task waits in
 todo's awaiting-acceptance section until a task.close ends it. A task may
-name its accepter; then only that actor may close it, otherwise anyone may.
-A closer who also did the work reads self_accepted: TRUE (SELF-ACCEPTED):
-visible, never blocked. Keep tasks small (R14.3) so success honestly means
+name its accepter; then only that actor may close it, otherwise anyone may,
+and only the accepter may remove or change it in an amendment.
+closer_authored_receipt says whether the closer also wrote one of the task's
+attempt receipts (UNKNOWN when either author is unknown); FALSE does not show
+someone else did the work. A waived close shows the authority it cites, or
+"(no authority cited)"; the gate requires none. Visible, never blocking. Keep tasks small (R14.3) so success honestly means
 "this piece is done"; a large task stays open with the small ones as its
 prerequisites. Start to close (A is the attempt_id start prints, PACKET the
 receipt handback prints):

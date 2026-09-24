@@ -201,7 +201,7 @@ func TestLimitsNeverCutBlockedWorkClosureOrAttention(t *testing.T) {
 	}
 	if !reflect.DeepEqual(cut.InFlight, full.InFlight) || !reflect.DeepEqual(cut.Blocked, full.Blocked) ||
 		!reflect.DeepEqual(cut.AwaitingAcceptance, full.AwaitingAcceptance) || !reflect.DeepEqual(cut.OpenDecisions, full.OpenDecisions) ||
-		!reflect.DeepEqual(cut.Attention, full.Attention) || !reflect.DeepEqual(cut.IntakePending, full.IntakePending) {
+		!reflect.DeepEqual(cut.Attention, full.Attention) || !reflect.DeepEqual(cut.PacketsNotAccepted, full.PacketsNotAccepted) {
 		t.Fatal("the todo limit must never cut in-flight, blocked or awaiting work, open decisions, intake or attention")
 	}
 	if len(full.Attention) == 0 {

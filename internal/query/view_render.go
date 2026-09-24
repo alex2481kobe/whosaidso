@@ -133,15 +133,15 @@ func briefTodo(b *briefWriter, a cur) {
 		b.line(0, "limit: ready requested", o.at("requested"), "offered", o.at("offered"), "omitted", o.at("omitted"))
 	}
 	briefList(b, 0, "open decisions", a.at("open_decisions"), briefDetail)
-	briefIntake(b, "intake unreviewed", t.at("intake_unreviewed"), a.at("intake_pending"), "pending")
-	briefIntake(b, "correction requested (whether a corrected packet answered it is not recorded)", t.at("intake_correction_requested"), a.at("intake_pending"), "correction-requested")
+	briefIntake(b, "intake unreviewed", t.at("intake_unreviewed"), a.at("packets_not_accepted"), "pending")
+	briefIntake(b, "correction requested (whether a corrected packet answered it is not recorded)", t.at("intake_correction_requested"), a.at("packets_not_accepted"), "correction-requested")
 	if n := t.at("intake_rejected"); n.string() != "0" {
 		b.line(0, "rejected intake:", n, "(reviewed, nothing owed; whosaidso history lists the reviews)")
 	}
 	briefList(b, 0, "attention", a.at("attention"), briefAttention)
 }
 
-// briefIntake lists the intake_pending packets with one disposition, under
+// briefIntake lists the packets_not_accepted packets with one disposition, under
 // the total that counts them.
 func briefIntake(b *briefWriter, title string, total, list cur, disposition string) {
 	if total.string() == "0" {

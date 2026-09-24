@@ -116,7 +116,7 @@ func TestSelfAdmissionAuditThreeStates(t *testing.T) {
 			}
 		})
 	}
-	pending := todoOf(t, p).IntakePending
+	pending := todoOf(t, p).PacketsNotAccepted
 	if len(pending) != 7 {
 		t.Fatalf("rejected/correction reviews vanished: %+v", pending)
 	}
