@@ -38,7 +38,7 @@ func TestHelpContractExamplesAreWhatTheCodeReads(t *testing.T) {
 		t.Fatalf("the guide's whosaidso.toml example must parse as a project: %q %v", config, err)
 	}
 
-	report := regexp.MustCompile(`(?s)(\{"version":1,.*?"conditions_observed":\{\}\})`).FindString(strings.ReplaceAll(whole, "\n      ", ""))
+	report := regexp.MustCompile(`(?s)(\{"version":1,.*?"conditions_observed":\{\}\})`).FindString(whole)
 	d := json.NewDecoder(strings.NewReader(report))
 	d.DisallowUnknownFields()
 	var r write.ProducerReport
@@ -46,8 +46,9 @@ func TestHelpContractExamplesAreWhatTheCodeReads(t *testing.T) {
 		t.Fatalf("the guide's producer report must decode as the one run reads: %q %v", report, err)
 	}
 
+	// Each example is parsed exactly as printed: no whitespace is normalized,
+	// so a line break inside a JSON string fails here as it fails a reader.
 	envelope := regexp.MustCompile(`(?s)\{"value": 0\.75.*?"one step"\}`).FindString(whole)
-	envelope = regexp.MustCompile(`\s+`).ReplaceAllString(envelope, " ")
 	data := []byte(`{"absolute_error":` + envelope + `}`)
 	reading, err := evidence.Select(evidence.ResolvedArtifact{Bytes: data, SHA256: model.HashBytes(data)}, model.Selector{Kind: "json-pointer", Pointer: "/absolute_error"})
 	if err != nil || reading.Kind != evidence.ReadingScalar || reading.Unit.Value == nil || *reading.Unit.Value != "world units" ||
