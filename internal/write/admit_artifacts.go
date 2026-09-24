@@ -18,13 +18,14 @@ import (
 )
 
 // materializeAdmission resolves every accepted artifact and hands verified
-// bytes to preserve: preserveAdmissionBlob on admission, a recorder on a dry run.
-func materializeAdmission(ctx context.Context, project store.Project, packets []model.Packet, preserve func(root, artifactDir string, data []byte) error) error {
+// bytes to preserve: the store on admission, the dry run's staging otherwise.
+func materializeAdmission(ctx context.Context, project store.Project, packets []model.Packet, dry *dryRun) error {
+	preserve := dry.preserver()
 	inbox, err := store.IntakeDir(project)
 	if err != nil {
 		return err
 	}
-	resolver := evidence.NewResolverAt(project.Root, project.ArtifactDir())
+	resolver := dry.resolver(project)
 	for _, packet := range packets {
 		for _, raw := range packet.Events {
 			event, err := model.DecodeEvent(raw)
@@ -33,7 +34,7 @@ func materializeAdmission(ctx context.Context, project store.Project, packets []
 			}
 			var published []model.ArtifactRef
 			if seal, ok := event.(*model.InvocationSeal); ok {
-				own, err := runAdmitOutputs(project.Root, project.ArtifactDir(), inbox, packet, seal.Envelope)
+				own, err := runAdmitOutputs(project.Root, project.ArtifactDir(), inbox, packet, seal.Envelope, dry)
 				if err != nil {
 					return err
 				}
@@ -74,7 +75,7 @@ func materializeAdmission(ctx context.Context, project store.Project, packets []
 				if ref.Content != nil {
 					for _, candidate := range packets {
 						path := filepath.Join(inbox, string(candidate.CommandID), "blobs", string(ref.Content.SHA256))
-						blob, err := admissionBlob(path)
+						blob, err := dry.packetBlob(inbox, candidate.CommandID, ref.Content.SHA256)
 						if os.IsNotExist(err) {
 							continue
 						}

@@ -58,7 +58,7 @@ func checkVerb(mode string) func(*flag.FlagSet) func(*call) error {
 	return func(fs *flag.FlagSet) func(*call) error {
 		jsonOutput := jsonFlag(fs)
 		var eventsPath, blob, output, digest, git, family, criterion string
-		var packets blobPaths
+		var packets, blobs blobPaths
 		var actor func(*call) model.Actor
 		switch mode {
 		case "criterion":
@@ -67,6 +67,7 @@ func checkVerb(mode string) func(*flag.FlagSet) func(*call) error {
 			fs.StringVar(&output, "output", "", "a candidate run output `FILE`; default: the criterion's pinned example")
 		case "admission":
 			fs.StringVar(&eventsPath, "events", "", "a JSON event array, dry-run as one uncaptured packet: a `FILE`, or - for stdin")
+			fs.Var(&blobs, "blob", "--events: a `FILE` whose exact bytes the packet would be captured with (repeatable)")
 			actor = actorFlag(fs)
 			fs.Var(&packets, "packet", "a captured packet `ID` to admit with the events (repeatable)")
 			fs.StringVar(&family, "family", "", "instead: the proof family of this claim `ID`'s current criterion, and a proof skeleton")
@@ -84,6 +85,8 @@ func checkVerb(mode string) func(*flag.FlagSet) func(*call) error {
 				return usageError("datum check admission: --family lists a family; it takes no --events or --packet")
 			case criterion != "" && family == "":
 				return usageError("datum check admission: --criterion belongs to --family")
+			case len(blobs) > 0 && eventsPath == "":
+				return usageError("datum check admission: --blob belongs to --events; a captured packet's blobs are already in intake")
 			case mode == "criterion" && eventsPath == "" || mode == "admission" && family == "" && eventsPath == "" && len(packets) == 0:
 				return usageError("datum check %s needs --events", mode)
 			}
@@ -116,7 +119,7 @@ func checkVerb(mode string) func(*flag.FlagSet) func(*call) error {
 					answer, header, text = a, &a.checkHeader, a.text
 					break
 				}
-				a, err := admissionCheck(c.ctx, project, events, packets, actor(c))
+				a, err := admissionCheck(c.ctx, project, events, blobs, packets, actor(c))
 				if err != nil {
 					return err
 				}
@@ -182,13 +185,34 @@ type admissionAnswer struct {
 	text     string
 }
 
-// admissionCheck puts the events (as one uncaptured packet by the actor) and
-// any captured packets through the admission gate against the published
-// ledger, and collects every refusal the gate's stages allow.
-func admissionCheck(ctx context.Context, project store.Project, events []model.Event, packets []string, author model.Actor) (*admissionAnswer, error) {
-	var uncaptured []model.Packet
+// admissionCheck puts the events (as one uncaptured packet by the actor, with
+// the blobs capture would store: the --blob files and the source bytes
+// capture adds itself) and any captured packets through the admission gate
+// against the published ledger, and collects every refusal the gate's stages
+// allow.
+func admissionCheck(ctx context.Context, project store.Project, events []model.Event, blobs, packets []string, author model.Actor) (*admissionAnswer, error) {
+	var uncaptured []write.Uncaptured
 	if len(events) > 0 {
-		packet, err := write.UncapturedPacket(project, author, events)
+		var data [][]byte
+		for _, path := range blobs {
+			b, err := os.ReadFile(path)
+			if err != nil {
+				return nil, err
+			}
+			data = append(data, b)
+		}
+		sources, err := sourceBlobs(ctx, project, events)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range sources {
+			b, err := io.ReadAll(r)
+			if err != nil {
+				return nil, err
+			}
+			data = append(data, b)
+		}
+		packet, err := write.UncapturedPacket(project, author, events, data)
 		if err != nil {
 			return nil, err
 		}
@@ -211,12 +235,6 @@ func admissionCheck(ctx context.Context, project store.Project, events []model.E
 	}
 	for i, r := range c.Refusals {
 		reason := r.Err.Error()
-		for _, digest := range c.Unpreserved {
-			if strings.Contains(reason, string(digest)) {
-				reason += " [these bytes are in a captured blob admission copies into the artifact store first; the dry run copies nothing, so this may resolve on admission]"
-				break
-			}
-		}
 		a.Reasons = append(a.Reasons, reason)
 		a.Refusals = append(a.Refusals, checkRefusal{Stage: r.Stage, Reason: reason})
 		fmt.Fprintf(&b, "  %d. [%s] %s\n", i+1, r.Stage, reason)

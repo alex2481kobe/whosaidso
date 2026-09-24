@@ -5,13 +5,16 @@ package write
 // read without the admission lock. It publishes no bundle, preserves no blob
 // and writes no intake. It adds no rule: the collector below only decides
 // whether a refusal ends the check or is recorded while the later, independent
-// stages still run. The admission transaction and every rule live elsewhere.
+// stages still run, and it holds in memory the bytes admission would have
+// read from intake or the artifact store, so every rule reads what it would
+// read on admission. The admission transaction and every rule live elsewhere.
 
 import (
 	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -45,20 +48,23 @@ type ProofMemberCheck struct {
 // refusal were reached only because the dry run kept going; admission stops at
 // the first.
 type AdmissionCheck struct {
-	Head        uint64
-	Refusals    []CheckRefusal
-	StoppedAt   string
-	Unpreserved []model.Digest
-	Members     []ProofMemberCheck
+	Head      uint64
+	Refusals  []CheckRefusal
+	StoppedAt string
+	Members   []ProofMemberCheck
 }
 
 var errCheckStopped = errors.New("dry run stopped")
 
 // dryRun is the collector admissionProposal is handed on a dry run. Every
 // method is a no-op pass-through on a nil receiver, which is a real admission.
+// staged is what admission would have published into the artifact store, by
+// digest; blobs is each uncaptured packet's blobs, as capture would store them.
 type dryRun struct {
-	check *AdmissionCheck
-	after *reduce.Snapshot
+	check  *AdmissionCheck
+	after  *reduce.Snapshot
+	staged map[model.Digest][]byte
+	blobs  map[model.ID]map[model.Digest][]byte
 }
 
 func (d *dryRun) stop(stage string, err error) error {
@@ -89,16 +95,46 @@ func (d *dryRun) replayed(after reduce.Snapshot) {
 	}
 }
 
-// preserver is preserveAdmissionBlob on admission. A dry run only records what
-// admission would copy into the artifact store.
+// preserver is preserveAdmissionBlob on admission. A dry run stages the bytes
+// in memory instead, where its resolvers read them as the store's copy.
 func (d *dryRun) preserver() func(string, string, []byte) error {
 	if d == nil {
 		return preserveAdmissionBlob
 	}
 	return func(_, _ string, data []byte) error {
-		d.check.Unpreserved = append(d.check.Unpreserved, model.HashBytes(data))
+		d.staged[model.HashBytes(data)] = data
 		return nil
 	}
+}
+
+// resolver is the production resolver, reading a dry run's staged bytes as
+// the artifact store's copy.
+func (d *dryRun) resolver(project store.Project) *evidence.Resolver {
+	r := evidence.NewResolverAt(project.Root, project.ArtifactDir())
+	if d != nil {
+		r.Staged = d.staged
+	}
+	return r
+}
+
+// packetBlob reads one captured blob of one packet: from intake, or for an
+// uncaptured packet from the bytes handed with it, under intake's size limit.
+// A digest an uncaptured packet does not hold is looked up in intake, where
+// its never-captured packet is not, so it fails exactly as a missing blob does.
+func (d *dryRun) packetBlob(inbox string, packet model.ID, digest model.Digest) ([]byte, error) {
+	path := filepath.Join(inbox, string(packet), "blobs", string(digest))
+	var data []byte
+	ok := false
+	if d != nil {
+		data, ok = d.blobs[packet][digest]
+	}
+	if !ok {
+		return admissionBlob(path)
+	}
+	if int64(len(data)) > evidence.DefaultMaxBytes {
+		return nil, admissionFault("unavailable", path, "artifact exceeds the resolver byte limit")
+	}
+	return data, nil
 }
 
 // proofMembers asks each listed member the gate's own questions separately, so
@@ -109,12 +145,12 @@ func (d *dryRun) proofMembers(ctx context.Context, project store.Project, after 
 	if d == nil {
 		return
 	}
-	resolver := evidence.NewResolverAt(project.Root, project.ArtifactDir())
+	resolver := d.resolver(project)
 	criterion, known := after.Criterion(e.CriterionRef)
 	for i, member := range e.Evidence {
 		alone := *e
 		alone.Evidence = []model.ObservationDisposition{member}
-		if err := gateProofFamily(ctx, project, after, intake, &alone); err != nil {
+		if err := gateProofFamily(ctx, project, after, intake, &alone, d); err != nil {
 			var fault *model.Fault
 			if errors.As(err, &fault) && strings.HasPrefix(fault.Path, "evidence[0]") {
 				moved := *fault
@@ -148,31 +184,39 @@ func evaluateOwn(ctx context.Context, resolver *evidence.Resolver, fix model.Cri
 	return evidence.Evaluate(fix, []evidence.Observation{observation})
 }
 
-// UncapturedPacket wraps events the author has not captured yet as the packet
-// capture would publish, without writing intake. It carries no blobs.
-func UncapturedPacket(project store.Project, author model.Actor, events []model.Event) (model.Packet, error) {
+// Uncaptured is a packet the author has not captured yet, with the blob bytes
+// capture would store beside it.
+type Uncaptured struct {
+	Packet model.Packet
+	Blobs  [][]byte
+}
+
+// UncapturedPacket wraps events and blobs the author has not captured yet as
+// the packet capture would publish, without writing intake.
+func UncapturedPacket(project store.Project, author model.Actor, events []model.Event, blobs [][]byte) (Uncaptured, error) {
 	at := time.Now().UTC()
 	id, err := model.NewID(at, rand.Reader)
 	if err != nil {
-		return model.Packet{}, err
+		return Uncaptured{}, err
 	}
 	data, err := model.Encode(events)
 	if err != nil {
-		return model.Packet{}, err
+		return Uncaptured{}, err
 	}
-	return model.Packet{Version: model.WireVersion, Project: project.ID, CommandID: id, RequestDigest: model.HashBytes(data), Author: author, CapturedAt: at, Events: events}, nil
+	return Uncaptured{Packet: model.Packet{Version: model.WireVersion, Project: project.ID, CommandID: id, RequestDigest: model.HashBytes(data), Author: author, CapturedAt: at, Events: events}, Blobs: blobs}, nil
 }
 
 // CheckAdmission runs an accepted admission of the named intake packets plus
 // the uncaptured ones through the gate and reports every refusal it collected.
 // The error return is for a check that could not run at all.
-func CheckAdmission(ctx context.Context, project store.Project, packetIDs []model.ID, uncaptured []model.Packet, admitter model.Actor) (AdmissionCheck, error) {
+func CheckAdmission(ctx context.Context, project store.Project, packetIDs []model.ID, uncaptured []Uncaptured, admitter model.Actor) (AdmissionCheck, error) {
 	loaded, err := store.Load(project)
 	if err != nil {
 		return AdmissionCheck{}, err
 	}
 	snapshot := loaded.Snapshot()
 	check := AdmissionCheck{Head: snapshot.Watermark().Sequence}
+	dry := &dryRun{check: &check, staged: map[model.Digest][]byte{}, blobs: map[model.ID]map[model.Digest][]byte{}}
 	var packets []model.Packet
 	var refs []model.PacketRef
 	if len(packetIDs) > 0 {
@@ -185,18 +229,23 @@ func CheckAdmission(ctx context.Context, project store.Project, packetIDs []mode
 			packets, refs = append(packets, v.Packet), append(refs, v.Ref)
 		}
 	}
-	for _, p := range uncaptured {
+	for _, u := range uncaptured {
+		p := u.Packet
 		data, err := model.Encode(p)
 		if err != nil {
 			return AdmissionCheck{}, err
 		}
 		packets, refs = append(packets, p), append(refs, model.PacketRef{CommandID: p.CommandID, Digest: model.HashBytes(data)})
+		own := map[model.Digest][]byte{}
+		for _, blob := range u.Blobs {
+			own[model.HashBytes(blob)] = blob
+		}
+		dry.blobs[p.CommandID] = own
 	}
 	if len(packets) == 0 {
 		return AdmissionCheck{}, admissionFault("invalid-field", "packets", "a check needs events or packets")
 	}
 	sort.Slice(refs, func(i, j int) bool { return refs[i].CommandID < refs[j].CommandID })
-	dry := &dryRun{check: &check}
 	for _, ref := range refs {
 		if prior, ok := snapshot.Review(reduce.ReviewKey{Project: project.ID, CommandID: ref.CommandID}); ok {
 			dry.stop("gate", admissionFault("conflict", "packets", fmt.Sprintf("packet %s already has disposition %s", ref.CommandID, prior.Outcome)))

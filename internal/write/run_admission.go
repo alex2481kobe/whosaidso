@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"datum/internal/evidence"
@@ -32,7 +31,7 @@ type runOwnOutput struct {
 // packet: a same-digest copy there (the criterion's example, say) was not
 // produced by this run. write.Run's staging is not a source either: a run's
 // seal carries its outputs in its own blobs.
-func runAdmitOutputs(root, artifactDir, inbox string, packet model.Packet, env model.InvocationEnvelope) ([]runOwnOutput, error) {
+func runAdmitOutputs(root, artifactDir, inbox string, packet model.Packet, env model.InvocationEnvelope, dry *dryRun) ([]runOwnOutput, error) {
 	if env.OutputRefs.State != model.Known || env.OutputRefs.Value == nil {
 		return nil, nil
 	}
@@ -49,7 +48,7 @@ func runAdmitOutputs(root, artifactDir, inbox string, packet model.Packet, env m
 					fmt.Sprintf("run outputs are declared in the run's own directory %s/, not at %q", runDir, l.Path))
 			}
 		}
-		blob, why := runOwnBytes(root, inbox, packet.CommandID, *ref.Content)
+		blob, why := runOwnBytes(root, inbox, packet.CommandID, *ref.Content, dry)
 		if blob == nil {
 			return nil, admissionFault("unavailable", at, "this run's output is neither in its captured blobs nor in its run directory: "+why)
 		}
@@ -60,7 +59,7 @@ func runAdmitOutputs(root, artifactDir, inbox string, packet model.Packet, env m
 
 // runOwnBytes returns verified bytes for the pin from this packet's blobs or a
 // run-dir locator, or nil and every reason a candidate was not them.
-func runOwnBytes(root, inbox string, packet model.ID, pin model.ContentPin) ([]byte, string) {
+func runOwnBytes(root, inbox string, packet model.ID, pin model.ContentPin, dry *dryRun) ([]byte, string) {
 	var notes []string
 	try := func(label string, read func() ([]byte, error)) []byte {
 		b, err := read()
@@ -74,8 +73,7 @@ func runOwnBytes(root, inbox string, packet model.ID, pin model.ContentPin) ([]b
 		}
 		return nil
 	}
-	own := filepath.Join(inbox, string(packet), "blobs", string(pin.SHA256))
-	if b := try("captured blob", func() ([]byte, error) { return admissionBlob(own) }); b != nil {
+	if b := try("captured blob", func() ([]byte, error) { return dry.packetBlob(inbox, packet, pin.SHA256) }); b != nil {
 		return b, ""
 	}
 	for _, l := range pin.Locators {

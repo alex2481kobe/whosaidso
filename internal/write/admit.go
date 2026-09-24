@@ -115,7 +115,8 @@ func proposeAdmission(ctx context.Context, project store.Project, request AdmitR
 
 // admissionProposal is the whole gate. dry is nil for a real admission; a dry
 // run (admit_check.go) passes its collector, which records each refusal and
-// lets the later, independent stages run, and which never preserves a blob.
+// lets the later, independent stages run, and which stages in memory the blobs
+// admission would preserve, never writing them.
 func admissionProposal(ctx context.Context, project store.Project, request AdmitRequest, digest model.Digest, snapshot reduce.Snapshot, packets []model.Packet, lockedRefs []model.PacketRef, dry *dryRun) (model.Bundle, error) {
 	proposal := model.Bundle{Admitter: request.Admitter, Packets: lockedRefs, Events: []model.Event{}}
 	eventPackets := []model.ID{}
@@ -160,13 +161,13 @@ func admissionProposal(ctx context.Context, project store.Project, request Admit
 		if err := dry.note("disposals", gateDisposals(after, packets)); err != nil {
 			return model.Bundle{}, err
 		}
-		if err := dry.note("artifacts", materializeAdmission(ctx, project, packets, dry.preserver())); err != nil {
+		if err := dry.note("artifacts", materializeAdmission(ctx, project, packets, dry)); err != nil {
 			return model.Bundle{}, err
 		}
 		if err := dry.note("proofs", gateProofs(ctx, project, after, packets, dry)); err != nil {
 			return model.Bundle{}, err
 		}
-		if err := dry.note("quotes", gateQuotes(ctx, project, packets)); err != nil {
+		if err := dry.note("quotes", gateQuotes(ctx, project, packets, dry)); err != nil {
 			return model.Bundle{}, err
 		}
 	}

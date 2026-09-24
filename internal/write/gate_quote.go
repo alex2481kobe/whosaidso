@@ -20,8 +20,8 @@ import (
 
 // gateQuotes runs after admission artifacts resolved, so the authority's
 // source is available from its locators or the preserved blob store.
-func gateQuotes(ctx context.Context, project store.Project, packets []model.Packet) error {
-	resolver := evidence.NewResolverAt(project.Root, project.ArtifactDir())
+func gateQuotes(ctx context.Context, project store.Project, packets []model.Packet, dry *dryRun) error {
+	resolver := dry.resolver(project)
 	for _, packet := range packets {
 		for _, raw := range packet.Events {
 			event, err := model.DecodeEvent(raw)

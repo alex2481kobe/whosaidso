@@ -139,9 +139,11 @@ An observer that died before sealing: datum reconcile --invocation-id ID
 	{"check", "the three dry runs and what each did NOT check", `  datum check criterion --events crit.json [--blob EXAMPLE] [--output RUN_OUTPUT]
       criterion preview only: instrument validation, proof-family
       completeness, comparability and admission were NOT checked
-  datum check admission --events ev.json [--packet ID ...]
+  datum check admission --events ev.json [--blob FILE ...] [--packet ID ...]
       admission dry run at watermark W: full gate, evidence and authority
-      checks; result may change if the ledger moves
+      checks; result may change if the ledger moves. --blob is capture's:
+      the bytes the events would be captured with. A packet's blobs resolve
+      as on admission, held in memory, never copied
   datum check admission --family CLAIM [--criterion ID]
       proof family at watermark W, confirmed by an admission dry run;
       dispositions, reasons, judgment and verdict were NOT chosen

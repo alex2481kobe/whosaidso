@@ -193,7 +193,7 @@ func gateProofs(ctx context.Context, project store.Project, after reduce.Snapsho
 			case *model.InvocationSeal:
 				err = gatePendingRealSeal(intake, after, e.Envelope)
 			case *model.ProofAdmit:
-				err = gateProofFamily(ctx, project, after, intake, e)
+				err = gateProofFamily(ctx, project, after, intake, e, dry)
 				dry.proofMembers(ctx, project, after, intake, e)
 			case *model.TaskClose:
 				err = gateClosureEffective(after, e)

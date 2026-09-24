@@ -49,6 +49,11 @@ type Resolver struct {
 	ArtifactDir string
 	Git         GitRunner
 	MaxBytes    int64
+	// Staged stands in for the artifact store's copy of these digests: an
+	// admission dry run hands here the bytes admission would have published
+	// there, so it resolves what admission would without writing the store.
+	// The bytes are verified against the pin like any other copy.
+	Staged map[model.Digest][]byte
 }
 
 // NewResolver builds a resolver for one project root and the default store.
