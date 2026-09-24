@@ -122,7 +122,7 @@ func TestDecisionDisposeKeepsEarlierHistoryVisible(t *testing.T) {
 	w := newDisposeWorld(t)
 	w.f.accept(w.f.capture(nil, w.dispose(1, "approved")))
 	open := w.decision(t, 1)
-	revise := &model.DecisionRevise{Provenance: model.Provenance{Author: w.f.author, SourceRefs: []model.ArtifactRef{}}, Target: w.f.ref(w.id, 1), ExpectedRevision: 1, Replacement: *open.Spec}
+	revise := &model.DecisionRevise{Provenance: model.Provenance{Author: w.f.author, SourceRefs: []model.ArtifactRef{}}, Target: w.f.ref(w.id, 1), Replacement: *open.Spec}
 	w.f.accept(w.f.capture(nil, revise))
 	w.f.accept(w.f.capture(nil, w.dispose(2, "withdrawn")))
 	if first := w.decision(t, 1); len(first.Dispositions) != 1 || first.Dispositions[0].Disposition.Disposition != "approved" {

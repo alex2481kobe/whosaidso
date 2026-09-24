@@ -66,7 +66,7 @@ func schemaEvents() []TypedEvent {
 	seal.ConditionsObserved = schemaKnown(map[string]Availability[Scalar]{})
 	return []TypedEvent{
 		&TaskCreate{ID: schemaID(1), Spec: schemaTask(), Provenance: schemaProvenance()},
-		&TaskAmend{Target: schemaRef(1), ExpectedRevision: 1, Replacement: schemaTask(), Provenance: schemaProvenance()},
+		&TaskAmend{Target: schemaRef(1), Replacement: schemaTask(), Provenance: schemaProvenance()},
 		&TaskStart{Task: schemaRef(1), Actor: Actor{ID: "lane-a"}, AttemptID: schemaID(10)},
 		&TaskTakeover{Task: schemaRef(1), Actor: Actor{ID: "lane-b"}, AttemptID: schemaID(10), PriorAttemptID: schemaID(12), StoppedConfirmationRef: schemaArtifact()},
 		&AttemptTerminal{Task: schemaRef(1), AttemptID: schemaID(10), Outcome: AttemptRunnerDied, Reason: "observer died", NextAction: "reconcile missing terminal observation", DeliveryRefs: []ArtifactRef{}, CommitsDenied: true, ReconciliationOwed: true},
@@ -77,16 +77,16 @@ func schemaEvents() []TypedEvent {
 		&InvocationSeal{StartRef: InvocationRef{Project: schemaProject, InvocationID: schemaID(9)}, Envelope: seal},
 		&SourceIntake{SourceID: schemaID(14), OriginalDigest: schemaArtifact().Content.SHA256, Length: 6, SourceRef: schemaArtifact(), Speaker: Actor{UnknownReason: "original speaker was not retained"}, Order: 0, Referents: []RecordRef{schemaRef(1)}},
 		&ClaimAssert{ID: schemaID(1), Spec: schemaClaim(), Provenance: schemaProvenance()},
-		&ClaimRevise{Target: schemaRef(1), ExpectedRevision: 1, Replacement: schemaClaim(), Provenance: schemaProvenance()},
+		&ClaimRevise{Target: schemaRef(1), Replacement: schemaClaim(), Provenance: schemaProvenance()},
 		&CriterionFix{Claim: schemaRef(1), CriterionID: schemaID(8), Revision: 2, Expression: schemaExpression(), Policy: EvaluationPolicy{Inclusion: "entire-criterion-family", Retry: "retain-all"}, Author: Actor{ID: "predicate-author"}, SourceRefs: []ArtifactRef{schemaArtifact()}},
 		&ProofAdmit{Claim: schemaRef(1), CriterionRef: schemaCriterionRef(), Evidence: []ObservationDisposition{{InvocationRef: InvocationRef{Project: schemaProject, InvocationID: schemaID(9)}, Disposition: "supports", Reason: "every case matched the predicate"}}, Judgment: ResponsibleJudgment{Actor: Actor{ID: "coordinator"}, Reason: "the complete family supports the criterion"}, Verdict: VerdictSupports},
 		&DecisionOpen{ID: schemaID(1), Spec: schemaDecision(), Provenance: schemaProvenance()},
-		&DecisionRevise{Target: schemaRef(1), ExpectedRevision: 1, Replacement: schemaDecision(), Provenance: schemaProvenance()},
+		&DecisionRevise{Target: schemaRef(1), Replacement: schemaDecision(), Provenance: schemaProvenance()},
 		&DecisionDispose{Decision: schemaRef(1), Disposition: "approved", Quote: "  Approve this scope.\n", Scope: schemaScope(), Authority: schemaAuthority()},
 		&Supersede{Prior: schemaRef(1), Replacement: schemaRef(15), Reason: "new scope replaces the old ruling", Authority: ptr(schemaAuthority())},
 		&Correction{Target: CorrectionTarget{Kind: "support", Support: &SupportLink{Dependent: schemaRef(1), Evidence: schemaArtifact()}}, AffectedRevisions: []RecordRef{schemaRef(1)}, Reason: "support did not test the asserted scope", CorrectiveRef: schemaArtifact()},
 		&InstrumentDeclare{ID: schemaID(1), Spec: schemaInstrument(), Provenance: schemaProvenance()},
-		&InstrumentRevise{Target: schemaRef(1), ExpectedRevision: 1, Replacement: schemaInstrument(), Provenance: schemaProvenance()},
+		&InstrumentRevise{Target: schemaRef(1), Replacement: schemaInstrument(), Provenance: schemaProvenance()},
 		&TrustWithdraw{Instrument: schemaRef(1), Scope: schemaScope(), RevalidationCondition: "bind validation to the repaired implementation"},
 		&ReviewAdmit{Packets: []PacketRef{{CommandID: schemaID(16), Digest: HashBytes([]byte("packet"))}}, Outcome: "accepted", Actor: Actor{ID: "coordinator"}, Reason: "reviewed against the current record",
 			Authors: map[ID]Actor{schemaID(16): {ID: "lane-a"}}, CapturedAt: map[ID]Availability[time.Time]{schemaID(16): {State: Unknown, Reason: "not recorded"}}, EventPackets: []ID{}},
@@ -156,16 +156,16 @@ func TestEveryTypedEventRoundTripAndRefusal(t *testing.T) {
 		path  string
 		value any
 	}{
-		"task.create": {"spec.intent", " \t"}, "task.amend": {"expected_revision", 0},
+		"task.create": {"spec.intent", " \t"}, "task.amend": {"target.revision", 0},
 		"task.start": {"task.revision", 0}, "task.takeover": {"attempt_id", schemaID(12)},
 		"attempt.terminal": {"outcome", "done"}, "task.close": {"outcome", "done"},
 		"blocker.hold": {"reason", "whatever"}, "blocker.clear": {"hold_ref.blocker_id", schemaID(20)},
 		"invocation.start": {"envelope.outcome", schemaKnown(ProcessOutcome{Kind: "exit", ExitCode: ptr(0)})},
 		"invocation.seal":  {"start_ref.invocation_id", schemaID(20)},
 		"source.intake":    {"length", 7}, "claim.assert": {"spec.falsifier", " "},
-		"claim.revise": {"expected_revision", 0}, "criterion.fix": {"expression.operator", "approximately"},
+		"claim.revise": {"target.revision", 0}, "criterion.fix": {"expression.operator", "approximately"},
 		"proof.admit": {"criterion_ref.revision", 0}, "decision.open": {"spec.question", " "},
-		"decision.revise": {"expected_revision", 0}, "decision.dispose": {"quote", " \n"},
+		"decision.revise": {"target.revision", 0}, "decision.dispose": {"quote", " \n"},
 		"supersede": {"prior.revision", 0}, "correction": {"target.kind", "patch"},
 		"instrument.declare": {"spec.blind_to", " "}, "instrument.revise": {"replacement.blind_to", " "},
 		"trust.withdraw": {"revalidation_condition", " "}, "review.admit": {"outcome", "superseded"},
@@ -212,7 +212,8 @@ func TestClosedEventSetAndReplacementOnly(t *testing.T) {
 				good := requireSchemaGood(t, e)
 				requireSchemaRefusal(t, mutateSchema(t, good, "replacement", map[string]any{}, false), "invalid-field")
 				requireSchemaRefusal(t, mutateSchema(t, good, "patch", map[string]any{"intent": "forged"}, false), "invalid-field")
-				requireSchemaRefusal(t, mutateSchema(t, good, "expected_revision", 2, false), "invalid-field")
+				requireSchemaRefusal(t, mutateSchema(t, good, "expected_revision", 1, false), "invalid-field")
+				requireSchemaRefusal(t, mutateSchema(t, good, "target.revision", json.Number("18446744073709551615"), false), "invalid-field")
 				requireSchemaRefusal(t, mutateSchema(t, good, "replacement", nil, true), "invalid-field")
 			})
 		}

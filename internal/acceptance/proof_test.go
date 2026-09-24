@@ -199,7 +199,7 @@ func TestProofRevisionAndTrustLossStayAttachedToTheirExactSubjects(t *testing.T)
 		t.Fatalf("control scoped ruling must settle revision 1: %+v", d)
 	}
 	third := laneEReduceBundle(t, second,
-		&model.DecisionRevise{Target: laneEReduceRef(5, 1), ExpectedRevision: 1, Provenance: laneEReduceProvenance(), Replacement: spec},
+		&model.DecisionRevise{Target: laneEReduceRef(5, 1), Provenance: laneEReduceProvenance(), Replacement: spec},
 		&model.TrustWithdraw{Instrument: laneEReduceRef(4, 1), Scope: laneEReduceScope(), RevalidationCondition: "repeat independent validation"})
 	after := laneEReduceReplay(t, append(prefix[:len(prefix):len(prefix)], second, third)...)
 	d, _ = after.Decision(laneEReduceIdent(5))

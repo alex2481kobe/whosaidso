@@ -255,7 +255,7 @@ func TestProofCannotBorrowAnotherRevisionsObservations(t *testing.T) {
 	w.f.accept(s, e)
 	claim := w.f.claim()
 	claim.Spec.Assertion = "a revised finding"
-	w.f.accept(w.f.capture(nil, &model.ClaimRevise{Provenance: claim.Provenance, Target: w.claim, ExpectedRevision: 1, Replacement: claim.Spec}))
+	w.f.accept(w.f.capture(nil, &model.ClaimRevise{Provenance: claim.Provenance, Target: w.claim, Replacement: claim.Spec}))
 	revised := w.claim
 	revised.Revision = 2
 	// A criterion for the revision exists, but no run carries it.

@@ -275,7 +275,7 @@ func TestAdmissionStructuredSelfAdmission(t *testing.T) {
 func TestAdmissionStaleRevisionAndConcurrentWriters(t *testing.T) {
 	f := newAdmissionFixture(t)
 	task := f.goodControl()
-	amend := &model.TaskAmend{Provenance: task.Provenance, Target: f.ref(task.ID, 1), ExpectedRevision: 1, Replacement: task.Spec}
+	amend := &model.TaskAmend{Provenance: task.Provenance, Target: f.ref(task.ID, 1), Replacement: task.Spec}
 	first, second := f.capture(nil, amend), f.capture(nil, amend)
 	requests := []AdmitRequest{f.request(first), f.request(second)}
 	errorsOut := make(chan error, 2)

@@ -18,7 +18,7 @@ func TestTaskRevisionHoldersAndUnknownNeverBorrowNearbyActors(t *testing.T) {
 	spec := testTask(1).Spec
 	spec.NextActor = model.Actor{UnknownReason: "no next actor was assigned"}
 	appendEvents(t, p, 101,
-		&model.TaskAmend{Target: testRef(1, 1), ExpectedRevision: 1, Replacement: spec, Provenance: testTask(1).Provenance},
+		&model.TaskAmend{Target: testRef(1, 1), Replacement: spec, Provenance: testTask(1).Provenance},
 		&model.TaskStart{Task: testRef(1, 2), AttemptID: testID(70), Actor: model.Actor{ID: "worker"}},
 		&model.BlockerHold{Task: testRef(1, 2), BlockerID: testID(80), Reason: model.BlockerPrerequisite,
 			Actor: model.Actor{UnknownReason: "external owner not named"}, Criterion: "external input arrives"})

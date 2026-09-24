@@ -484,10 +484,9 @@ func TestStaleAmendmentIsATypedConflict(t *testing.T) {
 	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
 	// Control: the first amendment at the current revision is accepted.
 	l.add(t, &model.TaskAmend{
-		Provenance:       provenance("lane-a"),
-		Target:           ref(newID("TSKA"), 1),
-		ExpectedRevision: 1,
-		Replacement:      taskSpec(withIntent("first amendment wins")),
+		Provenance:  provenance("lane-a"),
+		Target:      ref(newID("TSKA"), 1),
+		Replacement: taskSpec(withIntent("first amendment wins")),
 	})
 	s := mustReplay(t, l.bundles())
 	if rev, _ := s.CurrentRevision(Ident{Project: testProject, ID: newID("TSKA")}); rev != 2 {
@@ -496,10 +495,9 @@ func TestStaleAmendmentIsATypedConflict(t *testing.T) {
 
 	// The second amendment expects the same revision and must lose.
 	stale := l.add(t, &model.TaskAmend{
-		Provenance:       provenance("lane-b"),
-		Target:           ref(newID("TSKA"), 1),
-		ExpectedRevision: 1,
-		Replacement:      taskSpec(withIntent("second amendment loses")),
+		Provenance:  provenance("lane-b"),
+		Target:      ref(newID("TSKA"), 1),
+		Replacement: taskSpec(withIntent("second amendment loses")),
 	})
 	_, err := Apply(s, stale)
 	c := wantConflict(t, err)
@@ -522,16 +520,14 @@ func TestLedgerSequenceDecidesWhichAmendmentLoses(t *testing.T) {
 		l := newLedger()
 		l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
 		l.add(t, &model.TaskAmend{
-			Provenance:       provenance("lane-a"),
-			Target:           ref(newID("TSKA"), 1),
-			ExpectedRevision: 1,
-			Replacement:      taskSpec(withIntent(first)),
+			Provenance:  provenance("lane-a"),
+			Target:      ref(newID("TSKA"), 1),
+			Replacement: taskSpec(withIntent(first)),
 		})
 		l.add(t, &model.TaskAmend{
-			Provenance:       provenance("lane-b"),
-			Target:           ref(newID("TSKA"), 1),
-			ExpectedRevision: 1,
-			Replacement:      taskSpec(withIntent(second)),
+			Provenance:  provenance("lane-b"),
+			Target:      ref(newID("TSKA"), 1),
+			Replacement: taskSpec(withIntent(second)),
 		})
 		_, err := Replay(l.bundles())
 		return err
@@ -558,10 +554,9 @@ func TestStaleTaskRevisionOnAttemptEvents(t *testing.T) {
 	s := mustReplay(t, l.bundles())
 
 	amend := l.add(t, &model.TaskAmend{
-		Provenance:       provenance("coordinator"),
-		Target:           ref(newID("TSKA"), 1),
-		ExpectedRevision: 1,
-		Replacement:      taskSpec(withIntent("the contract moved under the lane")),
+		Provenance:  provenance("coordinator"),
+		Target:      ref(newID("TSKA"), 1),
+		Replacement: taskSpec(withIntent("the contract moved under the lane")),
 	})
 	s, err := Apply(s, amend)
 	if err != nil {
@@ -710,8 +705,7 @@ func TestUnknownReferencesAreRefused(t *testing.T) {
 		{"amendment of a closed task", CodeInvalidTransition, func(t *testing.T) []model.Bundle {
 			l := closedTaskLedger(t)
 			l.add(t, &model.TaskAmend{
-				Provenance: provenance("coordinator"), Target: ref(newID("TSKA"), 1),
-				ExpectedRevision: 1, Replacement: taskSpec(withIntent("rewriting the closed contract")),
+				Provenance: provenance("coordinator"), Target: ref(newID("TSKA"), 1), Replacement: taskSpec(withIntent("rewriting the closed contract")),
 			})
 			return l.bundles()
 		}},

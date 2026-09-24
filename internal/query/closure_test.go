@@ -39,7 +39,7 @@ func closureWorld(t *testing.T) (*ContinueAnswer, func(limit int) *ContinueAnswe
 	appendEvents(t, p, 102, taskWith(2, func(s *model.TaskSpec) {
 		s.Prerequisites = []model.Prerequisite{{Kind: "task-success", Target: testRef(3, 1), WaiverPolicy: "forbid"}}
 	}))
-	appendEvents(t, p, 103, &model.TaskAmend{Target: testRef(3, 1), ExpectedRevision: 1, Provenance: prov("author"),
+	appendEvents(t, p, 103, &model.TaskAmend{Target: testRef(3, 1), Provenance: prov("author"),
 		Replacement: taskWith(3, func(s *model.TaskSpec) {
 			s.ConstraintRefs = []model.RecordRef{testRef(31, 1), testRef(20, 1), testRef(2, 1)}
 		}).Spec})
@@ -101,7 +101,7 @@ func TestClosureReportsACycleInsteadOfLooping(t *testing.T) {
 	p := testProject(t)
 	appendEvents(t, p, 100, testTask(2))
 	appendEvents(t, p, 101, taskWith(3, func(s *model.TaskSpec) { s.ConstraintRefs = []model.RecordRef{testRef(2, 1)} }))
-	appendEvents(t, p, 102, &model.TaskAmend{Target: testRef(2, 1), ExpectedRevision: 1, Provenance: prov("author"),
+	appendEvents(t, p, 102, &model.TaskAmend{Target: testRef(2, 1), Provenance: prov("author"),
 		Replacement: taskWith(2, func(s *model.TaskSpec) { s.ConstraintRefs = []model.RecordRef{testRef(3, 1)} }).Spec})
 	appendEvents(t, p, 103, &model.Supersede{Prior: testRef(2, 1), Replacement: testRef(2, 2), Reason: "restated"})
 	a := continueOf(t, p, testID(3), 0)
@@ -149,7 +149,7 @@ func TestClosureTaskNodeIsTheExactRevision(t *testing.T) {
 	appendEvents(t, p, 101, taskWith(5, func(s *model.TaskSpec) {
 		s.Prerequisites = []model.Prerequisite{{Kind: "task-success", Target: testRef(6, 1), WaiverPolicy: "forbid"}}
 	}))
-	appendEvents(t, p, 102, &model.TaskAmend{Target: testRef(5, 1), ExpectedRevision: 1, Provenance: prov("author"),
+	appendEvents(t, p, 102, &model.TaskAmend{Target: testRef(5, 1), Provenance: prov("author"),
 		Replacement: testTask(5).Spec})
 	appendEvents(t, p, 103, taskWith(7, func(s *model.TaskSpec) { s.ConstraintRefs = []model.RecordRef{testRef(5, 1)} }))
 	a := continueOf(t, p, testID(7), 0)

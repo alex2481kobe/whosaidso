@@ -139,7 +139,7 @@ func TestDecisionOpenAndReviseAdmitWithoutDisposition(t *testing.T) {
 		Spec: model.DecisionSpec{Question: "ship this", Options: []string{"yes", "no"}, WaitingActor: model.Actor{ID: "owner"}, Scope: scope}}
 	f.accept(f.capture(nil, open))
 	ref := f.ref(open.ID, 1)
-	revise := &model.DecisionRevise{Provenance: open.Provenance, Target: ref, ExpectedRevision: 1, Replacement: open.Spec}
+	revise := &model.DecisionRevise{Provenance: open.Provenance, Target: ref, Replacement: open.Spec}
 	forged := *revise
 	forged.Provenance.Author = model.Actor{ID: "someone-else"}
 	f.refuse(f.request(f.capture(nil, &forged)), "attribution-mismatch")

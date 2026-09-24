@@ -123,7 +123,7 @@ func TestInstrumentKnownValidationMustResolve(t *testing.T) {
 					replacement.Validation = proofKnown(model.InstrumentValidation{Ref: proofPin(`{"validated":"never written"}`, "validation/missing.json"), Version: "v2"})
 					code = "unavailable"
 				}
-				events = []model.TypedEvent{&model.InstrumentRevise{Provenance: instrument.Provenance, Target: f.ref(instrument.ID, 1), ExpectedRevision: 1, Replacement: replacement}}
+				events = []model.TypedEvent{&model.InstrumentRevise{Provenance: instrument.Provenance, Target: f.ref(instrument.ID, 1), Replacement: replacement}}
 			} else {
 				instrument.Spec.Validation = known
 			}
@@ -203,11 +203,11 @@ func TestNewOperationsCannotEscapeRootThroughSymlink(t *testing.T) {
 			case "claim.revise":
 				claim := f.claim()
 				claim.Provenance.SourceRefs = []model.ArtifactRef{pin}
-				event = &model.ClaimRevise{Provenance: claim.Provenance, Target: w.claim, ExpectedRevision: 1, Replacement: claim.Spec}
+				event = &model.ClaimRevise{Provenance: claim.Provenance, Target: w.claim, Replacement: claim.Spec}
 			case "instrument.revise":
 				spec := f.instrument().Spec
 				spec.Validation = proofKnown(model.InstrumentValidation{Ref: pin, Version: "v2"})
-				event = &model.InstrumentRevise{Provenance: model.Provenance{Author: f.author, SourceRefs: []model.ArtifactRef{}}, Target: w.instrument, ExpectedRevision: 1, Replacement: spec}
+				event = &model.InstrumentRevise{Provenance: model.Provenance{Author: f.author, SourceRefs: []model.ArtifactRef{}}, Target: w.instrument, Replacement: spec}
 			}
 			before := f.snapshot().Watermark()
 			_, err := Admit(context.Background(), f.project, f.request(f.capture([][]byte{[]byte("instrument implementation")}, event)))

@@ -1207,7 +1207,7 @@ func TestFlowRemainingEvents(t *testing.T) {
 	amended := task.spec
 	amended.Intent = "take over, reconcile, and say so"
 	w.mustAdmit(flowLane, &model.TaskAmend{Provenance: model.Provenance{Author: model.Actor{ID: flowLane}, SourceRefs: []model.ArtifactRef{}},
-		Target: task.ref, ExpectedRevision: 1, Replacement: amended})
+		Target: task.ref, Replacement: amended})
 	r := w.record(task.ref.RecordID)
 	if flowStr(r, "task", "revision") != "2" || flowStr(r, "fact", "task", "intent") != amended.Intent || flowStr(r, "task", "status") != "IN FLIGHT" {
 		t.Fatalf("task.amend must read revision 2 with the new intent and leave the attempt live, got %s %s", flowStr(r, "task", "revision"), flowStr(r, "task", "status"))
@@ -1251,7 +1251,7 @@ func TestFlowRemainingEvents(t *testing.T) {
 	// Decision revision.
 	decision, _ := w.decision()
 	w.mustAdmit(flowLane, &model.DecisionRevise{Provenance: model.Provenance{Author: model.Actor{ID: flowLane}, SourceRefs: []model.ArtifactRef{}},
-		Target: decision, ExpectedRevision: 1, Replacement: model.DecisionSpec{Question: "ship revision two?", Options: []string{"ship", "hold"}, WaitingActor: model.Actor{ID: "owner"}, Scope: w.scope}})
+		Target: decision, Replacement: model.DecisionSpec{Question: "ship revision two?", Options: []string{"ship", "hold"}, WaitingActor: model.Actor{ID: "owner"}, Scope: w.scope}})
 	d := w.record(decision.RecordID)
 	if flowStr(d, "fact", "key", "revision") != "2" || flowStr(d, "decision", "status") != "OPEN" || flowStr(d, "fact", "decision", "question") != "ship revision two?" {
 		t.Errorf("decision.revise must read revision 2, OPEN, with the new question; got %v", flowGet(d, "fact", "key"))
@@ -1269,7 +1269,7 @@ func TestFlowRemainingEvents(t *testing.T) {
 		t.Errorf("trust.withdraw must keep PROVEN history and remove current support, got %s %v", flowStr(c, "claim", "status"), flowGet(c, "claim", "support"))
 	}
 	spec := model.ClaimSpec{Assertion: "every pose is below 0.04 mm", Falsifier: "a pose reaches 0.04 mm", Scope: p.scope, ExternalRefs: []model.ExternalReference{}}
-	p.mustAdmit(flowLane, &model.ClaimRevise{Provenance: model.Provenance{Author: model.Actor{ID: flowLane}, SourceRefs: []model.ArtifactRef{}}, Target: p.claim, ExpectedRevision: 1, Replacement: spec})
+	p.mustAdmit(flowLane, &model.ClaimRevise{Provenance: model.Provenance{Author: model.Actor{ID: flowLane}, SourceRefs: []model.ArtifactRef{}}, Target: p.claim, Replacement: spec})
 	c = p.record(p.claim.RecordID)
 	if flowStr(c, "fact", "key", "revision") != "2" || flowStr(c, "claim", "status") != "UNMEASURED" {
 		t.Errorf("a revised claim must not borrow revision 1's proof: got revision %s %s", flowStr(c, "fact", "key", "revision"), flowStr(c, "claim", "status"))
@@ -1281,7 +1281,7 @@ func TestFlowRemainingEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	instrument.BlindTo = "unmeasured poses and any pose outside the fixture sweep"
-	p.mustAdmit(flowLane, &model.InstrumentRevise{Provenance: model.Provenance{Author: model.Actor{ID: flowLane}, SourceRefs: []model.ArtifactRef{}}, Target: p.instrument, ExpectedRevision: 1, Replacement: instrument})
+	p.mustAdmit(flowLane, &model.InstrumentRevise{Provenance: model.Provenance{Author: model.Actor{ID: flowLane}, SourceRefs: []model.ArtifactRef{}}, Target: p.instrument, Replacement: instrument})
 	listed := false
 	for _, v := range flowList(p.read("show", "--kind", "instrument"), "records") { // R19: instruments is show --kind instrument
 		listed = listed || flowStr(v, "ref", "record_id") == string(p.instrument.RecordID) && flowStr(v, "ref", "revision") == "2" && flowStr(v, "instrument", "blind_to") == instrument.BlindTo

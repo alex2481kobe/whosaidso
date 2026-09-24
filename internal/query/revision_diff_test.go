@@ -82,11 +82,11 @@ func planWorld(t *testing.T, p store.Project) (model.ID, model.ID, model.ID) {
 	item3 := testTask(3).Spec
 	item3.Intent = "item three, restated"
 	appendEvents(t, p, 100, testTask(2), testTask(3), testTask(4), plan,
-		&model.TaskAmend{Target: testRef(3, 1), ExpectedRevision: 1, Replacement: item3, Provenance: testTask(3).Provenance})
+		&model.TaskAmend{Target: testRef(3, 1), Replacement: item3, Provenance: testTask(3).Provenance})
 	r2 := plan.Spec
 	r2.Prerequisites = []model.Prerequisite{prereq(3, 1)}
 	first := admitAs(t, p, 200, "item two leaves the plan",
-		&model.TaskAmend{Target: testRef(5, 1), ExpectedRevision: 1, Replacement: r2, Provenance: plan.Provenance})
+		&model.TaskAmend{Target: testRef(5, 1), Replacement: r2, Provenance: plan.Provenance})
 	r3 := r2
 	r3.Prerequisites = []model.Prerequisite{prereq(3, 2), prereq(4, 1)}
 	r3.AcceptanceCriteria = []model.AcceptanceCriterion{{ID: testID(90), Revision: 2, Criterion: "text and JSON agree exactly"},
@@ -96,13 +96,13 @@ func planWorld(t *testing.T, p store.Project) (model.ID, model.ID, model.ID) {
 	r3.NonGoals = append([]string{}, r2.NonGoals...)
 	r3.NonGoals = append(r3.NonGoals, "rewrite the ledger")
 	second := admitAs(t, p, 300, "the plan follows item three",
-		&model.TaskAmend{Target: testRef(5, 2), ExpectedRevision: 2, Replacement: r3, Provenance: plan.Provenance})
+		&model.TaskAmend{Target: testRef(5, 2), Replacement: r3, Provenance: plan.Provenance})
 	r4 := r3
 	r4.Accepter = nil
 	// Coordinator merge edit 2026-09-24: the accepter-change rule (fix-correct) lets
 	// only the named accepter remove it, so owner writes this amendment.
 	third := admitWrittenBy(t, p, 400, "owner", "anyone may accept",
-		&model.TaskAmend{Target: testRef(5, 3), ExpectedRevision: 3, Replacement: r4,
+		&model.TaskAmend{Target: testRef(5, 3), Replacement: r4,
 			Provenance: model.Provenance{Author: model.Actor{ID: "owner"}, SourceRefs: plan.Provenance.SourceRefs}})
 	return first, second, third
 }
@@ -209,9 +209,9 @@ func TestEveryKindIsDiffedAndAnUnattributedReviewStaysUnknown(t *testing.T) {
 	claim.Falsifier = "two replays of one prefix disagree"
 	decision.Options = []string{"yes", "no", "defer"}
 	instrument.BlindTo = "generated and vendored code"
-	appendEvents(t, p, 101, &model.ClaimRevise{Target: testRef(20, 1), ExpectedRevision: 1, Replacement: claim, Provenance: prov("a")},
-		&model.DecisionRevise{Target: testRef(30, 1), ExpectedRevision: 1, Replacement: decision, Provenance: prov("a")},
-		&model.InstrumentRevise{Target: testRef(10, 1), ExpectedRevision: 1, Replacement: instrument, Provenance: prov("a")})
+	appendEvents(t, p, 101, &model.ClaimRevise{Target: testRef(20, 1), Replacement: claim, Provenance: prov("a")},
+		&model.DecisionRevise{Target: testRef(30, 1), Replacement: decision, Provenance: prov("a")},
+		&model.InstrumentRevise{Target: testRef(10, 1), Replacement: instrument, Provenance: prov("a")})
 	for id, want := range map[int]string{20: `changed falsifier "two replays disagree" "two replays of one prefix disagree"`,
 		30: `added options "defer"`, 10: `changed blind_to "generated code" "generated and vendored code"`} {
 		a := view_(t, p, ViewRequest{View: "continue", ID: testID(id)}).(*ContinueAnswer)

@@ -160,7 +160,7 @@ func TestSuccessCloseRefusesAPrerequisiteCycle(t *testing.T) {
 		l := newLedger()
 		l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
 		l.add(t, consumer(withPrerequisite("task-success", ref(newID("TSKA"), 1), "forbid", nil)))
-		l.add(t, &model.TaskAmend{Provenance: provenance("coordinator"), Target: ref(newID("TSKA"), 1), ExpectedRevision: 1,
+		l.add(t, &model.TaskAmend{Provenance: provenance("coordinator"), Target: ref(newID("TSKA"), 1),
 			Replacement: taskSpec(
 				withPrerequisite("task-success", ref(newID("TSKB"), 1), "forbid", nil),
 				withPrerequisite("task-success", ref(newID("TSKA"), 1), "forbid", nil),

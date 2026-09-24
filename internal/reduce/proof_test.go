@@ -126,7 +126,7 @@ func TestU06ClaimAchievementAndRevision(t *testing.T) {
 	}
 	replacement := claimSpec()
 	replacement.Assertion = "a different assertion needs its own observations"
-	l.add(t, &model.ClaimRevise{Target: claim, ExpectedRevision: 1, Provenance: provenance("lane-a"), Replacement: replacement})
+	l.add(t, &model.ClaimRevise{Target: claim, Provenance: provenance("lane-a"), Replacement: replacement})
 	revised := mustReplay(t, l.out)
 	current, ok := revised.Claim(ident(claim))
 	if !ok || current.Claim.Revision != 2 || current.Status != StatusUnmeasured || len(current.Proofs) != 0 {
@@ -216,7 +216,7 @@ func TestU06WithdrawnInstrument(t *testing.T) {
 	if supportNow(t, before, claim).Current() != TruthTrue {
 		t.Fatal("Apply mutated prior snapshot")
 	}
-	l.add(t, &model.InstrumentRevise{Target: ref(newID("HNSS"), 1), ExpectedRevision: 1, Provenance: provenance("lane-a"), Replacement: proofInstrument()})
+	l.add(t, &model.InstrumentRevise{Target: ref(newID("HNSS"), 1), Provenance: provenance("lane-a"), Replacement: proofInstrument()})
 	revised := mustReplay(t, l.out)
 	instrument, _ = revised.Instrument(ident(ref(newID("HNSS"), 1)))
 	if instrument.Instrument.Revision != 2 || instrument.Support.ActiveTrust != TruthTrue {
@@ -302,7 +302,7 @@ func TestU06DecisionDispositionsAndSupersession(t *testing.T) {
 			t.Fatalf("decision = %+v", p)
 		}
 	}
-	l.add(t, &model.DecisionRevise{Target: d, ExpectedRevision: 1, Replacement: decisionSpec(), Provenance: provenance("author")})
+	l.add(t, &model.DecisionRevise{Target: d, Replacement: decisionSpec(), Provenance: provenance("author")})
 	s = mustReplay(t, l.out)
 	p, _ = s.Decision(ident(d))
 	if p.Status != StatusOpen || len(p.Dispositions) != 0 {
@@ -483,7 +483,7 @@ func TestU06TypedCorrectionsAndLateDependents(t *testing.T) {
 					t.Fatal("typed correction missed dependent")
 				}
 			}
-			l.add(t, &model.ClaimRevise{Target: claim, ExpectedRevision: 1, Provenance: provenance("lane-a"), Replacement: claimSpec()})
+			l.add(t, &model.ClaimRevise{Target: claim, Provenance: provenance("lane-a"), Replacement: claimSpec()})
 			p := wantClaim(t, mustReplay(t, l.out), ref(claim.RecordID, 2), StatusUnmeasured)
 			if p.Support.CorrectionFree != TruthTrue {
 				t.Fatal("replacement inherited prior correction through its expected revision")

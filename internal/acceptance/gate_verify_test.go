@@ -222,7 +222,7 @@ func TestGateVerifyClosedEventSet(t *testing.T) {
 		&model.SourceIntake{SourceID: f.id(), SourceRef: pin, OriginalDigest: pin.Content.SHA256, Length: pin.Content.Length, Speaker: a, Referents: []model.RecordRef{ref}},
 		hold,
 		&model.BlockerClear{Task: ref, BlockerID: hold.BlockerID, HoldRef: model.BlockerRef{Task: ref, BlockerID: hold.BlockerID}, ResolvingWitness: pin},
-		&model.TaskAmend{Provenance: task.Provenance, Target: ref, ExpectedRevision: 1, Replacement: task.Spec},
+		&model.TaskAmend{Provenance: task.Provenance, Target: ref, Replacement: task.Spec},
 		&model.TaskStart{Task: model.RecordRef{Project: ref.Project, RecordID: ref.RecordID, Revision: 2}, Actor: a, AttemptID: f.id()},
 		f.claim(a),
 	}

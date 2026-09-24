@@ -75,7 +75,7 @@ func (t *boundTemplate) current(id model.ID, kind model.Kind) (model.RecordRef, 
 
 // bindFrom copies the record's current spec, as written, as the replacement,
 // except the judgments replacementRejudged names, which stay placeholders.
-// The revise names that revision as its target and expected revision.
+// The revise names that revision as its target.
 func (t *boundTemplate) bindFrom(id model.ID) error {
 	kind := map[model.EventType]model.Kind{"task.amend": model.Task, "claim.revise": model.Claim,
 		"decision.revise": model.Decision, "instrument.revise": model.Instrument}[t.event]
@@ -96,9 +96,6 @@ func (t *boundTemplate) bindFrom(id model.ID) error {
 	}
 	from := fmt.Sprintf("%s revision %d", id, ref.Revision)
 	if err := t.put("target", ref, from); err != nil {
-		return err
-	}
-	if err := t.put("expected_revision", revisionNumber(ref.Revision), from); err != nil {
 		return err
 	}
 	// The replacement's re-judged fields go back to the template's own

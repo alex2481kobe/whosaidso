@@ -43,7 +43,7 @@ func fixAccepterTask(t *testing.T, f *gateVerifyFixture, lane, reviewer model.Ac
 
 func fixAccepterAmend(ref model.RecordRef, author model.Actor, replacement model.TaskSpec) *model.TaskAmend {
 	return &model.TaskAmend{Provenance: model.Provenance{Author: author, SourceRefs: []model.ArtifactRef{}},
-		Target: ref, ExpectedRevision: ref.Revision, Replacement: replacement}
+		Target: ref, Replacement: replacement}
 }
 
 func TestFixAccepterAmendmentCannotRemoveTheAccepterThenClose(t *testing.T) {
