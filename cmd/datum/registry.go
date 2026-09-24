@@ -51,8 +51,8 @@ with an ID; false excludes unknown, and an unknown author stays UNKNOWN.
 		{name: "capture", summary: "write a packet to immutable intake; publishes nothing", detail: `Reads a JSON array of typed events (datum template makes one). A
 source.intake is captured with its original bytes, from its reference or
 from --blob; capture refuses a source whose bytes it cannot save. Prints
-"captured PACKET (N events) command ID", and on stderr each id its events
-create ("new      claim.assert id = ID"). With --admit the packet is then
+"captured PACKET (N events) command ID", and (without --json) on stderr
+each id its events create ("new      claim.assert id = ID"). With --admit the packet is then
 admitted as a second act; if that is refused the capture stands, the packet
 stays pending, the retry command is printed and the exit status is 4.
 `, define: captureVerb},
