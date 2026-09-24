@@ -1,5 +1,7 @@
 # WhoSaidSo
 
+<img src="internal/ui/logo.svg" alt="WhoSaidSo owl" height="120">
+
 WhoSaidSo keeps a project accountable. Work is recorded as it happens in an
 append-only ledger inside the repository, and every answer, from what is owed
 to what a measurement cannot see, is a query over that ledger. A task cannot

@@ -104,7 +104,7 @@ function itemReason(answer, item) {
 }
 
 // fieldName reads a change path for people: a keyed list entry by its list.
-const fieldName = (path) => path.replace(/^acceptance_criteria\[[^\]]+\]\.?/, "acceptance criterion ").replace(/^prerequisites\[[^\]]+\]\.?/, "plan item ").replace(/_/g, " ").trim();
+const fieldName = (path) => path.replace(/^acceptance_criteria\[[^\]]+\]\.?/, "acceptance criterion ").replace(/^prerequisites\[[^\]]+\]\.?/, "plan item ").replace(/_/g, " ").replace("criterion criterion", "criterion").trim();
 
 function changeGroups(answer) {
   const groups = { added: [], removed: [], changed: [] };
@@ -151,6 +151,7 @@ function renderPlan(c) {
             reason ? el("small", "", reason) : null));
       }))),
       criteria(root),
+      root.task.attempts.length ? attempts(root, at) : null,
       revisionCard(answer, at, root)),
     el("section", "panel changed", el("h2", "", "What changed"),
       ...group("Added", "green", groups.added), ...group("Removed", "red", groups.removed), ...group("Revised", "blue", groups.changed))));

@@ -95,7 +95,6 @@ export function actorName(actor) {
 export function actorReason(actor) {
   return actor?.unknown_reason || actor?.reason || "";
 }
-export const shortID = (id) => (id && id.length > 12 ? id.slice(0, 4) + "…" + id.slice(-6) : id);
 const monthDay = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 const clock = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
 const fullDay = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" });
