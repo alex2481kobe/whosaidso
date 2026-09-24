@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"whosaidso/internal/evidence"
@@ -75,12 +74,14 @@ func TestPinsMatchRealBytesAndGitObjects(t *testing.T) {
 	// Control: the pinned clear admits through the real gate.
 	boundCapture(t, f.root, "blocker.clear", "--hold", hold, "--pin", "resolving_witness=tools/measure.sh@HEAD")
 
-	// A file that exists but lies outside the project is refused for where it is.
+	// A file outside the project is pinned by content alone: no locator (an
+	// absolute or ../ path is never stored), its bytes a blob.
 	if err := os.WriteFile(filepath.Join(filepath.Dir(f.root), "outside.txt"), []byte("outside\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, errs, code := cliRun(t, f.root, nil, "lane", "template", "claim.assert", "--pin", "provenance.source_refs[0]=../outside.txt"); code != 1 || !strings.Contains(errs, "provenance.source_refs[0]") {
-		t.Errorf("a pin outside the project must be refused on its path: %d %s", code, errs)
+	outside := pinOf(t, boundPrint(t, f.root, "claim.assert", "--pin", "provenance.source_refs[0]=../outside.txt"), "provenance.source_refs[0]")
+	if outside.Kind != "content" || outside.Content.SHA256 != model.HashBytes([]byte("outside\n")) || outside.Content.Locators == nil || len(outside.Content.Locators) != 0 {
+		t.Errorf("a pin outside the project must be content-only with no locator: %+v %+v", outside, outside.Content)
 	}
 	for _, tc := range []struct {
 		args []string

@@ -124,9 +124,18 @@ func (b *templateBuilder) walk(t reflect.Type, path []string, field reflect.Stru
 				}
 			}
 		}
+		// The noun is the field naming the id: a list element (event_packets[0])
+		// takes its list's name, a record_id its owner's, and a record_id in
+		// a list of references (context_refs[0].record_id) is any record.
 		noun := here[len(here)-1]
+		if noun == "0" && len(here) > 1 {
+			noun = strings.TrimSuffix(here[len(here)-2], "s")
+		}
 		if noun == "record_id" && len(here) > 1 {
 			noun = here[len(here)-2]
+			if noun == "0" {
+				noun = "record"
+			}
 		}
 		return "<id: ULID of the existing " + strings.ReplaceAll(strings.TrimSuffix(noun, "_id"), "_", " ") + "; look it up>"
 	case reflect.TypeOf(model.ProjectID("")):
@@ -282,6 +291,10 @@ func renderTemplateNotes(event model.EventType, notes []templateNote) string {
 			}
 			b.WriteByte('\n')
 		case "optional":
+			if n.Detail == "absent" {
+				fmt.Fprintf(&b, "optional %s: absent; --set or --pin %s adds it\n", at, at)
+				continue
+			}
 			fmt.Fprintf(&b, "optional %s: delete the key to omit it\n", at)
 		case "choose":
 			if at == "" {
