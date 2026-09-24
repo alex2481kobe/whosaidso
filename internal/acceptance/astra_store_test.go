@@ -17,9 +17,9 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 func astraClaim(w *flowWorld) *model.ClaimAssert {
@@ -36,7 +36,7 @@ func astraCommand(w *flowWorld, args ...string) *exec.Cmd {
 	w.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	w.t.Cleanup(cancel)
-	cmd := exec.CommandContext(ctx, pvDatum(w.t), args...)
+	cmd := exec.CommandContext(ctx, pvWhoSaidSo(w.t), args...)
 	cmd.Dir, cmd.Env = w.root, append(os.Environ(), "HOME="+w.home)
 	bindProjectHome(cmd)
 	return cmd
@@ -70,7 +70,7 @@ func TestAstraStoreRetrySurvivesIntakeLoss(t *testing.T) {
 	for _, verb := range []string{"show", "history", "todo"} { // R19: the views replace state, now and context
 		reads[verb] = w.readJSON(verb)
 	}
-	// Leave only datum.toml and .datum/events, with an empty machine inbox.
+	// Leave only whosaidso.toml and .whosaidso/events, with an empty machine inbox.
 	if err := os.RemoveAll(w.home); err != nil {
 		t.Fatal(err)
 	}
@@ -90,12 +90,12 @@ func TestAstraStoreRetrySurvivesIntakeLoss(t *testing.T) {
 }
 
 // R8.1 and DATUM-CONTRACT.md:676,690: real filesystem paths stay confined,
-// including the admission lock, not merely the spelling in datum.toml.
+// including the admission lock, not merely the spelling in whosaidso.toml.
 func TestAstraStoreLockCannotCreateOutsideRoot(t *testing.T) {
 	w := flowNew(t)
 	w.mustAdmit(flowLane, astraClaim(w)) // passing ordinary-lock control
 	before := w.ledger()
-	lock := filepath.Join(w.root, ".datum/events/.lock")
+	lock := filepath.Join(w.root, ".whosaidso/events/.lock")
 	if err := os.Remove(lock); err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestAstraStoreLockCannotCreateOutsideRoot(t *testing.T) {
 	// lock through flowWorld.ledger while establishing the pre-admission bytes.
 	_, err := w.cli(nil, args...)
 	if err == nil {
-		t.Error("expected refusal of an escaping lock symlink; admission succeeded, so its real lock path leaves the datum root (R8.1; contract:676,690)")
+		t.Error("expected refusal of an escaping lock symlink; admission succeeded, so its real lock path leaves the whosaidso root (R8.1; contract:676,690)")
 	}
 	if _, err := os.Lstat(outside); !os.IsNotExist(err) {
 		t.Errorf("expected no external file; opening the lock created %s: %v; a confined admission wrote outside its project", outside, err)
@@ -116,7 +116,7 @@ func TestAstraStoreLockCannotCreateOutsideRoot(t *testing.T) {
 	if err := os.Remove(lock); err != nil {
 		t.Fatal(err)
 	}
-	w.put(".datum/events/.lock", nil) // restore the fixture's lock to compare bundles
+	w.put(".whosaidso/events/.lock", nil) // restore the fixture's lock to compare bundles
 	if !reflect.DeepEqual(before, w.ledger()) {
 		t.Error("expected an unchanged ledger after refusing an escaping lock; a new canonical bundle appeared")
 	}
@@ -205,7 +205,7 @@ func TestAstraStoreKilledAdmissionAndNestedGit(t *testing.T) {
 	w := flowNew(t)
 	repo := t.TempDir()
 	w.root = filepath.Join(repo, "project")
-	w.put("datum.toml", []byte("id = 'flow/review'\nledger = '.datum/events'\n"))
+	w.put("whosaidso.toml", []byte("id = 'flow/review'\nledger = '.whosaidso/events'\n"))
 	w.put("evidence.json", []byte(`{"scope":"inside"}`))
 	pvPut(t, repo, "evidence.json", []byte(`{"scope":"outside"}`))
 	git := func(args ...string) string {
@@ -245,7 +245,7 @@ func TestAstraStoreKilledAdmissionAndNestedGit(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = cmd.Process.Kill() })
 	astraWait(t, func() bool { _, err := os.Stat(marker); return err == nil })
-	lock, err := os.OpenFile(filepath.Join(w.root, ".datum/events/.lock"), os.O_RDWR, 0)
+	lock, err := os.OpenFile(filepath.Join(w.root, ".whosaidso/events/.lock"), os.O_RDWR, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +262,7 @@ func TestAstraStoreKilledAdmissionAndNestedGit(t *testing.T) {
 	}
 	// A torn temporary models an interrupted file write, without racing a
 	// sub-millisecond syscall window or adding production fault-injection hooks.
-	partial := ".datum/events/00000001-" + string(w.id()) + ".json.tmp"
+	partial := ".whosaidso/events/00000001-" + string(w.id()) + ".json.tmp"
 	w.put(partial, []byte(`{"version":`))
 	if _, err := w.cli(nil, args...); err != nil {
 		t.Fatalf("next process must release the dead writer's lock and recover the partial file: %v", err)
@@ -307,7 +307,7 @@ func TestAstraStoreKilledAcknowledgement(t *testing.T) {
 	t.Cleanup(func() { _ = cmd.Process.Kill() })
 	var published []byte
 	astraWait(t, func() bool {
-		files, _ := filepath.Glob(filepath.Join(w.root, ".datum/events/*-"+args[2]+".json"))
+		files, _ := filepath.Glob(filepath.Join(w.root, ".whosaidso/events/*-"+args[2]+".json"))
 		if len(files) == 0 {
 			return false
 		}

@@ -186,7 +186,7 @@ type ReviewAdmit struct {
 	// ledger, not only in local intake. It covers every reviewed packet; an
 	// author nobody recorded is an unknown Actor with its reason.
 	Authors map[ID]Actor `json:"authors"`
-	// CapturedAt binds each reviewed packet's command ID to the time Datum's
+	// CapturedAt binds each reviewed packet's command ID to the time WhoSaidSo's
 	// intake stamped when it captured the packet; no author-facing input sets
 	// it. "Criterion frozen before the run" is decided against it, so the check
 	// replays from the ledger. It covers every reviewed packet; a time nobody

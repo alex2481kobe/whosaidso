@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // authoredDispose builds one bundle the way admission does: the packet's

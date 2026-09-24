@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func knownOf[T any](v T) model.Availability[T] {

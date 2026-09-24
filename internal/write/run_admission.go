@@ -11,8 +11,8 @@ import (
 	"path"
 	"strings"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
 )
 
 // runOwnOutput is one declared output with the bytes proven to be this run's.

@@ -8,8 +8,8 @@ import (
 	"sort"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
 // Bulk setup deliberately omits fsyncs. Replaying ten thousand historical

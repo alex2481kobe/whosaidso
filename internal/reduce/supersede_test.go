@@ -8,7 +8,7 @@ package reduce
 import (
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func supersedeLedger(t *testing.T) (*ledgerBuilder, model.RecordRef, model.RecordRef, model.RecordRef) {

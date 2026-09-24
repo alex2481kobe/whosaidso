@@ -2,15 +2,15 @@ package query
 
 // Cost of the views: show ID reads one record and never builds the project
 // (an allocation test that fails if it grows with the ledger), and a
-// benchmark of every view on the 1k benchmark fixture (DATUM_VIEWS_1K_ROOT;
+// benchmark of every view on the 1k benchmark fixture (WHOSAIDSO_VIEWS_1K_ROOT;
 // see views_worlds_test.go).
 
 import (
 	"os"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
 func TestShowOneNeverBuildsTheWholeProject(t *testing.T) {
@@ -51,15 +51,15 @@ func TestShowOneNeverBuildsTheWholeProject(t *testing.T) {
 func BenchmarkViews(b *testing.B) {
 	w, ok := thousandFixture(b)
 	if !ok {
-		b.Skip("set DATUM_VIEWS_1K_ROOT to a retained DATUM_BENCH_ROOT holding n1000")
+		b.Skip("set WHOSAIDSO_VIEWS_1K_ROOT to a retained WHOSAIDSO_BENCH_ROOT holding n1000")
 	}
 	if _, err := store.Load(w.project); err != nil { // warm the cache image, as after any command
 		b.Fatal(err)
 	}
-	// DATUM_VIEWS_BENCH_SOURCE=1 answers from one loaded prefix, so the numbers
+	// WHOSAIDSO_VIEWS_BENCH_SOURCE=1 answers from one loaded prefix, so the numbers
 	// are the views' own work without ledger loading and project discovery.
 	var source Source
-	if os.Getenv("DATUM_VIEWS_BENCH_SOURCE") != "" {
+	if os.Getenv("WHOSAIDSO_VIEWS_BENCH_SOURCE") != "" {
 		loaded, err := store.Load(w.project)
 		if err != nil {
 			b.Fatal(err)

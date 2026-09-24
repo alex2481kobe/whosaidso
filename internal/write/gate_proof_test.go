@@ -17,10 +17,10 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 const (
@@ -271,7 +271,7 @@ func TestProofCannotBorrowAnotherRevisionsObservations(t *testing.T) {
 
 // TestAdmissionChecksInvocationConfigNames: a hand-captured start or seal
 // naming a knob the exact instrument revision never declared is refused at
-// admission, exactly as datum run refuses it before launch. Admission reaches
+// admission, exactly as whosaidso run refuses it before launch. Admission reaches
 // the rule through reduce.Apply.
 func TestAdmissionChecksInvocationConfigNames(t *testing.T) {
 	w := newProofWorld(t, true)

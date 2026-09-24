@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
 func runIntent(project store.Project, r RunRequest) (model.InvocationEnvelope, error) {

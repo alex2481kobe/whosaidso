@@ -9,8 +9,8 @@ package write
 import (
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 // reviseCriterion admits revision 2 of the world's criterion and returns it.

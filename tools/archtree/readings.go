@@ -1,4 +1,4 @@
-// Readings: the scanner's numbers restated in the shape a Datum criterion can
+// Readings: the scanner's numbers restated in the shape a WhoSaidSo criterion can
 // select.
 //
 // What belongs here is the mapping from what scan.go found to readings keyed by
@@ -7,7 +7,7 @@
 // holds the value. Nothing here reads the module and nothing here judges a
 // number: counting is scan.go's job, and the threshold belongs to a criterion.
 //
-// Why the shape is exactly this: Datum's evaluator (internal/evidence, Select
+// Why the shape is exactly this: WhoSaidSo's evaluator (internal/evidence, Select
 // and metaFrom) takes a reading's unit, population and denominator from the
 // selected object or its immediate parent, never from further up, and it reads
 // a number from that object's "value" or a set from its "values". A number

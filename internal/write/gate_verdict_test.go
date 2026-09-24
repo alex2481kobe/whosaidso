@@ -11,9 +11,9 @@ import (
 	"io"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 func (w *proofWorld) refutation(members map[model.InvocationRef]string) *model.ProofAdmit {

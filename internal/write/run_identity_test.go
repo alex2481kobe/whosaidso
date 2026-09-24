@@ -1,6 +1,6 @@
 package write
 
-// What `datum run` observes about where it executes: the persistent machine id
+// What `whosaidso run` observes about where it executes: the persistent machine id
 // and the project root's git HEAD and dirty state. Launch and report handling
 // are tested in run_test.go.
 
@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
 func identityGit(t *testing.T, dir string, args ...string) string {
@@ -28,10 +28,10 @@ func identityGit(t *testing.T, dir string, args ...string) string {
 }
 
 func identityProject(t *testing.T, root string) store.Project {
-	return store.Project{ID: "test/identity", Root: root, Ledger: filepath.Join(root, ".datum", "events")}
+	return store.Project{ID: "test/identity", Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
 }
 
-// identityRepo is a committed checkout whose datum root is a subdirectory.
+// identityRepo is a committed checkout whose whosaidso root is a subdirectory.
 func identityRepo(t *testing.T) (repo, root string) {
 	t.Helper()
 	repo = t.TempDir()
@@ -66,14 +66,14 @@ func TestRunIdentityRecordsMachineHeadAndCleanState(t *testing.T) {
 		t.Fatal("two runs on one machine must record one machine id")
 	}
 
-	t.Run("datum's own record directories do not make the source dirty", func(t *testing.T) {
-		proofPut(t, root, ".datum/artifacts/runs/01ARZ3NDEKTSV4RRFFQ69G5FAX/stdout", "x")
-		proofPut(t, root, ".datum/events/000001.json", "{}")
+	t.Run("whosaidso's own record directories do not make the source dirty", func(t *testing.T) {
+		proofPut(t, root, ".whosaidso/artifacts/runs/01ARZ3NDEKTSV4RRFFQ69G5FAX/stdout", "x")
+		proofPut(t, root, ".whosaidso/events/000001.json", "{}")
 		if id := RunExecutionIdentity(context.Background(), identityProject(t, root)); id.Dirty.State != model.Known || *id.Dirty.Value {
 			t.Fatalf("records of runs are not the source a run executes: %+v", id.Dirty)
 		}
 	})
-	t.Run("changes outside the datum root do not make it dirty", func(t *testing.T) {
+	t.Run("changes outside the whosaidso root do not make it dirty", func(t *testing.T) {
 		proofPut(t, repo, "outside.txt", "edited\n")
 		if id := RunExecutionIdentity(context.Background(), identityProject(t, root)); id.Dirty.State != model.Known || *id.Dirty.Value {
 			t.Fatalf("the project root's state is what is recorded: %+v", id.Dirty)
@@ -135,7 +135,7 @@ func TestRunIdentityDirtyOrUnobservableIsUnknownWithAReason(t *testing.T) {
 	t.Run("an unreadable machine id is UNKNOWN, never regenerated", func(t *testing.T) {
 		home := t.TempDir()
 		t.Setenv("HOME", home)
-		proofPut(t, home, ".datum/"+store.MachineIDFile, "damaged\n")
+		proofPut(t, home, ".whosaidso/"+store.MachineIDFile, "damaged\n")
 		id := RunExecutionIdentity(context.Background(), identityProject(t, t.TempDir()))
 		if id.MachineID.State != model.Unknown || !strings.Contains(id.MachineID.Reason, "machine id") {
 			t.Fatalf("a damaged machine id must be UNKNOWN with the reason: %+v", id.MachineID)

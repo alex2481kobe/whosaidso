@@ -10,8 +10,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 // Attention is a fact the reader must not miss, surfaced first in a view.

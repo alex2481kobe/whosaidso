@@ -20,13 +20,13 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
-// RecordDir is Datum's in-repo record folder beside datum.toml (R13.1). This
-// is the one place the name is spelled in code; datum.toml's ledger names it
+// RecordDir is WhoSaidSo's in-repo record folder beside whosaidso.toml (R13.1). This
+// is the one place the name is spelled in code; whosaidso.toml's ledger names it
 // for a project, and a project's artifact store is derived from that ledger.
-const RecordDir = ".datum"
+const RecordDir = ".whosaidso"
 
 // DefaultArtifactDir is where admission materializes incoming blobs, keyed by
 // digest, for a resolver built from a root alone. The resolver checks it after
@@ -42,7 +42,7 @@ const DefaultMaxBytes int64 = 64 << 20
 // GitRunner is the process seam. Tests pass their own, production passes ExecGit.
 type GitRunner func(ctx context.Context, dir string, args ...string) ([]byte, error)
 
-// Resolver fetches pinned bytes. Root is the absolute datum root that every
+// Resolver fetches pinned bytes. Root is the absolute whosaidso root that every
 // authored path is relative to. No authored record ever holds an absolute path.
 type Resolver struct {
 	Root        string

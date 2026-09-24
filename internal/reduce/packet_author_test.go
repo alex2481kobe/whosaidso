@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // authoredReview attributes the one event before it to a packet whose recorded

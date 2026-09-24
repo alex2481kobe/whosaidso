@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
 )
 
 var resultBody = []byte(`{"results":{"unit":"ms","population":"request corpus","denominator":"requests","values":[10,20]},"population":{"population":"request corpus","denominator":"requests","values":["request-a","request-b"]},"diagnostic":"` + strings.Repeat("x", 4096) + `"}`)
@@ -137,7 +137,7 @@ func (f *fixture) cycle(i int) {
 	backlog.Spec.ContextRefs = []model.RecordRef{f.ref(claim.ID), f.Instrument}
 	events = []model.TypedEvent{backlog}
 	// Keep a terminal handback even in the ten-bundle smoke fixture, while
-	// preserving the first measured task's live attempt for datum run.
+	// preserving the first measured task's live attempt for whosaidso run.
 	if i == 0 {
 		secondary := f.id()
 		events = append(events, &model.TaskStart{Task: f.ref(backlog.ID), Actor: author, AttemptID: secondary},

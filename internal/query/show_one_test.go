@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func TestShowOneIsUnscopedShowsEntryForThatID(t *testing.T) {

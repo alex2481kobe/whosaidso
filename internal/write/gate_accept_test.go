@@ -8,8 +8,8 @@ package write
 import (
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 // newAcceptWorld is newCloseWorld with an optional accepter on the task. The

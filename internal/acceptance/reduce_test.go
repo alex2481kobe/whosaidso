@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 const laneEReduceProject = model.ProjectID("datum/lane-e-reduce")
@@ -30,7 +30,7 @@ func laneEReduceArtifact(name string) model.ArtifactRef {
 		Kind: "content", Selector: model.Selector{Kind: "whole"},
 		Content: &model.ContentPin{
 			SHA256: model.HashBytes([]byte(name)), Length: uint64(len(name)),
-			MediaType: "text/plain", Locators: []model.Locator{{Path: ".datum/artifacts/" + name}},
+			MediaType: "text/plain", Locators: []model.Locator{{Path: ".whosaidso/artifacts/" + name}},
 		},
 	}
 }

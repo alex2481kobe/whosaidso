@@ -4,7 +4,7 @@
 //
 // SELECT FROM /readings, and only from there. Each reading there states its
 // own unit, population and denominator on the object holding its value or
-// values, which is where Datum's evaluator looks, and is reached by name:
+// values, which is where WhoSaidSo's evaluator looks, and is reached by name:
 // /readings/file_lines (every production file, module-wide),
 // /readings/by_package/<path with / as ~1>/file_lines, .../largest_file_lines,
 // /readings/by_file/<path>, /readings/import_cycles. For a set, the population
@@ -19,7 +19,7 @@
 // dot-directories skipped; a test-only package having no largest file; which
 // comment supplies a purpose (a package doc, doc.go first, never a file
 // comment). NOT validated by any known answer: imports, import cycles.
-// criterion_test.go puts the readings through Datum's own Observe and Evaluate.
+// criterion_test.go puts the readings through WhoSaidSo's own Observe and Evaluate.
 //
 // BLIND TO, and this matters more than the numbers it prints:
 //
@@ -48,7 +48,7 @@
 //   - identity across a move. Readings are keyed by path and populations name
 //     the module, so a renamed file, package or module is a new key: a frozen
 //     criterion then reads nothing (UNKNOWN), never the thing's new self.
-//   - which member failed, in Datum's words. Set members carry their path, but
+//   - which member failed, in WhoSaidSo's words. Set members carry their path, but
 //     the evaluator's FALSE reason names a member by index ("value 18"); the
 //     index is into /readings/.../values of that run's own output.
 //   - test-only packages have no imports reported, because their imports are
@@ -59,7 +59,7 @@
 //     "Command" for main), from doc.go when that has one, else the first file
 //     by name; purpose_from names the file. With none it says no purpose was
 //     supplied, and never borrows a file's own comment, which once made the
-//     README describe the whole CLI as the datum id implementation. It reports
+//     README describe the whole CLI as the whosaidso id implementation. It reports
 //     what the comment SAYS, never whether that is still true of the code.
 //
 // Usage:

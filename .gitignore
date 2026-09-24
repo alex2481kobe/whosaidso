@@ -2,7 +2,7 @@
 # folder above it, which is not a git repo. Nothing here guards against them.
 
 # Go
-/datum
+/whosaidso
 /dist/
 *.test
 *.out
@@ -17,6 +17,6 @@ coverage.*
 .DS_Store
 *.swp
 
-# Datum's disposable snapshot cache, rebuilt from the ledger whenever it is
+# WhoSaidSo's disposable snapshot cache, rebuilt from the ledger whenever it is
 # missing, stale or damaged. Never a record.
 .datum/cache/

@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 // cacheTask proposes one valid task, so the ledger folds under the reducer.
@@ -330,7 +330,7 @@ func TestInterruptedAndFailedPublicationsChangeNoAnswer(t *testing.T) {
 	requireReplayed(t, p, 6)
 }
 
-// The cache folder must not carry a read or a write out of the datum root.
+// The cache folder must not carry a read or a write out of the whosaidso root.
 func TestACacheFolderSymlinkIsNeitherReadNorWritten(t *testing.T) {
 	p := warmProject(t)
 	outside := t.TempDir()

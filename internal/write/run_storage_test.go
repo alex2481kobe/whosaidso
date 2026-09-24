@@ -14,10 +14,10 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 const runStorageReport = `{"version":1,"config_effective":{},"conditions_observed":{},"outputs":[{"path":"out/result.json","media_type":"application/json"}]}`

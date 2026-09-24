@@ -6,8 +6,8 @@ package write
 // providers and reference resolution stay in gate.go.
 
 import (
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 func gateAuthorities(event model.TypedEvent, sources []reduce.Source) error {

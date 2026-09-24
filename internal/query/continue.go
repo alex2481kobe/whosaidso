@@ -9,8 +9,8 @@ package query
 import (
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 // Observation is the caller's fresh look at the workspace.

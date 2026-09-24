@@ -24,7 +24,7 @@ func schemaUnknown[T any]() Availability[T] {
 }
 func schemaNumber(s string) Scalar { n := json.Number(s); return Scalar{Type: "number", Number: &n} }
 func schemaArtifact() ArtifactRef {
-	return ArtifactRef{Kind: "content", Content: &ContentPin{SHA256: HashBytes([]byte("source")), Length: 6, MediaType: "application/json", Locators: []Locator{{Path: ".datum/artifacts/source.json"}}}, Selector: Selector{Kind: "whole"}}
+	return ArtifactRef{Kind: "content", Content: &ContentPin{SHA256: HashBytes([]byte("source")), Length: 6, MediaType: "application/json", Locators: []Locator{{Path: ".whosaidso/artifacts/source.json"}}}, Selector: Selector{Kind: "whole"}}
 }
 func schemaScope() Scope {
 	return Scope{SourcePaths: []string{"internal/model"}, ContextRefs: []RecordRef{schemaRef(2)}, AppliesWhen: "the pinned source and configuration match", Limitations: "does not establish runtime behavior"}
@@ -36,7 +36,7 @@ func schemaProvenance() Provenance {
 	return Provenance{Author: Actor{ID: "lane-a"}, SourceRefs: []ArtifactRef{schemaArtifact()}}
 }
 func schemaTask() TaskSpec {
-	return TaskSpec{Intent: "validate authored payloads", Subject: "Datum model", Scope: schemaScope(), NonGoals: []string{"no admission logic"}, AcceptanceCriteria: []AcceptanceCriterion{{ID: schemaID(3), Revision: 1, Criterion: "malformed payloads are refused"}}, ContextRefs: []RecordRef{schemaRef(4)}, ConstraintRefs: []RecordRef{schemaRef(5)}, Prerequisites: []Prerequisite{{Kind: "task-success", Target: schemaRef(6), WaiverPolicy: "forbid"}}, NextActor: Actor{ID: "coordinator"}, Progress: &TaskProgress{Summary: "fixtures authored", NextAction: "run them", WitnessRefs: []ArtifactRef{schemaArtifact()}}}
+	return TaskSpec{Intent: "validate authored payloads", Subject: "WhoSaidSo model", Scope: schemaScope(), NonGoals: []string{"no admission logic"}, AcceptanceCriteria: []AcceptanceCriterion{{ID: schemaID(3), Revision: 1, Criterion: "malformed payloads are refused"}}, ContextRefs: []RecordRef{schemaRef(4)}, ConstraintRefs: []RecordRef{schemaRef(5)}, Prerequisites: []Prerequisite{{Kind: "task-success", Target: schemaRef(6), WaiverPolicy: "forbid"}}, NextActor: Actor{ID: "coordinator"}, Progress: &TaskProgress{Summary: "fixtures authored", NextAction: "run them", WitnessRefs: []ArtifactRef{schemaArtifact()}}}
 }
 func schemaClaim() ClaimSpec {
 	return ClaimSpec{Assertion: "blank blind spots are refused", Falsifier: "a whitespace-only blind_to decodes", Scope: schemaScope(), ExternalRefs: []ExternalReference{{Tag: "REPORTED MEASUREMENT", Citation: "prior audit", SourceRef: ptr(schemaArtifact()), RecordRef: ptr(schemaRef(7))}}}
@@ -90,7 +90,7 @@ func schemaEvents() []TypedEvent {
 		&TrustWithdraw{Instrument: schemaRef(1), Scope: schemaScope(), RevalidationCondition: "bind validation to the repaired implementation"},
 		&ReviewAdmit{Packets: []PacketRef{{CommandID: schemaID(16), Digest: HashBytes([]byte("packet"))}}, Outcome: "accepted", Actor: Actor{ID: "coordinator"}, Reason: "reviewed against the current record",
 			Authors: map[ID]Actor{schemaID(16): {ID: "lane-a"}}, CapturedAt: map[ID]Availability[time.Time]{schemaID(16): {State: Unknown, Reason: "not recorded"}}, EventPackets: []ID{}},
-		&ArtifactDispose{Artifact: schemaArtifact(), Digest: schemaArtifact().Content.SHA256, PreviousLocation: ".datum/artifacts/source.json", SupportLoss: []SupportLoss{{Target: schemaRef(1), Reason: "the observation is no longer verifiable"}}, Authority: schemaAuthority()},
+		&ArtifactDispose{Artifact: schemaArtifact(), Digest: schemaArtifact().Content.SHA256, PreviousLocation: ".whosaidso/artifacts/source.json", SupportLoss: []SupportLoss{{Target: schemaRef(1), Reason: "the observation is no longer verifiable"}}, Authority: schemaAuthority()},
 	}
 }
 

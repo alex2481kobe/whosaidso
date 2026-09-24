@@ -14,10 +14,10 @@ import (
 	"sync"
 	"testing"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 type admissionFixture struct {
@@ -31,7 +31,7 @@ func newAdmissionFixture(t *testing.T) *admissionFixture {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	root := t.TempDir()
-	return &admissionFixture{t: t, project: store.Project{ID: "test/admission", Root: root, Ledger: filepath.Join(root, ".datum", "events")}, author: model.Actor{ID: "lane-c2"}}
+	return &admissionFixture{t: t, project: store.Project{ID: "test/admission", Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}, author: model.Actor{ID: "lane-c2"}}
 }
 
 func (f *admissionFixture) id() model.ID {

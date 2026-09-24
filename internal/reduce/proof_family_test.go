@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func familyLedger(t *testing.T, sealSecond bool) (*ledgerBuilder, model.RecordRef, model.InvocationEnvelope, model.InvocationEnvelope) {

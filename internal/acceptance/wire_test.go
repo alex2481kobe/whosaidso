@@ -19,7 +19,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 const wirePacketID = "01K5V8Q1110000000000000000"

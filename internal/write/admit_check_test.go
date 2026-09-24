@@ -1,7 +1,7 @@
 package write
 
 // Tests for the admission dry run (admit_check.go) and for refusals naming
-// only what exists (DOGFOOD entry 13). The CLI over them is tested in cmd/datum.
+// only what exists (DOGFOOD entry 13). The CLI over them is tested in cmd/whosaidso.
 
 import (
 	"context"
@@ -15,8 +15,8 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
 // checkTree fingerprints every file under the project root and the intake,

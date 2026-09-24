@@ -11,14 +11,14 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
 func laneELedgerProject(t *testing.T) store.Project {
 	t.Helper()
 	root := t.TempDir()
-	return store.Project{ID: "datum/lane-e-ledger", Root: root, Ledger: filepath.Join(root, ".datum", "events")}
+	return store.Project{ID: "datum/lane-e-ledger", Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
 }
 
 func laneELedgerID(n int) model.ID { return model.ID(fmt.Sprintf("%026d", n)) }

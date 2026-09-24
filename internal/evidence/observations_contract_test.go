@@ -6,7 +6,7 @@ package evidence
 import (
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // R8.3 as decided for U12, R9: the criterion's contract path resolves inside the

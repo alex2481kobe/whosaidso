@@ -13,9 +13,9 @@ import (
 	"sort"
 	"strings"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 // CriterionChoice is what an author named; a zero field was omitted.

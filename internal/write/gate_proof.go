@@ -13,9 +13,9 @@ import (
 	"fmt"
 	"reflect"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 func gateProofOperation(event model.TypedEvent, author model.Actor) (*model.Provenance, error) {

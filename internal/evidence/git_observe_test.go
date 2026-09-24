@@ -2,7 +2,7 @@ package evidence
 
 // The raw git observer against real repositories. CheckoutHead and
 // CheckoutDirty report what git says and conclude nothing: dirty is KNOWN
-// either way. ScopeChanges, in a repository whose datum root is a
+// either way. ScopeChanges, in a repository whose whosaidso root is a
 // subdirectory: only scoped files between the two commits, relative to the
 // root, renames as both names, scope paths taken literally, an empty scope
 // asking nothing, and commits git cannot find refused rather than read as "no
@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func TestScopeChangesListsOnlyScopedFilesBetweenTwoCommits(t *testing.T) {
@@ -24,7 +24,7 @@ func TestScopeChangesListsOnlyScopedFilesBetweenTwoCommits(t *testing.T) {
 	a := head(commitFile(t, repo, "project/src/a.go", "v1\n"))
 	commitFile(t, repo, "project/src/*.go", "a file literally named star\n")
 	commitFile(t, repo, "project/notes.txt", "outside the scope\n")
-	commitFile(t, repo, "outside/src/a.go", "outside the datum root\n")
+	commitFile(t, repo, "outside/src/a.go", "outside the whosaidso root\n")
 	gitRun(t, repo, "mv", "project/src/a.go", "project/src/b.go")
 	gitRun(t, repo, "commit", "--quiet", "-m", "rename")
 	b := head(gitRun(t, repo, "rev-parse", "HEAD"))

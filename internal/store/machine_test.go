@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func TestMachineIDIsCreatedOnceUnderTheUserHome(t *testing.T) {
@@ -19,9 +19,9 @@ func TestMachineIDIsCreatedOnceUnderTheUserHome(t *testing.T) {
 	if err != nil || !model.ValidID(first) {
 		t.Fatalf("control: the first call creates a ULID: %q, %v", first, err)
 	}
-	raw, err := os.ReadFile(filepath.Join(home, ".datum", MachineIDFile))
+	raw, err := os.ReadFile(filepath.Join(home, ".whosaidso", MachineIDFile))
 	if err != nil || string(raw) != string(first)+"\n" {
-		t.Fatalf("expected ~/.datum/%s to hold the id and a newline, got %q, %v", MachineIDFile, raw, err)
+		t.Fatalf("expected ~/.whosaidso/%s to hold the id and a newline, got %q, %v", MachineIDFile, raw, err)
 	}
 	again, err := MachineID()
 	if err != nil || again != first {
@@ -35,7 +35,7 @@ func TestMachineIDIsCreatedOnceUnderTheUserHome(t *testing.T) {
 }
 
 func TestMachineIDRacingFirstRunsAgree(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), ".datum")
+	dir := filepath.Join(t.TempDir(), ".whosaidso")
 	ids := make([]model.ID, 16)
 	errs := make([]error, len(ids))
 	var wg sync.WaitGroup

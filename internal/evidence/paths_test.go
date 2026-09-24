@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func artifactLink(t *testing.T, target, link string) {

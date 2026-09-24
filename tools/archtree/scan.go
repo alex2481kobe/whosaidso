@@ -48,7 +48,7 @@ type fileLines struct {
 	Lines int    `json:"lines"`
 }
 
-// report has no report-wide unit. Datum's evaluator lets an object's direct
+// report has no report-wide unit. WhoSaidSo's evaluator lets an object's direct
 // children inherit its "unit", so one here labelled /cycles and /packages as
 // counted in lines: a true word on the wrong question. Every number a criterion
 // may select is in Readings and states its own unit.

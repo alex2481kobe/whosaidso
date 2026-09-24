@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // artifactIO is the publication boundary the destination-verification test

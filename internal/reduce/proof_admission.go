@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // completedObservation uses the immutable start's exact local assertion link.

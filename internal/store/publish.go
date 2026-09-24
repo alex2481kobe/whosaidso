@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // errLockBusy means another writer holds the admission lock right now. It is

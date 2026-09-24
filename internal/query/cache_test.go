@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"testing"
 
-	"datum/internal/store"
+	"whosaidso/internal/store"
 )
 
 func requireCachedParity(t *testing.T, p store.Project, state string, restored int) {

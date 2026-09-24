@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 // owedBy raises one blocked task's owed reasons: a BLOCKED task waits on

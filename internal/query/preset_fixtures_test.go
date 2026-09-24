@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
 // presetStart follows the clock: store.Transact stamps each fixture bundle

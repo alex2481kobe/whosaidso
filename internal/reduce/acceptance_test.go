@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // authored appends an accepted review attributing each event to the actor

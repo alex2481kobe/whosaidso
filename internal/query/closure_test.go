@@ -7,8 +7,8 @@ package query
 import (
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
 func taskWith(n int, edit func(*model.TaskSpec)) *model.TaskCreate {

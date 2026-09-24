@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
 )
 
 // admissionParity dry-runs the events with blobs as an uncaptured packet, then

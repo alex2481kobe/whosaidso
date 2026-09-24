@@ -2,7 +2,7 @@ package evidence
 
 // Where observed and pinned bytes may come from: run-dir outputs read from the
 // run's own directory or their admitted copy in the store, non-canonical paths matching nothing, and git pins
-// resolved relative to the datum root. General resolver and selector behaviour
+// resolved relative to the whosaidso root. General resolver and selector behaviour
 // belongs in resolve_test.go and selectors_test.go, not here.
 
 import (
@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // runDirObserve observes one run whose single output declares its run-dir
@@ -69,8 +69,8 @@ func TestNonCanonicalPathsMatchNothing(t *testing.T) {
 	ref := func(p string) model.ArtifactRef {
 		return contentRef(criterionExample, "application/json", []string{p}, "whole", "")
 	}
-	dot := ".datum/./artifacts/runs/" + string(invocationB) + "/out/result.json"
-	dbl := ".datum//artifacts/runs/" + string(invocationB) + "/out/result.json"
+	dot := ".whosaidso/./artifacts/runs/" + string(invocationB) + "/out/result.json"
+	dbl := ".whosaidso//artifacts/runs/" + string(invocationB) + "/out/result.json"
 	for _, tc := range []struct {
 		name, contract, output string
 		match                  bool
@@ -96,10 +96,10 @@ func TestNonCanonicalPathsMatchNothing(t *testing.T) {
 	}
 }
 
-// The datum root sits one directory below the repository top level. A pin to
-// secret.json names datum-root/secret.json, which does not exist, never the
+// The whosaidso root sits one directory below the repository top level. A pin to
+// secret.json names whosaidso-root/secret.json, which does not exist, never the
 // repository's top-level file.
-func TestGitPinResolvesRelativeToTheDatumRoot(t *testing.T) {
+func TestGitPinResolvesRelativeToTheWhoSaidSoRoot(t *testing.T) {
 	repo := newRepo(t)
 	writeFile(t, repo, "secret.json", `{"secret":"outside the root"}`)
 	writeFile(t, repo, "project/inside.json", `{"inside":"the root"}`)
@@ -111,10 +111,10 @@ func TestGitPinResolvesRelativeToTheDatumRoot(t *testing.T) {
 
 	got, err := r.Resolve(ctx, gitRef("sha1", head, "inside.json", "whole", ""))
 	if err != nil || string(got.Bytes) != `{"inside":"the root"}` {
-		t.Fatalf("control: a committed file inside the datum root must resolve: %q %v", got.Bytes, err)
+		t.Fatalf("control: a committed file inside the whosaidso root must resolve: %q %v", got.Bytes, err)
 	}
 	if _, err := r.Resolve(ctx, gitRef("sha1", head, "secret.json", "whole", "")); err == nil {
-		t.Fatal("secret.json is outside the datum root and must not resolve")
+		t.Fatal("secret.json is outside the whosaidso root and must not resolve")
 	}
 	// The same lookup backs a git pin that corroborates a content pin.
 	body := `{"secret":"outside the root"}`
@@ -122,6 +122,6 @@ func TestGitPinResolvesRelativeToTheDatumRoot(t *testing.T) {
 	both.Git = &model.GitPin{ObjectFormat: "sha1", Commit: head, Path: "secret.json"}
 	writeFile(t, filepath.Join(repo, "project"), DefaultArtifactDir+"/"+string(model.HashBytes([]byte(body))), body)
 	if _, err := r.Resolve(ctx, both); err == nil {
-		t.Fatal("a corroborating git pin must also resolve inside the datum root")
+		t.Fatal("a corroborating git pin must also resolve inside the whosaidso root")
 	}
 }

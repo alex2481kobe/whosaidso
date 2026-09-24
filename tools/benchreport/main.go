@@ -1,5 +1,5 @@
 // Command benchreport is an instrument that restates go test -bench output as
-// readings a Datum criterion can select. It reports measurements and does not
+// readings a WhoSaidSo criterion can select. It reports measurements and does not
 // judge them: whether 660ms is fast enough is a criterion's question, frozen
 // before the run, never this program's.
 //
@@ -39,7 +39,7 @@
 // not one go test -bench prints; input with no result lines at all.
 //
 // VALIDATED by known-answer tests in known_answer_test.go (each
-// mutation-checked); criterion_test.go puts readings through Datum's own
+// mutation-checked); criterion_test.go puts readings through WhoSaidSo's own
 // evidence.Observe and evidence.Evaluate.
 //
 // BLIND TO, and this matters more than the numbers it prints:

@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/query"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/query"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 var stageSink any
@@ -80,7 +80,7 @@ func BenchmarkStages(b *testing.B) {
 // Show whether the limit actually bounds the answer. JSON/text sizes are exact
 // byte counts, not token estimates. Run opt-in; the 10k continue is expensive.
 func TestOutputLimits(t *testing.T) {
-	if os.Getenv("DATUM_BENCH_OUTPUT") == "" {
+	if os.Getenv("WHOSAIDSO_BENCH_OUTPUT") == "" {
 		t.Skip("opt-in large read measurement")
 	}
 	f := getFixture(t, 10000)

@@ -13,7 +13,7 @@ import (
 	"sort"
 	"strings"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // CheckoutHead is the commit checked out at root. It is KNOWN only when git

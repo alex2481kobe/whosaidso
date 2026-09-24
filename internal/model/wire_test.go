@@ -180,7 +180,7 @@ func encodeRaw(b []byte) ([]byte, error) {
 }
 
 func TestSameActorNeverMatchesTwoUnknowns(t *testing.T) {
-	unknown := Actor{UnknownReason: "no --actor and no DATUM_ACTOR"}
+	unknown := Actor{UnknownReason: "no --actor and no WHOSAIDSO_ACTOR"}
 	if SameActor(unknown, unknown) {
 		t.Error("two unknown actors must never count as the same actor - that would fake self-admission")
 	}

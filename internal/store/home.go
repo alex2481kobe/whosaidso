@@ -1,6 +1,6 @@
 package store
 
-// The per-machine Datum home and the project registry live here: where the
+// The per-machine WhoSaidSo home and the project registry live here: where the
 // home is, how a project's binding is read, and how a command opens a project
 // through its bound home. Changing a binding lives in home_bind.go; intake,
 // staging and the machine id only ask Home where they belong.
@@ -12,14 +12,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // HomeEnv overrides the whole per-machine home: registry, intake, staging and
 // machine id move together, so a rehearsal cannot touch one real store.
-const HomeEnv = "DATUM_HOME"
+const HomeEnv = "WHOSAIDSO_HOME"
 
-// Home is the per-machine Datum home: $DATUM_HOME when set, else ~/.datum.
+// Home is the per-machine WhoSaidSo home: $WHOSAIDSO_HOME when set, else ~/.whosaidso.
 // Every per-machine path is derived from it and from nothing else.
 func Home() (string, error) {
 	if dir := os.Getenv(HomeEnv); dir != "" {
@@ -32,7 +32,7 @@ func Home() (string, error) {
 	if err != nil || !filepath.IsAbs(home) {
 		return "", storeFault("io", "home", "an absolute user home directory is required")
 	}
-	return filepath.Join(home, ".datum"), nil
+	return filepath.Join(home, ".whosaidso"), nil
 }
 
 // bindingPath is the registry file naming one project's home.
@@ -77,7 +77,7 @@ func Binding(id model.ProjectID) (string, bool, error) {
 	}
 	root, ok := strings.CutSuffix(string(raw), "\n")
 	if !ok || root == "" || !filepath.IsAbs(root) || filepath.Clean(root) != root || strings.ContainsAny(root, "\x00\n") {
-		return "", false, storeFault("binding-corrupt", path, fmt.Sprintf("expected one absolute clean path and a newline, found %q; fix it with datum home PATH", raw))
+		return "", false, storeFault("binding-corrupt", path, fmt.Sprintf("expected one absolute clean path and a newline, found %q; fix it with whosaidso home PATH", raw))
 	}
 	return root, true, nil
 }
@@ -87,7 +87,7 @@ func Binding(id model.ProjectID) (string, bool, error) {
 //
 // An unbound project refuses, so no clone silently becomes the home by running
 // first. A bound home that is missing, or no longer declares this project,
-// refuses too: Datum never falls back to the invoking checkout's ledger and
+// refuses too: WhoSaidSo never falls back to the invoking checkout's ledger and
 // never creates an empty one. Checkout stays the invoking checkout.
 func Open(cwd string) (Project, error) {
 	invoked, err := Discover(cwd)
@@ -100,7 +100,7 @@ func Open(cwd string) (Project, error) {
 	}
 	if !bound {
 		return Project{}, storeFault("home-unbound", invoked.Root, fmt.Sprintf(
-			"project %s is not bound to a home on this machine; run datum home PATH with the checkout that holds its live ledger", invoked.ID))
+			"project %s is not bound to a home on this machine; run whosaidso home PATH with the checkout that holds its live ledger", invoked.ID))
 	}
 	home, err := homeAt(root, invoked.ID)
 	if err != nil {
@@ -120,7 +120,7 @@ func Open(cwd string) (Project, error) {
 func homeAt(root string, id model.ProjectID) (Project, error) {
 	unavailable := func(why string) error {
 		return storeFault("home-unavailable", root, fmt.Sprintf(
-			"home %s of project %s is unavailable: %s; Datum does not fall back to another ledger or create one; restore it or bind the new place with datum home PATH", root, id, why))
+			"home %s of project %s is unavailable: %s; WhoSaidSo does not fall back to another ledger or create one; restore it or bind the new place with whosaidso home PATH", root, id, why))
 	}
 	info, err := os.Stat(root)
 	if err != nil {
@@ -131,13 +131,13 @@ func homeAt(root string, id model.ProjectID) (Project, error) {
 	}
 	home, err := configAt(root)
 	if os.IsNotExist(err) {
-		return Project{}, unavailable("it has no datum.toml")
+		return Project{}, unavailable("it has no whosaidso.toml")
 	}
 	if err != nil {
 		return Project{}, err
 	}
 	if home.ID != id {
-		return Project{}, unavailable(fmt.Sprintf("its datum.toml declares project %s", home.ID))
+		return Project{}, unavailable(fmt.Sprintf("its whosaidso.toml declares project %s", home.ID))
 	}
 	return home, nil
 }

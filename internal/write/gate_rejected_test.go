@@ -11,9 +11,9 @@ import (
 	"os"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 // A rejected contradicting run never leaves the family (R10.3). The review

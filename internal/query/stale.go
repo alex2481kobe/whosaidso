@@ -1,13 +1,13 @@
 package query
 
-// The stale-claims read of `datum show --stale` (R14.2) lives here: which
+// The stale-claims read of `whosaidso show --stale` (R14.2) lives here: which
 // observed claims to answer, each one's last run, the HEAD-only comparison and
 // the brief lines. The git facts come from the caller (StaleGit), observed in
 // the invoking checkout through internal/evidence; this package never runs git.
 
 import (
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 // StaleClaim answers one observed current claim. Stale is TRUE when scoped

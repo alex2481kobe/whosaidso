@@ -11,7 +11,7 @@ import (
 	"reflect"
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func unknownInstrument() model.InstrumentSpec {
@@ -61,7 +61,7 @@ func TestInstrumentValidationRealSequenceThreeReplay(t *testing.T) {
 		t.Fatalf("need the committed bundles through sequence 3: %v, %v", paths, err)
 	}
 	// The subject is sequence 3's declarations, so read the prefix through 3.
-	// Later bundles (Datum recording its own work) may revise these instruments.
+	// Later bundles (WhoSaidSo recording its own work) may revise these instruments.
 	paths = paths[:3]
 	var bundles []model.Bundle
 	var incremental Snapshot

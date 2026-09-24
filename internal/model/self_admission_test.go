@@ -81,7 +81,7 @@ func TestReviewStoredSelfAdmissionIsRefused(t *testing.T) {
 	}
 }
 
-// Bundle 1 of Datum's own ledger, as the R18.2 migration left it: its author
+// Bundle 1 of WhoSaidSo's own ledger, as the R18.2 migration left it: its author
 // and capture time come from the intake packet whose bytes hash to the digest
 // the bundle records, and its reason prose is untouched.
 func TestReviewCommittedSequenceOneRecordsItsVerifiedAuthor(t *testing.T) {

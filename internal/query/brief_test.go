@@ -14,8 +14,8 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
 func jsonAt(t *testing.T, root any, path []string) (any, bool) {
@@ -115,7 +115,7 @@ func TestBriefNamesStatusReasonAndNextActorPerRecord(t *testing.T) {
 		Actor: model.Actor{ID: "owner"}, Criterion: "resume is authorized"})
 	todo := assertViewHonest(t, viewAnswerOf(t, p, ViewRequest{View: "todo"}))
 	for _, want := range []string{
-		"blocked: 1\n  TASK " + string(testID(2)) + " rev 1 BLOCKED next acceptance-owner\n    Build U09 of Datum",
+		"blocked: 1\n  TASK " + string(testID(2)) + " rev 1 BLOCKED next acceptance-owner\n    Build U09 of WhoSaidSo",
 		"    blocked: resume waits on owner hold " + string(testID(80)) + " - resume is authorized\n",
 		"ready: 1\n  TASK " + string(testID(1)) + " rev 1 READY next acceptance-owner\n",
 		"attention: 1\n  task-blocked-owed " + string(testID(2)) + " rev 1 waits on owner\n",
@@ -149,7 +149,7 @@ func TestBriefShowsReviewedIntakeWithItsDisposition(t *testing.T) {
 		"\nintake unreviewed: 1\n  packet " + string(testID(1003)) + " pending\n    author author events 1 task.create\n",
 		"\ncorrection requested (each packet's author owes a corrected packet): 1\n  packet " + string(testID(1004)) + " correction-requested\n",
 		"    reviewed correction-requested by reviewer\n",
-		"\nrejected intake: 1 (reviewed, nothing owed; datum history lists the reviews)\n"} {
+		"\nrejected intake: 1 (reviewed, nothing owed; whosaidso history lists the reviews)\n"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("intake brief must carry %q, got\n%s", want, text)
 		}

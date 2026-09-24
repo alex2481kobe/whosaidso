@@ -11,9 +11,9 @@ import (
 	"sort"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 // AdmitRequest has its own command identity because one admission can carry many packets.

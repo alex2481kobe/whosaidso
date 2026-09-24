@@ -12,9 +12,9 @@ import (
 	"fmt"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 // ReconcileRequest names an admitted, unsealed invocation whose observer did

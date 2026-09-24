@@ -3,7 +3,7 @@ package reduce
 import (
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func projectTask(t *testing.T, l *ledgerBuilder, id model.ID) TaskProjection {

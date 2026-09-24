@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // rejectedLedger admits a passing sealed run and records, through a rejected

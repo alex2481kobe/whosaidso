@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // evClosedSet is the closed event set as the plan's event table names it,
@@ -51,7 +51,7 @@ func recPointerRef(d model.Digest, pointer string) model.ArtifactRef {
 		Kind: "content",
 		Content: &model.ContentPin{
 			SHA256: d, Length: 4096, MediaType: "application/json",
-			Locators: []model.Locator{{Path: ".datum/artifacts/" + string(d)}},
+			Locators: []model.Locator{{Path: ".whosaidso/artifacts/" + string(d)}},
 		},
 		Selector: model.Selector{Kind: "json-pointer", Pointer: pointer},
 	}
@@ -159,7 +159,7 @@ func evAll() []model.TypedEvent {
 		recStart(),
 		&model.TaskTakeover{
 			Task: recRef(recID(1), 2), Actor: recActor("lane-b"), AttemptID: recID(71),
-			PriorAttemptID: recID(70), StoppedConfirmationRef: recGit(".datum/handback/lane-e.json"),
+			PriorAttemptID: recID(70), StoppedConfirmationRef: recGit(".whosaidso/handback/lane-e.json"),
 		},
 		&model.AttemptTerminal{
 			Task: recRef(recID(1), 2), AttemptID: recID(70), Outcome: model.AttemptNoReading,
@@ -220,7 +220,7 @@ func evAll() []model.TypedEvent {
 		&model.ArtifactDispose{
 			Artifact:         recContent(recDigest('b'), 2048),
 			Digest:           recDigest('b'),
-			PreviousLocation: ".datum/artifacts/" + string(recDigest('b')),
+			PreviousLocation: ".whosaidso/artifacts/" + string(recDigest('b')),
 			SupportLoss: []model.SupportLoss{{
 				Target: recRef(recID(95), 1), Reason: "the only observation behind this claim is gone",
 			}},
@@ -431,7 +431,7 @@ func TestEventsSealAndBlockerClearMustLinkTheirOwnSubject(t *testing.T) {
 	t.Run("takeover reusing the prior attempt id", func(t *testing.T) {
 		takeover := recEncode(t, &model.TaskTakeover{
 			Task: recRef(recID(1), 2), Actor: recActor("lane-b"), AttemptID: recID(71),
-			PriorAttemptID: recID(70), StoppedConfirmationRef: recGit(".datum/handback/lane-e.json"),
+			PriorAttemptID: recID(70), StoppedConfirmationRef: recGit(".whosaidso/handback/lane-e.json"),
 		})
 		recMustRefuse(t, "task.takeover whose new attempt reuses the prior attempt id",
 			recSet(t, takeover, "attempt_id", string(recID(70))))

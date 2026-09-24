@@ -13,14 +13,14 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
-	"datum/internal/write"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
+	"whosaidso/internal/write"
 )
 
 // Run with -run '^$' -bench BenchmarkCommands -benchmem -benchtime=1x.
-// DATUM_BENCH_ROOT optionally retains fixtures across processes; use an empty,
+// WHOSAIDSO_BENCH_ROOT optionally retains fixtures across processes; use an empty,
 // lane-prefixed scratch directory. HOME is isolated inside this test binary only;
 // the invoking Go tool uses its configured shared cache, without a GOCACHE override.
 // Large fixtures use Encode/DecodeBundle, ReadVerifiedIntake and Replay, then write
@@ -30,7 +30,7 @@ import (
 var benchRoot string
 
 func TestMain(m *testing.M) {
-	benchRoot = os.Getenv("DATUM_BENCH_ROOT")
+	benchRoot = os.Getenv("WHOSAIDSO_BENCH_ROOT")
 	remove := benchRoot == ""
 	var err error
 	if remove {
@@ -191,8 +191,8 @@ func getFixture(t testing.TB, n int) *fixture {
 func buildFixture(t testing.TB, dir string, n int, realAdmission bool) *fixture {
 	t.Helper()
 	f := &fixture{t: t, Bundles: n, realAdmission: realAdmission, building: true,
-		Project: store.Project{ID: model.ProjectID("astraeff/" + filepath.Base(dir) + "/" + string(model.HashBytes([]byte(dir)))[:8]), Root: dir, Ledger: filepath.Join(dir, ".datum", "events")}}
-	put(t, filepath.Join(dir, "datum.toml"), []byte(fmt.Sprintf("id = %q\nledger = %q\n", f.Project.ID, ".datum/events")))
+		Project: store.Project{ID: model.ProjectID("astraeff/" + filepath.Base(dir) + "/" + string(model.HashBytes([]byte(dir)))[:8]), Root: dir, Ledger: filepath.Join(dir, ".whosaidso", "events")}}
+	put(t, filepath.Join(dir, "whosaidso.toml"), []byte(fmt.Sprintf("id = %q\nledger = %q\n", f.Project.ID, ".whosaidso/events")))
 	for i := 0; i < n/10; i++ {
 		f.cycle(i)
 	}

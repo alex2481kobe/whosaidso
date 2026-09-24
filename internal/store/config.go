@@ -11,7 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // Project keeps absolute paths at the runtime boundary. Only ID is persisted in
@@ -43,7 +43,7 @@ func (p Project) ExecRoot() string {
 
 // ArtifactDir is the project-relative, slash-separated artifact store: the
 // sibling "artifacts" of the ledger inside the ledger's record folder (R13.1:
-// .datum/events beside .datum/artifacts). It is derived from the configured
+// .whosaidso/events beside .whosaidso/artifacts). It is derived from the configured
 // ledger, never named separately, so the two cannot drift apart, and it is
 // computed lexically under Root, which R8.1 already confines the ledger to.
 func (p Project) ArtifactDir() string {
@@ -69,7 +69,7 @@ func Discover(cwd string) (Project, error) {
 		return Project{}, storeFault("invalid-field", root, "cwd must be a directory")
 	}
 	for {
-		path := filepath.Join(root, "datum.toml")
+		path := filepath.Join(root, "whosaidso.toml")
 		project, err := configAt(root)
 		if err == nil || !os.IsNotExist(err) {
 			return project, err
@@ -81,7 +81,7 @@ func Discover(cwd string) (Project, error) {
 		}
 		parent := filepath.Dir(root)
 		if parent == root {
-			return Project{}, storeFault("config-not-found", cwd, "no datum.toml in this directory or its parents")
+			return Project{}, storeFault("config-not-found", cwd, "no whosaidso.toml in this directory or its parents")
 		}
 		root = parent
 	}
@@ -90,7 +90,7 @@ func Discover(cwd string) (Project, error) {
 // configAt reads the config in root itself, never a parent's. A missing file
 // is returned as the os error, so callers can tell absence from a bad config.
 func configAt(root string) (Project, error) {
-	path := filepath.Join(root, "datum.toml")
+	path := filepath.Join(root, "whosaidso.toml")
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return Project{}, err
@@ -110,12 +110,12 @@ func configAt(root string) (Project, error) {
 }
 
 // ledgerInRoot enforces ruling R8.1: the ledger is committed with the project,
-// so it may not leave the datum root. Containment is asked of the filesystem by
+// so it may not leave the whosaidso root. Containment is asked of the filesystem by
 // path segments, with symlinks resolved on both sides (macOS /tmp is a link).
 func ledgerInRoot(root, declared, config string) (string, error) {
 	ledger := filepath.Join(root, declared)
 	outside := storeFault("config-invalid-value", config,
-		fmt.Sprintf("ledger %q resolves to %q, outside the datum root %q", declared, ledger, root))
+		fmt.Sprintf("ledger %q resolves to %q, outside the whosaidso root %q", declared, ledger, root))
 	if filepath.IsAbs(declared) || filepath.VolumeName(declared) != "" {
 		return "", outside
 	}
@@ -129,7 +129,7 @@ func ledgerInRoot(root, declared, config string) (string, error) {
 	}
 	rel, err := filepath.Rel(realRoot, realLedger)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		outside.Detail = fmt.Sprintf("ledger %q resolves to %q, outside the datum root %q", declared, realLedger, realRoot)
+		outside.Detail = fmt.Sprintf("ledger %q resolves to %q, outside the whosaidso root %q", declared, realLedger, realRoot)
 		return "", outside
 	}
 	return ledger, nil

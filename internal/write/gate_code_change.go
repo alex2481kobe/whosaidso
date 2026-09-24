@@ -14,10 +14,10 @@ import (
 	"reflect"
 	"sort"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 // gateGit is the git the gate asks. Production runs the real binary.

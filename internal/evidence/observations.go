@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // ---- observations --------------------------------------------------------
@@ -113,7 +113,7 @@ func (r *Resolver) readSelector(ctx context.Context, outs []model.ArtifactRef, r
 		// these bytes were this run's output (its captured blobs or its run
 		// directory) and published them, so the store holds THIS run's admitted
 		// bytes under their digest. The run-dir path is the output's logical
-		// name: datum run stages outside the project and never writes there, so
+		// name: whosaidso run stages outside the project and never writes there, so
 		// the store copy is the only one. Older runs and hand-placed outputs
 		// may still have bytes at the path, and they are read there first.
 		pin := *ref.Content

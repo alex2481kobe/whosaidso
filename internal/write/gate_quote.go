@@ -13,9 +13,9 @@ import (
 	"context"
 	"fmt"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
-	"datum/internal/store"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
 // gateQuotes runs after admission artifacts resolved, so the authority's

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // lockName is the admission lock's file, inside the ledger directory so one
@@ -15,7 +15,7 @@ import (
 const lockName = ".lock"
 
 // unsafeLock refuses a lock path that is not a regular file of its own, such as
-// a symlink that would carry the lock, and its creation, out of the datum root.
+// a symlink that would carry the lock, and its creation, out of the whosaidso root.
 func unsafeLock(path string) error {
 	return storeFault("ledger-corrupt", path,
 		"the admission lock must be a regular file in the ledger directory, never a symlink; remove it and retry")

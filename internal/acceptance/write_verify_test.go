@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/store"
-	"datum/internal/write"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
+	"whosaidso/internal/write"
 )
 
 // Exercise the entrances around the handback UTF-8 repair, not just the
@@ -219,8 +219,8 @@ func TestWriteVerifyNestedInvocationIntentCopiesAreOwned(t *testing.T) {
 
 func writeVerifyCLI(t *testing.T) string {
 	t.Helper()
-	binary := filepath.Join(t.TempDir(), "datum")
-	cmd := exec.Command("go", "build", "-o", binary, "./cmd/datum")
+	binary := filepath.Join(t.TempDir(), "whosaidso")
+	cmd := exec.Command("go", "build", "-o", binary, "./cmd/whosaidso")
 	cmd.Dir = filepath.Join("..", "..")
 	cmd.Env = append(os.Environ(), "GOPROXY=off", "GOTOOLCHAIN=local")
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -246,7 +246,7 @@ func writeVerifyCLIPacket(binary string, f *gateVerifyFixture, input string, arg
 func TestWriteVerifyCLIJSONAliasesCannotChooseAuthoredMeaning(t *testing.T) {
 	f := gateVerifyNew(t)
 	f.control()
-	stWriteConfig(t, f.p.Root, string(f.p.ID), ".datum/events")
+	stWriteConfig(t, f.p.Root, string(f.p.ID), ".whosaidso/events")
 	binary := writeVerifyCLI(t)
 	author := model.Actor{ID: "reviewer"}
 	t.Run("capture-event-type", func(t *testing.T) {

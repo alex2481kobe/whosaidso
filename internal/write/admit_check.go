@@ -19,10 +19,10 @@ import (
 	"strings"
 	"time"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 // CheckRefusal is one reason the gate would refuse, and the stage that found it.
@@ -256,7 +256,7 @@ func CheckAdmission(ctx context.Context, project store.Project, packetIDs []mode
 	if err != nil {
 		return AdmissionCheck{}, err
 	}
-	request := AdmitRequest{CommandID: command, Admitter: admitter, Outcome: "accepted", Reason: "dry run: datum proof check"}
+	request := AdmitRequest{CommandID: command, Admitter: admitter, Outcome: "accepted", Reason: "dry run: whosaidso proof check"}
 	digest, err := admissionDigest(project, request, refs)
 	if err != nil {
 		return AdmissionCheck{}, err

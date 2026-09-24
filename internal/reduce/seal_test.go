@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func sealNumber(s string) model.Scalar {

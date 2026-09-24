@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
 )
 
 // runAdmitWorld is a proof world plus one started run whose seal the case builds.

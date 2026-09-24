@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func TestMemberMetadataMustBeComparableBeforeReduction(t *testing.T) {

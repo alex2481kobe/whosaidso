@@ -6,7 +6,7 @@ package reduce
 import (
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func prereqTask(kind string, target model.RecordRef) *model.TaskCreate {

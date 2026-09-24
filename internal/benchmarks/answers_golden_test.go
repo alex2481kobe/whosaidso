@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/query"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/query"
+	"whosaidso/internal/store"
 )
 
 // The golden holds one sha-256 per view answer (todo, continue, bare show,
@@ -34,9 +34,9 @@ import (
 //
 // Blind spot: two answers that differ only in which timestamp sits where, or
 // only in digest bytes with the same equality pattern, hash the same. The raw
-// answers are also written, unnormalized, to DATUM_ANSWERS_DUMP when set, so a
+// answers are also written, unnormalized, to WHOSAIDSO_ANSWERS_DUMP when set, so a
 // change can be compared byte for byte on one retained fixture
-// (DATUM_BENCH_ROOT) as well.
+// (WHOSAIDSO_BENCH_ROOT) as well.
 const answersGolden = "testdata/answers-n1000.golden"
 
 var (
@@ -92,7 +92,7 @@ func normalizeAnswer(raw []byte, project store.Project) []byte {
 func answerDigests(t *testing.T, f *fixture) map[string]string {
 	t.Helper()
 	answers := goldenAnswers(t, f)
-	dump := os.Getenv("DATUM_ANSWERS_DUMP")
+	dump := os.Getenv("WHOSAIDSO_ANSWERS_DUMP")
 	out := map[string]string{}
 	for name, raw := range answers {
 		if dump != "" {
@@ -123,7 +123,7 @@ func readGolden(t *testing.T) map[string]string {
 }
 
 // TestAnswersMatchMainGolden: every pinned answer on the 1k fixture hashes to
-// the value main produced. DATUM_WRITE_GOLDEN=1 rewrites the golden; only do
+// the value main produced. WHOSAIDSO_WRITE_GOLDEN=1 rewrites the golden; only do
 // that on the commit the golden is meant to describe.
 func TestAnswersMatchMainGolden(t *testing.T) {
 	if testing.Short() {
@@ -131,7 +131,7 @@ func TestAnswersMatchMainGolden(t *testing.T) {
 	}
 	f := getFixture(t, 1000)
 	got := answerDigests(t, f)
-	if os.Getenv("DATUM_WRITE_GOLDEN") == "1" {
+	if os.Getenv("WHOSAIDSO_WRITE_GOLDEN") == "1" {
 		var buf bytes.Buffer
 		for _, name := range []string{"continue", "history", "show", "show-instrument", "show-one", "todo"} {
 			fmt.Fprintf(&buf, "%s %s\n", name, got[name])

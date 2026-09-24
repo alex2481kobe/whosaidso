@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
-	"datum/internal/query"
-	"datum/internal/reduce"
-	"datum/internal/store"
-	"datum/internal/write"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
+	"whosaidso/internal/query"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
+	"whosaidso/internal/write"
 )
 
 // Only the public capture/admit/read boundaries are used: a schema refusal
@@ -34,7 +34,7 @@ func gateVerifyNew(t *testing.T) *gateVerifyFixture {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	root := t.TempDir()
-	return &gateVerifyFixture{t: t, p: store.Project{ID: recProject, Root: root, Ledger: filepath.Join(root, ".datum", "events")}, n: 200}
+	return &gateVerifyFixture{t: t, p: store.Project{ID: recProject, Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}, n: 200}
 }
 
 func (f *gateVerifyFixture) id() model.ID { f.n++; return recID(f.n) }
@@ -81,7 +81,7 @@ func (f *gateVerifyFixture) unmeasured(id model.ID) {
 	}
 }
 
-// gateVerifyShow is `datum show ID` (R19: read through the show view).
+// gateVerifyShow is `whosaidso show ID` (R19: read through the show view).
 func gateVerifyShow(p store.Project, id model.ID) (*query.ShowAnswer, error) {
 	a, err := query.ReadView(p, query.ViewRequest{View: "show", ID: id})
 	if err != nil {

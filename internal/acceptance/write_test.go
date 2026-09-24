@@ -12,16 +12,16 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/store"
-	"datum/internal/write"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
+	"whosaidso/internal/write"
 )
 
 func outsideWriteProject(t *testing.T) store.Project {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	root := t.TempDir()
-	return store.Project{ID: laneEReduceProject, Root: root, Ledger: filepath.Join(root, ".datum", "events")}
+	return store.Project{ID: laneEReduceProject, Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
 }
 
 // TestWriteAdmissionCannotAcceptItsOwnAuthorsPacket was removed by the
@@ -247,7 +247,7 @@ func TestWriteProducerChild(t *testing.T) {
 			time.Sleep(5 * time.Millisecond)
 		}
 	}
-	if err := os.WriteFile(os.Getenv("DATUM_RUN_REPORT"), []byte(report), 0600); err != nil {
+	if err := os.WriteFile(os.Getenv("WHOSAIDSO_RUN_REPORT"), []byte(report), 0600); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(93)
 	}

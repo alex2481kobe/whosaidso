@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // closeBothWays appends the closure to l and folds it twice: once by Apply

@@ -1,4 +1,4 @@
-// Criterion tests: benchreport's readings put through Datum's own observation
+// Criterion tests: benchreport's readings put through WhoSaidSo's own observation
 // and evaluation path (internal/evidence Observe then Evaluate), exactly as a
 // run's stdout would be, following tools/archtree/criterion_test.go. A reading
 // that only looks selectable proves nothing; these assert the verdict.
@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
 )
 
 const (
@@ -67,7 +67,7 @@ func atMost(t *testing.T, example []byte, result, popPtr, unit, identity, max st
 	return c
 }
 
-// evaluate writes stdout where write.Run puts a run's stdout and lets Datum's
+// evaluate writes stdout where write.Run puts a run's stdout and lets WhoSaidSo's
 // resolver find, read and judge it.
 func evaluate(t *testing.T, c model.CriterionFix, stdout []byte) evidence.Evaluation {
 	t.Helper()
@@ -120,8 +120,8 @@ func reportOf(t *testing.T, input string) []byte {
 const (
 	showMedian = "/readings/by_benchmark/BenchmarkCommands~1N1000~1ShowOne/ns_per_op"
 	todoMedian = "/readings/by_benchmark/BenchmarkCommands~1N1000~1Todo/ns_per_op"
-	showPop    = "median of BenchmarkCommands/N1000/ShowOne runs in datum/internal/benchmarks"
-	todoPop    = "median of BenchmarkCommands/N1000/Todo runs in datum/internal/benchmarks"
+	showPop    = "median of BenchmarkCommands/N1000/ShowOne runs in whosaidso/internal/benchmarks"
+	todoPop    = "median of BenchmarkCommands/N1000/Todo runs in whosaidso/internal/benchmarks"
 )
 
 // "BenchmarkX median <= 1e9 ns/op", on the real 1k run: ShowOne's median is
@@ -150,7 +150,7 @@ func TestMedianCriterionDecides(t *testing.T) {
 func TestSamplesCriterionDecides(t *testing.T) {
 	out := reportOf(t, realRun)
 	const set = "/readings/by_benchmark/BenchmarkCommands~1N1000~1ShowOne/ns_per_op_samples"
-	const pop = "BenchmarkCommands/N1000/ShowOne runs in datum/internal/benchmarks"
+	const pop = "BenchmarkCommands/N1000/ShowOne runs in whosaidso/internal/benchmarks"
 	if ev := evaluate(t, atMost(t, out, set, set+"/values", "ns/op", pop, "667107208"), out); ev.Verdict != evidence.True {
 		t.Fatalf("every ShowOne run <= its slowest: %s", ev.Describe())
 	}

@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 func TestHistoryPreservesRevisionsOrderSourcesAndIncomingReferences(t *testing.T) {

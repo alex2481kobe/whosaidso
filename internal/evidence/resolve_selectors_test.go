@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // ---- selectors -----------------------------------------------------------

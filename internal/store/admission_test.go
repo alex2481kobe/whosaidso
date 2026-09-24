@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func TestAdmissionLockNeverFollowsASymlink(t *testing.T) {

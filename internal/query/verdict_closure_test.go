@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
 )
 
 // refutedAndClosedWorld is presetWorld plus a refutation of claim 21 (its only

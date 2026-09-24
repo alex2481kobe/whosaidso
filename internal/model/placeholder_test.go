@@ -1,7 +1,7 @@
 package model
 
 // Tests for the placeholder grammar the decoder refuses (placeholder.go):
-// exactly the forms `datum template` writes, and no near miss.
+// exactly the forms `whosaidso template` writes, and no near miss.
 
 import (
 	"strings"

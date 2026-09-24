@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // Compare every leaf and empty container, including full field paths.

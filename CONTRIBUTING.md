@@ -1,6 +1,6 @@
 # Contributing
 
-Datum is in early construction and the design is still settling. Open an issue
+WhoSaidSo is in early construction and the design is still settling. Open an issue
 before writing code, so you do not build against a decision that is about to
 change.
 

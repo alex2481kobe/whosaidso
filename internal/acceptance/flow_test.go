@@ -1,17 +1,17 @@
 package acceptance_test
 
-// U14 independent end-to-end flows. Every step runs the built `datum` binary
-// in a fresh process, inside a temp project with its own datum.toml and its
+// U14 independent end-to-end flows. Every step runs the built `whosaidso` binary
+// in a fresh process, inside a temp project with its own whosaidso.toml and its
 // own HOME (so its own intake), and every fact is read back through the read
 // surface. Every read is taken three times, as the default (brief) text, as
 // --full and as --json. --full is compared with --json field by field; every
 // value the brief prints must equal the JSON leaf at its recorded path or be a
 // marked prefix of it, and every count must equal that array's length. Every
 // answer must carry the watermark of the ledger it was read from. Refusals must
-// leave .datum/events byte-identical.
+// leave .whosaidso/events byte-identical.
 //
 // Event payloads are built with the model types only to produce the JSON a
-// lane would pipe to `datum capture`; nothing here calls the write, store or
+// lane would pipe to `whosaidso capture`; nothing here calls the write, store or
 // reduce packages directly.
 //
 // Supersede and artifact.dispose are left to a later lane on purpose.
@@ -34,8 +34,8 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/query"
+	"whosaidso/internal/model"
+	"whosaidso/internal/query"
 )
 
 type flowWorld struct {
@@ -58,7 +58,7 @@ func flowNew(t *testing.T) *flowWorld {
 		t.Skip("flows use POSIX producers; Windows is out of scope")
 	}
 	w := &flowWorld{t: t, root: t.TempDir(), home: t.TempDir(), project: "flow/review", n: 100}
-	w.put("datum.toml", []byte("id = \"flow/review\"\nledger = \".datum/events\"\n"))
+	w.put("whosaidso.toml", []byte("id = \"flow/review\"\nledger = \".whosaidso/events\"\n"))
 	w.scope = model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this flow fixture", Limitations: "a temp project"}
 	return w
 }
@@ -72,14 +72,14 @@ func (w *flowWorld) ref(id model.ID, revision model.Revision) model.RecordRef {
 }
 
 // cli runs the built binary in a fresh process at the project root, with no
-// DATUM_ACTOR inherited, so every attribution is the one the step names.
+// WHOSAIDSO_ACTOR inherited, so every attribution is the one the step names.
 func (w *flowWorld) cli(stdin []byte, args ...string) ([]byte, error) {
 	w.t.Helper()
-	cmd := exec.Command(pvDatum(w.t), args...)
+	cmd := exec.Command(pvWhoSaidSo(w.t), args...)
 	cmd.Dir, cmd.Stdin = w.root, bytes.NewReader(stdin)
 	env := []string{}
 	for _, entry := range os.Environ() {
-		if !strings.HasPrefix(entry, "DATUM_ACTOR=") && !strings.HasPrefix(entry, "HOME=") {
+		if !strings.HasPrefix(entry, "WHOSAIDSO_ACTOR=") && !strings.HasPrefix(entry, "HOME=") {
 			env = append(env, entry)
 		}
 	}
@@ -88,7 +88,7 @@ func (w *flowWorld) cli(stdin []byte, args ...string) ([]byte, error) {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
-		return stdout.Bytes(), fmt.Errorf("datum %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+		return stdout.Bytes(), fmt.Errorf("whosaidso %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
 	}
 	return stdout.Bytes(), nil
 }
@@ -138,11 +138,11 @@ func (w *flowWorld) mustAdmit(author string, events ...model.TypedEvent) {
 	}
 }
 
-// ledger is every byte under .datum/events, by file name.
+// ledger is every byte under .whosaidso/events, by file name.
 func (w *flowWorld) ledger() map[string][]byte {
 	w.t.Helper()
 	out := map[string][]byte{}
-	dir := filepath.Join(w.root, ".datum", "events")
+	dir := filepath.Join(w.root, ".whosaidso", "events")
 	entries, err := os.ReadDir(dir)
 	if err != nil && !os.IsNotExist(err) {
 		w.t.Fatal(err)
@@ -168,7 +168,7 @@ func (w *flowWorld) refused(what string, step func() error) {
 		w.t.Logf("%s: refused: %v", what, err)
 	}
 	if after := w.ledger(); !reflect.DeepEqual(before, after) {
-		w.t.Errorf("%s: a refused admission changed .datum/events (%d files before, %d after)", what, len(before), len(after))
+		w.t.Errorf("%s: a refused admission changed .whosaidso/events (%d files before, %d after)", what, len(before), len(after))
 	}
 }
 
@@ -189,7 +189,7 @@ func (w *flowWorld) read(args ...string) map[string]any {
 	if err != nil {
 		w.t.Fatalf("text read: %v", err)
 	}
-	flowBriefAgrees(w.t, "datum "+strings.Join(args, " "), exported, answer, string(text))
+	flowBriefAgrees(w.t, "whosaidso "+strings.Join(args, " "), exported, answer, string(text))
 	w.watermark(args, answer)
 	return answer
 }
@@ -296,9 +296,9 @@ func (w *flowWorld) readFlag(flag string, args ...string) []byte {
 	return out
 }
 
-// openTasks reads `datum show` on both surfaces (same facts, same watermark,
+// openTasks reads `whosaidso show` on both surfaces (same facts, same watermark,
 // via read) and keeps the TASK records whose status is not CLOSED, IN FLIGHT
-// included. That is exactly what `datum task todo` selected before the owner
+// included. That is exactly what `whosaidso task todo` selected before the owner
 // removed the verb as redundant (R12); the todo preset's sections differ.
 func (w *flowWorld) openTasks() []any {
 	w.t.Helper()
@@ -332,18 +332,18 @@ func (w *flowWorld) watermark(args []string, answer map[string]any) {
 	}
 	mark, _ := answer["watermark"].(map[string]any)
 	if mark == nil {
-		w.t.Errorf("datum %s: the answer carries no watermark", strings.Join(args, " "))
+		w.t.Errorf("whosaidso %s: the answer carries no watermark", strings.Join(args, " "))
 		return
 	}
 	if seq == "" {
 		if flowStr(mark, "head", "state") != "UNKNOWN" {
-			w.t.Errorf("datum %s: an empty ledger's watermark names a head: %v", strings.Join(args, " "), mark)
+			w.t.Errorf("whosaidso %s: an empty ledger's watermark names a head: %v", strings.Join(args, " "), mark)
 		}
 		return
 	}
 	want, _ := strconv.ParseUint(seq, 10, 64)
 	if flowStr(mark, "sequence") != strconv.FormatUint(want, 10) || flowStr(mark, "head", "command_id") != head {
-		w.t.Errorf("datum %s: watermark %v does not name the ledger head %s-%s", strings.Join(args, " "), mark, seq, head)
+		w.t.Errorf("whosaidso %s: watermark %v does not name the ledger head %s-%s", strings.Join(args, " "), mark, seq, head)
 	}
 }
 
@@ -386,7 +386,7 @@ func flowList(v any, path ...any) []any {
 	return s
 }
 
-// record is the single record `datum show ID` selects.
+// record is the single record `whosaidso show ID` selects.
 func (w *flowWorld) record(id model.ID) map[string]any {
 	w.t.Helper()
 	answer := w.read("show", string(id))
@@ -474,7 +474,7 @@ func (w *flowWorld) fix(id model.ID, revision model.Revision) {
 	time.Sleep(2 * time.Millisecond) // the criterion's bundle strictly precedes any launch
 }
 
-// run is a real `datum run` of a producer script under the current criterion.
+// run is a real `whosaidso run` of a producer script under the current criterion.
 func (w *flowWorld) run(script string) (model.ID, []model.ID, error) {
 	w.t.Helper()
 	w.put("tools/run.sh", []byte(script))
@@ -483,7 +483,7 @@ func (w *flowWorld) run(script string) (model.ID, []model.ID, error) {
 		"--claim", string(w.claim.RecordID), "--claim-revision", "1", "--criterion-id", string(w.criterion.CriterionID),
 		"--criterion-revision", strconv.FormatUint(uint64(w.criterion.Revision), 10), "--", "/bin/sh", "tools/run.sh")
 	var result struct {
-		// datum run prints snake_case keys (coordinator change, in the open).
+		// whosaidso run prints snake_case keys (coordinator change, in the open).
 		Envelope    model.InvocationEnvelope `json:"envelope"`
 		StartPacket model.PacketRef          `json:"start_packet"`
 		SealPacket  model.PacketRef          `json:"seal_packet"`
@@ -507,7 +507,7 @@ func (w *flowWorld) admittedRun(body string) model.ID {
 	w.t.Helper()
 	id, packets, err := w.run(pvProducer(body))
 	if err != nil || len(packets) != 2 {
-		w.t.Fatalf("control: datum run must seal and print both packets: %v, %v", packets, err)
+		w.t.Fatalf("control: whosaidso run must seal and print both packets: %v, %v", packets, err)
 	}
 	if err := w.review("accepted", packets...); err != nil {
 		w.t.Fatalf("control: the run's start and seal admit: %v", err)
@@ -946,10 +946,10 @@ func TestFlowRecovery(t *testing.T) {
 	w := flowProofWorld(t)
 	pass := w.admittedRun(pvPass)
 
-	// Kill a real `datum run` after its producer is running.
+	// Kill a real `whosaidso run` after its producer is running.
 	w.put("tools/run.sh", []byte("touch flow-lane-started\nwhile kill -0 $PPID 2>/dev/null; do sleep 0.05; done\n"))
 	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
-	cmd := exec.Command(pvDatum(t), "run", "--json", "--actor", flowLane, "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),
+	cmd := exec.Command(pvWhoSaidSo(t), "run", "--json", "--actor", flowLane, "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),
 		"--claim", string(w.claim.RecordID), "--claim-revision", "1", "--criterion-id", string(w.criterion.CriterionID), "--criterion-revision", "1",
 		"--", "/bin/sh", "tools/run.sh")
 	cmd.Dir = w.root
@@ -1038,15 +1038,15 @@ func TestFlowRecovery(t *testing.T) {
 	}
 	for _, e := range entries {
 		switch e.Name() {
-		case "datum.toml":
-		case ".datum":
-			inner, err := os.ReadDir(filepath.Join(w.root, ".datum"))
+		case "whosaidso.toml":
+		case ".whosaidso":
+			inner, err := os.ReadDir(filepath.Join(w.root, ".whosaidso"))
 			if err != nil {
 				t.Fatal(err)
 			}
 			for _, r := range inner {
 				if r.Name() != "events" {
-					if err := os.RemoveAll(filepath.Join(w.root, ".datum", r.Name())); err != nil {
+					if err := os.RemoveAll(filepath.Join(w.root, ".whosaidso", r.Name())); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -1058,15 +1058,15 @@ func TestFlowRecovery(t *testing.T) {
 		}
 	}
 	if !reflect.DeepEqual(ledger, w.ledger()) {
-		t.Fatal("fixture: deleting generated output touched .datum/events")
+		t.Fatal("fixture: deleting generated output touched .whosaidso/events")
 	}
 	for _, args := range reads {
 		if after := w.read(args...); !reflect.DeepEqual(before[strings.Join(args, " ")], after) {
-			t.Errorf("datum %s answers differently after generated output was deleted", strings.Join(args, " "))
+			t.Errorf("whosaidso %s answers differently after generated output was deleted", strings.Join(args, " "))
 		}
 	}
 	if !reflect.DeepEqual(openBefore, w.openTasks()) {
-		t.Error("the open (not CLOSED) tasks in `datum show` differ after generated output was deleted")
+		t.Error("the open (not CLOSED) tasks in `whosaidso show` differ after generated output was deleted")
 	}
 }
 

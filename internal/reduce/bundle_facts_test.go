@@ -8,7 +8,7 @@ package reduce
 import (
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 func TestCriterionRetainsItsBundleRecordingTime(t *testing.T) {

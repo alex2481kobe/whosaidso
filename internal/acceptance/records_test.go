@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 const recProject = model.ProjectID("datum/acceptance")
@@ -63,7 +63,7 @@ func recContent(d model.Digest, length uint64) model.ArtifactRef {
 		Kind: "content",
 		Content: &model.ContentPin{
 			SHA256: d, Length: length, MediaType: "application/json",
-			Locators: []model.Locator{{Path: ".datum/artifacts/" + string(d)}},
+			Locators: []model.Locator{{Path: ".whosaidso/artifacts/" + string(d)}},
 		},
 		Selector: model.Selector{Kind: "whole"},
 	}
@@ -166,7 +166,7 @@ func recEnvelope() model.InvocationEnvelope {
 		ExecutionSourceIdentity: model.ExecutionIdentity{
 			Project:    recProject,
 			MachineID:  recKnown(recID(43)),
-			SourceRefs: []model.ArtifactRef{recGit("cmd/datum/main.go")},
+			SourceRefs: []model.ArtifactRef{recGit("cmd/whosaidso/main.go")},
 			Head:       recKnown(model.GitHead{ObjectFormat: "sha1", Commit: strings.Repeat("b", 40)}),
 			Dirty:      recKnown(false),
 		},

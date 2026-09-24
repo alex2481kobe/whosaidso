@@ -6,7 +6,7 @@ package reduce
 import (
 	"reflect"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // supportNode is a tagged key, so equal-looking ids in different namespaces

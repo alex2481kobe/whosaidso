@@ -6,7 +6,7 @@ package reduce
 import (
 	"time"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // ---- identities ----------------------------------------------------------

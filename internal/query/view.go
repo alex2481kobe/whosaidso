@@ -9,9 +9,9 @@ package query
 import (
 	"fmt"
 
-	"datum/internal/model"
-	"datum/internal/reduce"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/reduce"
+	"whosaidso/internal/store"
 )
 
 type ViewRequest struct {

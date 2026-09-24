@@ -16,7 +16,7 @@ import (
 // suffix, three repeats and two custom metrics.
 const realRun = "goos: darwin\n" +
 	"goarch: arm64\n" +
-	"pkg: datum/internal/benchmarks\n" +
+	"pkg: whosaidso/internal/benchmarks\n" +
 	"cpu: Apple M4\n" +
 	"BenchmarkCommands/N1000/ShowOne-10 \t       2\t 662256438 ns/op\t      3252 json-B/op\t      2859 text-B/op\t543252852 B/op\t17568992 allocs/op\n" +
 	"BenchmarkCommands/N1000/ShowOne-10 \t       2\t 665484958 ns/op\t      3252 json-B/op\t      2859 text-B/op\t543273632 B/op\t17569048 allocs/op\n" +
@@ -25,7 +25,7 @@ const realRun = "goos: darwin\n" +
 	"BenchmarkCommands/N1000/Todo-10    \t       1\t1405629541 ns/op\t    575703 json-B/op\t    503899 text-B/op\t987094456 B/op\t34797910 allocs/op\n" +
 	"BenchmarkCommands/N1000/Todo-10    \t       1\t1400206709 ns/op\t    575703 json-B/op\t    503899 text-B/op\t987002208 B/op\t34797888 allocs/op\n" +
 	"PASS\n" +
-	"ok  \tdatum/internal/benchmarks\t12.794s\n"
+	"ok  \twhosaidso/internal/benchmarks\t12.794s\n"
 
 // run returns the report as generic JSON, numbers kept as their text.
 func run(t *testing.T, input string) map[string]any {
@@ -59,12 +59,12 @@ func TestRepeatsMediansAndSamples(t *testing.T) {
 	out := run(t, realRun)
 	show := bench(t, out, "BenchmarkCommands/N1000/ShowOne")
 	for key, want := range map[string]string{
-		"ns_per_op":     `{"denominator":"benchmark runs","median_of_runs":[2],"population":"median of BenchmarkCommands/N1000/ShowOne runs in datum/internal/benchmarks","rule":"middle value of 3 runs sorted by value","statistic":"median","unit":"ns/op","value":665484958}`,
-		"B_per_op":      `{"denominator":"benchmark runs","median_of_runs":[3],"population":"median of BenchmarkCommands/N1000/ShowOne runs in datum/internal/benchmarks","rule":"middle value of 3 runs sorted by value","statistic":"median","unit":"B/op","value":543261988}`,
-		"allocs_per_op": `{"denominator":"benchmark runs","median_of_runs":[3],"population":"median of BenchmarkCommands/N1000/ShowOne runs in datum/internal/benchmarks","rule":"middle value of 3 runs sorted by value","statistic":"median","unit":"allocs/op","value":17569029}`,
-		"runs":          `{"denominator":"benchmark runs","population":"BenchmarkCommands/N1000/ShowOne runs in datum/internal/benchmarks","unit":"runs","value":3}`,
-		"conditions":    `{"cpu":"Apple M4","goarch":"arm64","goos":"darwin","pkg":"datum/internal/benchmarks","procs":"10"}`,
-		"ns_per_op_samples": `{"denominator":"benchmark runs","population":"BenchmarkCommands/N1000/ShowOne runs in datum/internal/benchmarks","unit":"ns/op","values":[` +
+		"ns_per_op":     `{"denominator":"benchmark runs","median_of_runs":[2],"population":"median of BenchmarkCommands/N1000/ShowOne runs in whosaidso/internal/benchmarks","rule":"middle value of 3 runs sorted by value","statistic":"median","unit":"ns/op","value":665484958}`,
+		"B_per_op":      `{"denominator":"benchmark runs","median_of_runs":[3],"population":"median of BenchmarkCommands/N1000/ShowOne runs in whosaidso/internal/benchmarks","rule":"middle value of 3 runs sorted by value","statistic":"median","unit":"B/op","value":543261988}`,
+		"allocs_per_op": `{"denominator":"benchmark runs","median_of_runs":[3],"population":"median of BenchmarkCommands/N1000/ShowOne runs in whosaidso/internal/benchmarks","rule":"middle value of 3 runs sorted by value","statistic":"median","unit":"allocs/op","value":17569029}`,
+		"runs":          `{"denominator":"benchmark runs","population":"BenchmarkCommands/N1000/ShowOne runs in whosaidso/internal/benchmarks","unit":"runs","value":3}`,
+		"conditions":    `{"cpu":"Apple M4","goarch":"arm64","goos":"darwin","pkg":"whosaidso/internal/benchmarks","procs":"10"}`,
+		"ns_per_op_samples": `{"denominator":"benchmark runs","population":"BenchmarkCommands/N1000/ShowOne runs in whosaidso/internal/benchmarks","unit":"ns/op","values":[` +
 			`{"line":5,"name":"run 1","run":1,"value":662256438},{"line":6,"name":"run 2","run":2,"value":665484958},{"line":7,"name":"run 3","run":3,"value":667107208}]}`,
 	} {
 		if got := text(show[key]); got != want {
@@ -86,7 +86,7 @@ func TestRepeatsMediansAndSamples(t *testing.T) {
 	if got := text(out["benchmarks"]); got != `["BenchmarkCommands/N1000/ShowOne","BenchmarkCommands/N1000/Todo"]` {
 		t.Errorf("benchmarks = %s", got)
 	}
-	if got := text(out["conditions"]); got != `{"cpu":["Apple M4"],"goarch":["arm64"],"goos":["darwin"],"pkg":["datum/internal/benchmarks"]}` {
+	if got := text(out["conditions"]); got != `{"cpu":["Apple M4"],"goarch":["arm64"],"goos":["darwin"],"pkg":["whosaidso/internal/benchmarks"]}` {
 		t.Errorf("conditions = %s", got)
 	}
 }

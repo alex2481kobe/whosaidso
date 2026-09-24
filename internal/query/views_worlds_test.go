@@ -1,8 +1,8 @@
 package query
 
 // Shared view-test inputs: the rich fixture's workspace observation and stale
-// check, and the retained 1k benchmark fixture (DATUM_VIEWS_1K_ROOT names a
-// retained DATUM_BENCH_ROOT holding n1000). Assertions do not belong here.
+// check, and the retained 1k benchmark fixture (WHOSAIDSO_VIEWS_1K_ROOT names a
+// retained WHOSAIDSO_BENCH_ROOT holding n1000). Assertions do not belong here.
 
 import (
 	"encoding/json"
@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"datum/internal/model"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
 type thousandWorld struct {
@@ -37,7 +37,7 @@ func richStale() *StaleGit {
 
 // thousandFixture opens a retained 1k benchmark fixture, or skips.
 func thousandFixture(t testing.TB) (thousandWorld, bool) {
-	root := os.Getenv("DATUM_VIEWS_1K_ROOT")
+	root := os.Getenv("WHOSAIDSO_VIEWS_1K_ROOT")
 	if root == "" {
 		return thousandWorld{}, false
 	}
@@ -49,7 +49,7 @@ func thousandFixture(t testing.TB) (thousandWorld, bool) {
 	dir := filepath.Join(root, "n1000")
 	data, err := os.ReadFile(filepath.Join(dir, "fixture.json"))
 	if err != nil {
-		t.Fatalf("DATUM_VIEWS_1K_ROOT has no n1000 fixture: %v", err)
+		t.Fatalf("WHOSAIDSO_VIEWS_1K_ROOT has no n1000 fixture: %v", err)
 	}
 	var meta struct{ Task, Claim, Instrument model.RecordRef }
 	if err := json.Unmarshal(data, &meta); err != nil {

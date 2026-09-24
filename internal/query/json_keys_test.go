@@ -16,8 +16,8 @@ import (
 	"testing"
 	"unicode"
 
-	"datum/internal/model"
-	"datum/internal/store"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
 // upperKeys returns every object key in v with an uppercase letter, by path.

@@ -8,7 +8,7 @@ package reduce
 import (
 	"testing"
 
-	"datum/internal/model"
+	"whosaidso/internal/model"
 )
 
 // configLedger declares instrument HNSS revision 1 with one knob, "samples",

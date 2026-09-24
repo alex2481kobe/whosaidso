@@ -12,9 +12,9 @@ import (
 	"path/filepath"
 	"reflect"
 
-	"datum/internal/evidence"
-	"datum/internal/model"
-	"datum/internal/store"
+	"whosaidso/internal/evidence"
+	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
 // materializeAdmission resolves every accepted artifact and hands verified

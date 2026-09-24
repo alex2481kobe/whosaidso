@@ -22,7 +22,7 @@ import (
 // whole recovery story for the lock itself: no lease timer, no age test, no PID
 // test, and nothing that can decide another writer is dead while it is working.
 //
-// The lock is the one file Datum opens by a fixed name without O_EXCL, so it is
+// The lock is the one file WhoSaidSo opens by a fixed name without O_EXCL, so it is
 // the one a planted symlink could redirect: O_CREATE follows a dangling link
 // and creates its target, wherever that is. O_NOFOLLOW refuses a link as the
 // final component, and the open file must be a regular file, so admission

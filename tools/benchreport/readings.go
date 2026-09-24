@@ -1,11 +1,11 @@
-// Readings: parsed samples restated in the shape a Datum criterion can select.
+// Readings: parsed samples restated in the shape a WhoSaidSo criterion can select.
 //
 // What belongs here is grouping samples by benchmark name, refusing groups
 // whose runs do not describe the same measurement, and the median. Nothing
 // here reads text (parse.go does) and nothing here judges a number: the
 // threshold belongs to a criterion.
 //
-// The shape follows tools/archtree/readings.go for the same reason: Datum's
+// The shape follows tools/archtree/readings.go for the same reason: WhoSaidSo's
 // evaluator takes a reading's unit, population and denominator from the
 // selected object or its immediate parent, and reads "value" or "values"
 // there. Every pointer is by name (the benchmark name, a unit-derived key),
