@@ -208,7 +208,8 @@ falsifier. The home's staging/ folder holds runs' outputs, not notes.
    then capture and admit it.
 PROVEN needs a validated instrument (R9). A FAILING member can only be
 contradicts, or inapplicable with a code_change git verifies over the
-claim's scope (R14.2). Record a failing criterion with a refutes proof: the
+claim's scope (R14.2); you choose its two commits, and the template fills
+their object formats and the scoped changed paths from git. Record a failing criterion with a refutes proof: the
 claim reads REFUTED. Every proof judges the claim's current criterion
 revision. A FALSE reason names the failing member: its path or id, else
 "member N" (its index), then its reading.
