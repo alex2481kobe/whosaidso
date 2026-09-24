@@ -68,7 +68,8 @@ type Event struct {
 	Admitter  model.Actor         `json:"admitter"`
 	Packets   []model.PacketRef   `json:"packets"`
 	Event     model.Event         `json:"event"`
-	Author    reduce.PacketAuthor `json:"author"` // who wrote the packet that carried Event
+	Author    reduce.PacketAuthor `json:"author"`              // who wrote Event: its packet's author, or a review's own actor
+	Amendment *Amendment          `json:"amendment,omitempty"` // an amending event: what it changed and its review
 }
 type Packet struct {
 	CommandID   model.ID      `json:"command_id"`

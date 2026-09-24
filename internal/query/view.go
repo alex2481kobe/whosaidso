@@ -7,6 +7,7 @@ package query
 // detail.go.
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"whosaidso/internal/model"
@@ -145,8 +146,8 @@ func view(project store.Project, r ViewRequest, source Source) (ViewAnswer, erro
 	return historyView(project, source, h, r)
 }
 
-// HistoryAnswer is the history view, unchanged from the history read: ledger
-// events in order and, without an ID, every per-packet review.
+// HistoryAnswer is the history view: ledger events in order, each amending
+// event with what it changed, and, without an ID, every per-packet review.
 type HistoryAnswer struct {
 	ViewHeader
 	Events  []Event  `json:"events"`
@@ -172,6 +173,7 @@ func historyView(project store.Project, source Source, h ViewHeader, r ViewReque
 		return a, nil
 	}
 	selected := historyOrigins(snapshot, reduce.Ident{Project: project.ID, ID: r.ID})
+	amended := snapshot.Amended()
 	prefix, err := source.Bundles()
 	if err != nil {
 		return nil, err
@@ -179,10 +181,35 @@ func historyView(project store.Project, source Source, h ViewHeader, r ViewReque
 	for _, bundle := range prefix {
 		for i, event := range bundle.Events {
 			origin := reduce.Origin{Sequence: bundle.Sequence, EventIndex: i}
-			if r.ID == "" || selected[origin] {
-				a.Events = append(a.Events, Event{origin, bundle.CommandID, bundle.Admitter, bundle.Packets, event, snapshot.EventAuthor(origin)})
+			if r.ID != "" && !selected[origin] {
+				continue
 			}
+			row := Event{Origin: origin, CommandID: bundle.CommandID, Admitter: bundle.Admitter, Packets: bundle.Packets,
+				Event: event, Author: eventAuthor(snapshot, origin, event)}
+			if record, ok := amended[origin]; ok {
+				if amendment, ok := amendmentOf(snapshot, record); ok {
+					row.Amendment = &amendment
+				}
+			}
+			a.Events = append(a.Events, row)
 		}
 	}
 	return a, nil
+}
+
+// eventAuthor answers who wrote one event. A packet's event was written by
+// the packet's author. A review.admit is carried by no packet: the admission
+// constructs it, so its author is the reviewing actor it records, and it names
+// no packet.
+func eventAuthor(s reduce.Snapshot, origin reduce.Origin, event model.Event) reduce.PacketAuthor {
+	if event.Type != (*model.ReviewAdmit)(nil).EventType() {
+		return s.EventAuthor(origin)
+	}
+	var review struct {
+		Actor model.Actor `json:"actor"`
+	}
+	if err := json.Unmarshal(event.Data, &review); err != nil {
+		return reduce.PacketAuthor{Author: model.Actor{UnknownReason: "this review.admit's actor could not be read: " + err.Error()}}
+	}
+	return reduce.PacketAuthor{Author: review.Actor}
 }

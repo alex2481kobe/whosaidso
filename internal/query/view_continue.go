@@ -16,18 +16,22 @@ import (
 
 type ContinueAnswer struct {
 	ViewHeader
-	Record    *model.RecordRef  `json:"record,omitempty"` // the root; its body is records[id@revision]
-	Records   map[string]Detail `json:"records"`          // id@revision -> detail, each once
-	Progress  any               `json:"progress,omitempty"`
-	Attempts  *[]AttemptView    `json:"attempts,omitempty"`
-	Runs      *[]RunDetail      `json:"runs,omitempty"` // the task's runs, then runs a claim in records observes
-	Owed      *Owed             `json:"owed,omitempty"`
-	Closure   *ClosureRefs      `json:"closure,omitempty"`
-	Context   *ContextRefs      `json:"context,omitempty"`
-	Observed  *Observation      `json:"observed,omitempty"`
-	Attention []Attention       `json:"attention"`
-	Handoff   string            `json:"handoff,omitempty"`
-	Generated string            `json:"generated,omitempty"`
+	Record   *model.RecordRef  `json:"record,omitempty"` // the root; its body is records[id@revision]
+	Records  map[string]Detail `json:"records"`          // id@revision -> detail, each once
+	Progress any               `json:"progress,omitempty"`
+	Attempts *[]AttemptView    `json:"attempts,omitempty"`
+	Runs     *[]RunDetail      `json:"runs,omitempty"` // the task's runs, then runs a claim in records observes
+	Owed     *Owed             `json:"owed,omitempty"`
+	// Amendments are every amendment of the root since its creation, oldest
+	// first, each with what it changed: a plan item removed at any revision
+	// stays visible here with the amendment and review that removed it.
+	Amendments *[]Amendment `json:"amendments,omitempty"`
+	Closure    *ClosureRefs `json:"closure,omitempty"`
+	Context    *ContextRefs `json:"context,omitempty"`
+	Observed   *Observation `json:"observed,omitempty"`
+	Attention  []Attention  `json:"attention"`
+	Handoff    string       `json:"handoff,omitempty"`
+	Generated  string       `json:"generated,omitempty"`
 }
 
 // ClosureRef is one exact referenced revision: resolved ones have their body
@@ -100,6 +104,8 @@ func continueView(s reduce.Snapshot, h ViewHeader, root reduce.Record, r ViewReq
 	a.Closure = &ClosureRefs{Root: c.Root, Mandatory: closureRefs(c.Mandatory), Cycles: c.Cycles}
 	a.Context = &ContextRefs{Refs: closureRefs(c.Optional), Limit: c.Limit}
 	a.Attention = append(a.Attention, closureNotes(c)...)
+	changes := amendments(s, reduce.Ident{Project: root.Key.Project, ID: root.Key.ID})
+	a.Amendments = &changes
 	rootDetail, notes := d.detail(root)
 	a.Records[recordKey(ref)] = rootDetail
 	a.Attention = append(a.Attention, notes...)

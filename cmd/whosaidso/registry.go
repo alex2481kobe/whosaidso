@@ -39,10 +39,12 @@ totals counts intake_unreviewed, intake_correction_requested and
 intake_rejected.
 `, define: viewVerb("todo")},
 		{name: "continue", args: "RECORD_ID", summary: "resume any record: detail, closure, what is owed", detail: `Any kind of record. A task adds its progress, every attempt, every run and
-what is owed, item by item for a plan. Every kind gets its mandatory closure
-(never cut), optional one-hop context (cut by --limit), attention, and a
-fresh look at git HEAD, dirty state and the time in this checkout. Writes
-nothing: there is no handoff record.
+what is owed, item by item for a plan. Every kind gets every amendment since
+its creation, each with the fields it changed (a plan item removed at any
+revision stays listed, with the packet and review reason that removed it),
+its mandatory closure (never cut), optional one-hop context (cut by
+--limit), attention, and a fresh look at git HEAD, dirty state and the time
+in this checkout. Writes nothing: there is no handoff record.
 `, define: viewVerb("continue")},
 		{name: "show", args: "[RECORD_ID]", summary: "one record, or a summary and every current record", detail: `show ID is that record's detail, superseded or not. Bare show opens with
 counts per status, attention and owed work, then every current record by
@@ -50,8 +52,12 @@ kind, then every run, unsealed ones included. --stale is HEAD-only: it
 cannot see uncommitted changes.
 `, define: viewVerb("show")},
 		{name: "history", args: "[RECORD_ID]", summary: "admitted events in order, and per-packet reviews", detail: `With an ID: every revision and every event or run that names it. Without:
-every event and every per-packet review. --self-admitted cannot be combined
-with an ID; false excludes unknown, and an unknown author stays UNKNOWN.
+every event and every per-packet review. An amending event's row shows what
+it changed from the revision before (fields added, removed or changed; a
+plan item by its record id) and its review's reason, computed from the two
+recorded revisions. A review.admit row's author is the reviewer it records.
+--self-admitted cannot be combined with an ID; false excludes unknown, and
+an unknown author stays UNKNOWN.
 `, define: viewVerb("history")},
 		{name: "capture", summary: "write a packet to immutable intake; publishes nothing", detail: `Reads a JSON array of typed events (whosaidso template makes one). A
 source.intake is captured with its original bytes, from its reference or

@@ -227,6 +227,7 @@ func briefContinue(b *briefWriter, a cur) {
 	if r := a.at("runs"); r.ok() {
 		briefList(b, 0, "runs", r, briefRun)
 	}
+	briefList(b, 0, "amendments", a.at("amendments"), briefAmendment)
 	c := a.at("closure")
 	b.line(0, "closure: mandatory", count(c.at("mandatory")), "cycles", count(c.at("cycles")))
 	briefRefs(b, a, c.at("mandatory"))
