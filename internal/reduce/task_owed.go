@@ -39,7 +39,7 @@ func (s *state) witnessed(rec Record, c Closure) (missing []model.AcceptanceCrit
 // withdrawn and waived are closed too.
 func (s *state) closedSuccess(target model.RecordRef) (Truth, string) {
 	if target.Project != s.project {
-		return TruthUnknown, "cross-project dependency resolves at read time"
+		return TruthUnknown, crossProject(target)
 	}
 	rec, ok := s.records[recordKey(target)]
 	if !ok {
@@ -251,7 +251,7 @@ func (s *state) reconciled(id Ident, after Origin) bool {
 // at the wrong person.
 func (s *state) dependencyActor(target model.RecordRef) model.Actor {
 	if target.Project != s.project {
-		return model.Actor{UnknownReason: "the dependency is in another project and resolves at read time"}
+		return model.Actor{UnknownReason: crossProject(target)}
 	}
 	rev, ok := s.current[ident(target)]
 	if !ok {

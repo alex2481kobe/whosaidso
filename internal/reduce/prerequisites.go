@@ -11,12 +11,18 @@ import (
 	"whosaidso/internal/model"
 )
 
+// crossProject is the UNKNOWN reason for a target in another project: this
+// ledger alone decides validity, and it holds none of that project's records.
+func crossProject(target model.RecordRef) string {
+	return fmt.Sprintf("project %s's ledger is not read here", target.Project)
+}
+
 // exactTarget resolves a prerequisite target to one admitted revision of the
 // wanted kind. A target this ledger cannot read is UNKNOWN; a target of the
 // wrong kind was compared and disagreed, so it is FALSE.
 func (s *state) exactTarget(target model.RecordRef, want model.Kind) (Truth, string, bool) {
 	if target.Project != s.project {
-		return TruthUnknown, "cross-project dependency resolves at read time", false
+		return TruthUnknown, crossProject(target), false
 	}
 	rec, ok := s.records[recordKey(target)]
 	if !ok {

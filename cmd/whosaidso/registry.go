@@ -160,9 +160,10 @@ a ledger inside it and a readable history. A home every read would refuse
 is not bound: intake that is not owner-only, or a ledger this binary cannot
 decode, is refused with that reason. Binding again elsewhere is the
 move: while the old home exists, PATH's history must continue it bundle for
-bundle; when it is gone, continuity: not-compared is printed. An entry that
-cannot be read is replaced, and says so (continuity:
-unreadable-binding-replaced).
+bundle; when it is gone, continuity: not-compared is printed. Any binding
+refuses a home whose artifact store lacks bytes its admitted records cite,
+naming each digest and its citer. An entry that cannot be read is replaced,
+and says so (continuity: unreadable-binding-replaced).
 `, define: homeVerb},
 		{name: "id", args: "[N]", summary: "print N fresh record ids (default one)", detail: `Use it rather than inventing an id: hand-typed Crockford base32 parses and
 means nothing.

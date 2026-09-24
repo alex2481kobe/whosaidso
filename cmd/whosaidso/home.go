@@ -12,6 +12,7 @@ import (
 
 	"whosaidso/internal/query"
 	"whosaidso/internal/store"
+	"whosaidso/internal/write"
 )
 
 // homeAnswer is `whosaidso home` with no PATH: the binding, never a refusal.
@@ -103,8 +104,10 @@ func bindHome(c *call, path string, jsonOutput bool) error {
 // servable refuses to bind a home that every read would then refuse: it
 // answers the read todo answers (the ledger decoded and folded by this
 // binary, and the project's intake under the store's own owner-only
-// permission rule) from PATH before the binding is written. A PATH that is
-// not this project's own root is left to store.Bind to refuse.
+// permission rule) from PATH before the binding is written. It also refuses a
+// home missing artifacts its admitted records cite, on a first binding and a
+// move alike: a home that cannot resolve its own admitted evidence is not one.
+// A PATH that is not this project's own root is left to store.Bind to refuse.
 func servable(c *call, path string) error {
 	invoked, err := c.checkout()
 	if err != nil {
@@ -126,6 +129,9 @@ func servable(c *call, path string) error {
 	}
 	if err != nil {
 		return fmt.Errorf("whosaidso home: not bound: every read through %s would refuse: %w", path, err)
+	}
+	if err := write.HomeHoldsKeptArtifacts(c.ctx, dest, state); err != nil {
+		return fmt.Errorf("whosaidso home: not bound: %w", err)
 	}
 	return nil
 }
