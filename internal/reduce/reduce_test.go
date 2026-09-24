@@ -509,6 +509,48 @@ func TestStaleAmendmentIsATypedConflict(t *testing.T) {
 	}
 }
 
+// A claim, decision or instrument revision names the revision it replaces as
+// its target; a second revision of the same target loses exactly like a stale
+// task amendment, and never overwrites the revision the first one created.
+func TestStaleRevisionOfEveryRecordKindIsATypedConflict(t *testing.T) {
+	for _, tc := range []struct {
+		kind   string
+		create func(id model.ID) model.TypedEvent
+		revise func(target model.RecordRef) model.TypedEvent
+	}{
+		{"claim", func(id model.ID) model.TypedEvent {
+			return &model.ClaimAssert{Provenance: provenance("lane-a"), ID: id, Spec: claimSpec()}
+		}, func(target model.RecordRef) model.TypedEvent {
+			return &model.ClaimRevise{Provenance: provenance("lane-a"), Target: target, Replacement: claimSpec()}
+		}},
+		{"decision", func(id model.ID) model.TypedEvent {
+			return &model.DecisionOpen{Provenance: provenance("lane-a"), ID: id, Spec: decisionSpec()}
+		}, func(target model.RecordRef) model.TypedEvent {
+			return &model.DecisionRevise{Provenance: provenance("lane-a"), Target: target, Replacement: decisionSpec()}
+		}},
+		{"instrument", func(id model.ID) model.TypedEvent {
+			return &model.InstrumentDeclare{Provenance: provenance("lane-a"), ID: id, Spec: proofInstrument()}
+		}, func(target model.RecordRef) model.TypedEvent {
+			return &model.InstrumentRevise{Provenance: provenance("lane-a"), Target: target, Replacement: proofInstrument()}
+		}},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			l := newLedger()
+			id := newID("REVA")
+			l.add(t, tc.create(id))
+			l.add(t, tc.revise(ref(id, 1)))
+			s := mustReplay(t, l.bundles())
+			if rev, _ := s.CurrentRevision(Ident{Project: testProject, ID: id}); rev != 2 {
+				t.Fatalf("control revision did not land: revision %d", rev)
+			}
+			c := wantConflict(t, func() error { _, err := Apply(s, l.add(t, tc.revise(ref(id, 1)))); return err }())
+			if c.Expected != 1 || c.Actual != 2 || c.Target.RecordID != id {
+				t.Fatalf("conflict = %+v", c)
+			}
+		})
+	}
+}
+
 // TestLedgerSequenceDecidesWhichAmendmentLoses swaps the two conflicting
 // amendments. The loser changes with ledger order and with nothing else: no
 // directory enumeration, no map iteration and no wall clock is consulted.
