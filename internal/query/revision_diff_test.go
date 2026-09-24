@@ -292,10 +292,20 @@ func TestCommittedPlanShowsStepZeroRemovedAtRevisionTwo(t *testing.T) {
 	review, _ := removal.Review.(AmendmentReview)
 	if removal.Revision.Revision != 2 || removal.Origin.Sequence != 75 || removal.Packet != "01M391H1RGJMGQVR9JDV7NAF9J" ||
 		!strings.HasPrefix(review.Reason, "Step 0 (docs/contract) leaves the plan") ||
-		!reflect.DeepEqual(changeLines(removal.Changes)[0][:52], "removed prerequisites[01M37TMPJ07N34R115HJZ8B57P] {\"") || len(removal.Changes) != 1 {
+		!reflect.DeepEqual(changeLines(removal.Changes)[0][:52], "removed prerequisites[01M37TMPJ07N34R115HJZ8B57P] {\"") || len(removal.Changes) != 2 ||
+		!strings.HasPrefix(changeLines(removal.Changes)[1], "added provenance.source_refs") {
+		// Coordinator edit 2026-09-24 (review final2 #1): the diff now also shows the
+		// source the amendment newly cites (bundle 74's waived close).
 		t.Fatalf("step 0 must read removed at revision 2 in bundle 75 with its review, got %+v", removal)
 	}
-	if retarget.Origin.Sequence != 76 || !reflect.DeepEqual(changeLines(retarget.Changes), []string{
+	lines := changeLines(retarget.Changes)
+	sources := 0
+	for _, l := range lines[min(2, len(lines)):] {
+		if strings.Contains(l, "provenance.source_refs") {
+			sources++
+		}
+	}
+	if retarget.Origin.Sequence != 76 || len(lines) < 3 || sources != len(lines)-2 || !reflect.DeepEqual(lines[:2], []string{
 		"changed prerequisites[01M37TMPK1QBPTT68WCJBPM1ZG].target.revision 1 2",
 		"changed prerequisites[01M37TMPKC3EDWA5JG7JP28G7F].target.revision 1 2"}) {
 		t.Fatalf("bundle 76 must read as two retargets to revision 2, got %+v", retarget)
