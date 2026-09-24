@@ -9,11 +9,12 @@ package main
 // was given: #POINTER selects a JSON pointer, none selects the whole
 // artifact. Every pin in the project is resolved back through the evidence
 // resolver admission uses before it is put in the template. Where the pin
-// goes lives in template_tree.go; what else its bytes fill, in
+// goes lives in template_tree.go; what else its bytes fill, once the draft is final, in
 // template_derive.go.
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -117,12 +118,13 @@ func (t *boundTemplate) pin(spec string) error {
 	if err := t.put(name, ref, from+", selector "+selectorText(selector)); err != nil {
 		return err
 	}
-	return t.derive(name, pinned, selector)
+	t.pinned = append(t.pinned, pinned) // what its bytes state is read from the final draft
+	return nil
 }
 
 // gitPin is PATH as committed at REV: the full commit and object format.
 func gitPin(t *boundTemplate, root, path, rev string) (model.ArtifactRef, error) {
-	format, err := evidence.ExecGit(t.c.ctx, root, "rev-parse", "--show-object-format")
+	format, err := objectFormat(t.c.ctx, root)
 	if err != nil {
 		return model.ArtifactRef{}, fmt.Errorf("template: --pin %s@%s: not a readable git checkout: %w", path, rev, err)
 	}
@@ -131,7 +133,13 @@ func gitPin(t *boundTemplate, root, path, rev string) (model.ArtifactRef, error)
 		return model.ArtifactRef{}, fmt.Errorf("template: --pin %s@%s: %s is not a commit here", path, rev, rev)
 	}
 	return model.ArtifactRef{Kind: "git", Selector: model.Selector{Kind: "whole"},
-		Git: &model.GitPin{ObjectFormat: strings.TrimSpace(string(format)), Commit: strings.TrimSpace(string(commit)), Path: path}}, nil
+		Git: &model.GitPin{ObjectFormat: format, Commit: strings.TrimSpace(string(commit)), Path: path}}, nil
+}
+
+// objectFormat is the object format git reports for the repository at root.
+func objectFormat(ctx context.Context, root string) (string, error) {
+	format, err := evidence.ExecGit(ctx, root, "rev-parse", "--show-object-format")
+	return strings.TrimSpace(string(format)), err
 }
 
 // refSlot refuses a NAME that is not an artifact reference in this event, so
