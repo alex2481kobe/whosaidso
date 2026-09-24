@@ -254,7 +254,11 @@ func briefContinue(b *briefWriter, a cur) {
 
 func briefShow(b *briefWriter, a cur) {
 	if s := a.at("summary"); s.ok() {
-		b.line(0, "summary: kind", s.at("kind"), "records", s.at("records"), "attention", s.at("attention"))
+		pieces := []any{"summary: kind", s.at("kind"), "records", s.at("records")}
+		if s.at("sources").ok() {
+			pieces = append(pieces, "sources", s.at("sources"))
+		}
+		b.line(0, append(pieces, "attention", s.at("attention"))...)
 		for _, kind := range []string{"tasks", "claims", "decisions", "instruments"} {
 			counts, _ := s.at(kind).v.(map[string]any)
 			keys := make([]string, 0, len(counts))
@@ -312,10 +316,28 @@ func briefShow(b *briefWriter, a cur) {
 	if r := a.at("runs"); r.ok() {
 		briefList(b, 0, "runs", r, briefRun)
 	}
+	if src := a.at("sources"); src.ok() {
+		briefList(b, 0, "sources", src, briefSource)
+	}
 	if st := a.at("stale"); st.ok() {
 		b.line(0, "stale blind spot:", prefix(st.at("blind_spot")))
 		briefList(b, 0, "stale claims", st.at("claims"), briefStale)
 	}
+}
+
+// briefSource is one admitted source: its id, speaker and order, its bytes'
+// digest and length and how they are pinned, the records it concerns, then
+// who wrote and who admitted it.
+func briefSource(b *briefWriter, indent int, src cur) {
+	in := src.at("intake")
+	b.line(indent, append([]any{"SOURCE", in.at("source_id"), "order", in.at("order"), "speaker"}, who(in.at("speaker"))...)...)
+	b.line(indent+1, "bytes sha256", in.at("original_digest"), "length", in.at("length"), "pinned", in.at("source_ref", "kind"))
+	briefList(b, indent+1, "referents", in.at("referents"), func(b *briefWriter, indent int, r cur) {
+		b.line(indent, r.at("record_id"), "rev", r.at("revision"))
+	})
+	pieces := append([]any{"author"}, who(src.at("author", "actor"))...)
+	pieces = append(append(pieces, "admitted by"), who(src.at("admitted_by"))...)
+	b.line(indent+1, append(pieces, "self-admitted", src.at("self_admitted"))...)
 }
 
 func reasonKey(kind, detail string) string { return kind + "\x00" + detail }

@@ -6,7 +6,12 @@ package main
 // boolean, object and array fields take VALUE as JSON. What the gate or git
 // then makes of the value is tested elsewhere.
 
-import "testing"
+import (
+	"encoding/json"
+	"reflect"
+	"strings"
+	"testing"
+)
 
 func TestSetValueIsTypedByTheSkeleton(t *testing.T) {
 	f := boundWorld(t)
@@ -71,6 +76,38 @@ func TestSetValueFillsTypedPlaceholders(t *testing.T) {
 	} {
 		if got := boundAt(c.data, path); got != c.want {
 			t.Errorf("%s: got %#v (%T), want %#v (%T)", path, got, got, c.want, c.want)
+		}
+	}
+}
+
+// --set on an artifact reference with anything but a whole JSON object is
+// refused before capture, naming --pin, the only flag that builds one. The
+// control: a whole reference object is still taken as JSON.
+func TestSetOnAReferenceNamesPin(t *testing.T) {
+	f := boundWorld(t)
+	boundCapture(t, f.root, "blocker.hold", "--task", string(f.task), "--set", "reason=resume", "--set", `actor={"id":"lane"}`, "--set", "criterion=the fixture output exists")
+	hold := string(openHold(t, boundSnapshot(t, f.root), f.task))
+	pinned := boundPrint(t, f.root, "blocker.clear", "--hold", hold, "--pin", "resolving_witness=out/result.json")
+	whole, err := json.Marshal(pinned["resolving_witness"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := boundPrint(t, f.root, "blocker.clear", "--hold", hold, "--set", "resolving_witness="+string(whole)); !reflect.DeepEqual(got["resolving_witness"], pinned["resolving_witness"]) {
+		t.Errorf("a whole reference object given to --set must be kept: %#v", got["resolving_witness"])
+	}
+	for _, c := range []struct{ event, flag, path string }{
+		{"blocker.clear", "--hold", "resolving_witness"},
+		{"task.close", "--task", "delivery_witness_refs[0]"},
+	} {
+		id := hold
+		if c.event == "task.close" {
+			id = string(f.task)
+		}
+		for _, value := range []string{"out/result.json", `"out/result.json"`, "[]"} {
+			_, errs, code := cliRun(t, f.root, nil, "lane", "template", c.event, c.flag, id, "--set", c.path+"="+value)
+			if want := c.path + " is a reference: use --pin " + c.path + "=PATH"; code != 2 || !strings.Contains(errs, want) {
+				t.Errorf("template %s --set %s=%s: want exit 2 saying %q, got %d %s", c.event, c.path, value, want, code, errs)
+			}
 		}
 	}
 }
