@@ -169,7 +169,7 @@ func gateProvides(project model.ProjectID, event model.TypedEvent) (gateKey, boo
 		target.Revision++
 		return gateKey{Record: target}, true
 	case *model.BlockerHold:
-		return gateKey{Record: e.Task, Blocker: e.BlockerID}, true
+		return gateHoldKey(model.BlockerRef{Task: e.Task, BlockerID: e.BlockerID}), true
 	case *model.TaskStart:
 		return gateKey{Attempt: e.AttemptID}, true
 	case *model.TaskTakeover:
@@ -190,19 +190,21 @@ func gateAttemptNeed(event model.TypedEvent) (string, model.ID) {
 	return "", ""
 }
 
+// gateHoldKey matches a proposed hold to a proposed clear the way the reducer's
+// lookup does: by task and blocker id, whatever task revision either names.
+func gateHoldKey(ref model.BlockerRef) gateKey {
+	task := model.RecordRef{Project: ref.Task.Project, RecordID: ref.Task.RecordID}
+	return gateKey{Record: task, Blocker: ref.BlockerID}
+}
+
 func gateReference(snapshot reduce.Snapshot, ref model.Reference) (gateKey, bool) {
 	if ref.Record != nil {
 		_, exists := snapshot.Record(*ref.Record)
 		return gateKey{Record: *ref.Record}, exists
 	}
 	if ref.Blocker != nil {
-		key := gateKey{Record: ref.Blocker.Task, Blocker: ref.Blocker.BlockerID}
-		for _, blocker := range snapshot.Blockers(reduce.Ident{Project: key.Record.Project, ID: key.Record.RecordID}) {
-			if blocker.Key.Blocker == key.Blocker && blocker.TaskRevision == key.Record.Revision {
-				return key, true
-			}
-		}
-		return key, false
+		_, exists := snapshot.Hold(*ref.Blocker)
+		return gateHoldKey(*ref.Blocker), exists
 	}
 	if ref.Criterion != nil {
 		_, exists := snapshot.Criterion(*ref.Criterion)
