@@ -58,10 +58,8 @@ func gatePackets(project model.ProjectID, snapshot reduce.Snapshot, packets []mo
 		}
 	}
 	dependencies := make([]map[int]bool, len(packets))
-	for i := range dependencies {
-		dependencies[i] = map[int]bool{}
-	}
 	for i, typed := range events {
+		dependencies[i] = map[int]bool{}
 		for _, event := range typed {
 			if err := gateAuthorities(event, sources); err != nil {
 				return nil, err
@@ -77,15 +75,6 @@ func gatePackets(project model.ProjectID, snapshot reduce.Snapshot, packets []mo
 				return nil, err
 			}
 			for _, ref := range refs {
-				// Whatever names a record at revision r goes before the proposal
-				// that moves it to r+1, which would make that name stale.
-				if ref.Record != nil {
-					next := *ref.Record
-					next.Revision++
-					if successor, ok := providers[gateKey{Record: next}]; ok && successor != i {
-						dependencies[successor][i] = true
-					}
-				}
 				key, exists := gateReference(snapshot, ref)
 				if exists {
 					continue

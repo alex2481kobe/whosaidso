@@ -138,6 +138,9 @@ Judgment never:
 assertions, falsifiers, blind spots, reasons, dispositions, verdicts,
 acceptance and validation stay placeholders; fill them with --set PATH=VALUE
 (paths as the notes print them, e.g. evidence[0].disposition) or by editing.
+VALUE is typed by the field: a text field takes it as text (a JSON string
+literal is decoded), so a commit like 79461799e564 stays text; a number,
+boolean, object or array field takes it as JSON.
 Filling one member of a choice chooses it: --set actor.id=X drops
 actor.unknown_reason, a key of one member sets the tag, and the other
 members' keys nobody filled go; a filled one stays for the gate.

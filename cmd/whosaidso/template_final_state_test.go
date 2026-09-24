@@ -150,7 +150,9 @@ func TestProofCodeChangeIsFilledFromGit(t *testing.T) {
 		t.Fatalf("formats and scoped changed paths must be git's, the commits the author's: %v", c)
 	}
 	// A commit that does not resolve fills nothing.
-	for name, pair := range map[string][2]string{"unknown to": {from, strings.Repeat("0", 40)}, "unknown from": {strings.Repeat("0", 40), to}, "short": {from[:12], to}} {
+	for name, pair := range map[string][2]string{"unknown to": {from, strings.Repeat("0", 40)}, "unknown from": {strings.Repeat("0", 40), to}, "short": {from[:12], to},
+		// Digits and one e: a fixed abbreviation that JSON would read as a number.
+		"digits and e": {"79461799e564", to}} {
 		c := draft(pair[0], pair[1])
 		if !placeholder(boundAt(c, "from.object_format")) || !placeholder(boundAt(c, "to.object_format")) || !placeholder(c["changed_paths"]) {
 			t.Errorf("%s: an unresolved commit must leave every computed field a placeholder: %v", name, c)

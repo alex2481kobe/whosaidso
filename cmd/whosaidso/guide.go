@@ -80,6 +80,11 @@ again to retry exactly. A refused packet stays in intake until you admit it
 capture --admit and run --admit admit as a second act: if admission is
 refused, the capture stands, the packet stays pending, the retry command is
 printed and the exit status is 4 (partial success).
+One admission applies a packet after the packets creating what it names,
+otherwise in capture (packet id) order, each packet's events as authored. A
+proposal naming a revision that an earlier one supersedes is refused as stale
+(revision-conflict or invalid-transition); re-capture it against the current
+revision.
 `},
 	{"accept", "closing a task: witnesses, outcomes, withheld acceptance", `A success handback closes the attempt, not the task: the task waits in
 todo's awaiting-acceptance section until a task.close ends it. A task may
