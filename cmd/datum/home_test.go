@@ -264,3 +264,70 @@ func TestCLICaptureAdmitReadsSourcesFromTheInvokingCheckout(t *testing.T) {
 		t.Fatal("the admission must land in the home")
 	}
 }
+
+// datum home PATH refuses to bind a home every read would refuse: intake
+// with loose permissions (the store's own owner-only rule) or a ledger this
+// binary cannot decode. Nothing is bound; the reason names the refusal.
+func TestCLIHomeRefusesToBindWhatItCannotServe(t *testing.T) {
+	root, input := cliFixture(t)
+	cliControl(t, root, input) // one admitted bundle in root's ledger
+	unbound := func(name string) {
+		t.Helper()
+		t.Setenv("DATUM_HOME", filepath.Join(t.TempDir(), name))
+	}
+	// Loose intake permissions: a captured packet's directory made 0755.
+	unbound("loose")
+	if _, errs, code := cliRun(t, root, input, "lane", "capture", "--command-id", string(cliID(60))); code != 0 {
+		t.Fatalf("control: plain capture: %d %s", code, errs)
+	}
+	project, err := store.Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	intake, err := store.IntakeDir(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packet := filepath.Join(intake, string(cliID(60)))
+	if err := os.Chmod(packet, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, errs, code := cliRun(t, root, nil, "", "home", "."); code != 1 || !strings.Contains(errs, "not bound") || !strings.Contains(errs, "insecure-permissions") {
+		t.Fatalf("a home whose intake is not owner-only must not bind: %d %q", code, errs)
+	}
+	if _, bound, _ := store.Binding("test/cli"); bound {
+		t.Fatal("a refused home was bound")
+	}
+	if err := os.Chmod(packet, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if out, errs, code := cliRun(t, root, nil, "", "home", "."); code != 0 || !strings.HasPrefix(out, "bound test/cli") {
+		t.Fatalf("control: owner-only intake binds: %d %q", code, errs)
+	}
+	// An undecodable ledger: an admitted event with a field this binary does not know.
+	unbound("undecodable")
+	ledger := filepath.Join(root, ".datum", "events")
+	files, err := os.ReadDir(ledger)
+	if err != nil || len(files) == 0 {
+		t.Fatalf("the fixture ledger: %v", err)
+	}
+	var bundle string
+	for _, f := range files {
+		if strings.HasSuffix(f.Name(), ".json") {
+			bundle = filepath.Join(ledger, f.Name())
+		}
+	}
+	data, err := os.ReadFile(bundle)
+	if err != nil || !strings.Contains(string(data), `"intent"`) {
+		t.Fatalf("the fixture bundle holds the task intent: %v", err)
+	}
+	if err := os.WriteFile(bundle, []byte(strings.Replace(string(data), `"intent"`, `"purpose"`, 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, errs, code := cliRun(t, root, nil, "", "home", "."); code != 1 || !strings.Contains(errs, "not bound") || !strings.Contains(errs, "purpose") {
+		t.Fatalf("a ledger this binary cannot decode must not bind: %d %q", code, errs)
+	}
+	if _, bound, _ := store.Binding("test/cli"); bound {
+		t.Fatal("an undecodable home was bound")
+	}
+}

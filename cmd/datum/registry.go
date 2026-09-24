@@ -132,7 +132,9 @@ does. Notes go to stderr. Event types:
 		{name: "home", args: "[PATH]", summary: "show or set where this project's live ledger is", detail: `Bare, shows this project's binding on this machine: its home, or unbound,
 and whether the home is available. With PATH, binds the project to the
 checkout at PATH, which must hold datum.toml declaring the same project id,
-a ledger inside it and a readable history. Binding again elsewhere is the
+a ledger inside it and a readable history. A home every read would refuse
+is not bound: intake that is not owner-only, or a ledger this binary cannot
+decode, is refused with that reason. Binding again elsewhere is the
 move: while the old home exists, PATH's history must continue it bundle for
 bundle; when it is gone, continuity: not-compared is printed.
 `, define: homeVerb},
