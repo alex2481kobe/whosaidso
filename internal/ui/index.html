@@ -1,0 +1,54 @@
+<!doctype html>
+<!-- The viewer's one page: the header, and the main area ui.js renders each
+     screen into. Screens live in the ui-*.js modules, styles in ui.css. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WhoSaidSo</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/ui.css">
+  <script type="module" src="/ui.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/"><img src="/favicon.svg" alt=""><span>WhoSaidSo</span></a>
+    <div class="project">
+      <button id="project-button" class="project-button" type="button" aria-haspopup="listbox" aria-expanded="false">
+        <span id="project-name">Projects</span><svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div id="project-meta" class="project-meta"></div>
+      <div id="project-menu" class="menu" role="listbox" hidden></div>
+    </div>
+    <nav class="nav" aria-label="Screens">
+      <a data-nav="home" href="#/">Home</a>
+      <a data-nav="records" href="#/records">Records</a>
+      <a data-nav="history" href="#/history">History</a>
+    </nav>
+    <div class="theme">
+      <svg class="sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="currentColor"/><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></g></svg>
+      <button id="theme-toggle" class="switch" type="button" role="switch" aria-checked="false" aria-label="Dark theme"><span></span></button>
+    </div>
+  </header>
+  <main id="main" class="page" aria-live="polite"></main>
+  <template id="hero-art">
+    <div class="hero-art" aria-hidden="true">
+      <svg class="scenery" viewBox="0 0 300 120">
+        <g class="cloud"><ellipse cx="44" cy="40" rx="30" ry="11"/><ellipse cx="56" cy="32" rx="17" ry="13"/><ellipse cx="36" cy="35" rx="12" ry="9"/></g>
+        <path class="hill-back" d="M0 118 44 66l22 22 26-30 44 60Z"/>
+        <path class="hill-front" d="M20 118 62 82l20 16 18-14 34 34Z"/>
+        <path class="branch" d="M118 110c30-2 70-6 112-4 16 1 30-3 44-8" fill="none" stroke-width="5" stroke-linecap="round"/>
+        <path class="branch" d="M232 106c10-6 18-16 24-26" fill="none" stroke-width="3" stroke-linecap="round"/>
+        <path class="leaf" d="M256 80c-2-12 6-20 18-22-1 12-8 20-18 22Z"/>
+        <path class="leaf" d="M262 98c8-8 18-9 26-5-7 7-17 9-26 5Z"/>
+      </svg>
+      <img class="hero-owl" src="/logo.svg" alt="">
+      <p class="scribble">Small steps<br>build great<br>software.</p>
+      <svg class="sprig" viewBox="0 0 24 24"><path class="leaf" d="M6 20C5 12 10 6 19 4c1 9-5 15-13 16Z"/><path class="stem" d="M5 22c3-6 7-11 12-15" fill="none" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </div>
+  </template>
+  <template id="sprig">
+    <svg class="sprig" viewBox="0 0 24 24" aria-hidden="true"><path class="leaf" d="M6 20C5 12 10 6 19 4c1 9-5 15-13 16Z"/><path class="stem" d="M5 22c3-6 7-11 12-15" fill="none" stroke-width="1.6" stroke-linecap="round"/></svg>
+  </template>
+</body>
+</html>

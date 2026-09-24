@@ -76,14 +76,7 @@ func readView(c *call, request query.ViewRequest, stale, jsonOutput bool) error 
 	if err != nil {
 		return err
 	}
-	if request.View == "continue" {
-		observed := observe(c.ctx, project)
-		request.Observed = &observed
-	}
-	if stale {
-		request.Stale = staleGit(c.ctx, project)
-	}
-	answer, err := query.ReadView(project, request)
+	answer, err := answerView(c.ctx, project, request, stale)
 	if err != nil {
 		return err
 	}
@@ -94,6 +87,21 @@ func readView(c *call, request query.ViewRequest, stale, jsonOutput bool) error 
 		return query.RenderViewJSON(c.stdout, answer)
 	}
 	return query.RenderViewBrief(c.stdout, answer)
+}
+
+// answerView is one view's answer for project, with what the CLI adds to
+// the request itself: continue's fresh look at the checkout and, when asked,
+// show --stale's git. whosaidso ui answers through it too, so the viewer's
+// JSON is this answer.
+func answerView(ctx context.Context, project store.Project, request query.ViewRequest, stale bool) (query.ViewAnswer, error) {
+	if request.View == "continue" {
+		observed := observe(ctx, project)
+		request.Observed = &observed
+	}
+	if stale {
+		request.Stale = staleGit(ctx, project)
+	}
+	return query.ReadView(project, request)
 }
 
 // observe is continue's fresh look at the invoking checkout: its HEAD and
