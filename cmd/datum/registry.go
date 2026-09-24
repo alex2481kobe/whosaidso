@@ -101,8 +101,10 @@ when the disposal names a git pin. Writes nothing.
 `, define: checkVerb("disposal")},
 		{name: "template", args: "EVENT-TYPE", summary: "print a capture-ready JSON skeleton of one event", detail: `Every "<kind: hint>" string is a placeholder to fill. Datum fills only what
 has one computable answer: minted ids (revision 1), the project id, the
-packet author where admission requires it (from --actor or DATUM_ACTOR), a
-choice with one member, and with bind flags the exact references at their
+packet author where it is the author or the attempt holder (from --actor or
+DATUM_ACTOR), a choice with one member, a handback's commits_denied and
+reconciliation_owed as false (--set them true, as datum handback's flags
+do), and with bind flags the exact references at their
 CURRENT revisions: --from copies a record's current spec into an amend or
 revise (change what changed), except an instrument's validation, a verdict on
 the replaced implementation, which stays a placeholder to judge again; --task, --claim, --criterion and --attempt
@@ -117,9 +119,13 @@ criterion's example (never an observation). Judgment never:
 assertions, falsifiers, blind spots, reasons, dispositions, verdicts,
 acceptance and validation stay placeholders; fill them with --set PATH=VALUE
 (paths as the notes print them, e.g. evidence[0].disposition) or by editing.
+Filling one member of a choice chooses it: --set actor.id=X drops
+actor.unknown_reason, a key of one member sets the tag, and the other
+members' keys nobody filled go; a filled one stays for the gate.
+--set PATH=null omits an optional key; a required one is refused.
 --capture captures the result through capture's own path, refused while any
-placeholder remains; an optional key nobody filled is omitted, and the ids
-it minted are named on stderr. --admit then admits it, as capture --admit
+placeholder remains; an optional key you put nothing into is omitted, and
+the ids it minted are named on stderr. --admit then admits it, as capture --admit
 does. Notes go to stderr. Event types:
 ` + templateEventList() + "\n", define: templateVerb},
 		{name: "home", args: "[PATH]", summary: "show or set where this project's live ledger is", detail: `Bare, shows this project's binding on this machine: its home, or unbound,

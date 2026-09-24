@@ -4,9 +4,11 @@ package main
 // Printing and --capture, which hands the event to capture's own path so the
 // gate stays the judge, live in template_capture.go. Datum fills only what has one
 // computable answer: references and current revisions (template_ledger.go),
-// pins (template_pin.go), the project id, the packet author where the gate
-// requires it, and a choice with one member. Judgment stays a placeholder,
-// and capture refuses while any placeholder remains.
+// pins (template_pin.go), the project id, the packet author where it is the
+// author or attempt holder, the handback verb's false defaults, and a choice
+// with one member; which member of a choice the author filled is decided in
+// template_choice.go. Judgment stays a placeholder, and capture refuses
+// while any placeholder remains.
 
 import (
 	"encoding/json"
@@ -52,13 +54,23 @@ var templateBindEvents = map[string][]model.EventType{
 	"criterion": {"criterion.fix", "proof.admit"},
 }
 
-// templateAuthorPaths are the actor fields the gate requires to be the
-// packet's own author: filled from --actor or DATUM_ACTOR when it is known.
+// templateAuthorPaths are the actor fields whose one answer is the packet's
+// own author: the gate requires it, or (task.start) the attempt holder is
+// who hands the attempt back. Filled from --actor or DATUM_ACTOR when it is
+// known; --set replaces it. An actor who is someone else (a hold's assignee,
+// an authority, a waiting or next actor) is never filled.
 var templateAuthorPaths = map[model.EventType]string{
 	"task.create": "provenance.author", "task.amend": "provenance.author", "claim.assert": "provenance.author",
 	"claim.revise": "provenance.author", "decision.open": "provenance.author", "decision.revise": "provenance.author",
 	"instrument.declare": "provenance.author", "instrument.revise": "provenance.author",
-	"criterion.fix": "author", "proof.admit": "judgment.actor", "task.takeover": "actor",
+	"criterion.fix": "author", "proof.admit": "judgment.actor", "task.takeover": "actor", "task.start": "actor",
+}
+
+// templateDefaults are the values the handback verb defaults: a receipt
+// states commits_denied or reconciliation_owed only when it is true
+// (--set PATH=true), in the verb and the template alike.
+var templateDefaults = map[model.EventType][]string{
+	"attempt.terminal": {"commits_denied", "reconciliation_owed"},
 }
 
 // templateMintRevisions are the revisions of ids the template mints: a new
@@ -130,6 +142,11 @@ func (t *boundTemplate) fill(b templateBinds) error {
 			return err
 		}
 	}
+	for _, path := range templateDefaults[t.event] {
+		if err := t.put(path, false, "false unless you --set it true, as datum handback"); err != nil {
+			return err
+		}
+	}
 	t.body = t.onlyChoices(t.body)
 	for _, path := range templateMintRevisions[t.event] {
 		if err := t.put(path, json.Number("1"), "a minted id starts at revision 1"); err != nil {
@@ -173,10 +190,34 @@ func (t *boundTemplate) fill(b templateBinds) error {
 				return usageError("datum template: --set %s: %v", path, err)
 			}
 		}
+		if v == nil {
+			if err := t.omit(path); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := t.put(path, v, "--set"); err != nil {
 			return err
 		}
 	}
+	t.resolveChoices()
+	return nil
+}
+
+// omit is --set PATH=null: an optional key is removed; any other is refused,
+// since null is never a value.
+func (t *boundTemplate) omit(path string) error {
+	if !t.optionalPath(path) {
+		return usageError("datum template %s: --set %s=null omits only an optional key, and %s is required; null is never a value", t.event, path, path)
+	}
+	steps, err := parseTemplatePath(path)
+	if err != nil {
+		return usageError("datum template: %v", err)
+	}
+	if t.body, err = templateDelete(t.body, steps, ""); err != nil {
+		return usageError("datum template %s: %v", t.event, err)
+	}
+	t.filled = append(t.filled, path+": omitted (--set null)")
 	return nil
 }
 

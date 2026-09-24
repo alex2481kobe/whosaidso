@@ -239,11 +239,11 @@ func templatePlaceholders(node any, at string) []string {
 	return out
 }
 
-// templateDropUnfilled removes an optional key whose whole value is still
-// placeholders, and returns the updated node: an optional field nobody filled
-// is an omitted one. path is a note path ("0" steps), which applies to every
-// element of an array.
-func templateDropUnfilled(node any, path []string) any {
+// templateDropUnfilled removes an optional key the author left unfilled
+// (unfilled decides, from the key's concrete path), and returns the updated
+// node: an optional field nobody filled is an omitted one. path is a note
+// path ("0" steps), which applies to every element of an array.
+func templateDropUnfilled(node any, path []string, at string, unfilled func(string, any) bool) any {
 	if len(path) == 0 {
 		return node
 	}
@@ -251,7 +251,7 @@ func templateDropUnfilled(node any, path []string) any {
 	case []any:
 		if path[0] == "0" {
 			for i := range n {
-				n[i] = templateDropUnfilled(n[i], path[1:])
+				n[i] = templateDropUnfilled(n[i], path[1:], joinStep(at, templateStep{index: i}), unfilled)
 			}
 		}
 	case templateObject:
@@ -259,15 +259,43 @@ func templateDropUnfilled(node any, path []string) any {
 			if m.key != path[0] {
 				continue
 			}
+			here := joinStep(at, templateStep{key: m.key, index: -1})
 			if len(path) > 1 {
-				n[i].value = templateDropUnfilled(m.value, path[1:])
-			} else if allPlaceholders(m.value) {
+				n[i].value = templateDropUnfilled(m.value, path[1:], here, unfilled)
+			} else if unfilled(here, m.value) {
 				return append(n[:i:i], n[i+1:]...)
 			}
 			return n
 		}
 	}
 	return node
+}
+
+// templateDelete removes the key at path, which must exist, and returns the
+// updated node.
+func templateDelete(node any, steps []templateStep, at string) (any, error) {
+	s := steps[0]
+	switch n := node.(type) {
+	case templateObject:
+		for i := range n {
+			if n[i].key != s.key || s.index >= 0 {
+				continue
+			}
+			if len(steps) == 1 {
+				return append(n[:i:i], n[i+1:]...), nil
+			}
+			v, err := templateDelete(n[i].value, steps[1:], joinStep(at, s))
+			n[i].value = v
+			return n, err
+		}
+	case []any:
+		if s.index >= 0 && s.index < len(n) && len(steps) > 1 {
+			v, err := templateDelete(n[s.index], steps[1:], joinStep(at, s))
+			n[s.index] = v
+			return n, err
+		}
+	}
+	return nil, fmt.Errorf("%s has no field %s", orEvent(at), joinStep("", s))
 }
 
 // allPlaceholders reports whether every leaf under node is a placeholder.
