@@ -37,7 +37,7 @@ func TestAmendmentKeepsTheNamedAccepter(t *testing.T) {
 			if tc.intent != "" {
 				next.Intent = tc.intent
 			}
-			amend := &model.TaskAmend{Provenance: provenance("lane-a"), Target: ref(newID("TSKA"), 1), ExpectedRevision: 1, Replacement: next}
+			amend := &model.TaskAmend{Provenance: provenance("lane-a"), Target: ref(newID("TSKA"), 1), Replacement: next}
 			l.add(t, authored(l.seq+1, []model.TypedEvent{amend}, tc.author)...)
 			wantBoth(t, l, tc.code)
 		})
@@ -48,6 +48,6 @@ func TestAmendmentKeepsTheNamedAccepter(t *testing.T) {
 	l := newLedger()
 	l.bare = true
 	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: spec})
-	l.add(t, &model.TaskAmend{Provenance: provenance("lane-a"), Target: ref(newID("TSKA"), 1), ExpectedRevision: 1, Replacement: taskSpec()})
+	l.add(t, &model.TaskAmend{Provenance: provenance("lane-a"), Target: ref(newID("TSKA"), 1), Replacement: taskSpec()})
 	wantBoth(t, l, CodeAccepterMismatch)
 }

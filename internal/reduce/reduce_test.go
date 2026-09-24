@@ -76,10 +76,7 @@ func rulingAuthority(actor string) model.Authority {
 }
 
 func provenance(actor string) model.Provenance {
-	return model.Provenance{
-		Author:     model.Actor{ID: actor},
-		SourceRefs: []model.ArtifactRef{blobRef("intake-" + actor)},
-	}
+	return model.Provenance{SourceRefs: []model.ArtifactRef{blobRef("intake-" + actor)}}
 }
 
 type taskOpt func(*model.TaskSpec)
@@ -484,10 +481,9 @@ func TestStaleAmendmentIsATypedConflict(t *testing.T) {
 	l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
 	// Control: the first amendment at the current revision is accepted.
 	l.add(t, &model.TaskAmend{
-		Provenance:       provenance("lane-a"),
-		Target:           ref(newID("TSKA"), 1),
-		ExpectedRevision: 1,
-		Replacement:      taskSpec(withIntent("first amendment wins")),
+		Provenance:  provenance("lane-a"),
+		Target:      ref(newID("TSKA"), 1),
+		Replacement: taskSpec(withIntent("first amendment wins")),
 	})
 	s := mustReplay(t, l.bundles())
 	if rev, _ := s.CurrentRevision(Ident{Project: testProject, ID: newID("TSKA")}); rev != 2 {
@@ -496,10 +492,9 @@ func TestStaleAmendmentIsATypedConflict(t *testing.T) {
 
 	// The second amendment expects the same revision and must lose.
 	stale := l.add(t, &model.TaskAmend{
-		Provenance:       provenance("lane-b"),
-		Target:           ref(newID("TSKA"), 1),
-		ExpectedRevision: 1,
-		Replacement:      taskSpec(withIntent("second amendment loses")),
+		Provenance:  provenance("lane-b"),
+		Target:      ref(newID("TSKA"), 1),
+		Replacement: taskSpec(withIntent("second amendment loses")),
 	})
 	_, err := Apply(s, stale)
 	c := wantConflict(t, err)
@@ -514,6 +509,48 @@ func TestStaleAmendmentIsATypedConflict(t *testing.T) {
 	}
 }
 
+// A claim, decision or instrument revision names the revision it replaces as
+// its target; a second revision of the same target loses exactly like a stale
+// task amendment, and never overwrites the revision the first one created.
+func TestStaleRevisionOfEveryRecordKindIsATypedConflict(t *testing.T) {
+	for _, tc := range []struct {
+		kind   string
+		create func(id model.ID) model.TypedEvent
+		revise func(target model.RecordRef) model.TypedEvent
+	}{
+		{"claim", func(id model.ID) model.TypedEvent {
+			return &model.ClaimAssert{Provenance: provenance("lane-a"), ID: id, Spec: claimSpec()}
+		}, func(target model.RecordRef) model.TypedEvent {
+			return &model.ClaimRevise{Provenance: provenance("lane-a"), Target: target, Replacement: claimSpec()}
+		}},
+		{"decision", func(id model.ID) model.TypedEvent {
+			return &model.DecisionOpen{Provenance: provenance("lane-a"), ID: id, Spec: decisionSpec()}
+		}, func(target model.RecordRef) model.TypedEvent {
+			return &model.DecisionRevise{Provenance: provenance("lane-a"), Target: target, Replacement: decisionSpec()}
+		}},
+		{"instrument", func(id model.ID) model.TypedEvent {
+			return &model.InstrumentDeclare{Provenance: provenance("lane-a"), ID: id, Spec: proofInstrument()}
+		}, func(target model.RecordRef) model.TypedEvent {
+			return &model.InstrumentRevise{Provenance: provenance("lane-a"), Target: target, Replacement: proofInstrument()}
+		}},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			l := newLedger()
+			id := newID("REVA")
+			l.add(t, tc.create(id))
+			l.add(t, tc.revise(ref(id, 1)))
+			s := mustReplay(t, l.bundles())
+			if rev, _ := s.CurrentRevision(Ident{Project: testProject, ID: id}); rev != 2 {
+				t.Fatalf("control revision did not land: revision %d", rev)
+			}
+			c := wantConflict(t, func() error { _, err := Apply(s, l.add(t, tc.revise(ref(id, 1)))); return err }())
+			if c.Expected != 1 || c.Actual != 2 || c.Target.RecordID != id {
+				t.Fatalf("conflict = %+v", c)
+			}
+		})
+	}
+}
+
 // TestLedgerSequenceDecidesWhichAmendmentLoses swaps the two conflicting
 // amendments. The loser changes with ledger order and with nothing else: no
 // directory enumeration, no map iteration and no wall clock is consulted.
@@ -522,16 +559,14 @@ func TestLedgerSequenceDecidesWhichAmendmentLoses(t *testing.T) {
 		l := newLedger()
 		l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
 		l.add(t, &model.TaskAmend{
-			Provenance:       provenance("lane-a"),
-			Target:           ref(newID("TSKA"), 1),
-			ExpectedRevision: 1,
-			Replacement:      taskSpec(withIntent(first)),
+			Provenance:  provenance("lane-a"),
+			Target:      ref(newID("TSKA"), 1),
+			Replacement: taskSpec(withIntent(first)),
 		})
 		l.add(t, &model.TaskAmend{
-			Provenance:       provenance("lane-b"),
-			Target:           ref(newID("TSKA"), 1),
-			ExpectedRevision: 1,
-			Replacement:      taskSpec(withIntent(second)),
+			Provenance:  provenance("lane-b"),
+			Target:      ref(newID("TSKA"), 1),
+			Replacement: taskSpec(withIntent(second)),
 		})
 		_, err := Replay(l.bundles())
 		return err
@@ -558,10 +593,9 @@ func TestStaleTaskRevisionOnAttemptEvents(t *testing.T) {
 	s := mustReplay(t, l.bundles())
 
 	amend := l.add(t, &model.TaskAmend{
-		Provenance:       provenance("coordinator"),
-		Target:           ref(newID("TSKA"), 1),
-		ExpectedRevision: 1,
-		Replacement:      taskSpec(withIntent("the contract moved under the lane")),
+		Provenance:  provenance("coordinator"),
+		Target:      ref(newID("TSKA"), 1),
+		Replacement: taskSpec(withIntent("the contract moved under the lane")),
 	})
 	s, err := Apply(s, amend)
 	if err != nil {
@@ -710,8 +744,7 @@ func TestUnknownReferencesAreRefused(t *testing.T) {
 		{"amendment of a closed task", CodeInvalidTransition, func(t *testing.T) []model.Bundle {
 			l := closedTaskLedger(t)
 			l.add(t, &model.TaskAmend{
-				Provenance: provenance("coordinator"), Target: ref(newID("TSKA"), 1),
-				ExpectedRevision: 1, Replacement: taskSpec(withIntent("rewriting the closed contract")),
+				Provenance: provenance("coordinator"), Target: ref(newID("TSKA"), 1), Replacement: taskSpec(withIntent("rewriting the closed contract")),
 			})
 			return l.bundles()
 		}},

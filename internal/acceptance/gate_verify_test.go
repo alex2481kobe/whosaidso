@@ -40,7 +40,7 @@ func gateVerifyNew(t *testing.T) *gateVerifyFixture {
 func (f *gateVerifyFixture) id() model.ID { f.n++; return recID(f.n) }
 
 func (f *gateVerifyFixture) claim(author model.Actor) *model.ClaimAssert {
-	return &model.ClaimAssert{ID: f.id(), Provenance: model.Provenance{Author: author, SourceRefs: []model.ArtifactRef{}},
+	return &model.ClaimAssert{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.ClaimSpec{Assertion: "VERIFIED: all tests passed; this claim is proven", Falsifier: "one counterexample",
 			Scope: laneEReduceScope(), ExternalRefs: []model.ExternalReference{{Tag: "VERIFIED", Citation: "confident external prose"}}}}
 }
@@ -134,7 +134,7 @@ func TestGateVerifyClaimAttributionAndUnmeasuredStatus(t *testing.T) {
 		// as satisfaction of its local claim-proof prerequisite.
 		spec := laneEReduceSpec(1)
 		spec.Prerequisites = []model.Prerequisite{{Kind: "claim-proof", Target: model.RecordRef{Project: f.p.ID, RecordID: c.ID, Revision: 1}, WaiverPolicy: "forbid"}}
-		task := &model.TaskCreate{ID: f.id(), Provenance: model.Provenance{Author: author, SourceRefs: []model.ArtifactRef{}}, Spec: spec}
+		task := &model.TaskCreate{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Spec: spec}
 		if _, err := f.admit(author, author, task); err != nil {
 			t.Fatalf("control: task waiting on an admitted claim must itself admit: %v", err)
 		}
@@ -167,13 +167,6 @@ func TestGateVerifyClaimAttributionAndUnmeasuredStatus(t *testing.T) {
 				t.Errorf("expected packet %s selected as self-admitted %q, got %+v, error=%v; two unknown identities must not become a known match", packet.CommandID, want, reviews, err)
 			}
 		}
-		for _, forged := range []model.Actor{{ID: "somebody-else"}, {UnknownReason: "different missing attribution"}} {
-			bad := f.claim(forged)
-			_, err := f.admit(author, author, bad)
-			if recCode(err) != "attribution-mismatch" {
-				t.Errorf("expected attribution-mismatch for packet author %+v and provenance %+v, got %v; immutable packet authorship must govern claim provenance", author, forged, err)
-			}
-		}
 	}
 	for _, field := range []string{"status", "spec.status", "spec.authority", "provenance.author"} {
 		c := f.claim(model.Actor{ID: "owner"})
@@ -186,7 +179,7 @@ func TestGateVerifyClaimAttributionAndUnmeasuredStatus(t *testing.T) {
 			value = map[string]any{}
 		}
 		raw = recSet(t, raw, field, value)
-		_, err := f.admitRaw(c.Provenance.Author, c.Provenance.Author, raw)
+		_, err := f.admitRaw(model.Actor{ID: "owner"}, model.Actor{ID: "owner"}, raw)
 		if recCode(err) != "invalid-field" {
 			t.Errorf("expected strict refusal of injected %s, got %v; raw capture must not bypass claim schema checks", field, err)
 		}
@@ -211,7 +204,7 @@ func TestGateVerifyClosedEventSet(t *testing.T) {
 	f.control()
 	a := model.Actor{ID: "gate-reviewer"}
 	// Exercise the seven pre-U11 allowed operations with satisfiable dependencies.
-	task := &model.TaskCreate{ID: f.id(), Provenance: model.Provenance{Author: a, SourceRefs: []model.ArtifactRef{}}, Spec: laneEReduceSpec(1)}
+	task := &model.TaskCreate{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Spec: laneEReduceSpec(1)}
 	ref := model.RecordRef{Project: f.p.ID, RecordID: task.ID, Revision: 1}
 	body := []byte(`{"ruling":"blocker resolved"}`)
 	gateVerifyPut(t, filepath.Join(f.p.Root, "witness.json"), body)
@@ -222,7 +215,7 @@ func TestGateVerifyClosedEventSet(t *testing.T) {
 		&model.SourceIntake{SourceID: f.id(), SourceRef: pin, OriginalDigest: pin.Content.SHA256, Length: pin.Content.Length, Speaker: a, Referents: []model.RecordRef{ref}},
 		hold,
 		&model.BlockerClear{Task: ref, BlockerID: hold.BlockerID, HoldRef: model.BlockerRef{Task: ref, BlockerID: hold.BlockerID}, ResolvingWitness: pin},
-		&model.TaskAmend{Provenance: task.Provenance, Target: ref, ExpectedRevision: 1, Replacement: task.Spec},
+		&model.TaskAmend{Provenance: task.Provenance, Target: ref, Replacement: task.Spec},
 		&model.TaskStart{Task: model.RecordRef{Project: ref.Project, RecordID: ref.RecordID, Revision: 2}, Actor: a, AttemptID: f.id()},
 		f.claim(a),
 	}
@@ -317,16 +310,6 @@ var gateVerifyStillDisabled = map[model.EventType]bool{"review.admit": true}
 
 func gateVerifyPayloadAuthor(event model.TypedEvent, fallback model.Actor) model.Actor {
 	switch e := event.(type) {
-	case *model.ClaimRevise:
-		return e.Provenance.Author
-	case *model.DecisionOpen:
-		return e.Provenance.Author
-	case *model.DecisionRevise:
-		return e.Provenance.Author
-	case *model.InstrumentDeclare:
-		return e.Provenance.Author
-	case *model.InstrumentRevise:
-		return e.Provenance.Author
 	case *model.CriterionFix:
 		return e.Author
 	case *model.ProofAdmit:

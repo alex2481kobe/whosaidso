@@ -34,7 +34,7 @@ func boundWorld(t *testing.T) boundFixture {
 	n := 300
 	next := func() model.ID { n++; return cliID(n) }
 	f.task, f.claim, f.instrument, f.criterion, f.attempt, f.ac = next(), next(), next(), next(), next(), next()
-	lane := model.Provenance{Author: model.Actor{ID: "lane"}, SourceRefs: []model.ArtifactRef{}}
+	lane := model.Provenance{SourceRefs: []model.ArtifactRef{}}
 	scope := model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this fixture", Limitations: "not a real ledger"}
 	boundAdmit(t, root, &model.TaskCreate{ID: f.task, Provenance: lane, Spec: model.TaskSpec{Intent: "measure", Subject: "pose sweep", Scope: scope, NonGoals: []string{"production writes"},
 		AcceptanceCriteria: []model.AcceptanceCriterion{{ID: f.ac, Revision: 1, Criterion: "measured"}}, ContextRefs: []model.RecordRef{}, ConstraintRefs: []model.RecordRef{}, Prerequisites: []model.Prerequisite{}, NextActor: model.Actor{ID: "lane"}}},

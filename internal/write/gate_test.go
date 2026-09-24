@@ -19,7 +19,7 @@ import (
 
 func (f *admissionFixture) instrument() *model.InstrumentDeclare {
 	return &model.InstrumentDeclare{
-		ID: f.id(), Provenance: model.Provenance{Author: f.author, SourceRefs: []model.ArtifactRef{}},
+		ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.InstrumentSpec{
 			QuestionAnswered: "how many bytes does the input contain", BlindTo: "the meaning of those bytes",
 			NotAnswered: "whether the input is correct", ConfigSurface: []string{}, DangerousDefaults: []string{},
@@ -49,9 +49,10 @@ func TestAdmissionInstrumentDeclaration(t *testing.T) {
 			if !ok || !reflect.DeepEqual(got.Spec, &instrument.Spec) || got.Support.ActiveTrust != reduce.TruthUnknown {
 				t.Fatalf("declaration changed its specification or acquired trust: %+v", got)
 			}
-			record, ok := f.snapshot().Record(ref)
-			if !ok || record.Provenance.Author != f.author {
-				t.Fatalf("provenance was lost: %+v", record)
+			s := f.snapshot()
+			record, ok := s.Record(ref)
+			if !ok || s.EventAuthor(record.Origin).Author != f.author {
+				t.Fatalf("authorship was lost: %+v", record)
 			}
 			consumer = f.task()
 			consumer.Spec.ContextRefs = []model.RecordRef{ref}
@@ -123,16 +124,13 @@ func assertInstrumentDecodeRefusal(t *testing.T, f *admissionFixture, raw model.
 func TestAdmissionInstrumentAuthorityAndIdentityRefusals(t *testing.T) {
 	// Known validation and instrument.revise are admitted under R9 when their
 	// artifacts resolve; TestInstrumentKnownValidationMustResolve covers them.
-	for _, mutation := range []string{"forged-author", "duplicate-instrument", "duplicate-task"} {
+	for _, mutation := range []string{"duplicate-instrument", "duplicate-task"} {
 		t.Run(mutation, func(t *testing.T) {
 			f := newAdmissionFixture(t)
 			instrument := f.instrument()
 			events := []model.TypedEvent{instrument}
 			code := "conflict"
 			switch mutation {
-			case "forged-author":
-				instrument.Provenance.Author.ID = "someone else"
-				code = "attribution-mismatch"
 			case "duplicate-instrument":
 				other := f.instrument()
 				other.ID = instrument.ID
@@ -259,7 +257,7 @@ func TestGateInstrumentArtifactEnumeration(t *testing.T) {
 }
 
 func TestAdmissionReferenceAndAttributionRefusals(t *testing.T) {
-	for _, mutation := range []string{"missing-reference", "cycle", "in-packet-forward", "foreign-subject", "forged-author", "duplicate-provider"} {
+	for _, mutation := range []string{"missing-reference", "cycle", "in-packet-forward", "foreign-subject", "duplicate-provider"} {
 		t.Run(mutation, func(t *testing.T) {
 			f := newAdmissionFixture(t)
 			control := f.goodControl()
@@ -283,10 +281,6 @@ func TestAdmissionReferenceAndAttributionRefusals(t *testing.T) {
 				target.Project = "another/project"
 				packets = []model.PacketRef{f.capture(nil, &model.TaskStart{Task: target, Actor: f.author, AttemptID: f.id()})}
 				code = "invalid-field"
-			case "forged-author":
-				first.Provenance.Author.ID = "a different author"
-				packets = []model.PacketRef{f.capture(nil, first)}
-				code = "attribution-mismatch"
 			case "duplicate-provider":
 				second.ID = first.ID
 				packets = []model.PacketRef{f.capture(nil, first), f.capture(nil, second)}
@@ -335,7 +329,7 @@ func TestAdmissionOnlyFirstGateOperations(t *testing.T) {
 }
 
 func (f *admissionFixture) claim() *model.ClaimAssert {
-	return &model.ClaimAssert{ID: f.id(), Provenance: model.Provenance{Author: f.author, SourceRefs: []model.ArtifactRef{}},
+	return &model.ClaimAssert{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.ClaimSpec{Assertion: "a finding awaiting measurement", Falsifier: "a counterexample", Scope: f.task().Spec.Scope, ExternalRefs: []model.ExternalReference{}}}
 }
 
@@ -419,7 +413,7 @@ func TestAdmissionClaimCannotAssertProofWithoutEvidence(t *testing.T) {
 }
 
 func TestAdmissionClaimReferencesAndAttribution(t *testing.T) {
-	for _, mutation := range []string{"scope-reference", "external-reference", "forged-author", "duplicate-claim", "duplicate-task", "cycle", "in-packet-forward"} {
+	for _, mutation := range []string{"scope-reference", "external-reference", "duplicate-claim", "duplicate-task", "cycle", "in-packet-forward"} {
 		t.Run(mutation, func(t *testing.T) {
 			f := newAdmissionFixture(t)
 			claim, other := f.claim(), f.claim()
@@ -431,9 +425,6 @@ func TestAdmissionClaimReferencesAndAttribution(t *testing.T) {
 			case "external-reference":
 				ref := f.ref(other.ID, 1)
 				claim.Spec.ExternalRefs = []model.ExternalReference{{Tag: "VERIFIED", Citation: "missing local record", RecordRef: &ref}}
-			case "forged-author":
-				claim.Provenance.Author.ID = "someone else"
-				code = "attribution-mismatch"
 			case "duplicate-claim":
 				other.ID = claim.ID
 				packets = append(packets, f.capture(nil, other))
@@ -469,9 +460,10 @@ func TestAdmissionClaimForwardProviderAndUnknownAuthor(t *testing.T) {
 	if bundle.Events[0].Type != "claim.assert" || bundle.Events[1].Type != "task.create" {
 		t.Fatal("claim revision did not provide the forward reference")
 	}
-	record, ok := f.snapshot().Record(f.ref(claim.ID, 1))
-	if !ok || record.Provenance.Author != f.author {
-		t.Fatalf("explicit unknown provenance was lost: %+v", record)
+	s := f.snapshot()
+	record, ok := s.Record(f.ref(claim.ID, 1))
+	if !ok || s.EventAuthor(record.Origin).Author != f.author {
+		t.Fatalf("explicit unknown authorship was lost: %+v", record)
 	}
 	review, ok := f.snapshot().Review(reduce.ReviewKey{Project: f.project.ID, CommandID: second.CommandID})
 	if !ok || review.SelfAdmission != model.SelfAdmissionUnknown {

@@ -17,7 +17,7 @@ func TestShowOneIsUnscopedShowsEntryForThatID(t *testing.T) {
 	spec := testTask(1).Spec
 	spec.Intent = "the amended intent is the current revision"
 	appendEvents(t, p, 101, testTask(2), testTask(3),
-		&model.TaskAmend{Target: testRef(1, 1), ExpectedRevision: 1, Replacement: spec, Provenance: testTask(1).Provenance})
+		&model.TaskAmend{Target: testRef(1, 1), Replacement: spec, Provenance: testTask(1).Provenance})
 	all := view_(t, p, ViewRequest{View: "show"}).(*ShowAnswer)
 	if len(all.Records) != 3 {
 		t.Fatalf("control: unscoped show lists %d current records, want 3", len(all.Records))

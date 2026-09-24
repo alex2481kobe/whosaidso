@@ -125,7 +125,7 @@ func TestFreshProcessesExplainAdmittedWhoSaidSoConstructionTaskAndSource(t *test
 	if after := readProcess(t, root, nil, "show", "--json", string(task.ID)); !bytes.Equal(showBytes, after) {
 		t.Fatalf("deleting generated output changed a fresh process's answer: before %s after %s", showBytes, after)
 	}
-	claim, err := model.EncodeEvent(&model.ClaimAssert{ID: cliID(30), Provenance: model.Provenance{Author: model.Actor{ID: "lane"}, SourceRefs: []model.ArtifactRef{}},
+	claim, err := model.EncodeEvent(&model.ClaimAssert{ID: cliID(30), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.ClaimSpec{Assertion: "the read slice may omit source detail", Falsifier: "inspect its export against this ledger",
 			Scope: task.Spec.Scope, ExternalRefs: []model.ExternalReference{}}})
 	if err != nil {
@@ -273,7 +273,7 @@ func TestFreshProcessInstrumentsOnThisRepositoryShowUnknownValidation(t *testing
 	bindTestHome(t, root)
 	// R19: the instruments preset is show --kind instrument.
 	answer := readJSON[query.ShowAnswer](t, readProcess(t, root, nil, "show", "--kind", "instrument", "--json"))
-	if answer.Project != "datum/datum" || answer.Watermark.Bundles == 0 || len(answer.Records) == 0 {
+	if answer.Project != "whosaidso/whosaidso" || answer.Watermark.Bundles == 0 || len(answer.Records) == 0 {
 		t.Fatalf("instruments must answer from this repository's own ledger, got %+v", answer.ViewHeader)
 	}
 	// Attention listing is asserted in internal/query; this checks dispatch and rendering.

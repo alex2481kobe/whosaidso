@@ -117,7 +117,7 @@ func TestCLIAnswersAreByteIdenticalWhateverTheCacheHolds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := e2eAdmitOne(t, root, &model.DecisionOpen{ID: cliID(990), Provenance: model.Provenance{Author: model.Actor{ID: "lane"}, SourceRefs: []model.ArtifactRef{}},
+	if err := e2eAdmitOne(t, root, &model.DecisionOpen{ID: cliID(990), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.DecisionSpec{Question: "keep the cache?", Options: []string{"yes", "no"}, WaitingActor: model.Actor{ID: "owner"},
 			Scope: model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this fixture", Limitations: "not a real ledger"}}}, 991, 992, "lane"); err != nil {
 		t.Fatal(err)
@@ -203,7 +203,7 @@ func TestCLIConcurrentProcessesNeverAnswerStale(t *testing.T) {
 			defer wg.Done()
 			for i := 0; i < 3; i++ {
 				n := 800 + w*100 + i*10
-				task := &model.TaskCreate{ID: cliID(n), Provenance: model.Provenance{Author: model.Actor{ID: "lane"}, SourceRefs: []model.ArtifactRef{}},
+				task := &model.TaskCreate{ID: cliID(n), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 					Spec: model.TaskSpec{Intent: fmt.Sprintf("concurrent task %d", n), Subject: "cache", NonGoals: []string{"none"},
 						Scope:              model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this fixture", Limitations: "synthetic"},
 						AcceptanceCriteria: []model.AcceptanceCriterion{{ID: cliID(n + 1), Revision: 1, Criterion: "reads"}}, ContextRefs: []model.RecordRef{},

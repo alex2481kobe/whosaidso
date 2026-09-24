@@ -4,10 +4,10 @@ package model
 // Task execution, evidence admission, and event encoding do not.
 // This file stays below 200 lines because authored record history is a complete group.
 
-// Provenance travels with each authored revision because Bundle retains packet
-// digests, not packet bodies. Pure replay cannot recover authors from intake.
+// Provenance is what an authored revision cites as its sources. Its author is
+// not here: the review that admits the packet records the packet's author, so
+// replay attributes every event to it (reduce/authorship.go).
 type Provenance struct {
-	Author     Actor         `json:"author"`
 	SourceRefs []ArtifactRef `json:"source_refs"`
 }
 
@@ -19,10 +19,9 @@ type TaskCreate struct {
 	Spec       TaskSpec   `json:"spec"`
 }
 type TaskAmend struct {
-	Provenance       Provenance `json:"provenance"`
-	Target           RecordRef  `json:"target"`
-	ExpectedRevision Revision   `json:"expected_revision"`
-	Replacement      TaskSpec   `json:"replacement"`
+	Provenance  Provenance `json:"provenance"`
+	Target      RecordRef  `json:"target"`
+	Replacement TaskSpec   `json:"replacement"`
 }
 type ClaimAssert struct {
 	Provenance Provenance `json:"provenance"`
@@ -30,10 +29,9 @@ type ClaimAssert struct {
 	Spec       ClaimSpec  `json:"spec"`
 }
 type ClaimRevise struct {
-	Provenance       Provenance `json:"provenance"`
-	Target           RecordRef  `json:"target"`
-	ExpectedRevision Revision   `json:"expected_revision"`
-	Replacement      ClaimSpec  `json:"replacement"`
+	Provenance  Provenance `json:"provenance"`
+	Target      RecordRef  `json:"target"`
+	Replacement ClaimSpec  `json:"replacement"`
 }
 type DecisionOpen struct {
 	Provenance Provenance   `json:"provenance"`
@@ -41,10 +39,9 @@ type DecisionOpen struct {
 	Spec       DecisionSpec `json:"spec"`
 }
 type DecisionRevise struct {
-	Provenance       Provenance   `json:"provenance"`
-	Target           RecordRef    `json:"target"`
-	ExpectedRevision Revision     `json:"expected_revision"`
-	Replacement      DecisionSpec `json:"replacement"`
+	Provenance  Provenance   `json:"provenance"`
+	Target      RecordRef    `json:"target"`
+	Replacement DecisionSpec `json:"replacement"`
 }
 type InstrumentDeclare struct {
 	Provenance Provenance     `json:"provenance"`
@@ -52,30 +49,23 @@ type InstrumentDeclare struct {
 	Spec       InstrumentSpec `json:"spec"`
 }
 type InstrumentRevise struct {
-	Provenance       Provenance     `json:"provenance"`
-	Target           RecordRef      `json:"target"`
-	ExpectedRevision Revision       `json:"expected_revision"`
-	Replacement      InstrumentSpec `json:"replacement"`
+	Provenance  Provenance     `json:"provenance"`
+	Target      RecordRef      `json:"target"`
+	Replacement InstrumentSpec `json:"replacement"`
 }
 
-func replacementRevision(target RecordRef, expected Revision, p string) error {
-	if expected == 0 || expected == ^Revision(0) || target.Revision != expected {
-		return invalid(p+".expected_revision", "expected revision must match target and permit a successor")
+// replacementRevision refuses a target no successor revision can follow. The
+// target's revision is the one the writer replaces: a stale one is a conflict.
+func replacementRevision(target RecordRef, p string) error {
+	if target.Revision == ^Revision(0) {
+		return invalid(p+".target.revision", "the target revision must permit a successor")
 	}
 	return nil
 }
-func (e TaskAmend) validate(p string) error {
-	return replacementRevision(e.Target, e.ExpectedRevision, p)
-}
-func (e ClaimRevise) validate(p string) error {
-	return replacementRevision(e.Target, e.ExpectedRevision, p)
-}
-func (e DecisionRevise) validate(p string) error {
-	return replacementRevision(e.Target, e.ExpectedRevision, p)
-}
-func (e InstrumentRevise) validate(p string) error {
-	return replacementRevision(e.Target, e.ExpectedRevision, p)
-}
+func (e TaskAmend) validate(p string) error        { return replacementRevision(e.Target, p) }
+func (e ClaimRevise) validate(p string) error      { return replacementRevision(e.Target, p) }
+func (e DecisionRevise) validate(p string) error   { return replacementRevision(e.Target, p) }
+func (e InstrumentRevise) validate(p string) error { return replacementRevision(e.Target, p) }
 
 // DecisionDispose supplies U06/U12 a scoped attributable ruling; U13 preserves
 // the exact quote, including its original whitespace around nonblank words.

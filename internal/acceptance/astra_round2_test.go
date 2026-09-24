@@ -206,9 +206,9 @@ func TestAstraRound2RetryDoesNotNeedReadableIntake(t *testing.T) {
 func TestAstraRound2ReplayChecksInstrumentConfigNames(t *testing.T) {
 	w := pvNew(t)
 	env := w.start(w.id(), false)
-	w.mustAdmit(w.lane, &model.InvocationStart{Envelope: env}, w.seal(env, []model.ArtifactRef{}...))
+	w.mustAdmit(w.lane, &model.InvocationStart{Envelope: env}, w.seal(env, []model.RunOutput{}...))
 	badEnv := w.start(w.id(), false)
-	bad := w.seal(badEnv, []model.ArtifactRef{}...)
+	bad := w.seal(badEnv, []model.RunOutput{}...)
 	bad.Envelope.ConfigEffective = recKnown(map[string]model.Availability[model.Scalar]{"undeclared-camera": recKnown(laneEEvidenceNumber("1"))})
 	if err := w.admit(w.lane, &model.InvocationStart{Envelope: badEnv}, bad); recCode(err) != "invalid-field" || !strings.Contains(err.Error(), "config_effective") {
 		t.Fatalf("control: admission must refuse the undeclared effective knob: %v", err)

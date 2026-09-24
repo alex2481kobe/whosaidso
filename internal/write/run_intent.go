@@ -44,7 +44,7 @@ func runIntent(project store.Project, r RunRequest) (model.InvocationEnvelope, e
 		ConfigEffective:    runUnknown[map[string]model.Availability[model.Scalar]](),
 		ConditionsObserved: runUnknown[map[string]model.Availability[model.Scalar]](),
 		Isolation:          runUnknown[model.Isolation](), ObservedAt: runUnknown[time.Time](),
-		Outcome: runUnknown[model.ProcessOutcome](), OutputRefs: runUnknown[[]model.ArtifactRef](),
+		Outcome: runUnknown[model.ProcessOutcome](), Outputs: runUnknown[[]model.RunOutput](),
 		Visual: runUnknown[model.VisualObservation](),
 	}
 	if e.CriterionRef.State == "" {

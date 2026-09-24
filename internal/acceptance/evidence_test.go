@@ -327,11 +327,11 @@ func TestEvidenceUnreadableOutputIsAbsentWithAReasonInsteadOfUsingTheCriterionEx
 func TestEvidenceTwoOutputsAtOneDeclaredPathAreRefusedRegardlessOfTheirOrder(t *testing.T) {
 	c := laneEEvidenceCriterion()
 	root := t.TempDir()
-	laneEEvidenceWrite(t, root, laneEEvidenceRunPath(10), laneEEvidenceBody)
-	other := laneEEvidenceRunOutput(strings.Replace(laneEEvidenceBody, "0.0100", "0.9900", 1), 10)
-	for _, outputs := range [][]model.ArtifactRef{{laneEEvidenceRunOutput(laneEEvidenceBody, 10), other}, {other, laneEEvidenceRunOutput(laneEEvidenceBody, 10)}} {
+	laneEEvidenceWrite(t, root, laneEEvidenceStored(laneEEvidenceBody), laneEEvidenceBody)
+	other := laneEEvidenceRunOutput(strings.Replace(laneEEvidenceBody, "0.0100", "0.9900", 1))
+	for _, outputs := range [][]model.RunOutput{{laneEEvidenceRunOutput(laneEEvidenceBody), other}, {other, laneEEvidenceRunOutput(laneEEvidenceBody)}} {
 		env := laneEEvidenceEnvelope(c, laneEEvidenceBody, 10)
-		env.OutputRefs = laneEEvidenceKnown(outputs)
+		env.Outputs = laneEEvidenceKnown(outputs)
 		o, err := evidence.NewResolver(root).Observe(context.Background(), c, env)
 		if err != nil || !strings.Contains(o.Unavailable, "2 outputs") {
 			t.Fatalf("ambiguous path must refuse both output orders: %+v, %v", o, err)
@@ -484,17 +484,15 @@ func laneEEvidenceContent(body string) model.ArtifactRef {
 	}, Selector: model.Selector{Kind: "whole"}}
 }
 
-// laneEEvidenceRunPath is where invocation id's output lives (R9: the
-// run-relative path is the only form a run output may be declared at).
-func laneEEvidenceRunPath(id int) string {
-	return evidence.RunDir(model.ID(fmt.Sprintf("%026d", id))) + "/out/result.json"
+// laneEEvidenceStored is where admission keeps an output's bytes: the store,
+// by digest (R9: a run output is a name inside its run plus a content pin).
+func laneEEvidenceStored(body string) string {
+	return evidence.DefaultArtifactDir + "/" + string(laneEEvidenceDigest(body))
 }
 
-// laneEEvidenceRunOutput pins body at invocation id's run-relative path.
-func laneEEvidenceRunOutput(body string, id int) model.ArtifactRef {
-	ref := laneEEvidenceContent(body)
-	ref.Content.Locators = []model.Locator{{Path: laneEEvidenceRunPath(id)}}
-	return ref
+// laneEEvidenceRunOutput is the run's output out/result.json holding body.
+func laneEEvidenceRunOutput(body string) model.RunOutput {
+	return model.RunOutput{Name: "out/result.json", SHA256: laneEEvidenceDigest(body), Length: uint64(len(body)), MediaType: "application/json"}
 }
 
 // laneEEvidenceMachine is a fixed, KNOWN machine id shared by runs meant to be
@@ -590,7 +588,7 @@ func laneEEvidenceCriterion() model.CriterionFix {
 
 func laneEEvidenceObserve(t *testing.T, root string, c model.CriterionFix, body string, id int) evidence.Observation {
 	t.Helper()
-	laneEEvidenceWrite(t, root, laneEEvidenceRunPath(id), body)
+	laneEEvidenceWrite(t, root, laneEEvidenceStored(body), body)
 	env := laneEEvidenceEnvelope(c, body, id)
 	if err := model.ValidateSchema(c); err != nil {
 		t.Fatalf("criterion fixture must be valid: %v", err)
@@ -606,9 +604,7 @@ func laneEEvidenceObserve(t *testing.T, root string, c model.CriterionFix, body 
 }
 
 func laneEEvidenceEnvelope(c model.CriterionFix, body string, id int) model.InvocationEnvelope {
-	output := laneEEvidenceRunOutput(body, id)
-	// The output selector intentionally differs from the frozen criterion.
-	output.Selector = model.Selector{Kind: "json-pointer", Pointer: "/not-the-result"}
+	output := laneEEvidenceRunOutput(body)
 	exit := 0
 	when := time.Date(2026, 9, 22, 0, 0, 0, 0, time.UTC)
 	return model.InvocationEnvelope{
@@ -624,7 +620,7 @@ func laneEEvidenceEnvelope(c model.CriterionFix, body string, id int) model.Invo
 		ConfigEffective: laneEEvidenceConfig("sample_count", "12"), ConditionsDeclared: map[string]model.Scalar{},
 		ConditionsObserved: laneEEvidenceConfig("seed", "7"), Isolation: laneEEvidenceUnknown[model.Isolation]("not captured"),
 		StartedAt: when, ObservedAt: laneEEvidenceKnown(when), Outcome: laneEEvidenceKnown(model.ProcessOutcome{Kind: "exit", ExitCode: &exit}),
-		OutputRefs: laneEEvidenceKnown([]model.ArtifactRef{output}), Visual: laneEEvidenceUnknown[model.VisualObservation]("numeric instrument"),
+		Outputs: laneEEvidenceKnown([]model.RunOutput{output}), Visual: laneEEvidenceUnknown[model.VisualObservation]("numeric instrument"),
 	}
 }
 

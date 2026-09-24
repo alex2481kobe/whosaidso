@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"whosaidso/internal/evidence"
 	"whosaidso/internal/model"
 )
 
@@ -29,7 +28,7 @@ func pin(body []byte, path string) model.ArtifactRef {
 }
 
 func provenance() model.Provenance {
-	return model.Provenance{Author: author, SourceRefs: []model.ArtifactRef{}}
+	return model.Provenance{SourceRefs: []model.ArtifactRef{}}
 }
 func scope() model.Scope {
 	return model.Scope{SourcePaths: []string{"internal/service"}, ContextRefs: []model.RecordRef{}, AppliesWhen: "the frozen request corpus on the recorded source revision", Limitations: "synthetic measurements; no production load or network jitter"}
@@ -67,7 +66,7 @@ func (f *fixture) envelope(attempt model.ID, criterion model.CriterionRef) model
 		ExecutionSourceIdentity: model.ExecutionIdentity{Project: f.Project.ID, MachineID: known(model.ID("7ZZZZZZZZZZZZZZZZZZZZZZZZZ")), SourceRefs: []model.ArtifactRef{}, Head: known(model.GitHead{ObjectFormat: "sha1", Commit: "0123456789abcdef0123456789abcdef01234567"}), Dirty: known(false)},
 		Argv:                    []string{"measure-request-corpus"}, InputRefs: []model.ArtifactRef{}, ConfigRequested: map[string]model.Scalar{}, ConditionsDeclared: map[string]model.Scalar{},
 		ConfigEffective: unknown[map[string]model.Availability[model.Scalar]](), ConditionsObserved: unknown[map[string]model.Availability[model.Scalar]](),
-		Isolation: unknown[model.Isolation](), StartedAt: time.Now().UTC(), ObservedAt: unknown[time.Time](), Outcome: unknown[model.ProcessOutcome](), OutputRefs: unknown[[]model.ArtifactRef](), Visual: unknown[model.VisualObservation](),
+		Isolation: unknown[model.Isolation](), StartedAt: time.Now().UTC(), ObservedAt: unknown[time.Time](), Outcome: unknown[model.ProcessOutcome](), Outputs: unknown[[]model.RunOutput](), Visual: unknown[model.VisualObservation](),
 	}
 }
 
@@ -75,7 +74,7 @@ func (f *fixture) seal(env model.InvocationEnvelope) *model.InvocationSeal {
 	env.ObservedAt = known(time.Now().UTC())
 	exit := 0
 	env.Outcome = known(model.ProcessOutcome{Kind: "exit", ExitCode: &exit})
-	env.OutputRefs = known([]model.ArtifactRef{pin(resultBody, evidence.RunDir(env.InvocationID)+"/out/result.json")})
+	env.Outputs = known([]model.RunOutput{{Name: "out/result.json", SHA256: model.HashBytes(resultBody), Length: uint64(len(resultBody)), MediaType: "application/json"}})
 	env.ConfigEffective = known(map[string]model.Availability[model.Scalar]{})
 	env.ConditionsObserved = known(map[string]model.Availability[model.Scalar]{})
 	return &model.InvocationSeal{StartRef: model.InvocationRef{Project: f.Project.ID, InvocationID: env.InvocationID}, Envelope: env}

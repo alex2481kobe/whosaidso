@@ -1,10 +1,6 @@
 {
   "data": {
-    "expected_revision": 2,
     "provenance": {
-      "author": {
-        "id": "lane-e"
-      },
       "source_refs": [
         {
           "git": {

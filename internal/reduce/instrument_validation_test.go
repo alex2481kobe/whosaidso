@@ -56,7 +56,7 @@ func requireUnknownInstrument(t *testing.T, s Snapshot, target model.RecordRef) 
 // The committed ledger's sequence 3 declares two real instruments whose
 // validation is UNKNOWN. They must decode, replay, and stay untrusted.
 func TestInstrumentValidationRealSequenceThreeReplay(t *testing.T) {
-	paths, err := filepath.Glob("../../.datum/events/*.json")
+	paths, err := filepath.Glob("../../.whosaidso/events/*.json")
 	if err != nil || len(paths) < 3 {
 		t.Fatalf("need the committed bundles through sequence 3: %v, %v", paths, err)
 	}
@@ -109,8 +109,8 @@ func TestInstrumentValidationRealSequenceThreeReplay(t *testing.T) {
 			t.Fatal("real instrument or its unknown reason changed")
 		}
 		record, ok := replayed.Record(target)
-		if !ok || record.Provenance.Author != declaration.Provenance.Author {
-			t.Fatal("real instrument author changed")
+		if author := replayed.EventAuthor(record.Origin).Author; !ok || author.ID == "" {
+			t.Fatalf("real instrument lost its packet author: %+v", author)
 		}
 		// Editing an exported copy is not an admitted validation fact.
 		p.Spec.Validation = proofKnown(model.InstrumentValidation{Ref: blobRef("forged"), Version: "self-certified"})
@@ -125,7 +125,7 @@ func TestInstrumentValidationUnknownDeclarationAndRevisionAdmit(t *testing.T) {
 	l.add(t, &model.InstrumentDeclare{ID: target.RecordID, Provenance: provenance("author"), Spec: unknownInstrument()})
 	declared := mustReplay(t, l.out)
 	requireUnknownInstrument(t, declared, target)
-	next, err := Apply(declared, l.add(t, &model.InstrumentRevise{Target: target, ExpectedRevision: 1, Provenance: provenance("author"), Replacement: unknownInstrument()}))
+	next, err := Apply(declared, l.add(t, &model.InstrumentRevise{Target: target, Provenance: provenance("author"), Replacement: unknownInstrument()}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestInstrumentValidationRevisionDoesNotRestoreWithdrawnTrust(t *testing.T) 
 	if p.Support.ActiveTrust != TruthFalse || len(p.Withdrawals) != 1 {
 		t.Fatalf("withdrawal lost: %+v", p)
 	}
-	l.add(t, &model.InstrumentRevise{Target: target, ExpectedRevision: 1, Provenance: provenance("author"), Replacement: unknownInstrument()})
+	l.add(t, &model.InstrumentRevise{Target: target, Provenance: provenance("author"), Replacement: unknownInstrument()})
 	revised := mustReplay(t, l.out)
 	requireUnknownInstrument(t, revised, ref(target.RecordID, 2))
 	p, _ = revised.InstrumentAt(target)

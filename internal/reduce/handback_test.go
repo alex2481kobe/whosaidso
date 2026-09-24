@@ -71,7 +71,7 @@ func TestStoppedHandbackCarriesItsHold(t *testing.T) {
 	}
 	clear := &model.BlockerClear{Task: ref(newID("TSKA"), 1), BlockerID: newID("HDA1"),
 		HoldRef: model.BlockerRef{Task: ref(newID("TSKA"), 1), BlockerID: newID("HDA1")}, ResolvingWitness: blobRef("ruling")}
-	amend := &model.TaskAmend{Provenance: provenance("lane-a"), Target: ref(newID("TSKA"), 1), ExpectedRevision: 1, Replacement: taskSpec()}
+	amend := &model.TaskAmend{Provenance: provenance("lane-a"), Target: ref(newID("TSKA"), 1), Replacement: taskSpec()}
 	for _, tc := range []struct {
 		name    string
 		outcome model.AttemptOutcome

@@ -341,7 +341,7 @@ func TestReadVerifyLaterAdmissionDoesNotDispositionAnEarlierPrefix(t *testing.T)
 		t.Fatal(err)
 	}
 	ref, err := store.WriteIntake(context.Background(), p, store.IntakeRequest{
-		CommandID: laneEReduceID(1002), Author: create.Provenance.Author, Events: []model.Event{event}})
+		CommandID: laneEReduceID(1002), Author: model.Actor{ID: "lane-e"}, Events: []model.Event{event}})
 	if err != nil {
 		t.Fatal(err)
 	}

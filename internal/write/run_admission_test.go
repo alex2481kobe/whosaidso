@@ -1,8 +1,8 @@
 package write
 
-// Seal admission of a run's own outputs (R9's single run-directory form, bytes
-// proven from the seal's own blobs or a file hand-placed in the run directory). Proof families and generic artifact gates are tested in
-// the gate_*_test.go files.
+// Seal admission of a run's own outputs (R9: each output a name inside the run
+// and a content pin, its bytes proven from the seal's own captured blobs). Proof
+// families and generic artifact gates are tested in the gate_*_test.go files.
 
 import (
 	"os"
@@ -12,6 +12,7 @@ import (
 
 	"whosaidso/internal/evidence"
 	"whosaidso/internal/model"
+	"whosaidso/internal/store"
 )
 
 // runAdmitWorld is a proof world plus one started run whose seal the case builds.
@@ -22,14 +23,10 @@ func runAdmitWorld(t *testing.T) (*proofWorld, model.InvocationEnvelope, model.P
 	return w, env, w.f.capture(nil, &model.InvocationStart{Envelope: env})
 }
 
-func runSealWith(env model.InvocationEnvelope, outputs ...model.ArtifactRef) *model.InvocationSeal {
+func runSealWith(env model.InvocationEnvelope, outputs ...model.RunOutput) *model.InvocationSeal {
 	seal := proofSealed(env, proofPass)
-	seal.Envelope.OutputRefs = proofKnown(outputs)
+	seal.Envelope.Outputs = proofKnown(outputs)
 	return seal
-}
-
-func runOwnPath(env model.InvocationEnvelope) string {
-	return evidence.RunDir(env.InvocationID) + "/out/result.json"
 }
 
 // runOwnBody differs from the criterion's example, which admission already
@@ -42,17 +39,9 @@ func runStored(root string) bool {
 }
 
 func TestSealAdmissionProvesEachOutputIsThisRuns(t *testing.T) {
-	t.Run("control: the output is in the run directory", func(t *testing.T) {
+	t.Run("control: the seal's own packet captured the bytes", func(t *testing.T) {
 		w, env, start := runAdmitWorld(t)
-		proofPut(t, w.f.project.Root, runOwnPath(env), runOwnBody)
-		w.f.accept(start, w.f.capture(nil, runSealWith(env, proofPin(runOwnBody, runOwnPath(env)))))
-		if !runStored(w.f.project.Root) {
-			t.Fatal("admission must materialize the run's output into the store")
-		}
-	})
-	t.Run("control: the run directory is gone but the seal captured the bytes", func(t *testing.T) {
-		w, env, start := runAdmitWorld(t)
-		w.f.accept(start, w.f.capture([][]byte{[]byte(runOwnBody)}, runSealWith(env, proofPin(runOwnBody, runOwnPath(env)))))
+		w.f.accept(start, w.f.capture([][]byte{[]byte(runOwnBody)}, runSealWith(env, proofOutput(runOwnBody, proofPath))))
 		if !runStored(w.f.project.Root) {
 			t.Fatal("admission must materialize the captured output into the store")
 		}
@@ -64,54 +53,48 @@ func TestSealAdmissionProvesEachOutputIsThisRuns(t *testing.T) {
 		// build returns the packets to admit together with the start.
 		build func(w *proofWorld, env model.InvocationEnvelope) []model.PacketRef
 	}{
-		{"bare contract path, bytes captured", "invalid-field", func(w *proofWorld, env model.InvocationEnvelope) []model.PacketRef {
-			return []model.PacketRef{w.f.capture([][]byte{[]byte(proofPass)}, runSealWith(env, proofPin(proofPass, proofPath)))}
+		{"same bytes at the path the output's name spells", "unavailable", func(w *proofWorld, env model.InvocationEnvelope) []model.PacketRef {
+			proofPut(w.f.t, w.f.project.Root, "stdout", runOwnBody)
+			return []model.PacketRef{w.f.capture(nil, runSealWith(env, proofOutput(runOwnBody, "stdout")))}
 		}},
-		{"bare path beside the run-dir path", "invalid-field", func(w *proofWorld, env model.InvocationEnvelope) []model.PacketRef {
-			proofPut(w.f.t, w.f.project.Root, runOwnPath(env), proofPass)
-			both := proofPin(proofPass, runOwnPath(env))
-			both.Content.Locators = append(both.Content.Locators, model.Locator{Path: proofPath})
-			return []model.PacketRef{w.f.capture(nil, runSealWith(env, both))}
-		}},
-		{"another run's directory", "invalid-field", func(w *proofWorld, env model.InvocationEnvelope) []model.PacketRef {
-			other := evidence.RunDir(w.f.id()) + "/out/result.json"
-			proofPut(w.f.t, w.f.project.Root, other, proofPass)
-			return []model.PacketRef{w.f.capture(nil, runSealWith(env, proofPin(proofPass, other)))}
-		}},
-		{"non-canonical spelling of the run directory", "invalid-field", func(w *proofWorld, env model.InvocationEnvelope) []model.PacketRef {
-			odd := evidence.RunDir(env.InvocationID) + "//out/result.json"
-			proofPut(w.f.t, w.f.project.Root, runOwnPath(env), proofPass)
-			return []model.PacketRef{w.f.capture(nil, runSealWith(env, proofPin(proofPass, odd)))}
+		{"same bytes in an old-style run directory", "unavailable", func(w *proofWorld, env model.InvocationEnvelope) []model.PacketRef {
+			proofPut(w.f.t, w.f.project.Root, evidence.DefaultArtifactDir+"/runs/"+string(env.InvocationID)+"/"+proofPath, runOwnBody)
+			return []model.PacketRef{w.f.capture(nil, runSealWith(env, proofOutput(runOwnBody, proofPath)))}
 		}},
 		{"same digest only in the content store (the criterion's example)", "unavailable", func(w *proofWorld, env model.InvocationEnvelope) []model.PacketRef {
 			proofPut(w.f.t, w.f.project.Root, evidence.DefaultArtifactDir+"/"+string(model.HashBytes([]byte(proofPass))), proofPass)
-			return []model.PacketRef{w.f.capture(nil, runSealWith(env, proofPin(proofPass, runOwnPath(env))))}
+			return []model.PacketRef{w.f.capture(nil, runSealWith(env, proofOutput(proofPass, proofPath)))}
 		}},
 		{"same digest captured by a different packet of the set", "unavailable", func(w *proofWorld, env model.InvocationEnvelope) []model.PacketRef {
-			other := w.f.capture([][]byte{[]byte(proofPass)}, w.f.task())
-			return []model.PacketRef{other, w.f.capture(nil, runSealWith(env, proofPin(proofPass, runOwnPath(env))))}
+			other := w.f.capture([][]byte{[]byte(runOwnBody)}, w.f.task())
+			return []model.PacketRef{other, w.f.capture(nil, runSealWith(env, proofOutput(runOwnBody, proofPath)))}
 		}},
 		{"same bytes only in write.Run's staging, outside the project", "unavailable", func(w *proofWorld, env model.InvocationEnvelope) []model.PacketRef {
-			proofPut(w.f.t, runTestStaging(w.f.t, w.f.project, env.InvocationID), proofPath, proofPass)
-			return []model.PacketRef{w.f.capture(nil, runSealWith(env, proofPin(proofPass, runOwnPath(env))))}
+			proofPut(w.f.t, runTestStaging(w.f.t, w.f.project, env.InvocationID), proofPath, runOwnBody)
+			return []model.PacketRef{w.f.capture(nil, runSealWith(env, proofOutput(runOwnBody, proofPath)))}
 		}},
-		{"run directory reached through a symlink", "unavailable", func(w *proofWorld, env model.InvocationEnvelope) []model.PacketRef {
-			root := w.f.project.Root
-			if err := os.MkdirAll(filepath.Join(root, filepath.FromSlash(evidence.RunDir(env.InvocationID))), 0700); err != nil {
+		{"the captured blob was altered after capture", "intake-corrupt", func(w *proofWorld, env model.InvocationEnvelope) []model.PacketRef {
+			seal := w.f.capture([][]byte{[]byte(runOwnBody)}, runSealWith(env, proofOutput(runOwnBody, proofPath)))
+			inbox, err := store.IntakeDir(w.f.project)
+			if err != nil {
 				w.f.t.Fatal(err)
 			}
-			if err := os.Symlink(filepath.Join(root, "out"), filepath.Join(root, filepath.FromSlash(evidence.RunDir(env.InvocationID)), "out")); err != nil {
+			blob := filepath.Join(inbox, string(seal.CommandID), "blobs", string(model.HashBytes([]byte(runOwnBody))))
+			if err := os.Chmod(blob, 0600); err != nil {
 				w.f.t.Fatal(err)
 			}
-			return []model.PacketRef{w.f.capture(nil, runSealWith(env, proofPin(proofPass, runOwnPath(env))))}
+			if err := os.WriteFile(blob, []byte(strings.Replace(runOwnBody, "0.0100", "0.0900", 1)), 0400); err != nil {
+				w.f.t.Fatal(err)
+			}
+			return []model.PacketRef{seal}
 		}},
-		{"run-dir bytes differ from the pin", "unavailable", func(w *proofWorld, env model.InvocationEnvelope) []model.PacketRef {
-			proofPut(w.f.t, w.f.project.Root, runOwnPath(env), proofFail)
-			return []model.PacketRef{w.f.capture(nil, runSealWith(env, proofPin(proofPass, runOwnPath(env))))}
+		{"the output pins the captured digest with another length", "conflict", func(w *proofWorld, env model.InvocationEnvelope) []model.PacketRef {
+			out := proofOutput(runOwnBody, proofPath)
+			out.Length++
+			return []model.PacketRef{w.f.capture([][]byte{[]byte(runOwnBody)}, runSealWith(env, out))}
 		}},
-		{"a git pin is not a run output", "invalid-field", func(w *proofWorld, env model.InvocationEnvelope) []model.PacketRef {
-			ref := model.ArtifactRef{Kind: "git", Git: &model.GitPin{ObjectFormat: "sha1", Commit: strings.Repeat("a", 40), Path: runOwnPath(env)}, Selector: model.Selector{Kind: "whole"}}
-			return []model.PacketRef{w.f.capture(nil, runSealWith(env, ref))}
+		{"captured bytes differ from the pin", "unavailable", func(w *proofWorld, env model.InvocationEnvelope) []model.PacketRef {
+			return []model.PacketRef{w.f.capture([][]byte{[]byte(proofFail)}, runSealWith(env, proofOutput(runOwnBody, proofPath)))}
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -121,6 +104,9 @@ func TestSealAdmissionProvesEachOutputIsThisRuns(t *testing.T) {
 				t.Fatalf("fixture: the example must be present: %v", err)
 			}
 			w.f.refuse(w.f.request(append([]model.PacketRef{start}, tc.build(w, env)...)...), tc.code)
+			if runStored(w.f.project.Root) {
+				t.Fatal("a refused seal published its output")
+			}
 		})
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 
 	"whosaidso/internal/evidence"
 	"whosaidso/internal/model"
@@ -34,7 +35,7 @@ func materializeAdmission(ctx context.Context, project store.Project, packets []
 			}
 			var published []model.ArtifactRef
 			if seal, ok := event.(*model.InvocationSeal); ok {
-				own, err := runAdmitOutputs(project.Root, project.ArtifactDir(), inbox, packet, seal.Envelope, dry)
+				own, err := runAdmitOutputs(inbox, packet, seal.Envelope, dry)
 				if err != nil {
 					return err
 				}
@@ -42,19 +43,11 @@ func materializeAdmission(ctx context.Context, project store.Project, packets []
 					if err := ctx.Err(); err != nil {
 						return err
 					}
-					if out.ref.Git != nil {
-						// Publish the proven bytes; the generic path below
-						// still corroborates the git pin.
-						if err := preserve(project.Root, project.ArtifactDir(), out.bytes); err != nil {
-							return err
-						}
-						continue
-					}
-					resolved, err := resolver.RunOutput(out.ref, out.bytes)
+					resolved, err := resolver.RunOutput(out.out, out.bytes)
 					if err != nil {
 						return fmt.Errorf("accepted support is unavailable or invalid: %w", err)
 					}
-					if err := admissionReadable(resolved, out.ref.Selector); err != nil {
+					if err := admissionReadable(resolved, model.Selector{Kind: "whole"}); err != nil {
 						return err
 					}
 					// The proven bytes themselves are published, never a copy
@@ -62,15 +55,15 @@ func materializeAdmission(ctx context.Context, project store.Project, packets []
 					if err := preserve(project.Root, project.ArtifactDir(), out.bytes); err != nil {
 						return err
 					}
-					published = append(published, out.ref)
+					published = append(published, out.out.Ref())
 				}
 			}
 			for _, ref := range admissionArtifacts(event) {
 				if err := ctx.Err(); err != nil {
 					return err
 				}
-				if admissionPublished(published, ref) {
-					continue
+				if slices.ContainsFunc(published, func(p model.ArtifactRef) bool { return reflect.DeepEqual(p, ref) }) {
+					continue // a run output, verified and published above
 				}
 				if ref.Content != nil {
 					for _, candidate := range packets {
@@ -150,17 +143,6 @@ func admissionReadable(resolved evidence.ResolvedArtifact, selector model.Select
 		return admissionFault("unavailable", "artifact.selector", reading.Reason)
 	}
 	return nil
-}
-
-// admissionPublished reports whether ref is exactly a run output whose proven
-// bytes were already verified and published for this event.
-func admissionPublished(published []model.ArtifactRef, ref model.ArtifactRef) bool {
-	for _, p := range published {
-		if reflect.DeepEqual(p, ref) {
-			return true
-		}
-	}
-	return false
 }
 
 // preserveAdmissionBlob is admission's preserver: the store's durable,

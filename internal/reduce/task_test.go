@@ -416,7 +416,7 @@ func TestStaleAcceptanceWitnessDoesNotClose(t *testing.T) {
 		l := newLedger()
 		l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
 		l.add(t, &model.TaskAmend{
-			Provenance: provenance("coordinator"), Target: ref(newID("TSKA"), 1), ExpectedRevision: 1,
+			Provenance: provenance("coordinator"), Target: ref(newID("TSKA"), 1),
 			Replacement: taskSpec(withCriteria(model.AcceptanceCriterion{
 				ID: newID("ACCA"), Revision: 2, Criterion: "the acceptance bar was raised",
 			})),
@@ -517,7 +517,7 @@ func TestDependencyRequiresCurrentAndRequiredRevisionWitnesses(t *testing.T) {
 			l := newLedger()
 			l.add(t, &model.TaskCreate{Provenance: provenance("lane-a"), ID: newID("TSKA"), Spec: taskSpec()})
 			l.add(t, &model.TaskAmend{
-				Provenance: provenance("coordinator"), Target: ref(newID("TSKA"), 1), ExpectedRevision: 1,
+				Provenance: provenance("coordinator"), Target: ref(newID("TSKA"), 1),
 				Replacement: taskSpec(withCriteria(model.AcceptanceCriterion{
 					ID: newID("ACCA"), Revision: 2, Criterion: "the acceptance bar was raised",
 				})),

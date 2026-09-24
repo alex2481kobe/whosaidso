@@ -136,7 +136,7 @@ func TestAstraFinalCacheCannotForgeLedgerFact(t *testing.T) {
 	f := astraFinalNew(t)
 	c := f.claim(model.Actor{ID: "holder"})
 	c.Spec.Assertion = "ledger says original"
-	if _, err := f.admit(c.Provenance.Author, c.Provenance.Author, c); err != nil {
+	if _, err := f.admit(model.Actor{ID: "holder"}, model.Actor{ID: "holder"}, c); err != nil {
 		t.Fatal(err)
 	}
 	want, code := astraFinalCLI(t, f, "show", string(c.ID), "--json")
@@ -191,7 +191,7 @@ func TestAstraFinalHomeConfigChangeCannotLoseAdmission(t *testing.T) {
 	f.control()
 	pvPut(t, f.p.Root, "whosaidso.toml", []byte("id = 'datum/acceptance'\nledger = '.relocated/events'\n"))
 	c := f.claim(model.Actor{ID: "holder"})
-	b, err := f.admit(c.Provenance.Author, c.Provenance.Author, c)
+	b, err := f.admit(model.Actor{ID: "holder"}, model.Actor{ID: "holder"}, c)
 	if err != nil {
 		return
 	}
@@ -211,7 +211,7 @@ func TestAstraFinalHomeConfigChangeCannotLoseAdmission(t *testing.T) {
 func TestAstraFinalDuplicatePacketDryRunMatchesAdmission(t *testing.T) {
 	f := astraFinalNew(t)
 	c := f.claim(model.Actor{ID: "holder"})
-	packet := f.capture(c.Provenance.Author, recEncode(t, c))
+	packet := f.capture(model.Actor{ID: "holder"}, recEncode(t, c))
 	control, code := astraFinalCLI(t, f, "check", "admission", "--json", "--packet", string(packet.CommandID))
 	if code != 0 {
 		t.Fatalf("single-packet dry-run control: %d %s", code, control)

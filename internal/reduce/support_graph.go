@@ -131,6 +131,7 @@ func sameArtifact(a, b model.ArtifactRef) bool {
 }
 
 // artifactRefs walks typed payloads, not arbitrary JSON. Stopping at ArtifactRef
+// (a RunOutput counts as its content pin)
 // includes every availability and visual branch without mistaking locators or
 // selectors for identity. Scalar maps cannot contain artifact references.
 func artifactRefs(value reflect.Value, out *[]model.ArtifactRef) {
@@ -142,6 +143,10 @@ func artifactRefs(value reflect.Value, out *[]model.ArtifactRef) {
 	}
 	if value.Type() == reflect.TypeOf(model.ArtifactRef{}) {
 		*out = append(*out, value.Interface().(model.ArtifactRef))
+		return
+	}
+	if value.Type() == reflect.TypeOf(model.RunOutput{}) {
+		*out = append(*out, value.Interface().(model.RunOutput).Ref())
 		return
 	}
 	switch value.Kind() {

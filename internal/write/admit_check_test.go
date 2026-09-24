@@ -163,7 +163,7 @@ func TestRefusalNamesNoUnwrittenBundle(t *testing.T) {
 		t.Fatalf("refusal cites a bundle that was never written: %v", err)
 	}
 	task := w.f.goodControl()
-	amend := &model.TaskAmend{Provenance: task.Provenance, Target: w.f.ref(task.ID, 1), ExpectedRevision: 1, Replacement: task.Spec}
+	amend := &model.TaskAmend{Provenance: task.Provenance, Target: w.f.ref(task.ID, 1), Replacement: task.Spec}
 	w.f.accept(w.f.capture(nil, amend))
 	head = w.f.snapshot().Watermark().Sequence
 	_, err = Admit(context.Background(), w.f.project, w.f.request(w.f.capture(nil, amend)))

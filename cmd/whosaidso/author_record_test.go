@@ -18,7 +18,7 @@ func TestCLIShowAndHistoryNameTheRulingsPacketAuthor(t *testing.T) {
 	proofWrite(t, root, "rulings/decision.json", ruling)
 	scope := model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this fixture", Limitations: "not a real ledger"}
 	decision := cliID(10)
-	open := &model.DecisionOpen{ID: decision, Provenance: model.Provenance{Author: model.Actor{ID: "lane"}, SourceRefs: []model.ArtifactRef{}},
+	open := &model.DecisionOpen{ID: decision, Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.DecisionSpec{Question: "ship revision one", Options: []string{"yes", "no"}, WaitingActor: model.Actor{ID: "owner"}, Scope: scope}}
 	source := e2ePin(ruling, "rulings/decision.json", "application/json")
 	dispose := &model.DecisionDispose{Decision: model.RecordRef{Project: "test/cli", RecordID: decision, Revision: 1}, Disposition: "approved",

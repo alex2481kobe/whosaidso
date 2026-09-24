@@ -90,10 +90,7 @@ func recAuthority(context model.ID) model.Authority {
 }
 
 func recProvenance() model.Provenance {
-	return model.Provenance{
-		Author:     recActor("lane-e"),
-		SourceRefs: []model.ArtifactRef{recGit("documentation/design/research/BUILD-PLAN-DATUM.md")},
-	}
+	return model.Provenance{SourceRefs: []model.ArtifactRef{recGit("documentation/design/research/BUILD-PLAN-DATUM.md")}}
 }
 
 func recTaskSpec() model.TaskSpec {
@@ -180,7 +177,7 @@ func recEnvelope() model.InvocationEnvelope {
 		StartedAt:          recWhen,
 		ObservedAt:         recUnknown[time.Time]("the process has not run"),
 		Outcome:            recUnknown[model.ProcessOutcome]("the process has not run"),
-		OutputRefs:         recUnknown[[]model.ArtifactRef]("the process has not run"),
+		Outputs:            recUnknown[[]model.RunOutput]("the process has not run"),
 		Visual:             recUnknown[model.VisualObservation]("the process has not run"),
 	}
 }
@@ -445,14 +442,13 @@ func TestSchemaAvailabilityIsEitherAKnownValueOrAStatedUnknownReason(t *testing.
 	})
 }
 
-func TestSchemaAmendmentIsAFullReplacementCarryingItsExpectedRevision(t *testing.T) {
+func TestSchemaAmendmentIsAFullReplacementCarryingItsTargetRevision(t *testing.T) {
 	amend := recEncode(t, &model.TaskAmend{
-		Provenance:       recProvenance(),
-		Target:           recRef(recID(1), 2),
-		ExpectedRevision: 2,
-		Replacement:      recTaskSpec(),
+		Provenance:  recProvenance(),
+		Target:      recRef(recID(1), 2),
+		Replacement: recTaskSpec(),
 	})
-	recMustAccept(t, "a full task.amend replacement at its expected revision", amend)
+	recMustAccept(t, "a full task.amend replacement of its target revision", amend)
 
 	t.Run("replacement missing one authored field is a patch", func(t *testing.T) {
 		recMustRefuse(t, "task.amend replacement without spec.intent", recDrop(t, amend, "replacement.intent"))
@@ -463,15 +459,13 @@ func TestSchemaAmendmentIsAFullReplacementCarryingItsExpectedRevision(t *testing
 	t.Run("empty replacement object is a patch", func(t *testing.T) {
 		recMustRefuse(t, "task.amend with an empty replacement", recSet(t, amend, "replacement", map[string]any{}))
 	})
-	t.Run("expected revision absent", func(t *testing.T) {
-		recMustRefuse(t, "task.amend without expected_revision", recDrop(t, amend, "expected_revision"))
+	// The target names the revision replaced; a second copy of that number
+	// (expected_revision, which could disagree with it) is not a field.
+	t.Run("a separate expected revision is not a field", func(t *testing.T) {
+		recMustRefuse(t, "task.amend carrying expected_revision", recSet(t, amend, "expected_revision", json.Number("2")))
 	})
-	t.Run("expected revision zero", func(t *testing.T) {
-		recMustRefuse(t, "task.amend with expected_revision 0", recSet(t, amend, "expected_revision", json.Number("0")))
-	})
-	t.Run("expected revision disagrees with the target", func(t *testing.T) {
-		recMustRefuse(t, "task.amend expecting revision 1 while targeting revision 2",
-			recSet(t, amend, "expected_revision", json.Number("1")))
+	t.Run("target revision zero", func(t *testing.T) {
+		recMustRefuse(t, "task.amend targeting revision 0", recSet(t, amend, "target.revision", json.Number("0")))
 	})
 	t.Run("target revision absent", func(t *testing.T) {
 		recMustRefuse(t, "task.amend whose target carries no revision", recDrop(t, amend, "target.revision"))
@@ -482,15 +476,15 @@ func TestSchemaAmendmentIsAFullReplacementCarryingItsExpectedRevision(t *testing
 		event model.Event
 		path  string
 	}{
-		{"claim.revise", recEncode(t, &model.ClaimRevise{Provenance: recProvenance(), Target: recRef(recID(2), 2), ExpectedRevision: 2, Replacement: recClaimSpec()}), "replacement.falsifier"},
-		{"decision.revise", recEncode(t, &model.DecisionRevise{Provenance: recProvenance(), Target: recRef(recID(3), 2), ExpectedRevision: 2, Replacement: recDecisionSpec()}), "replacement.options"},
-		{"instrument.revise", recEncode(t, &model.InstrumentRevise{Provenance: recProvenance(), Target: recRef(recID(4), 2), ExpectedRevision: 2, Replacement: recInstrumentSpec()}), "replacement.blind_to"},
+		{"claim.revise", recEncode(t, &model.ClaimRevise{Provenance: recProvenance(), Target: recRef(recID(2), 2), Replacement: recClaimSpec()}), "replacement.falsifier"},
+		{"decision.revise", recEncode(t, &model.DecisionRevise{Provenance: recProvenance(), Target: recRef(recID(3), 2), Replacement: recDecisionSpec()}), "replacement.options"},
+		{"instrument.revise", recEncode(t, &model.InstrumentRevise{Provenance: recProvenance(), Target: recRef(recID(4), 2), Replacement: recInstrumentSpec()}), "replacement.blind_to"},
 	}
 	for _, p := range partials {
 		t.Run(p.name+" replacement missing "+p.path, func(t *testing.T) {
 			recMustAccept(t, p.name+" full replacement control", p.event)
 			recMustRefuse(t, p.name+" replacement without "+p.path, recDrop(t, p.event, p.path))
-			recMustRefuse(t, p.name+" without expected_revision", recDrop(t, p.event, "expected_revision"))
+			recMustRefuse(t, p.name+" without target.revision", recDrop(t, p.event, "target.revision"))
 		})
 	}
 }
@@ -501,7 +495,7 @@ func TestSchemaEveryReferenceThatNeedsAnExactRevisionCarriesOne(t *testing.T) {
 		event model.Event
 		path  string
 	}{
-		{"task.amend target", recEncode(t, &model.TaskAmend{Provenance: recProvenance(), Target: recRef(recID(1), 2), ExpectedRevision: 2, Replacement: recTaskSpec()}), "target"},
+		{"task.amend target", recEncode(t, &model.TaskAmend{Provenance: recProvenance(), Target: recRef(recID(1), 2), Replacement: recTaskSpec()}), "target"},
 		{"task.start task", recEncode(t, recStart()), "task"},
 		{"criterion.fix claim", recEncode(t, recCriterionFix()), "claim"},
 		{"proof.admit claim", recEncode(t, recProof()), "claim"},

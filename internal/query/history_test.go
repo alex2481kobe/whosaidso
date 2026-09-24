@@ -20,7 +20,7 @@ func TestHistoryPreservesRevisionsOrderSourcesAndIncomingReferences(t *testing.T
 	dependent := testTask(2)
 	dependent.Spec.Prerequisites = []model.Prerequisite{{Kind: "task-success", Target: testRef(1, 1), WaiverPolicy: "forbid"}}
 	appendEvents(t, p, 101,
-		&model.TaskAmend{Target: testRef(1, 1), ExpectedRevision: 1, Replacement: spec, Provenance: testTask(1).Provenance},
+		&model.TaskAmend{Target: testRef(1, 1), Replacement: spec, Provenance: testTask(1).Provenance},
 		&model.SourceIntake{SourceID: testID(50), SourceRef: testArtifact(), OriginalDigest: testArtifact().Content.SHA256,
 			Length: 3, Speaker: model.Actor{UnknownReason: "speaker was not identified"}, Referents: []model.RecordRef{testRef(1, 1)}},
 		dependent, testTask(3),

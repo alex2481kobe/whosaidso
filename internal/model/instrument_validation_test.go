@@ -19,7 +19,7 @@ func TestInstrumentUnknownValidationSchemaOnDeclareAndRevise(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			makeEvent := func(spec InstrumentSpec) TypedEvent {
 				if revision {
-					return &InstrumentRevise{Target: schemaRef(1), ExpectedRevision: 1, Provenance: schemaProvenance(), Replacement: spec}
+					return &InstrumentRevise{Target: schemaRef(1), Provenance: schemaProvenance(), Replacement: spec}
 				}
 				return &InstrumentDeclare{ID: schemaID(1), Provenance: schemaProvenance(), Spec: spec}
 			}

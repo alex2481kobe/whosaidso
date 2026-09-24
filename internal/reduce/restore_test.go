@@ -28,19 +28,19 @@ func restoreFixtures(t *testing.T) map[string][]model.Bundle {
 	// Amendments, holds, clearances and a takeover over the golden tasks.
 	tasks := goldenLedger(t)
 	tskb, tskc, tskd := ref(newID("TSKB"), 1), ref(newID("TSKC"), 1), ref(newID("TSKD"), 1)
-	tasks.add(t, &model.TaskAmend{Provenance: provenance("lane-b"), Target: tskb, ExpectedRevision: 1, Replacement: taskSpec(withIntent("amended"))})
+	tasks.add(t, &model.TaskAmend{Provenance: provenance("lane-b"), Target: tskb, Replacement: taskSpec(withIntent("amended"))})
 	tasks.add(t, &model.BlockerHold{Task: tskd, BlockerID: newID("HDD1"), Reason: model.BlockerPrerequisite, Actor: model.Actor{ID: "owner"}, Criterion: "the owner rules"})
 	tasks.add(t, &model.BlockerClear{Task: tskd, BlockerID: newID("HDD1"), HoldRef: model.BlockerRef{Task: tskd, BlockerID: newID("HDD1")}, ResolvingWitness: blobRef("ruling")})
 	tasks.add(t, &model.TaskTakeover{Task: tskc, Actor: model.Actor{ID: "lane-b"}, AttemptID: newID("ATTX"), PriorAttemptID: newID("ATTC"), StoppedConfirmationRef: blobRef("stopped")})
 	// Revisions of a proven claim, a decision and an instrument.
 	proof := proofLedger(t, true)
-	proof.add(t, &model.ClaimRevise{Target: ref(newID("CMA1"), 1), ExpectedRevision: 1, Provenance: provenance("lane-a"), Replacement: claimSpec()})
+	proof.add(t, &model.ClaimRevise{Target: ref(newID("CMA1"), 1), Provenance: provenance("lane-a"), Replacement: claimSpec()})
 	proof.add(t, &model.DecisionOpen{ID: newID("DCSA"), Provenance: provenance("author"), Spec: decisionSpec()})
-	proof.add(t, &model.DecisionRevise{Target: ref(newID("DCSA"), 1), ExpectedRevision: 1, Replacement: decisionSpec(), Provenance: provenance("author")})
+	proof.add(t, &model.DecisionRevise{Target: ref(newID("DCSA"), 1), Replacement: decisionSpec(), Provenance: provenance("author")})
 	config := configLedger(t)
 	instrument := proofInstrument()
 	instrument.ConfigSurface = []string{"samples", "mode"}
-	config.add(t, &model.InstrumentRevise{Target: ref(newID("HNSS"), 1), ExpectedRevision: 1, Provenance: provenance("lane-a"), Replacement: instrument})
+	config.add(t, &model.InstrumentRevise{Target: ref(newID("HNSS"), 1), Provenance: provenance("lane-a"), Replacement: instrument})
 	// Sub-second ledger times, so a codec that rounds them cannot pass.
 	for i := range tasks.out {
 		tasks.out[i].RecordedAt = tasks.out[i].RecordedAt.Add(time.Duration(i+1) * 123457 * time.Nanosecond)
@@ -123,7 +123,7 @@ func TestRestoreAtEverySplitEqualsReplay(t *testing.T) {
 
 // The golden ledger's image is pinned. A change that moves it must also move
 // snapshotFormat or the state's types, so older images are refused.
-const goldenImageSHA256 = "717a35d6b45956491e71f6a125ffb905bc48d995e1da4921ac152d6f80ed0f69"
+const goldenImageSHA256 = "11a29527615df474ffac5c1eaa127be4c9cafb74c39fb36aea974ce87f3ba509"
 
 func TestGoldenImageIsPinned(t *testing.T) {
 	image := mustEncode(t, mustReplay(t, goldenLedger(t).bundles()))

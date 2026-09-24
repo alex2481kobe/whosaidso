@@ -25,7 +25,7 @@ func completedObservation(inv Invocation, claim model.RecordRef) bool {
 	}
 	seal := inv.Seal
 	return seal.ObservedAt.State == model.Known && seal.Outcome.State == model.Known && seal.Outcome.Value != nil &&
-		seal.Outcome.Value.Kind != "spawn-failed" && seal.OutputRefs.State == model.Known && seal.OutputRefs.Value != nil && len(*seal.OutputRefs.Value) > 0
+		seal.Outcome.Value.Kind != "spawn-failed" && seal.Outputs.State == model.Known && seal.Outputs.Value != nil && len(*seal.Outputs.Value) > 0
 }
 
 func (s *state) requireKind(b model.Bundle, idx int, ref model.RecordRef, kind model.Kind, path string) error {

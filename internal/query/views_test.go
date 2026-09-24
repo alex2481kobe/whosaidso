@@ -36,7 +36,7 @@ func viewsWorld(t *testing.T, p store.Project) {
 	decision.Scope.ContextRefs = []model.RecordRef{testRef(11, 1), testRef(10, 1), {Project: "datum/elsewhere", RecordID: testID(777), Revision: 1}}
 	amended := testTask(1).Spec
 	amended.ContextRefs = []model.RecordRef{testRef(21, 1), testRef(22, 1)}
-	appendEvents(t, p, 119, admitted(119, &model.TaskAmend{Target: testRef(1, 1), ExpectedRevision: 1, Replacement: amended,
+	appendEvents(t, p, 119, admitted(119, &model.TaskAmend{Target: testRef(1, 1), Replacement: amended,
 		Provenance: testTask(1).Provenance})...)
 	appendEvents(t, p, 120, admitted(120, five, testTask(6), testTask(14), testTask(15), plan, nine,
 		&model.DecisionOpen{ID: testID(33), Provenance: prov("lane-c"), Spec: decision})...)

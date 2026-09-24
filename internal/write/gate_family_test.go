@@ -123,7 +123,7 @@ func TestInstrumentKnownValidationMustResolve(t *testing.T) {
 					replacement.Validation = proofKnown(model.InstrumentValidation{Ref: proofPin(`{"validated":"never written"}`, "validation/missing.json"), Version: "v2"})
 					code = "unavailable"
 				}
-				events = []model.TypedEvent{&model.InstrumentRevise{Provenance: instrument.Provenance, Target: f.ref(instrument.ID, 1), ExpectedRevision: 1, Replacement: replacement}}
+				events = []model.TypedEvent{&model.InstrumentRevise{Provenance: instrument.Provenance, Target: f.ref(instrument.ID, 1), Replacement: replacement}}
 			} else {
 				instrument.Spec.Validation = known
 			}
@@ -196,30 +196,24 @@ func TestNewOperationsCannotEscapeRootThroughSymlink(t *testing.T) {
 				env := w.envelope(w.criterion)
 				f.accept(f.capture(nil, &model.InvocationStart{Envelope: env}))
 				seal := proofSealed(env, proofPass)
-				// R9 migration: a run output is declared only in the run's own directory.
-				runPath := evidence.RunDir(env.InvocationID) + "/escape.json"
-				if err := os.MkdirAll(filepath.Join(f.project.Root, filepath.FromSlash(evidence.RunDir(env.InvocationID))), 0700); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.Symlink(filepath.Join(outside, "secret.json"), filepath.Join(f.project.Root, filepath.FromSlash(runPath))); err != nil {
-					t.Fatal(err)
-				}
-				seal.Envelope.OutputRefs = proofKnown([]model.ArtifactRef{proofPin(body, runPath)})
+				// An output's name is not a path: named like the symlink, its
+				// bytes must still be in the seal's own packet, and they are not.
+				seal.Envelope.Outputs = proofKnown([]model.RunOutput{proofOutput(body, "escape.json")})
 				event = seal
 			case "claim.revise":
 				claim := f.claim()
 				claim.Provenance.SourceRefs = []model.ArtifactRef{pin}
-				event = &model.ClaimRevise{Provenance: claim.Provenance, Target: w.claim, ExpectedRevision: 1, Replacement: claim.Spec}
+				event = &model.ClaimRevise{Provenance: claim.Provenance, Target: w.claim, Replacement: claim.Spec}
 			case "instrument.revise":
 				spec := f.instrument().Spec
 				spec.Validation = proofKnown(model.InstrumentValidation{Ref: pin, Version: "v2"})
-				event = &model.InstrumentRevise{Provenance: model.Provenance{Author: f.author, SourceRefs: []model.ArtifactRef{}}, Target: w.instrument, ExpectedRevision: 1, Replacement: spec}
+				event = &model.InstrumentRevise{Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Target: w.instrument, Replacement: spec}
 			}
 			before := f.snapshot().Watermark()
 			_, err := Admit(context.Background(), f.project, f.request(f.capture([][]byte{[]byte("instrument implementation")}, event)))
-			// The invariant is the refusal; run outputs are refused by the run-output
-			// reader ("without symlinks"), every other door by the resolver.
-			if admissionErrorCode(err) != "unavailable" || !(strings.Contains(err.Error(), "resolved outside the root") || strings.Contains(err.Error(), "without symlinks")) {
+			// The invariant is the refusal; run outputs are refused because their
+			// bytes are not in their own packet, every other door by the resolver.
+			if admissionErrorCode(err) != "unavailable" || !(strings.Contains(err.Error(), "resolved outside the root") || strings.Contains(err.Error(), "not in its own packet's captured blobs")) {
 				t.Fatalf("%s followed a symlink out of the root: %v", door, err)
 			}
 			if f.snapshot().Watermark() != before {
@@ -253,8 +247,8 @@ func TestProofRefusesIncomparableOrUnreadableSupport(t *testing.T) {
 				seed := json.Number("8")
 				seal.Envelope.ConditionsObserved = proofKnown(map[string]model.Availability[model.Scalar]{"seed": proofKnown(model.Scalar{Type: "number", Number: &seed})})
 			} else {
-				// The output exists but not at the criterion's declared path: UNKNOWN, not TRUE.
-				seal.Envelope.OutputRefs = proofKnown([]model.ArtifactRef{proofPin(proofPass, evidence.RunDir(env.InvocationID)+"/elsewhere/result.json")})
+				// The output exists but not under the criterion's output name: UNKNOWN, not TRUE.
+				seal.Envelope.Outputs = proofKnown([]model.RunOutput{proofOutput(proofPass, "elsewhere/result.json")})
 			}
 			second := model.InvocationRef{Project: w.f.project.ID, InvocationID: env.InvocationID}
 			w.f.accept(s1, e1, w.f.capture(nil, &model.InvocationStart{Envelope: env}), w.f.capture([][]byte{[]byte(proofPass)}, seal))

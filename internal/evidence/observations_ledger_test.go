@@ -1,10 +1,10 @@
 package evidence
 
-// Run outputs as stored: WhoSaidSo's own committed runs, recorded before outputs
-// were published only once, resolve from the content store now that their
-// duplicate run-dir copies are deleted (R18.2 migration); and admission's held run-output
-// bytes are verified without a second read. Observation semantics over
-// synthetic runs are in observations_test.go and run_dir_test.go.
+// Run outputs as stored: WhoSaidSo's own committed runs name each output inside
+// its run and pin its bytes, which the content store holds by digest; and
+// admission's held run-output bytes are verified without a second read.
+// Observation semantics over synthetic runs are in observations_test.go and
+// output_name_test.go.
 
 import (
 	"context"
@@ -16,23 +16,21 @@ import (
 )
 
 // ownLedgerPrefix is the fixed committed prefix this test is about. Bundles
-// 15-17, 23-25 and 35-37 admitted runs whose outputs were committed twice: in
-// .datum/artifacts/runs/<invocation>/ and by digest.
+// 9, 15-17, 23-25 and 35-37 admitted runs with their stdout and stderr.
 const ownLedgerPrefix = 43
 
-// .datum/artifacts/runs/ was deleted by the R18.2 migration, so every output of
-// every sealed run in that prefix resolves as authored from the content store,
-// with the same bytes as a store-only reference.
+// Every output of every sealed run in that prefix resolves from the content
+// store by its digest alone: no recorded path takes part.
 func TestOwnLedgerRunOutputsResolveFromTheStoreAlone(t *testing.T) {
 	root, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)
 	}
-	paths, err := filepath.Glob(filepath.Join(root, ".datum", "events", "*.json"))
+	paths, err := filepath.Glob(filepath.Join(root, ".whosaidso", "events", "*.json"))
 	if err != nil || len(paths) < ownLedgerPrefix {
 		t.Fatalf("committed history missing: %d bundles, %v", len(paths), err)
 	}
-	r := NewResolverAt(root, ".datum/artifacts") // this repository's store; see whosaidso.toml
+	r := NewResolverAt(root, ".whosaidso/artifacts") // this repository's store; see whosaidso.toml
 	seals, outputs := 0, 0
 	for _, path := range paths {
 		data, err := os.ReadFile(path)
@@ -52,37 +50,21 @@ func TestOwnLedgerRunOutputsResolveFromTheStoreAlone(t *testing.T) {
 				t.Fatal(err)
 			}
 			seal, ok := event.(*model.InvocationSeal)
-			if !ok || seal.Envelope.OutputRefs.Value == nil {
+			if !ok || seal.Envelope.Outputs.Value == nil {
 				continue
 			}
 			seals++
-			for _, ref := range *seal.Envelope.OutputRefs.Value {
+			for _, out := range *seal.Envelope.Outputs.Value {
 				outputs++
-				for _, at := range ref.Content.Locators {
-					if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(at.Path))); !os.IsNotExist(err) {
-						t.Fatalf("control: bundle %d run-dir copy %s must be deleted: %v", bundle.Sequence, at.Path, err)
-					}
-				}
-				authored, err := r.Resolve(context.Background(), ref)
-				if err != nil || authored.Origin != OriginArtifactStore {
-					t.Fatalf("bundle %d output %v does not resolve as authored from the content store: origin %q, %v", bundle.Sequence, ref.Content.Locators, authored.Origin, err)
-				}
-				storeOnly := ref
-				pin := *ref.Content
-				pin.Locators = []model.Locator{}
-				storeOnly.Content = &pin
-				stored, err := r.Resolve(context.Background(), storeOnly)
-				if err != nil || stored.Origin != OriginArtifactStore {
-					t.Fatalf("bundle %d output %v must resolve from the content store alone: origin %q, %v", bundle.Sequence, ref.Content.Locators, stored.Origin, err)
-				}
-				if string(stored.Bytes) != string(authored.Bytes) {
-					t.Fatalf("bundle %d output %v: authored and store-only readings differ", bundle.Sequence, ref.Content.Locators)
+				got, err := r.Resolve(context.Background(), out.Ref())
+				if err != nil || got.Origin != OriginArtifactStore || got.SHA256 != out.SHA256 {
+					t.Fatalf("bundle %d output %s does not resolve from the content store: origin %q, %v", bundle.Sequence, out.Name, got.Origin, err)
 				}
 			}
 		}
 	}
-	if seals < 9 || outputs < 2*seals {
-		t.Fatalf("expected the nine committed runs and their streams, found %d seals with %d outputs", seals, outputs)
+	if seals < 10 || outputs < 2*seals {
+		t.Fatalf("expected the ten committed runs and their streams, found %d seals with %d outputs", seals, outputs)
 	}
 }
 
@@ -90,36 +72,32 @@ func TestOwnLedgerRunOutputsResolveFromTheStoreAlone(t *testing.T) {
 // would apply, and never reaches for another copy on disk.
 func TestRunOutputVerifiesHeldBytesOnly(t *testing.T) {
 	root := t.TempDir()
-	at := RunDir(invocationA) + "/out/result.json"
 	body := `{"actual":8}`
+	out := runOutput("out/result.json", body, "application/json")
 	r := NewResolver(root)
-	got, err := r.RunOutput(contentRef(body, "application/json", []string{at}, "whole", ""), []byte(body))
-	if err != nil || got.Origin != OriginRunOutput || string(got.Bytes) != body || got.DeclaredPath != at {
+	got, err := r.RunOutput(out, []byte(body))
+	if err != nil || got.Origin != OriginRunOutput || string(got.Bytes) != body || got.DeclaredPath != out.Name {
 		t.Fatalf("control: %+v, %v", got, err)
 	}
-	// A matching file on disk cannot stand in for the held bytes.
-	writeFile(t, root, at, body)
+	// A matching copy in the store cannot stand in for the held bytes.
+	writeFile(t, root, storeCopy(body), body)
 	lfs := "version https://git-lfs.github.com/spec/v1\noid sha256:" + string(model.HashBytes([]byte(body))) + "\nsize 12\n"
-	gitPinned := contentRef(body, "application/json", []string{at}, "whole", "")
-	gitPinned.Git = &model.GitPin{ObjectFormat: "sha1", Commit: "0123456789abcdef0123456789abcdef01234567", Path: at}
 	small := NewResolver(root)
 	small.MaxBytes = 4
 	for _, tc := range []struct {
 		name string
 		r    *Resolver
-		ref  model.ArtifactRef
+		out  model.RunOutput
 		held string
 		code string
 	}{
-		{"held bytes differ from the pin", r, contentRef(body, "application/json", []string{at}, "whole", ""), `{"actual":9}`, "conflict"},
-		{"held bytes fail the media-type check", r, contentRef("not json", "application/json", []string{at}, "whole", ""), "not json", "conflict"},
-		{"held bytes are an LFS pointer", r, contentRef(lfs, "text/plain", []string{at}, "whole", ""), lfs, "unavailable"},
-		{"held bytes exceed the byte limit", small, contentRef(body, "application/json", []string{at}, "whole", ""), body, "unavailable"},
-		{"a git-pinned output needs corroboration", r, gitPinned, body, "invalid-field"},
-		{"an escaping locator", r, contentRef(body, "application/json", []string{"../" + at}, "whole", ""), body, "invalid-field"},
+		{"held bytes differ from the pin", r, out, `{"actual":9}`, "conflict"},
+		{"held bytes fail the media-type check", r, runOutput("out/result.json", "not json", "application/json"), "not json", "conflict"},
+		{"held bytes are an LFS pointer", r, runOutput("out/result.json", lfs, "text/plain"), lfs, "unavailable"},
+		{"held bytes exceed the byte limit", small, out, body, "unavailable"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := tc.r.RunOutput(tc.ref, []byte(tc.held))
+			_, err := tc.r.RunOutput(tc.out, []byte(tc.held))
 			if code := faultCode(err); code != tc.code {
 				t.Fatalf("want %s, got %v", tc.code, err)
 			}

@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path"
 	"sort"
 	"strings"
 
@@ -43,10 +42,13 @@ type Observation struct {
 // Observe reads the frozen criterion's selectors out of the artifact THIS
 // invocation produced.
 //
-// The criterion is fixed before the run, so its selector pins an artifact that
-// states where a result lives. The bytes read are always the run's own output,
-// matched by the declared path: reading a criterion's pinned example and calling
-// it this run's result would report a number no instrument produced here.
+// The criterion is fixed before the run, so its selector pins an example and
+// names the output a result lives in. The bytes read are always the run's own
+// output, matched by name among the outputs this invocation's seal lists and
+// fetched by that output's digest: reading a criterion's pinned example and
+// calling it this run's result would report a number no instrument produced
+// here. Seal admission proved each listed output's bytes were in the run's own
+// packet, so a same-digest copy in the store is those bytes.
 func (r *Resolver) Observe(ctx context.Context, c model.CriterionFix, env model.InvocationEnvelope) (Observation, error) {
 	if err := model.ValidateSchema(c); err != nil {
 		return Observation{}, err
@@ -61,19 +63,18 @@ func (r *Resolver) Observe(ctx context.Context, c model.CriterionFix, env model.
 		ConditionsObserved: env.ConditionsObserved,
 		Visual:             env.Visual,
 	}
-	if env.OutputRefs.State != model.Known || env.OutputRefs.Value == nil {
-		o.Unavailable = "the invocation reports no observed outputs: " + env.OutputRefs.Reason
+	if env.Outputs.State != model.Known || env.Outputs.Value == nil {
+		o.Unavailable = "the invocation reports no observed outputs: " + env.Outputs.Reason
 		return o, nil
 	}
-	outs := *env.OutputRefs.Value
+	outs := *env.Outputs.Value
 	for _, out := range outs {
-		if out.Content != nil && strings.HasPrefix(out.Content.MediaType, "image/") {
+		if strings.HasPrefix(out.MediaType, "image/") {
 			o.ImageOutput = true
 		}
 	}
-	runDir := RunDirIn(r.artifactDir(), env.InvocationID)
 
-	result, why, err := r.readSelector(ctx, outs, runDir, c.Expression.ResultSelector)
+	result, why, err := r.readSelector(ctx, outs, c.Expression.ResultSelector)
 	if err != nil {
 		return Observation{}, err
 	}
@@ -83,7 +84,7 @@ func (r *Resolver) Observe(ctx context.Context, c model.CriterionFix, env model.
 	}
 	o.Result = result
 
-	population, why, err := r.readSelector(ctx, outs, runDir, c.Expression.Population.Selector)
+	population, why, err := r.readSelector(ctx, outs, c.Expression.Population.Selector)
 	if err != nil {
 		return Observation{}, err
 	}
@@ -98,27 +99,16 @@ func (r *Resolver) Observe(ctx context.Context, c model.CriterionFix, env model.
 // readSelector finds the output this selector names and reads it. A missing or
 // unreadable artifact comes back as a reason, not an error, because the family
 // still has to be evaluated with that observation counted and refused.
-func (r *Resolver) readSelector(ctx context.Context, outs []model.ArtifactRef, runDir string, want model.ArtifactRef) (Reading, string, error) {
-	match, at, why := matchOutput(outs, runDir, want)
+func (r *Resolver) readSelector(ctx context.Context, outs []model.RunOutput, want model.ArtifactRef) (Reading, string, error) {
+	match, why := matchOutput(outs, want)
 	if why != "" {
 		return Reading{}, why, nil
 	}
 	// The pin comes from the run's own output. The pointer comes from the
 	// frozen criterion. That is what keeps a late edit to the criterion from
 	// silently re-aiming at different bytes.
-	ref := match
+	ref := match.Ref()
 	ref.Selector = want.Selector
-	if ref.Content != nil {
-		// Only the matched run-dir path, then the store. Seal admission proved
-		// these bytes were this run's output (its captured blobs or its run
-		// directory) and published them, so the store holds THIS run's admitted
-		// bytes under their digest. The run-dir path is the output's logical
-		// name: whosaidso run stages outside the project and never writes there, so
-		// the store copy is the only one. Older runs and hand-placed outputs
-		// may still have bytes at the path, and they are read there first.
-		pin := *ref.Content
-		pin.Locators, ref.Content = []model.Locator{{Path: at}}, &pin
-	}
 	resolved, err := r.Resolve(ctx, ref)
 	if err != nil {
 		if code := faultCode(err); code == "unavailable" || code == "io" {
@@ -133,42 +123,17 @@ func (r *Resolver) readSelector(ctx context.Context, outs []model.ArtifactRef, r
 	return reading, "", nil
 }
 
-// RunDir is the project-relative run directory that names one invocation's
-// outputs in the default artifact store. Production names the project's store: RunDirIn.
-func RunDir(invocation model.ID) string {
-	return RunDirIn(DefaultArtifactDir, invocation)
-}
-
-// RunDirIn is the project-relative run directory that names one invocation's
-// outputs, inside the project-relative artifact store artifactDir. It is a
-// logical name that binds an output to its invocation (R9), independent of
-// where the bytes physically are: write.Run stages outside the project and
-// admission publishes by digest.
-func RunDirIn(artifactDir string, invocation model.ID) string {
-	return path.Join(artifactDir, "runs", string(invocation))
-}
-
 // OriginRunOutput marks bytes admission already holds as one invocation's own
-// output (its captured blob or its run directory) and verified in memory.
+// output (its captured blob) and verified in memory.
 const OriginRunOutput Origin = "run-output"
 
 // RunOutput verifies bytes admission proved to be this invocation's own output
-// against that output's reference, applying the checks readContent applies to
-// bytes it reads: declared path syntax, the byte limit, the pin's digest and
-// length, the LFS-pointer refusal and the media-type check. It reads nothing,
-// so the bytes cannot be swapped for a same-digest copy found elsewhere, and
-// admission publishes exactly what it proved. A run output is content-pinned
-// only; one that also carries a git pin must go through Resolve to corroborate it.
-func (r *Resolver) RunOutput(ref model.ArtifactRef, b []byte) (ResolvedArtifact, error) {
-	if err := model.ValidateArtifactRef(ref, "artifact"); err != nil {
-		return ResolvedArtifact{}, err
-	}
-	if err := r.checkPaths(ref); err != nil {
-		return ResolvedArtifact{}, err
-	}
-	if ref.Content == nil || ref.Git != nil || len(ref.Content.Locators) == 0 {
-		return ResolvedArtifact{}, fault("invalid-field", "artifact", "a run output is a content pin with a locator and no git pin")
-	}
+// against that output's pin, applying the checks readContent applies to bytes
+// it reads: the byte limit, the digest and length, the LFS-pointer refusal and
+// the media-type check. It reads nothing, so the bytes cannot be swapped for a
+// same-digest copy found elsewhere, and admission publishes exactly what it proved.
+func (r *Resolver) RunOutput(out model.RunOutput, b []byte) (ResolvedArtifact, error) {
+	ref := out.Ref()
 	if int64(len(b)) > r.maxBytes() {
 		return ResolvedArtifact{}, fault("unavailable", "artifact.content", "the run output exceeds the resolver byte limit")
 	}
@@ -179,60 +144,51 @@ func (r *Resolver) RunOutput(ref model.ArtifactRef, b []byte) (ResolvedArtifact,
 		return ResolvedArtifact{}, fault("unavailable", "artifact.content",
 			"the content pin names an LFS pointer, not its payload. The payload needs a content pin naming oid "+ptr.oid)
 	}
-	if err := checkMediaType(b, ref.Content.MediaType); err != nil {
+	if err := checkMediaType(b, out.MediaType); err != nil {
 		return ResolvedArtifact{}, err
 	}
-	return ResolvedArtifact{Ref: ref, Bytes: b, SHA256: ref.Content.SHA256, Length: ref.Content.Length,
-		MediaType: ref.Content.MediaType, Origin: OriginRunOutput, DeclaredPath: ref.Content.Locators[0].Path}, nil
+	return ResolvedArtifact{Ref: ref, Bytes: b, SHA256: out.SHA256, Length: out.Length,
+		MediaType: out.MediaType, Origin: OriginRunOutput, DeclaredPath: out.Name}, nil
 }
 
-// matchOutput pairs a criterion selector with an output by the path each
-// declares. R8.3/R9: the contract path resolves in THIS run's own directory, so
-// out/result.json names runs/<this-id>/out/result.json and never another run's
-// file; a contract path that would leave that directory names nothing there.
-// That is the ONLY form: an output declared at the bare contract path names a
-// file any run, or the criterion's own example, could have put there. Ambiguity
-// is refused rather than resolved by position, since which of two same-path
-// outputs was meant is not something order can answer. A path not in canonical
-// form names nothing: refused, not normalized, so no spelling can reach another
-// run's directory. It returns the matched path.
-func matchOutput(outs []model.ArtifactRef, runDir string, want model.ArtifactRef) (model.ArtifactRef, string, string) {
+// matchOutput pairs a criterion selector with the run output it names. R8.3/R9:
+// each path the selector declares is an output name inside THIS invocation, so
+// out/result.json names this run's out/result.json and never another run's
+// file or the criterion's own example. A declared path that is not a valid
+// output name names nothing: refused, not normalized, so no spelling reaches a
+// different output. Ambiguity is refused rather than resolved by position,
+// since which of two named outputs was meant is not something order can answer.
+func matchOutput(outs []model.RunOutput, want model.ArtifactRef) (model.RunOutput, string) {
 	wanted := map[string]bool{}
 	var odd []string
 	for _, p := range declaredPaths(want) {
-		if path.Clean(p) != p {
+		if model.RunOutputName(p, "selector") != nil {
 			odd = append(odd, p)
 			continue
 		}
-		if joined := path.Join(runDir, p); strings.HasPrefix(joined, runDir+"/") {
-			wanted[joined] = true
-		}
+		wanted[p] = true
 	}
 	if len(wanted) == 0 {
-		return model.ArtifactRef{}, "", "the criterion selector declares no canonical path to match an output against " + strings.Join(odd, ", ")
+		return model.RunOutput{}, "the criterion selector declares no canonical output name to match " + strings.Join(odd, ", ")
 	}
-	var hits []model.ArtifactRef
-	var at string
+	var hits []model.RunOutput
 	for _, out := range outs {
-		for _, p := range declaredPaths(out) {
-			if wanted[p] {
-				hits, at = append(hits, out), p
-				break
-			}
+		if wanted[out.Name] {
+			hits = append(hits, out)
 		}
 	}
 	switch len(hits) {
 	case 1:
-		return hits[0], at, ""
+		return hits[0], ""
 	case 0:
-		paths := make([]string, 0, len(wanted))
+		names := make([]string, 0, len(wanted))
 		for p := range wanted {
-			paths = append(paths, p)
+			names = append(names, p)
 		}
-		sort.Strings(paths)
-		return model.ArtifactRef{}, "", "no output of this invocation declares " + strings.Join(paths, " or ")
+		sort.Strings(names)
+		return model.RunOutput{}, "no output of this invocation is named " + strings.Join(names, " or ")
 	default:
-		return model.ArtifactRef{}, "", fmt.Sprintf("%d outputs declare the selected path", len(hits))
+		return model.RunOutput{}, fmt.Sprintf("%d outputs of this invocation are named by the selector", len(hits))
 	}
 }
 

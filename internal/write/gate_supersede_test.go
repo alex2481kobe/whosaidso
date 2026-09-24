@@ -74,7 +74,7 @@ func TestSupersedeRefusesTwiceAndCycles(t *testing.T) {
 func TestSupersedeOfAnOwnerRulingNeedsItsAuthority(t *testing.T) {
 	w := newDisposeWorld(t)
 	prior := w.f.ref(w.id, 1)
-	open := &model.DecisionOpen{ID: w.f.id(), Provenance: model.Provenance{Author: w.f.author, SourceRefs: []model.ArtifactRef{}},
+	open := &model.DecisionOpen{ID: w.f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.DecisionSpec{Question: "ship revision two", Options: []string{"yes", "no"}, WaitingActor: model.Actor{ID: "owner"}, Scope: w.scope}}
 	w.f.accept(w.f.capture(nil, open))
 	replacement := w.f.ref(open.ID, 1)

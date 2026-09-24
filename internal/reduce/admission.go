@@ -118,18 +118,18 @@ func (s *state) checkExpectations(b model.Bundle, idx int, e model.TypedEvent) e
 	var expected model.Revision
 	var path string
 	switch t := e.(type) {
+	// A replacement names the revision it replaces as its target.
 	case *model.TaskAmend:
-		target, expected, path = t.Target, t.ExpectedRevision, "target"
+		target, expected, path = t.Target, t.Target.Revision, "target"
 	case *model.ClaimRevise:
-		target, expected, path = t.Target, t.ExpectedRevision, "target"
+		target, expected, path = t.Target, t.Target.Revision, "target"
 	case *model.DecisionRevise:
-		target, expected, path = t.Target, t.ExpectedRevision, "target"
+		target, expected, path = t.Target, t.Target.Revision, "target"
 	case *model.InstrumentRevise:
-		target, expected, path = t.Target, t.ExpectedRevision, "target"
+		target, expected, path = t.Target, t.Target.Revision, "target"
 
-	// These name the task revision the writer acted on. It is an expected
-	// revision under another name: acting on a superseded contract is exactly
-	// the stale write the conflict exists to stop.
+	// These name the task revision the writer acted on: acting on a
+	// superseded contract is exactly the stale write the conflict exists to stop.
 	case *model.TaskStart:
 		target, expected, path = t.Task, t.Task.Revision, "task"
 	case *model.TaskTakeover:

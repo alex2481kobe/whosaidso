@@ -35,7 +35,7 @@ func e2eRuling(t *testing.T, root, path, body string) model.Authority {
 func TestCLISupersededRecordStaysInShowAndHistory(t *testing.T) {
 	root, _ := cliFixture(t)
 	authority := e2eRuling(t, root, "rulings/supersede.json", `{"ruling":"the second question replaces the first"}`)
-	lane := model.Provenance{Author: model.Actor{ID: "lane"}, SourceRefs: []model.ArtifactRef{}}
+	lane := model.Provenance{SourceRefs: []model.ArtifactRef{}}
 	open := func(id int, question string) *model.DecisionOpen {
 		return &model.DecisionOpen{ID: cliID(id), Provenance: lane, Spec: model.DecisionSpec{Question: question, Options: []string{"yes", "no"}, WaitingActor: model.Actor{ID: "owner"}, Scope: authority.Scope}}
 	}
@@ -102,12 +102,12 @@ func TestCLIDisposedArtifactLeavesItsProofUnverifiable(t *testing.T) {
 		t.Fatal(err)
 	}
 	var output model.ArtifactRef
-	for _, ref := range *run.Envelope.OutputRefs.Value {
-		if strings.HasSuffix(ref.Content.Locators[0].Path, "/out/result.json") {
-			output = ref
+	for _, out := range *run.Envelope.Outputs.Value {
+		if out.Name == "out/result.json" {
+			output = out.Ref()
 		}
 	}
-	dispose := &model.ArtifactDispose{Artifact: output, Digest: output.Content.SHA256, PreviousLocation: output.Content.Locators[0].Path,
+	dispose := &model.ArtifactDispose{Artifact: output, Digest: output.Content.SHA256, PreviousLocation: ".whosaidso/artifacts/" + string(output.Content.SHA256),
 		SupportLoss: []model.SupportLoss{{Target: criterion.Claim, Reason: "its only supporting run output is deleted"}},
 		Authority:   e2eRuling(t, root, "rulings/dispose.json", `{"ruling":"delete that run output"}`)}
 	if err := e2eAdmitOne(t, root, dispose, 903, 904, "agent-sol"); err != nil {

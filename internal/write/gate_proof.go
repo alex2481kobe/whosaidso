@@ -18,51 +18,47 @@ import (
 	"whosaidso/internal/store"
 )
 
-func gateProofOperation(event model.TypedEvent, author model.Actor) (*model.Provenance, error) {
+func gateProofOperation(event model.TypedEvent, author model.Actor) error {
 	switch e := event.(type) {
-	case *model.ClaimRevise:
-		return &e.Provenance, nil
-	case *model.DecisionOpen:
-		return &e.Provenance, nil
-	case *model.DecisionRevise:
-		return &e.Provenance, nil
+	case *model.ClaimRevise, *model.DecisionOpen, *model.DecisionRevise:
+		return nil
 	case *model.DecisionDispose:
 		// R10.1 as overruled: an agent writes the packet that records a ruling.
 		// The packet author stays whoever wrote it and is never checked against
 		// or replaced by the authority; author, authority and the exact quote
 		// (nonblank by schema) are all recorded: visible, not blocked.
 		if model.Blank(e.Authority.Actor.ID) {
-			return nil, admissionFault("authority-unavailable", "authority.actor", "a disposition must name the authority that ruled")
+			return admissionFault("authority-unavailable", "authority.actor", "a disposition must name the authority that ruled")
 		}
-		return nil, nil
+		return nil
 	case *model.Supersede, *model.ArtifactDispose:
-		return nil, gateOwnerActOperation(event)
+		return gateOwnerActOperation(event)
 	case *model.TaskClose:
 		// R15.1: no authority carrier is required. The accepter, when the task
 		// names one, is checked by the reducer against the packet author; a
 		// cited authority is still checked against its carrier in
 		// gateCloseAuthority; whether the closure takes effect, after replay.
-		return nil, nil
+		return nil
 	case *model.InstrumentRevise:
-		return &e.Provenance, gateValidation(e.Replacement.Validation)
+		return gateValidation(e.Replacement.Validation)
 	case *model.InvocationSeal:
-		return nil, gateReconciliation(e.Envelope, author)
+		return gateReconciliation(e.Envelope, author)
 	case *model.TrustWithdraw, *model.Correction, *model.InvocationStart:
 		// Withdrawal and correction only remove support, attributed to the
 		// packet author in the review. Invocation facts are checked by the
 		// reducer, including criterion freezing, and by artifact resolution.
-		return nil, nil
+		return nil
 	case *model.ProofAdmit:
 		// The verdict (R14.1) is required by the event schema. The judgment
 		// must be the identified packet author: see CriterionFix.
-		return nil, nil
+		return nil
 	case *model.CriterionFix:
 		// The criterion author and the proof judgment must be the identified
 		// packet author. The reducer checks that from the review's recorded
 		// authors, on admission and replay alike (reduce/packet_author.go).
-		return nil, nil
+		return nil
 	}
-	return nil, admissionFault("unavailable-until-integrated", "event.type", string(event.EventType())+" is not enabled by the admission gate")
+	return admissionFault("unavailable-until-integrated", "event.type", string(event.EventType())+" is not enabled by the admission gate")
 }
 
 // gateValidation requires a version beside every known validation. The artifact
@@ -154,6 +150,10 @@ func gateWalkArtifacts(value reflect.Value, out *[]model.ArtifactRef) {
 	}
 	if value.Type() == reflect.TypeOf(model.ArtifactRef{}) {
 		*out = append(*out, value.Interface().(model.ArtifactRef))
+		return
+	}
+	if value.Type() == reflect.TypeOf(model.RunOutput{}) {
+		*out = append(*out, value.Interface().(model.RunOutput).Ref())
 		return
 	}
 	switch value.Kind() {
@@ -253,7 +253,7 @@ func gateReconciliation(env model.InvocationEnvelope, author model.Actor) error 
 		name  string
 		state model.AvailabilityState
 	}{
-		{"observed_at", env.ObservedAt.State}, {"output_refs", env.OutputRefs.State}, {"config_effective", env.ConfigEffective.State},
+		{"observed_at", env.ObservedAt.State}, {"outputs", env.Outputs.State}, {"config_effective", env.ConfigEffective.State},
 		{"conditions_observed", env.ConditionsObserved.State}, {"isolation", env.Isolation.State}, {"visual", env.Visual.State},
 	} {
 		if f.state != model.Unknown {

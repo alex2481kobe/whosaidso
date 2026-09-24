@@ -43,7 +43,7 @@ func laneEReduceScope() model.Scope {
 }
 
 func laneEReduceProvenance() model.Provenance {
-	return model.Provenance{Author: model.Actor{ID: "lane-e"}, SourceRefs: []model.ArtifactRef{laneEReduceArtifact("request")}}
+	return model.Provenance{SourceRefs: []model.ArtifactRef{laneEReduceArtifact("request")}}
 }
 
 func laneEReduceSpec(criterionRevision model.Revision) model.TaskSpec {
@@ -209,7 +209,7 @@ func laneEReduceRevisedDependency(t *testing.T, witnessRevision, requiredRevisio
 	t.Helper()
 	b := laneEReduceBundle(t, model.Bundle{},
 		laneEReduceCreate(1, laneEReduceSpec(1)),
-		&model.TaskAmend{Provenance: laneEReduceProvenance(), Target: laneEReduceRef(1, 1), ExpectedRevision: 1, Replacement: laneEReduceSpec(2)},
+		&model.TaskAmend{Provenance: laneEReduceProvenance(), Target: laneEReduceRef(1, 1), Replacement: laneEReduceSpec(2)},
 		laneEReduceClose(1, 2, witnessRevision, model.ClosureSuccess), laneEReduceConsumer(requiredRevision))
 	return laneEReduceReplay(t, b)
 }
@@ -311,7 +311,7 @@ func TestReducerReturnedTerminalCannotAddReconciliationDebtToAnotherSnapshot(t *
 func TestReducerApplyFailureAfterAnEarlierEventPublishesNoStateAndDoesNotAmendItsInput(t *testing.T) {
 	first := laneEReduceBundle(t, model.Bundle{}, laneEReduceCreate(1, laneEReduceSpec(1)))
 	before := laneEReduceReplay(t, first)
-	amend := &model.TaskAmend{Provenance: laneEReduceProvenance(), Target: laneEReduceRef(1, 1), ExpectedRevision: 1, Replacement: laneEReduceSpec(2)}
+	amend := &model.TaskAmend{Provenance: laneEReduceProvenance(), Target: laneEReduceRef(1, 1), Replacement: laneEReduceSpec(2)}
 	control, err := reduce.Apply(before, laneEReduceBundle(t, first, amend))
 	if err != nil || laneEReduceTask(t, control, 1).Task.Revision != 2 {
 		t.Fatalf("control single amendment must produce revision 2: %v", err)
@@ -336,7 +336,7 @@ func TestReducerLedgerSequenceAlwaysDecidesWhichSameRevisionAmendmentLoses(t *te
 			amend := func(intent string) *model.TaskAmend {
 				spec := laneEReduceSpec(1)
 				spec.Intent = intent
-				return &model.TaskAmend{Provenance: laneEReduceProvenance(), Target: laneEReduceRef(1, 1), ExpectedRevision: 1, Replacement: spec}
+				return &model.TaskAmend{Provenance: laneEReduceProvenance(), Target: laneEReduceRef(1, 1), Replacement: spec}
 			}
 			winner := laneEReduceBundle(t, first, amend(order[0]))
 			control := laneEReduceReplay(t, first, winner)

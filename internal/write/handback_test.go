@@ -132,7 +132,7 @@ func TestHandbackStartedAndCurrentRevisions(t *testing.T) {
 	r.Outcome = model.AttemptBlockedMidTask
 	r.Holds = []HandbackHold{{BlockerID: f.id(), Reason: model.BlockerResume, Actor: f.author, Criterion: "owner reviews the changed contract"}}
 	packet := captureHandback(t, f, r)
-	amend := &model.TaskAmend{Target: f.ref(task.ID, 1), ExpectedRevision: 1, Replacement: task.Spec, Provenance: task.Provenance}
+	amend := &model.TaskAmend{Target: f.ref(task.ID, 1), Replacement: task.Spec, Provenance: task.Provenance}
 	amend.Replacement.Intent = "contract changed while work was in flight"
 	f.accept(f.capture(nil, amend))
 	if again := captureHandback(t, f, r); again != packet {
@@ -182,13 +182,13 @@ func TestHandbackAtomicHoldRefusals(t *testing.T) {
 				extra = append(extra, f.capture(nil, hold))
 			case "scope-amendment":
 				r.Outcome = model.AttemptOutOfScope
-				extra = append(extra, f.capture(nil, hold, &model.TaskAmend{Target: hold.Task, ExpectedRevision: 1, Replacement: task.Spec, Provenance: task.Provenance}))
+				extra = append(extra, f.capture(nil, hold, &model.TaskAmend{Target: hold.Task, Replacement: task.Spec, Provenance: task.Provenance}))
 				code = "invalid-transition"
 			case "wrong-author":
 				r.Author.ID = "another lane"
 				code = "attribution-mismatch"
 			case "wrong-revision":
-				f.accept(f.capture(nil, &model.TaskAmend{Target: hold.Task, ExpectedRevision: 1, Replacement: task.Spec, Provenance: task.Provenance}))
+				f.accept(f.capture(nil, &model.TaskAmend{Target: hold.Task, Replacement: task.Spec, Provenance: task.Provenance}))
 				bad := &model.AttemptTerminal{Task: f.ref(task.ID, 2), AttemptID: r.AttemptID, Outcome: model.AttemptStopped, Reason: r.Reason, NextAction: r.NextAction, DeliveryRefs: []model.ArtifactRef{}}
 				f.refuse(f.request(f.capture(nil, bad)), "revision-conflict")
 				return

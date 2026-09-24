@@ -90,3 +90,18 @@ func wantFault(t *testing.T, err error, code string) {
 		t.Fatalf("expected code %q, got %q (%v)", code, f.Code, err)
 	}
 }
+
+// runOutput is one output named inside a run, pinned to body.
+func runOutput(name, body, media string) model.RunOutput {
+	return model.RunOutput{Name: name, SHA256: model.HashBytes([]byte(body)), Length: uint64(len(body)), MediaType: media}
+}
+
+// knownOutputs is a seal's observed output list.
+func knownOutputs(outs ...model.RunOutput) model.Availability[[]model.RunOutput] {
+	return model.Availability[[]model.RunOutput]{State: model.Known, Value: &outs}
+}
+
+// storeCopy is where the default store keeps body, named by its digest.
+func storeCopy(body string) string {
+	return DefaultArtifactDir + "/" + string(model.HashBytes([]byte(body)))
+}

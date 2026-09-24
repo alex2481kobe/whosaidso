@@ -128,4 +128,7 @@ func TestDisposedArtifactIsNeverAvailableAgain(t *testing.T) {
 	if w.status(t) != reduce.StatusProven {
 		t.Fatal("the remaining verifiable run could not prove the claim")
 	}
+	// A new run whose output is the disposed bytes cites them too.
+	_, s3, e3 := w.run(w.criterion, gone)
+	w.f.refuse(w.f.request(s3, e3), "artifact-disposed")
 }

@@ -23,7 +23,7 @@ import (
 func cacheTask(n int) func([]model.Bundle) (model.Bundle, error) {
 	return func([]model.Bundle) (model.Bundle, error) {
 		actor := model.Actor{ID: "cache-test"}
-		e, err := model.EncodeEvent(&model.TaskCreate{ID: admissionID(500000 + n), Provenance: model.Provenance{Author: actor, SourceRefs: []model.ArtifactRef{}},
+		e, err := model.EncodeEvent(&model.TaskCreate{ID: admissionID(500000 + n), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 			Spec: model.TaskSpec{Intent: fmt.Sprintf("cache task %d", n), Subject: "snapshot cache",
 				Scope:    model.Scope{SourcePaths: []string{"internal/store"}, ContextRefs: []model.RecordRef{}, AppliesWhen: "tests", Limitations: "synthetic"},
 				NonGoals: []string{"production use"}, AcceptanceCriteria: []model.AcceptanceCriterion{{ID: admissionID(600000 + n), Revision: 1, Criterion: "same answer as replay"}},

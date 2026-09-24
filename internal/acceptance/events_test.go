@@ -139,7 +139,7 @@ func recSealedEnvelope() model.InvocationEnvelope {
 	e.Isolation = recKnown(model.IsolationClean)
 	e.ObservedAt = recKnown(recWhen.Add(90 * time.Second))
 	e.Outcome = recKnown(model.ProcessOutcome{Kind: "exit", ExitCode: ptr(0)})
-	e.OutputRefs = recKnown([]model.ArtifactRef{recContent(recDigest('d'), 128)})
+	e.Outputs = recKnown([]model.RunOutput{{Name: "out/result.json", SHA256: recDigest('d'), Length: 128, MediaType: "application/json"}})
 	return e
 }
 
@@ -155,7 +155,7 @@ func recSeal() *model.InvocationSeal {
 func evAll() []model.TypedEvent {
 	return []model.TypedEvent{
 		&model.TaskCreate{Provenance: recProvenance(), ID: recID(1), Spec: recTaskSpec()},
-		&model.TaskAmend{Provenance: recProvenance(), Target: recRef(recID(1), 2), ExpectedRevision: 2, Replacement: recTaskSpec()},
+		&model.TaskAmend{Provenance: recProvenance(), Target: recRef(recID(1), 2), Replacement: recTaskSpec()},
 		recStart(),
 		&model.TaskTakeover{
 			Task: recRef(recID(1), 2), Actor: recActor("lane-b"), AttemptID: recID(71),
@@ -193,11 +193,11 @@ func evAll() []model.TypedEvent {
 			Referents: []model.RecordRef{recRef(recID(91), 1)},
 		},
 		&model.ClaimAssert{Provenance: recProvenance(), ID: recID(2), Spec: recClaimSpec()},
-		&model.ClaimRevise{Provenance: recProvenance(), Target: recRef(recID(2), 2), ExpectedRevision: 2, Replacement: recClaimSpec()},
+		&model.ClaimRevise{Provenance: recProvenance(), Target: recRef(recID(2), 2), Replacement: recClaimSpec()},
 		recCriterionFix(),
 		recProof(),
 		&model.DecisionOpen{Provenance: recProvenance(), ID: recID(3), Spec: recDecisionSpec()},
-		&model.DecisionRevise{Provenance: recProvenance(), Target: recRef(recID(3), 2), ExpectedRevision: 2, Replacement: recDecisionSpec()},
+		&model.DecisionRevise{Provenance: recProvenance(), Target: recRef(recID(3), 2), Replacement: recDecisionSpec()},
 		&model.DecisionDispose{
 			Decision: recRef(recID(3), 2), Disposition: "approved",
 			Quote:     "refuse observed fields in a start",
@@ -207,7 +207,7 @@ func evAll() []model.TypedEvent {
 		recSupersede(),
 		recCorrection(),
 		&model.InstrumentDeclare{Provenance: recProvenance(), ID: recID(4), Spec: recInstrumentSpec()},
-		&model.InstrumentRevise{Provenance: recProvenance(), Target: recRef(recID(4), 2), ExpectedRevision: 2, Replacement: recInstrumentSpec()},
+		&model.InstrumentRevise{Provenance: recProvenance(), Target: recRef(recID(4), 2), Replacement: recInstrumentSpec()},
 		recTrustWithdraw(),
 		&model.ReviewAdmit{
 			Packets: []model.PacketRef{{CommandID: recID(94), Digest: recDigest('a')}},
@@ -367,8 +367,8 @@ func TestEventsInvocationStartCannotCarryObservationsOnlyASealCanHave(t *testing
 		{"an observation time", func(e *model.InvocationEnvelope) {
 			e.ObservedAt = recKnown(recWhen.Add(time.Minute))
 		}},
-		{"sealed output references", func(e *model.InvocationEnvelope) {
-			e.OutputRefs = recKnown([]model.ArtifactRef{recContent(recDigest('d'), 8)})
+		{"sealed outputs", func(e *model.InvocationEnvelope) {
+			e.Outputs = recKnown([]model.RunOutput{{Name: "out/result.json", SHA256: recDigest('d'), Length: 8, MediaType: "application/json"}})
 		}},
 		{"observed conditions", func(e *model.InvocationEnvelope) {
 			e.ConditionsObserved = recKnown(map[string]model.Availability[model.Scalar]{

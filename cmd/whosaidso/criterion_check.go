@@ -3,8 +3,8 @@ package main
 // This file holds `whosaidso check criterion`: one hypothetical completed run whose
 // output is the candidate bytes, evaluated by evidence.Observe and
 // evidence.Evaluate, the calls admission makes for each exact proof member.
-// The candidate is read from a temporary directory outside the project, so
-// nothing is written. Flags, the scope statement and printing live in
+// The candidate's bytes are held in memory as the store's copy, so nothing is
+// written. Flags, the scope statement and printing live in
 // check.go; no rule lives here.
 
 import (
@@ -12,7 +12,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -72,9 +71,9 @@ func criterionCheck(ctx context.Context, project store.Project, events []model.E
 	if err != nil {
 		return none, nil, err
 	}
-	runDir := evidence.RunDirIn(project.ArtifactDir(), invocation)
 	placed := map[string][]byte{}
-	var outputs []model.ArtifactRef
+	staged := map[model.Digest][]byte{}
+	var outputs []model.RunOutput
 	for i, selector := range selectors {
 		bytes := candidate
 		if bytes == nil {
@@ -87,22 +86,18 @@ func criterionCheck(ctx context.Context, project store.Project, events []model.E
 			media = selector.Content.MediaType
 		}
 		for _, declared := range selectorPaths(selector) {
-			at := path.Join(runDir, declared)
-			if path.Clean(declared) != declared || !strings.HasPrefix(at, runDir+"/") {
+			if model.RunOutputName(declared, "selector") != nil {
 				continue // matchOutput names nothing for it; Observe says so
 			}
-			if prior, ok := placed[at]; ok {
+			if prior, ok := placed[declared]; ok {
 				if string(prior) != string(bytes) {
-					return none, nil, fmt.Errorf("the result and population examples are different bytes at the same path %s", declared)
+					return none, nil, fmt.Errorf("the result and population examples are different bytes at the same output %s", declared)
 				}
 				continue
 			}
-			if err := writeScratch(scratch, at, bytes); err != nil {
-				return none, nil, err
-			}
-			placed[at] = bytes
-			outputs = append(outputs, model.ArtifactRef{Kind: "content", Selector: model.Selector{Kind: "whole"},
-				Content: &model.ContentPin{SHA256: model.HashBytes(bytes), Length: uint64(len(bytes)), MediaType: media, Locators: []model.Locator{{Path: at}}}})
+			placed[declared] = bytes
+			staged[model.HashBytes(bytes)] = bytes
+			outputs = append(outputs, model.RunOutput{Name: declared, SHA256: model.HashBytes(bytes), Length: uint64(len(bytes)), MediaType: media})
 		}
 	}
 	if output != "" && len(placed) > 1 {
@@ -116,8 +111,10 @@ func criterionCheck(ctx context.Context, project store.Project, events []model.E
 		ExecutionSourceIdentity: model.ExecutionIdentity{Project: project.ID},
 		Outcome:                 model.Availability[model.ProcessOutcome]{State: model.Known, Value: &model.ProcessOutcome{Kind: "exit", ExitCode: &exit}},
 		ObservedAt:              model.Availability[time.Time]{State: model.Known, Value: &now},
-		OutputRefs:              model.Availability[[]model.ArtifactRef]{State: model.Known, Value: &outputs}}
-	resolver := evidence.NewResolverAt(scratch, project.ArtifactDir())
+		Outputs:                 model.Availability[[]model.RunOutput]{State: model.Known, Value: &outputs}}
+	// The hypothetical run's outputs stand in the store's place, in memory.
+	resolver := evidence.NewResolverAt(project.Root, project.ArtifactDir())
+	resolver.Staged = staged
 	observation, err := resolver.Observe(ctx, *fix, env)
 	if err != nil {
 		return none, nil, err

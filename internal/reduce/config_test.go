@@ -95,7 +95,7 @@ func TestInvocationConfigNamesTheExactInstrumentRevision(t *testing.T) {
 		l := configLedger(t)
 		revised := proofInstrument()
 		revised.ConfigSurface = []string{"samples", "mode"}
-		l.add(t, &model.InstrumentRevise{Target: ref(newID("HNSS"), 1), ExpectedRevision: 1, Provenance: provenance("lane-a"), Replacement: revised})
+		l.add(t, &model.InstrumentRevise{Target: ref(newID("HNSS"), 1), Provenance: provenance("lane-a"), Replacement: revised})
 		atTwo := configEnvelope("RNC", "mode")
 		atTwo.InstrumentRef.Revision = 2
 		control := *l

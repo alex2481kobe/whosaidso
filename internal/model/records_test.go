@@ -36,7 +36,7 @@ func TestAvailabilityHonestUnknownAndObservedZero(t *testing.T) {
 		t.Run(name, func(t *testing.T) { badSchemaValue(t, v) })
 	}
 	raw := requireSchemaGood(t, &InvocationStart{Envelope: schemaEnvelope()})
-	for _, at := range []string{"envelope.criterion_ref", "envelope.execution_source_identity.machine_id", "envelope.execution_source_identity.head", "envelope.execution_source_identity.dirty", "envelope.config_effective", "envelope.conditions_observed", "envelope.isolation", "envelope.observed_at", "envelope.outcome", "envelope.output_refs", "envelope.visual"} {
+	for _, at := range []string{"envelope.criterion_ref", "envelope.execution_source_identity.machine_id", "envelope.execution_source_identity.head", "envelope.execution_source_identity.dirty", "envelope.config_effective", "envelope.conditions_observed", "envelope.isolation", "envelope.observed_at", "envelope.outcome", "envelope.outputs", "envelope.visual"} {
 		requireSchemaRefusal(t, mutateSchema(t, raw, at, map[string]any{"state": "unknown", "reason": " "}, false), "invalid-field")
 		requireSchemaRefusal(t, mutateSchema(t, raw, at, nil, false), "invalid-field")
 	}

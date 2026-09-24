@@ -130,7 +130,7 @@ func TestSelfAdmissionMalformedActorIsUnknown(t *testing.T) {
 // bundles 3 and 4 used to store. Self-admission is computed from that author
 // and the admitter: TRUE, never read from the stored field or the prose.
 func TestReviewSelfAdmissionCommittedHistoryIsComputed(t *testing.T) {
-	paths, err := filepath.Glob("../../.datum/events/*.json")
+	paths, err := filepath.Glob("../../.whosaidso/events/*.json")
 	if err != nil || len(paths) < 4 {
 		t.Fatalf("committed history missing: %v %v", paths, err)
 	}
@@ -182,7 +182,7 @@ func TestReviewSelfAdmissionLegacyIgnoresProse(t *testing.T) {
 }
 
 func TestReviewSelfAdmissionCommittedSequenceOneReplay(t *testing.T) {
-	data, err := os.ReadFile("../../.datum/events/00000001-01M3408ER2RFD597S5KPXMYP4P.json")
+	data, err := os.ReadFile("../../.whosaidso/events/00000001-01M3408ER2RFD597S5KPXMYP4P.json")
 	if err != nil {
 		t.Fatal(err)
 	}

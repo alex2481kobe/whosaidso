@@ -34,7 +34,7 @@ func fixAccepterTask(t *testing.T, f *gateVerifyFixture, lane, reviewer model.Ac
 	t.Helper()
 	spec := laneEReduceSpec(1)
 	spec.Accepter = &reviewer
-	create := &model.TaskCreate{ID: f.id(), Provenance: model.Provenance{Author: lane, SourceRefs: []model.ArtifactRef{}}, Spec: spec}
+	create := &model.TaskCreate{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Spec: spec}
 	if _, err := f.admit(lane, lane, create); err != nil {
 		t.Fatalf("control: a task naming its accepter must admit: %v", err)
 	}
@@ -42,8 +42,8 @@ func fixAccepterTask(t *testing.T, f *gateVerifyFixture, lane, reviewer model.Ac
 }
 
 func fixAccepterAmend(ref model.RecordRef, author model.Actor, replacement model.TaskSpec) *model.TaskAmend {
-	return &model.TaskAmend{Provenance: model.Provenance{Author: author, SourceRefs: []model.ArtifactRef{}},
-		Target: ref, ExpectedRevision: ref.Revision, Replacement: replacement}
+	return &model.TaskAmend{Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
+		Target: ref, Replacement: replacement}
 }
 
 func TestFixAccepterAmendmentCannotRemoveTheAccepterThenClose(t *testing.T) {

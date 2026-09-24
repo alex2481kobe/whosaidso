@@ -52,7 +52,7 @@ func TestReorderedPacketsKeepTheirOwnAuthors(t *testing.T) {
 	f.author = model.Actor{ID: "lane-dispose"}
 	dispose := f.capture(nil, w.dispose(1, "rejected"))
 	f.author = model.Actor{ID: "lane-open"}
-	open := f.capture(nil, &model.DecisionOpen{ID: w.id, Provenance: model.Provenance{Author: f.author, SourceRefs: []model.ArtifactRef{}},
+	open := f.capture(nil, &model.DecisionOpen{ID: w.id, Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.DecisionSpec{Question: "ship", Options: []string{"yes", "no"}, WaitingActor: model.Actor{ID: "owner"}, Scope: w.scope}})
 	bundle := f.accept(dispose, open)
 	if len(bundle.Events) != 3 || bundle.Events[0].Type != "decision.open" || bundle.Events[1].Type != "decision.dispose" {

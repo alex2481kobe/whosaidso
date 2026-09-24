@@ -43,7 +43,7 @@ func TestClaimProofNeedsCurrentSupport(t *testing.T) {
 		{"measured but not proven", false, nil, TruthFalse, StatusBlocked},
 		{"proven then trust withdrawn", true, []model.TypedEvent{withdrawal()}, TruthFalse, StatusBlocked},
 		{"proven then evidence disposed", true, []model.TypedEvent{disposal()}, TruthFalse, StatusBlocked},
-		{"proven revision no longer current", true, []model.TypedEvent{&model.ClaimRevise{Target: claim, ExpectedRevision: 1,
+		{"proven revision no longer current", true, []model.TypedEvent{&model.ClaimRevise{Target: claim,
 			Replacement: claimSpec(), Provenance: provenance("lane-a")}}, TruthFalse, StatusBlocked},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -76,7 +76,7 @@ func TestDecisionApprovedNeedsApprovalInForce(t *testing.T) {
 		{"withdrawn", []model.TypedEvent{dispose(d, "withdrawn")}, TruthFalse},
 		{"approved then rejected", []model.TypedEvent{dispose(d, "approved"), dispose(d, "rejected")}, TruthFalse},
 		{"approved revision revised", []model.TypedEvent{dispose(d, "approved"),
-			&model.DecisionRevise{Target: d, ExpectedRevision: 1, Replacement: decisionSpec(), Provenance: provenance("author")}}, TruthFalse},
+			&model.DecisionRevise{Target: d, Replacement: decisionSpec(), Provenance: provenance("author")}}, TruthFalse},
 		{"approved revision superseded", []model.TypedEvent{dispose(d, "approved"),
 			&model.Supersede{Prior: d, Replacement: other, Reason: "question changed", Authority: ptrProof(rulingAuthority("owner"))}}, TruthFalse},
 	} {

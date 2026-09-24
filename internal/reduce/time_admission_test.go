@@ -55,7 +55,7 @@ func TestInvocationTimestampIsUTCThroughApplicationAdmission(t *testing.T) {
 			Admitter: model.Actor{ID: "reviewer"}, Outcome: "accepted", Reason: "timestamp reachability experiment",
 		})
 	}
-	task := &model.TaskCreate{ID: id(1), Provenance: model.Provenance{Author: author, SourceRefs: []model.ArtifactRef{}},
+	task := &model.TaskCreate{ID: id(1), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.TaskSpec{
 			Intent: "test admission", Subject: "timestamp reachability",
 			Scope:    model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this test", Limitations: "fixture"},
@@ -80,7 +80,7 @@ func TestInvocationTimestampIsUTCThroughApplicationAdmission(t *testing.T) {
 		ConditionsObserved: admissionUnknown[map[string]model.Availability[model.Scalar]](), Isolation: admissionUnknown[model.Isolation](),
 		StartedAt:  time.Date(2026, 9, 22, 12, 0, 0, 0, time.FixedZone("fixture", 37*60)),
 		ObservedAt: admissionUnknown[time.Time](), Outcome: admissionUnknown[model.ProcessOutcome](),
-		OutputRefs: admissionUnknown[[]model.ArtifactRef](), Visual: admissionUnknown[model.VisualObservation](),
+		Outputs: admissionUnknown[[]model.RunOutput](), Visual: admissionUnknown[model.VisualObservation](),
 	}
 	packet := capture(14, &model.InvocationStart{Envelope: env})
 	packets, err := store.ReadIntake(project, []model.ID{packet.CommandID})

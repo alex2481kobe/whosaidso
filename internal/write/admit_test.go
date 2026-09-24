@@ -41,7 +41,7 @@ func (f *admissionFixture) id() model.ID {
 
 func (f *admissionFixture) task() *model.TaskCreate {
 	return &model.TaskCreate{
-		ID: f.id(), Provenance: model.Provenance{Author: f.author, SourceRefs: []model.ArtifactRef{}},
+		ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.TaskSpec{
 			Intent: "verify admission", Subject: "a test task",
 			Scope:    model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this test", Limitations: "no production evidence"},
@@ -275,7 +275,7 @@ func TestAdmissionStructuredSelfAdmission(t *testing.T) {
 func TestAdmissionStaleRevisionAndConcurrentWriters(t *testing.T) {
 	f := newAdmissionFixture(t)
 	task := f.goodControl()
-	amend := &model.TaskAmend{Provenance: task.Provenance, Target: f.ref(task.ID, 1), ExpectedRevision: 1, Replacement: task.Spec}
+	amend := &model.TaskAmend{Provenance: task.Provenance, Target: f.ref(task.ID, 1), Replacement: task.Spec}
 	first, second := f.capture(nil, amend), f.capture(nil, amend)
 	requests := []AdmitRequest{f.request(first), f.request(second)}
 	errorsOut := make(chan error, 2)

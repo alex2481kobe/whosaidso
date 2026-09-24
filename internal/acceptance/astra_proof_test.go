@@ -31,13 +31,15 @@ func astraProven(t *testing.T, w *pvWorld, members map[model.ID]string) {
 	}
 }
 
-// OWNER-RULINGS-DATUM.md:181-183 (R9): the contract path resolves relative
-// to EACH RUN'S OWN artifact directory. The bare-path compatibility branch
-// still reads a shared example, and also permits the digest store to answer
-// when that bare locator has vanished. Neither observes this run's output.
+// OWNER-RULINGS-DATUM.md:181-183 (R9): the contract path names an output of
+// EACH RUN ITSELF. A run declaring that name without producing it must not
+// borrow the shared example at the bare path, nor the digest store's copy
+// when that file has vanished. Neither observes this run's output. (The
+// bare-alias-first route, two locators on one output, is no longer
+// expressible: an output has one name and no locator.)
 func TestAstraProofBareContractPathCannotBorrowAnExample(t *testing.T) {
-	pvOwnRunDirControl(t, []byte(pvFail))
-	for _, route := range []string{"shared-example", "store-only", "bare-alias-first"} {
+	pvOwnOutputControl(t, []byte(pvFail))
+	for _, route := range []string{"shared-example", "store-only"} {
 		t.Run(route, func(t *testing.T) {
 			w := astraProofWorld(t, pvPass)
 			if route == "store-only" {
@@ -45,16 +47,10 @@ func TestAstraProofBareContractPathCannotBorrowAnExample(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			id, sealErr := w.run(true, func(id model.ID) []model.ArtifactRef {
-				paths := []string{"out/result.json"}
-				if route == "bare-alias-first" {
-					paths = append(paths, pvRunPath(id, "out/result.json"))
-				}
-				return []model.ArtifactRef{pvPin([]byte(pvPass), paths...)}
+			id, sealErr := w.run(true, func(id model.ID) []model.RunOutput {
+				// Declared, never produced by this run.
+				return []model.RunOutput{pvOutput([]byte(pvPass), "out/result.json")}
 			})
-			if _, err := os.Stat(filepath.Join(w.p.Root, pvRunPath(id, "out/result.json"))); !os.IsNotExist(err) {
-				t.Fatalf("fixture: this run must never have produced the selected file: %v", err)
-			}
 			var proofErr error
 			if sealErr == nil {
 				proofErr = w.prove(map[model.ID]string{id: "supports"})
@@ -88,9 +84,7 @@ func TestAstraProofDifferentMachinesAreNotComparable(t *testing.T) {
 				env.ExecutionSourceIdentity.MachineID = recKnown(machine)
 				// Coordinator decision 2026-09-23: only a known equal HEAD with clean checkouts (or equal pins) establishes equal source.
 				env.ExecutionSourceIdentity.Head, env.ExecutionSourceIdentity.Dirty = recKnown(model.GitHead{ObjectFormat: "sha1", Commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}), recKnown(false)
-				rel := pvRunPath(id, "out/result.json")
-				pvPut(t, w.p.Root, rel, []byte(pvPass))
-				w.mustAdmit(w.lane, &model.InvocationStart{Envelope: env}, w.seal(env, pvPin([]byte(pvPass), rel)))
+				w.mustAdmit(w.lane, &model.InvocationStart{Envelope: env}, w.seal(env, w.produce(id, []byte(pvPass), "out/result.json")))
 				members[id] = "supports"
 			}
 			if !different {
@@ -121,13 +115,13 @@ func TestAstraProofCapturedRunSurvivesProducerCheckoutRemoval(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			w := astraProofWorld(t, pvFail)
 			env, packets, err := w.cliRun(pvProducer(pvPass))
-			if err != nil || env.OutputRefs.Value == nil {
+			if err != nil || env.Outputs.Value == nil {
 				t.Fatalf("control: a real whosaidso run must durably capture its passing output: %v", err)
 			}
 			if removeProducer {
 				// The coordinator retains the project ledger and receives intake;
-				// the producer's uncommitted artifact directory is not transported.
-				if err := os.RemoveAll(filepath.Join(w.p.Root, evidence.RunDir(env.InvocationID))); err != nil {
+				// the producer's script and staging are not transported.
+				if err := os.Remove(filepath.Join(w.p.Root, "tools", "run.sh")); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -137,8 +131,8 @@ func TestAstraProofCapturedRunSurvivesProducerCheckoutRemoval(t *testing.T) {
 			// The exact run output remains readable after admission. A missing
 			// observation, changed bytes, or the failing example cannot explain
 			// a refusal here.
-			for _, ref := range *env.OutputRefs.Value {
-				if _, err := evidence.NewResolver(w.p.Root).Resolve(context.Background(), ref); err != nil {
+			for _, out := range *env.Outputs.Value {
+				if _, err := evidence.NewResolver(w.p.Root).Resolve(context.Background(), out.Ref()); err != nil {
 					t.Fatalf("captured output must still resolve by its exact pin: %v", err)
 				}
 			}

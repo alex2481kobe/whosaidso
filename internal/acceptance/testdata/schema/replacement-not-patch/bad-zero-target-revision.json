@@ -1,9 +1,6 @@
 {
   "data": {
     "provenance": {
-      "author": {
-        "id": "lane-e"
-      },
       "source_refs": [
         {
           "git": {
@@ -112,7 +109,7 @@
     "target": {
       "project": "datum/acceptance",
       "record_id": "01K5V8R0010000000000000000",
-      "revision": 2
+      "revision": 0
     }
   },
   "type": "task.amend"
