@@ -120,7 +120,8 @@ func briefTodoTask(b *briefWriter, indent int, t cur) {
 func briefTodo(b *briefWriter, a cur) {
 	t := a.at("totals")
 	b.line(0, "totals: tasks", t.at("tasks"), "in flight", t.at("in_flight"), "awaiting acceptance", t.at("awaiting_acceptance"),
-		"blocked", t.at("blocked"), "ready", t.at("ready"), "open decisions", t.at("open_decisions"), "intake pending", t.at("intake_pending"))
+		"blocked", t.at("blocked"), "ready", t.at("ready"), "open decisions", t.at("open_decisions"),
+		"intake unreviewed", t.at("intake_unreviewed"), "correction requested", t.at("intake_correction_requested"), "rejected", t.at("intake_rejected"))
 	briefList(b, 0, "in flight", a.at("in_flight"), briefTodoTask)
 	briefList(b, 0, "awaiting acceptance", a.at("awaiting_acceptance"), briefTodoTask)
 	briefList(b, 0, "blocked", a.at("blocked"), briefTodoTask)
@@ -129,8 +130,27 @@ func briefTodo(b *briefWriter, a cur) {
 		b.line(0, "limit: ready requested", o.at("requested"), "offered", o.at("offered"), "omitted", o.at("omitted"))
 	}
 	briefList(b, 0, "open decisions", a.at("open_decisions"), briefDetail)
-	briefList(b, 0, "intake pending", a.at("intake_pending"), briefPacket)
+	briefIntake(b, "intake unreviewed", t.at("intake_unreviewed"), a.at("intake_pending"), "pending")
+	briefIntake(b, "correction requested (each packet's author owes a corrected packet)", t.at("intake_correction_requested"), a.at("intake_pending"), "correction-requested")
+	if n := t.at("intake_rejected"); n.string() != "0" {
+		b.line(0, "rejected intake:", n, "(reviewed, nothing owed; datum history lists the reviews)")
+	}
 	briefList(b, 0, "attention", a.at("attention"), briefAttention)
+}
+
+// briefIntake lists the intake_pending packets with one disposition, under
+// the total that counts them.
+func briefIntake(b *briefWriter, title string, total, list cur, disposition string) {
+	if total.string() == "0" {
+		b.line(0, title+": none")
+		return
+	}
+	b.line(0, title+":", total)
+	for _, p := range list.items() {
+		if p.at("disposition").text() == disposition {
+			briefPacket(b, 1, p)
+		}
+	}
 }
 
 func briefRefs(b *briefWriter, a cur, refs cur) {

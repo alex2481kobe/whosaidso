@@ -129,20 +129,45 @@ func TestBriefNamesStatusReasonAndNextActorPerRecord(t *testing.T) {
 	}
 }
 
+// DOGFOOD item 72: todo shows what intake owes. An unreviewed packet awaits
+// review; a correction-requested one awaits its author's corrected packet, so
+// it is listed with its review; a rejected one owes nothing, so it is only
+// counted, and history still lists its review.
 func TestBriefShowsReviewedIntakeWithItsDisposition(t *testing.T) {
 	p := testProject(t)
 	readyControl(t, p)
-	if empty := assertViewHonest(t, viewAnswerOf(t, p, ViewRequest{View: "todo"})); !strings.Contains(empty, "\nintake pending: none\n") {
-		t.Fatalf("an empty section must say none, not vanish, got\n%s", empty)
+	empty := assertViewHonest(t, viewAnswerOf(t, p, ViewRequest{View: "todo"}))
+	if !strings.Contains(empty, "\nintake unreviewed: none\n") || !strings.Contains(empty, "\ncorrection requested (each packet's author owes a corrected packet): none\n") || strings.Contains(empty, "rejected intake") {
+		t.Fatalf("an empty owed section must say none, not vanish, and nothing rejected says nothing, got\n%s", empty)
 	}
-	reviewPacket(t, p, 101, capturePacket(t, p, 2), "rejected")
+	rejected := capturePacket(t, p, 2)
+	reviewPacket(t, p, 101, rejected, "rejected")
+	reviewPacket(t, p, 102, capturePacket(t, p, 4), "correction-requested")
 	capturePacket(t, p, 3)
 	text := assertViewHonest(t, viewAnswerOf(t, p, ViewRequest{View: "todo"}))
-	for _, want := range []string{"packet " + string(testID(1002)) + " rejected\n", "    reviewed rejected by reviewer\n",
-		"packet " + string(testID(1003)) + " pending\n    author author events 1 task.create\n"} {
+	for _, want := range []string{"intake unreviewed 1 correction requested 1 rejected 1\n",
+		"\nintake unreviewed: 1\n  packet " + string(testID(1003)) + " pending\n    author author events 1 task.create\n",
+		"\ncorrection requested (each packet's author owes a corrected packet): 1\n  packet " + string(testID(1004)) + " correction-requested\n",
+		"    reviewed correction-requested by reviewer\n",
+		"\nrejected intake: 1 (reviewed, nothing owed; datum history lists the reviews)\n"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("intake brief must carry %q, got\n%s", want, text)
 		}
+	}
+	if strings.Contains(text, string(testID(1002))) {
+		t.Fatalf("a rejected packet owes nothing and must not be listed as owed:\n%s", text)
+	}
+	a := viewAnswerOf(t, p, ViewRequest{View: "todo"}).(*TodoAnswer)
+	if a.Totals.IntakeUnreviewed != 1 || a.Totals.IntakeCorrectionRequested != 1 || a.Totals.IntakeRejected != 1 {
+		t.Fatalf("totals must split intake by what the review says is owed: %+v", a.Totals)
+	}
+	history := viewAnswerOf(t, p, ViewRequest{View: "history"}).(*HistoryAnswer)
+	found := false
+	for _, r := range history.Reviews {
+		found = found || r.Packet.CommandID == rejected.CommandID && r.Outcome == "rejected"
+	}
+	if !found {
+		t.Fatalf("history must still list the rejected packet's review: %+v", history.Reviews)
 	}
 }
 

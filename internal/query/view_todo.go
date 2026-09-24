@@ -3,8 +3,9 @@ package query
 // The todo view: everything owed, in flight first (COMMAND-SPEC §3.1). It
 // absorbs the in-flight half of the old now preset (in-flight tasks with every
 // run of theirs, blocked-task waits, out-of-scope runs), the open decisions,
-// and pending intake. Each task appears once; the limit cuts only READY tasks
-// and says how many it cut. Rendering lives in view_brief.go.
+// and intake not accepted (every such packet, with the ledger's disposition;
+// the totals say which are owed). Each task appears once; the limit cuts only
+// READY tasks and says how many it cut. Rendering lives in view_render.go.
 
 import (
 	"datum/internal/model"
@@ -37,15 +38,20 @@ type TodoTask struct {
 }
 
 // TodoTotals counts each owed task identity once, whichever section holds it;
-// Ready counts every READY task, including any the limit omitted.
+// Ready counts every READY task, including any the limit omitted. The intake
+// counts split intake_pending by what the ledger's review says is owed: an
+// unreviewed packet awaits review, a correction-requested one awaits its
+// author's corrected packet, and a rejected one owes nothing.
 type TodoTotals struct {
-	Tasks              int `json:"tasks"`
-	InFlight           int `json:"in_flight"`
-	AwaitingAcceptance int `json:"awaiting_acceptance"`
-	Blocked            int `json:"blocked"`
-	Ready              int `json:"ready"`
-	OpenDecisions      int `json:"open_decisions"`
-	IntakePending      int `json:"intake_pending"`
+	Tasks                     int `json:"tasks"`
+	InFlight                  int `json:"in_flight"`
+	AwaitingAcceptance        int `json:"awaiting_acceptance"`
+	Blocked                   int `json:"blocked"`
+	Ready                     int `json:"ready"`
+	OpenDecisions             int `json:"open_decisions"`
+	IntakeUnreviewed          int `json:"intake_unreviewed"`
+	IntakeCorrectionRequested int `json:"intake_correction_requested"`
+	IntakeRejected            int `json:"intake_rejected"`
 }
 
 // currentRecords is every current revision, in the snapshot's record order.
@@ -135,7 +141,17 @@ func todoView(project store.Project, s reduce.Snapshot, h ViewHeader, limit int)
 	}
 	a.Omitted = map[string]LimitReport{"ready": report}
 	a.Totals = TodoTotals{InFlight: len(a.InFlight), AwaitingAcceptance: len(a.AwaitingAcceptance), Blocked: len(a.Blocked),
-		Ready: report.Offered, OpenDecisions: len(a.OpenDecisions), IntakePending: len(a.IntakePending)}
+		Ready: report.Offered, OpenDecisions: len(a.OpenDecisions)}
+	for _, p := range a.IntakePending {
+		switch p.Disposition {
+		case "pending":
+			a.Totals.IntakeUnreviewed++
+		case "correction-requested":
+			a.Totals.IntakeCorrectionRequested++
+		case "rejected":
+			a.Totals.IntakeRejected++
+		}
+	}
 	seen := map[model.ID]bool{}
 	for _, section := range [][]TodoTask{a.InFlight, a.AwaitingAcceptance, a.Blocked, a.Ready} {
 		for _, t := range section {
