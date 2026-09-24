@@ -31,14 +31,14 @@ interface or a callback.
 whosaidso
 |-- cmd/
 |   `-- whosaidso      whole command surface: the write side that captures and admits, and the read side that answers from what was admitted
-|          21 files, tested -- uses evidence, model, query, reduce, store, write
+|          24 files, tested -- uses evidence, model, query, reduce, store, write
 |-- internal/
 |   |-- acceptance     (tests only, no production code)
 |   |      tests only
 |   |-- benchmarks     (tests only, no production code)
 |   |      tests only
 |   |-- evidence       turns a reference into the exact bytes it names, and a frozen criterion into a verdict over what those bytes actually say
-|   |      9 files, tested -- uses model
+|   |      10 files, tested -- uses model
 |   |-- model          wire vocabulary every other package shares: identities, references, packets and bundles, plus the strict encode/decode boundary
 |   |      16 files, tested -- leaf
 |   |-- query          selects admitted facts before either output format renders them
