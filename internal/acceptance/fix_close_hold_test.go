@@ -89,7 +89,7 @@ func TestFixCloseHoldSuccessRefusedWhileAHoldIsOpen(t *testing.T) {
 	if result != "would-refuse" {
 		t.Errorf("expected check admission to refuse a success close over open hold %s; got %s", w.hold.BlockerID, result)
 	}
-	for _, want := range []string{string(w.hold.BlockerID), "awaiting-acceptance", "reviewer"} {
+	for _, want := range []string{string(w.hold.BlockerID), "(awaiting-acceptance)", "waits on reviewer"} {
 		if !strings.Contains(string(joined), want) {
 			t.Errorf("the refusal must name the open hold (id, reason, who it waits on); %q missing from %s", want, joined)
 		}
@@ -97,6 +97,12 @@ func TestFixCloseHoldSuccessRefusedWhileAHoldIsOpen(t *testing.T) {
 	w.refused("task.close success over an open hold", func() error { return w.review("accepted", packet) })
 	if got := flowStr(w.record(w.subject.ref.RecordID), "task", "status"); got != "BLOCKED" {
 		t.Errorf("the refused success close left the task %s; it must stay BLOCKED on its hold", got)
+	}
+	// While the task is open its hold is a blocked: line; open hold: is only
+	// for a CLOSED task, so the same hold is never printed twice.
+	text, err := w.cli(nil, "show", string(w.subject.ref.RecordID))
+	if err != nil || strings.Contains(string(text), "open hold:") || !strings.Contains(string(text), "hold "+string(w.hold.BlockerID)) {
+		t.Errorf("show of the BLOCKED task must list hold %s once, as blocked:, not as open hold: (%v):\n%s", w.hold.BlockerID, err, text)
 	}
 }
 
@@ -171,26 +177,41 @@ func TestFixCloseHoldReplay(t *testing.T) {
 		Actor: model.Actor{ID: "reviewer"}, Criterion: "not accepted until the reviewer has read it"}
 	clear := &model.BlockerClear{Task: task, BlockerID: hold.BlockerID,
 		HoldRef: model.BlockerRef{Task: task, BlockerID: hold.BlockerID}, ResolvingWitness: laneEReduceArtifact("acceptance")}
+	second := &model.BlockerHold{Task: task, BlockerID: laneEReduceID(71), Reason: model.BlockerResume,
+		Actor: model.Actor{UnknownReason: "no owner named yet"}, Criterion: "resume once someone rules"}
 	first := laneEReduceBundle(t, model.Bundle{}, create, hold)
+	one, both := []model.ID{hold.BlockerID}, []model.ID{hold.BlockerID, second.BlockerID}
 	cases := []struct {
 		name   string
 		events []model.TypedEvent
-		refuse bool
+		names  []model.ID // the open holds a refusal must name; none: admits
 	}{
-		{"success over the open hold", []model.TypedEvent{laneEReduceClose(1, 1, 1, model.ClosureSuccess)}, true},
-		{"close then clear", []model.TypedEvent{laneEReduceClose(1, 1, 1, model.ClosureSuccess), clear}, true},
-		{"clear then close", []model.TypedEvent{clear, laneEReduceClose(1, 1, 1, model.ClosureSuccess)}, false},
-		{"cancelled over the open hold", []model.TypedEvent{laneEReduceClose(1, 1, 1, model.ClosureCancelled)}, false},
-		{"withdrawn over the open hold", []model.TypedEvent{laneEReduceClose(1, 1, 1, model.ClosureWithdrawn)}, false},
+		{"success over the open hold", []model.TypedEvent{laneEReduceClose(1, 1, 1, model.ClosureSuccess)}, one},
+		{"success over two open holds", []model.TypedEvent{second, laneEReduceClose(1, 1, 1, model.ClosureSuccess)}, both},
+		{"close then clear", []model.TypedEvent{laneEReduceClose(1, 1, 1, model.ClosureSuccess), clear}, one},
+		{"clear then close", []model.TypedEvent{clear, laneEReduceClose(1, 1, 1, model.ClosureSuccess)}, nil},
+		{"cancelled over the open hold", []model.TypedEvent{laneEReduceClose(1, 1, 1, model.ClosureCancelled)}, nil},
+		{"withdrawn over the open hold", []model.TypedEvent{laneEReduceClose(1, 1, 1, model.ClosureWithdrawn)}, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := reduce.Replay([]model.Bundle{first, laneEReduceBundle(t, first, tc.events...)})
-			switch {
-			case tc.refuse && (recCode(err) != reduce.CodeInvalidTransition || !strings.Contains(err.Error(), string(hold.BlockerID))):
-				t.Errorf("expected replay to refuse, naming hold %s, as admission does; got %v", hold.BlockerID, err)
-			case !tc.refuse && err != nil:
-				t.Errorf("control: replay must admit; got %v", err)
+			if len(tc.names) == 0 {
+				if err != nil {
+					t.Errorf("control: replay must admit; got %v", err)
+				}
+				return
+			}
+			if recCode(err) != reduce.CodeInvalidTransition {
+				t.Fatalf("expected replay to refuse the success close over open holds %v, as admission does; got %v", tc.names, err)
+			}
+			for _, id := range tc.names {
+				if !strings.Contains(err.Error(), string(id)) {
+					t.Errorf("the refusal must name every open hold; %s missing from %v", id, err)
+				}
+			}
+			if len(tc.names) == 2 && !strings.Contains(err.Error(), "waits on UNKNOWN: no owner named yet") {
+				t.Errorf("a hold waiting on an unknown actor must say so, never a blank: %v", err)
 			}
 		})
 	}
