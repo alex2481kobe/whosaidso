@@ -116,7 +116,9 @@ Not accepted yet: record why as a hold, and clear it when that is met:
       --capture --admit --reason "..."
 A success close is refused while any hold on the task is open (a clear
 earlier in the same bundle counts); cancelled, withdrawn and waived still
-close, and show and continue then list each hold left open.
+close, and show and continue then list each hold left open. A hold belongs
+to its task and survives amendments; clear it against the task's current
+revision (--hold fills that revision).
 `},
 	{"outcomes", "the nine handback outcomes, and holds", `  whosaidso handback --attempt-id ULID --outcome OUTCOME --reason TEXT --next-action TEXT
 Only success says the work got done, and it closes the attempt, not the

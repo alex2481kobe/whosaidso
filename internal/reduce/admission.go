@@ -198,7 +198,7 @@ func (s *state) checkReferences(b model.Bundle, idx int, e model.TypedEvent) ([]
 					fmt.Sprintf("no admitted invocation %s", r.Invocation.InvocationID))
 			}
 		case r.Blocker != nil:
-			if _, ok := s.blockers[blockerKey(*r.Blocker)]; !ok {
+			if _, ok := s.held(*r.Blocker); !ok {
 				return nil, faultAt(CodeUnknownReference, b.Sequence, idx, r.Path,
 					fmt.Sprintf("no admitted blocker %s", r.Blocker.BlockerID))
 			}

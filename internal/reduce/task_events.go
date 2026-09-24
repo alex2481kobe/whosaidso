@@ -277,8 +277,7 @@ func (s *state) hold(b model.Bundle, idx int, o Origin, e *model.BlockerHold) er
 }
 
 func (s *state) clear(b model.Bundle, idx int, o Origin, e *model.BlockerClear) error {
-	key := BlockerKey{Project: b.Project, Task: e.Task.RecordID, Blocker: e.BlockerID}
-	held, ok := s.blockers[key]
+	held, ok := s.held(e.HoldRef)
 	if !ok {
 		return faultAt(CodeUnknownReference, b.Sequence, idx, "blocker_id", "no admitted hold with this id")
 	}
@@ -288,6 +287,6 @@ func (s *state) clear(b model.Bundle, idx int, o Origin, e *model.BlockerClear) 
 	witness := e.ResolvingWitness
 	held.Cleared = &o
 	held.Witness = &witness
-	s.blockers[key] = held
+	s.blockers[held.Key] = held
 	return nil
 }

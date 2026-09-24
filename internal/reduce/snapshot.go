@@ -144,6 +144,22 @@ func (s Snapshot) Attempts(id Ident) []Attempt { return deepCopySlice(s.inner().
 // Blockers returns one task's holds in ledger order, cleared ones included.
 func (s Snapshot) Blockers(id Ident) []Blocker { return deepCopySlice(s.inner().blockersFor(id)) }
 
+// Hold finds the hold a blocker reference names, cleared or not. Admission and
+// replay both resolve a hold_ref here, so they cannot disagree about it.
+func (s Snapshot) Hold(ref model.BlockerRef) (Blocker, bool) {
+	b, ok := s.inner().held(ref)
+	return deepCopy(b), ok
+}
+
+// held is the one hold lookup. A hold belongs to its task, not to the task
+// revision it was placed on: an amendment neither clears nor hides it, so the
+// reference's task revision is not part of the hold's identity (the event's
+// own task revision is checked as a stale write, in checkExpectations).
+func (s *state) held(ref model.BlockerRef) (Blocker, bool) {
+	b, ok := s.blockers[blockerKey(ref)]
+	return b, ok
+}
+
 // Closure returns the admitted closure, whether or not it takes effect.
 func (s Snapshot) Closure(id Ident) (Closure, bool) {
 	c, ok := s.inner().closed[id]
