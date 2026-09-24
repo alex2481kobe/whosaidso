@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"datum/internal/model"
 )
 
 // templateStep is one step of a field path: an object key or an array index.
@@ -207,21 +209,9 @@ func templateTree(v any) (any, error) {
 	return templateValue(data)
 }
 
-// placeholderKinds are the kinds template.go writes as "<kind: hint>" or "<kind>".
-var placeholderKinds = map[string]bool{
-	"text": true, "id": true, "project": true, "digest": true, "revision": true, "time": true, "number": true,
-	"one of": true, "bool": true, "integer": true, "count": true, "actor-id": true, "path": true, "commit": true,
-	"media-type": true, "pointer": true, "key": true, "unsupported": true,
-}
-
-// isPlaceholder reports whether s is a placeholder template.go wrote.
-func isPlaceholder(s string) bool {
-	if len(s) < 3 || s[0] != '<' || s[len(s)-1] != '>' {
-		return false
-	}
-	kind, _, _ := strings.Cut(s[1:len(s)-1], ": ")
-	return placeholderKinds[kind]
-}
+// isPlaceholder reports whether s is a placeholder template.go wrote. The
+// grammar is the model's, so the decoder refuses exactly what --capture does.
+func isPlaceholder(s string) bool { return model.IsPlaceholder(s) }
 
 // templatePlaceholders lists the path of every placeholder left under node:
 // a value, or an object key (a map's key is a placeholder too).

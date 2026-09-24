@@ -3,7 +3,7 @@ package main
 // Tests for bound templates (step 5): every bound template decodes and admits
 // through capture's own path, bind flags fill the CURRENT revisions, judgment
 // is never filled, and capture refuses a template with any placeholder left,
-// including a text placeholder the decoder would accept.
+// including a text placeholder whose type fits the field.
 
 import (
 	"encoding/json"
@@ -170,7 +170,8 @@ func TestBoundTemplatesDecodeAndAdmit(t *testing.T) {
 	if data := boundPrint(t, f.root, "criterion.fix", "--criterion", string(f.criterion)); boundAt(data, "revision") != float64(3) || boundAt(data, "expression.unit") != "mm" {
 		t.Fatalf("the next revision is 3, copied from revision 2: %v", data)
 	}
-	boundCapture(t, f.root, "instrument.revise", "--from", string(f.instrument), "--set", "provenance.source_refs=[]", "--set", "replacement.blind_to=unmeasured poses and scale")
+	boundCapture(t, f.root, "instrument.revise", "--from", string(f.instrument), "--set", "provenance.source_refs=[]", "--set", "replacement.blind_to=unmeasured poses and scale",
+		"--set", "replacement.validation="+boundValidation(t))
 	boundCapture(t, f.root, "claim.revise", "--from", string(f.claim), "--set", "provenance.source_refs=[]", "--set", "replacement.scope.limitations=the fixture sweep only")
 	s := boundSnapshot(t, f.root)
 	for id, want := range map[model.ID]model.Revision{f.task: 2, f.claim: 2, f.instrument: 2} {
@@ -218,7 +219,7 @@ func TestBoundTemplatesLeaveJudgment(t *testing.T) {
 }
 
 // capture refuses a template while any placeholder remains, including a text
-// placeholder the strict decoder accepts as a string; nothing reaches intake.
+// placeholder whose type fits the field; nothing reaches intake.
 func TestTemplateCaptureRefusesAnyPlaceholder(t *testing.T) {
 	f := boundWorld(t)
 	project, err := store.Discover(f.root)
@@ -229,11 +230,12 @@ func TestTemplateCaptureRefusesAnyPlaceholder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The only placeholder left is criterion, a text field: it decodes.
+	// The only placeholder left is criterion, a text field: its type fits, and
+	// the decoder refuses it too (placeholder_capture_test.go covers that path).
 	args := []string{"template", "blocker.hold", "--task", string(f.task), "--set", "reason=resume", "--set", `actor={"id":"lane"}`}
 	printed, _, code := cliRun(t, f.root, nil, "lane", args...)
-	if code != 0 || decodeTemplate([]byte(printed)) != nil {
-		t.Fatalf("control: the one-placeholder template must print and decode (%d): %v", code, decodeTemplate([]byte(printed)))
+	if err := decodeTemplate([]byte(printed)); code != 0 || err == nil || !strings.Contains(err.Error(), "event.data.criterion") {
+		t.Fatalf("control: the one-placeholder template must print, and decode only to a refusal of criterion (%d): %v", code, err)
 	}
 	out, errs, code := cliRun(t, f.root, nil, "lane", append(args, "--capture")...)
 	if code != 1 || out != "" || !strings.Contains(errs, "capture refused: 1 placeholder(s) unfilled: criterion") {

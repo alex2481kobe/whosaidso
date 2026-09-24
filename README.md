@@ -52,7 +52,7 @@ datum
 |   |-- evidence       turns a reference into the exact bytes it names, and a frozen criterion into a verdict over what those bytes actually say
 |   |      9 files, tested -- uses model
 |   |-- model          wire vocabulary every other package shares: identities, references, packets and bundles, plus the strict encode/decode boundary
-|   |      15 files, tested -- leaf
+|   |      16 files, tested -- leaf
 |   |-- query          selects admitted facts before either output format renders them
 |   |      17 files, tested -- uses model, reduce, store
 |   |-- reduce         folds admitted bundles into the state every Datum answer is read from

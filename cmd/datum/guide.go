@@ -184,6 +184,8 @@ to a scratch directory to rehearse without touching the real ones.
 - Every "<kind: hint>" in a template is a placeholder. A revise restates the
   whole spec: datum template claim.revise --from ID copies the current one,
   so change only what changed. Judgment is never filled for you.
+- A leftover "<kind: hint>" is refused by every capture, run and check, not
+  only template --capture: write the value, never the hint.
 - Tests read a fixed ledger prefix, never the live head; commit ledger
   bundles only after the full test run.
 - Quote shell variables. An error naming a flag as a value (--claim
