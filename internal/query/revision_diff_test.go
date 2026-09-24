@@ -2,8 +2,7 @@ package query
 
 // Tests for the computed revision diff (revision_diff.go) and the two views
 // that show it: history (each amending row) and continue (every amendment of
-// the root), plus history's review.admit author. The committed-ledger test
-// reads the fixed prefix it is about, bundles 1..76.
+// the root), plus history's review.admit author.
 
 import (
 	"bytes"
@@ -92,15 +91,15 @@ func planWorld(t *testing.T, p store.Project) (model.ID, model.ID, model.ID) {
 	r3.AcceptanceCriteria = []model.AcceptanceCriterion{{ID: testID(90), Revision: 2, Criterion: "text and JSON agree exactly"},
 		{ID: testID(91), Revision: 1, Criterion: "history shows the diff"}}
 	r3.Accepter = &model.Actor{ID: "owner"}
-	r3.Intent = "Build U09, amended"
+	r3.Intent = "Build the read slice, amended"
 	r3.NonGoals = append([]string{}, r2.NonGoals...)
 	r3.NonGoals = append(r3.NonGoals, "rewrite the ledger")
 	second := admitAs(t, p, 300, "the plan follows item three",
 		&model.TaskAmend{Target: testRef(5, 2), Replacement: r3, Provenance: plan.Provenance})
 	r4 := r3
 	r4.Accepter = nil
-	// Coordinator merge edit 2026-09-24: the accepter-change rule (fix-correct) lets
-	// only the named accepter remove it, so owner writes this amendment.
+	// Only the named accepter may remove the accepter, so owner writes this
+	// amendment.
 	third := admitWrittenBy(t, p, 400, "owner", "anyone may accept",
 		&model.TaskAmend{Target: testRef(5, 3), Replacement: r4,
 			Provenance: model.Provenance{SourceRefs: plan.Provenance.SourceRefs}})
@@ -128,7 +127,7 @@ func TestContinueShowsEveryAmendmentOfThePlanWithItsReview(t *testing.T) {
 			`changed acceptance_criteria[` + string(testID(90)) + `].revision 1 2`,
 			`added acceptance_criteria[` + string(testID(91)) + `] {"criterion":"history shows the diff","id":"` + string(testID(91)) + `","revision":1}`,
 			`added accepter.id "owner"`,
-			`changed intent "Build U09 of WhoSaidSo: the first usable read slice" "Build U09, amended"`,
+			`changed intent "Build the first usable read slice of WhoSaidSo" "Build the read slice, amended"`,
 			`added non_goals "rewrite the ledger"`,
 			`changed prerequisites[` + string(testID(3)) + `].target.revision 1 2`,
 			`added prerequisites[` + string(testID(4)) + `] {"kind":"task-success","target":{"project":"example/query-tests","record_id":"` + string(testID(4)) + `","revision":1},"waiver_policy":"forbid"}`}},
@@ -150,7 +149,7 @@ func TestContinueShowsEveryAmendmentOfThePlanWithItsReview(t *testing.T) {
 	}
 	for _, line := range []string{"amendments: 3", "amendment: rev 2 sequence", "reason: item two leaves the plan",
 		"removed prerequisites[" + string(testID(2)) + "]", "changed prerequisites[" + string(testID(3)) + "].target.revision 1 -> 2",
-		"changed intent", "before: Build U09 of WhoSaidSo", "after: Build U09, amended", `removed accepter.id`} {
+		"changed intent", "before: Build the first usable read slice of WhoSaidSo", "after: Build the read slice, amended", `removed accepter.id`} {
 		if !strings.Contains(text.String(), line) {
 			t.Fatalf("continue brief must show %q:\n%s", line, text.String())
 		}
@@ -251,63 +250,56 @@ func TestDiffListRules(t *testing.T) {
 	}
 }
 
-// Datum's own plan: bundle 75 dropped step 0 (revision 2), bundle 76 retargeted
-// two items to revision 2 (revision 3). Comparing only the latest pair would
-// hide the removal again; continue must show both, from the fixed prefix 1..76.
-func TestCommittedPlanShowsStepZeroRemovedAtRevisionTwo(t *testing.T) {
-	paths, err := filepath.Glob("../../.whosaidso/events/*.json")
-	if err != nil || len(paths) < 76 {
-		t.Fatalf("committed history 1..76 missing: %d %v", len(paths), err)
-	}
-	var bundles []model.Bundle
-	for _, path := range paths[:76] {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		bundle, err := model.DecodeBundle(data)
-		if err != nil {
-			t.Fatal(err)
-		}
-		bundles = append(bundles, bundle)
-	}
-	s, err := reduce.Replay(bundles)
-	if err != nil {
+// A plan loses an item in one reviewed amendment that also cites a new
+// source, then retargets its two remaining items in the next. Comparing only
+// the latest pair would hide the removal; continue shows both amendments, and
+// the first one's diff names the removed item and the newly cited source.
+func TestPlanShowsARemovalCitingANewSourceBeforeALaterRetarget(t *testing.T) {
+	p := testProject(t)
+	plan := testTask(5)
+	plan.Spec.Prerequisites = []model.Prerequisite{prereq(2, 1), prereq(3, 1), prereq(4, 1)}
+	item3, item4 := testTask(3).Spec, testTask(4).Spec
+	item3.Intent, item4.Intent = "item three, restated", "item four, restated"
+	appendEvents(t, p, 100, testTask(2), testTask(3), testTask(4), plan,
+		&model.TaskAmend{Target: testRef(3, 1), Replacement: item3, Provenance: testTask(3).Provenance},
+		&model.TaskAmend{Target: testRef(4, 1), Replacement: item4, Provenance: testTask(4).Provenance})
+	// The newly cited source must resolve at admission, so its bytes are stored.
+	cited := model.Provenance{SourceRefs: []model.ArtifactRef{testArtifact()}}
+	blob := filepath.Join(p.Root, filepath.FromSlash(p.ArtifactDir()), string(testArtifact().Content.SHA256))
+	if err := os.MkdirAll(filepath.Dir(blob), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	answer, err := ReadViewFrom(store.Project{ID: "whosaidso/whosaidso"}, ViewRequest{View: "continue", ID: "01M37TMPM2553VCNV9KK3PXWXP"}, replayed{s, bundles})
-	if err != nil {
+	if err := os.WriteFile(blob, []byte("abc"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	a := answer.(*ContinueAnswer)
-	if a.Record.Revision != 3 || len(*a.Amendments) != 2 {
+	r2 := plan.Spec
+	r2.Prerequisites = []model.Prerequisite{prereq(3, 1), prereq(4, 1)}
+	removal := admitAs(t, p, 200, "item two leaves the plan",
+		&model.TaskAmend{Target: testRef(5, 1), Replacement: r2, Provenance: cited})
+	r3 := r2
+	r3.Prerequisites = []model.Prerequisite{prereq(3, 2), prereq(4, 2)}
+	retarget := admitAs(t, p, 300, "the plan follows the restated items",
+		&model.TaskAmend{Target: testRef(5, 2), Replacement: r3, Provenance: cited})
+	a := view_(t, p, ViewRequest{View: "continue", ID: testID(5)}).(*ContinueAnswer)
+	if a.Record.Revision != 3 || a.Amendments == nil || len(*a.Amendments) != 2 {
 		t.Fatalf("control: the plan is at revision 3 after two amendments, got %+v %+v", a.Record, a.Amendments)
 	}
 	for _, item := range a.Owed.Items {
-		if item.Target.RecordID == "01M37TMPJ07N34R115HJZ8B57P" {
-			t.Fatal("control: step 0 is no longer a current item")
+		if item.Target.RecordID == testID(2) {
+			t.Fatal("control: item two is no longer a current item")
 		}
 	}
-	removal, retarget := (*a.Amendments)[0], (*a.Amendments)[1]
-	review, _ := removal.Review.(AmendmentReview)
-	if removal.Revision.Revision != 2 || removal.Origin.Sequence != 75 || removal.Packet != "01M391H1RGJMGQVR9JDV7NAF9J" ||
-		!strings.HasPrefix(review.Reason, "Step 0 (docs/contract) leaves the plan") ||
-		!reflect.DeepEqual(changeLines(removal.Changes)[0][:52], "removed prerequisites[01M37TMPJ07N34R115HJZ8B57P] {\"") || len(removal.Changes) != 2 ||
-		!strings.HasPrefix(changeLines(removal.Changes)[1], "added provenance.source_refs") {
-		// Coordinator edit 2026-09-24 (review final2 #1): the diff now also shows the
-		// source the amendment newly cites (bundle 74's waived close).
-		t.Fatalf("step 0 must read removed at revision 2 in bundle 75 with its review, got %+v", removal)
+	first, second := (*a.Amendments)[0], (*a.Amendments)[1]
+	review, _ := first.Review.(AmendmentReview)
+	lines := changeLines(first.Changes)
+	if first.Revision != testRef(5, 2) || first.Packet != removal || review.Reason != "item two leaves the plan" || len(lines) != 2 ||
+		!strings.HasPrefix(lines[0], "removed prerequisites["+string(testID(2))+"] {") ||
+		!strings.HasPrefix(lines[1], "added provenance.source_refs") {
+		t.Fatalf("item two must read removed at revision 2 with its review and the newly cited source, got %+v", first)
 	}
-	lines := changeLines(retarget.Changes)
-	sources := 0
-	for _, l := range lines[min(2, len(lines)):] {
-		if strings.Contains(l, "provenance.source_refs") {
-			sources++
-		}
-	}
-	if retarget.Origin.Sequence != 76 || len(lines) < 3 || sources != len(lines)-2 || !reflect.DeepEqual(lines[:2], []string{
-		"changed prerequisites[01M37TMPK1QBPTT68WCJBPM1ZG].target.revision 1 2",
-		"changed prerequisites[01M37TMPKC3EDWA5JG7JP28G7F].target.revision 1 2"}) {
-		t.Fatalf("bundle 76 must read as two retargets to revision 2, got %+v", retarget)
+	if second.Revision != testRef(5, 3) || second.Packet != retarget || !reflect.DeepEqual(changeLines(second.Changes), []string{
+		"changed prerequisites[" + string(testID(3)) + "].target.revision 1 2",
+		"changed prerequisites[" + string(testID(4)) + "].target.revision 1 2"}) {
+		t.Fatalf("the second amendment must read as two retargets to revision 2, got %+v", second)
 	}
 }

@@ -1,5 +1,6 @@
-// Final-round confirmation probes belong here: the reported CLI cases and
-// alternate paths through their fixes. Production changes and broad audits do not.
+// The CLI's criterion template with example readings, admission retries under
+// an invalid cache setting, hold capture through the template, task citation
+// removal and hold replay ordering belong here. Production changes do not.
 package acceptance_test
 
 import (
@@ -7,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -62,13 +62,14 @@ func TestCLITemplateRetryAndHoldCapture(t *testing.T) {
 	}
 	t.Run("criterion-original-benchmark-and-reversed-flag-order", func(t *testing.T) {
 		f := cliHoldNew(t)
-		for name, path := range map[string]string{"good.json": ".whosaidso/artifacts/d44766e9ee3710079c90dba7bfa4765a0b23909a82c31e819fe007d111dec05d", "bad.txt": "README.md"} {
-			b, err := os.ReadFile(filepath.Join("../..", path))
-			if err != nil {
-				t.Fatal(err)
-			}
-			pvPut(t, f.p.Root, name, b)
-		}
+		// good.json is benchmark readings in the shape tools/benchreport
+		// writes; bad.txt is not JSON at all.
+		good := `{"instrument":"benchreport","readings":{"by_benchmark":{"BenchmarkCommands/N1000/Now":{` +
+			`"ns_per_op":{"unit":"ns/op","population":"median of BenchmarkCommands/N1000/Now runs in example/bench",` +
+			`"denominator":"benchmark runs","statistic":"median","rule":"middle value of 5 runs sorted by value",` +
+			`"median_of_runs":[3],"value":1250000}}}}}`
+		pvPut(t, f.p.Root, "good.json", []byte(good))
+		pvPut(t, f.p.Root, "bad.txt", []byte("# Not JSON\n\nA plain text note.\n"))
 		base := []string{"criterion.fix", "--example", "good=" + filepath.Join(f.p.Root, "good.json"), "--pin", "expression.result_selector=good#/readings/by_benchmark/BenchmarkCommands~1N1000~1Now/ns_per_op"}
 		control := cliHoldDraft(t, f, bin, base...)
 		if flowStr(control, "expression", "unit") != "ns/op" {
@@ -283,15 +284,12 @@ func TestHoldReplayOrdering(t *testing.T) {
 	}
 }
 
-// Coordinator edit 2026-09-24: this test first required replay to refuse a clear
-// naming the task's current revision for a hold recorded at an earlier one. That
-// contradicts hold-clear-after-amendment above (the schema makes hold_ref.task equal
-// the clear's task, and a clear must name the current revision), so the two could
-// not both pass under any rule without a format change. Coordinator ruling: a hold
-// is identified by (task, blocker id) and survives amendments; admission and replay
-// share that one lookup. The test now pins that contract from the replay side:
-// after an amendment the current-revision clear is accepted and the task may close,
-// while a clear still naming the superseded revision is refused.
+// A hold is identified by (task, blocker id) and survives amendments;
+// admission and replay share that one lookup. The schema makes hold_ref.task
+// equal the clear's task, and a clear must name the task's current revision.
+// From the replay side: after an amendment the current-revision clear is
+// accepted and the task may close, while a clear still naming the superseded
+// revision is refused.
 func TestReplayRequiresTheRecordedHoldRevision(t *testing.T) {
 	create := reduceCreate(1, reduceSpec(1))
 	hold := &model.BlockerHold{Task: reduceRef(1, 1), BlockerID: reduceID(70), Reason: model.BlockerAwaitingAcceptance, Actor: model.Actor{ID: "reviewer"}, Criterion: "read before accepting"}

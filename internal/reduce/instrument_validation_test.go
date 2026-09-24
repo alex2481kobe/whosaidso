@@ -1,15 +1,15 @@
 package reduce
 
 // Tests that an instrument declared or revised with UNKNOWN validation stays
-// UNKNOWN through replay, the committed ledger, proof admission and revision.
+// UNKNOWN through replay, stored bytes, proof admission and revision.
 // Refusing authored KNOWN validation is not tested here: the acceptance suite
 // currently requires that form to decode and to support proof.
 
 import (
-	"os"
-	"path/filepath"
+	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"whosaidso/internal/model"
 )
@@ -53,64 +53,60 @@ func requireUnknownInstrument(t *testing.T, s Snapshot, target model.RecordRef) 
 	}
 }
 
-// The committed ledger's sequence 3 declares two real instruments whose
-// validation is UNKNOWN. They must decode, replay, and stay untrusted.
-func TestInstrumentValidationRealSequenceThreeReplay(t *testing.T) {
-	paths, err := filepath.Glob("../../.whosaidso/events/*.json")
-	if err != nil || len(paths) < 3 {
-		t.Fatalf("need the committed bundles through sequence 3: %v, %v", paths, err)
+// Two instruments declared with UNKNOWN validation in one reviewed packet
+// survive the bytes a ledger stores: each bundle is encoded and decoded back,
+// incremental Apply and full replay agree, each declaration and its unknown
+// reason are kept exactly, each names its packet author, and editing an
+// exported copy establishes nothing.
+func TestInstrumentValidationUnknownSurvivesStoredBytes(t *testing.T) {
+	second := unknownInstrument()
+	second.QuestionAnswered = "how long each fixture run takes"
+	second.Validation.Reason = "no known-answer case exists yet"
+	declared := []*model.InstrumentDeclare{
+		{ID: newID("HNSA"), Provenance: provenance("author"), Spec: unknownInstrument()},
+		{ID: newID("HNSB"), Provenance: provenance("author"), Spec: second},
 	}
-	// The subject is sequence 3's declarations, so read the prefix through 3.
-	// Later bundles (WhoSaidSo recording its own work) may revise these instruments.
-	paths = paths[:3]
-	var bundles []model.Bundle
+	review := &model.ReviewAdmit{Outcome: "accepted", Actor: model.Actor{ID: "reviewer"}, Reason: "declare two instruments",
+		Authors: map[model.ID]model.Actor{}, CapturedAt: map[model.ID]model.Availability[time.Time]{}}
+	for i := range declared {
+		packet := newID(fmt.Sprintf("PKTN%d", i))
+		review.Packets = append(review.Packets, model.PacketRef{CommandID: packet, Digest: newDigest(string(packet))})
+		review.EventPackets = append(review.EventPackets, packet)
+		review.Authors[packet] = model.Actor{ID: "author"}
+		review.CapturedAt[packet] = knownAt(baseTime)
+	}
+	l := goodLedger(t)
+	l.add(t, declared[0], declared[1], review)
+	var stored []model.Bundle
 	var incremental Snapshot
-	var declared []*model.InstrumentDeclare
-	var project model.ProjectID
-	for i, path := range paths {
-		data, err := os.ReadFile(path)
+	for _, b := range l.bundles() {
+		data, err := model.Encode(b)
 		if err != nil {
 			t.Fatal(err)
 		}
 		bundle, err := model.DecodeBundle(data)
-		if err != nil || bundle.Sequence != uint64(i+1) {
-			t.Fatalf("%s does not decode at its sequence: %v", path, err)
+		if err != nil || bundle.Sequence != b.Sequence {
+			t.Fatalf("bundle %d does not decode at its sequence: %v", b.Sequence, err)
 		}
-		bundles = append(bundles, bundle)
+		stored = append(stored, bundle)
 		if incremental, err = Apply(incremental, bundle); err != nil {
-			t.Fatalf("real ledger Apply at %d: %v", bundle.Sequence, err)
-		}
-		if bundle.Sequence != 3 {
-			continue
-		}
-		project = bundle.Project
-		for _, raw := range bundle.Events {
-			if raw.Type == "instrument.declare" {
-				event, err := model.DecodeEvent(raw)
-				if err != nil {
-					t.Fatal(err)
-				}
-				declared = append(declared, event.(*model.InstrumentDeclare))
-			}
+			t.Fatalf("Apply at %d: %v", bundle.Sequence, err)
 		}
 	}
-	replayed := mustReplay(t, bundles)
-	if len(declared) != 2 {
-		t.Fatalf("sequence three must hold two instrument declarations, found %d", len(declared))
-	}
+	replayed := mustReplay(t, stored)
 	if !reflect.DeepEqual(incremental, replayed) {
-		t.Fatal("real ledger incremental and full replay disagree")
+		t.Fatal("incremental and full replay of the stored bytes disagree")
 	}
 	for _, declaration := range declared {
-		target := model.RecordRef{Project: project, RecordID: declaration.ID, Revision: 1}
+		target := model.RecordRef{Project: testProject, RecordID: declaration.ID, Revision: 1}
 		requireUnknownInstrument(t, replayed, target)
 		p, _ := replayed.InstrumentAt(target)
 		if !reflect.DeepEqual(p.Spec, &declaration.Spec) {
-			t.Fatal("real instrument or its unknown reason changed")
+			t.Fatal("the instrument or its unknown reason changed")
 		}
 		record, ok := replayed.Record(target)
-		if author := replayed.EventAuthor(record.Origin).Author; !ok || author.ID == "" {
-			t.Fatalf("real instrument lost its packet author: %+v", author)
+		if author := replayed.EventAuthor(record.Origin).Author; !ok || author.ID != "author" {
+			t.Fatalf("the instrument lost its packet author: %+v", author)
 		}
 		// Editing an exported copy is not an admitted validation fact.
 		p.Spec.Validation = proofKnown(model.InstrumentValidation{Ref: blobRef("forged"), Version: "self-certified"})

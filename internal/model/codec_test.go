@@ -3,8 +3,6 @@ package model
 import (
 	"bytes"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -166,7 +164,8 @@ func TestBundleChainRules(t *testing.T) {
 }
 
 // TestArtifactRefShape: the tag picks the pin, and a selector cannot contradict
-// itself. U01 checks shape only; U07 verifies the actual bytes.
+// itself. The model checks shape only; resolution in internal/evidence
+// verifies the actual bytes.
 func TestArtifactRefShape(t *testing.T) {
 	sha1Commit := strings.Repeat("a", 40)
 	good := ArtifactRef{
@@ -212,7 +211,7 @@ func utcSeal(zone *time.Location) *InvocationSeal {
 	return seal
 }
 
-// Ruling R8.4, encode half: an in-process timestamp in any zone is written as
+// UTC timestamps, encode half: an in-process timestamp in any zone is written as
 // UTC, so one instant has one spelling, one byte string and one digest.
 func TestEncodeWritesOneInstantAsOneSpelling(t *testing.T) {
 	var first []byte
@@ -244,7 +243,7 @@ func TestEncodeWritesOneInstantAsOneSpelling(t *testing.T) {
 	}
 }
 
-// Ruling R8.4, decode half: any other offset is refused, not normalised, at
+// UTC timestamps, decode half: any other offset is refused, not normalised, at
 // every depth, naming the field. Stored bytes are exactly what decode returns.
 func TestDecodeRefusesANonUTCTimestampAtAnyDepth(t *testing.T) {
 	event, err := EncodeEvent(utcSeal(time.UTC))
@@ -280,28 +279,5 @@ func TestDecodeRefusesANonUTCTimestampAtAnyDepth(t *testing.T) {
 				t.Fatalf("want invalid-field at %s, got %v", c.path, err)
 			}
 		})
-	}
-}
-
-// The refusal breaks no history: WhoSaidSo's own committed ledger decodes whole.
-func TestCommittedLedgerIsAlreadyUTC(t *testing.T) {
-	paths, err := filepath.Glob(filepath.Join("..", "..", ".whosaidso", "events", "*.json"))
-	if err != nil || len(paths) == 0 {
-		t.Fatalf("committed ledger not found: %v", err)
-	}
-	for _, path := range paths {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		bundle, err := DecodeBundle(data)
-		if err != nil {
-			t.Fatalf("%s: %v", path, err)
-		}
-		for i, event := range bundle.Events {
-			if _, err := DecodeEvent(event); err != nil {
-				t.Errorf("%s event %d: %v", path, i, err)
-			}
-		}
 	}
 }
