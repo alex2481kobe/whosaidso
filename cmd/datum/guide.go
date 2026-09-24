@@ -131,7 +131,8 @@ PROVEN needs a validated instrument (R9). A FAILING member can only be
 contradicts, or inapplicable with a code_change git verifies over the
 claim's scope (R14.2). Record a failing criterion with a refutes proof: the
 claim reads REFUTED. Every proof judges the claim's current criterion
-revision. "value 0 does not satisfy" means member 0, not a reading of zero.
+revision. A FALSE reason names the failing member: its path or id, else
+"member N" (its index), then its reading.
 An observer that died before sealing: datum reconcile --invocation-id ID
 --reason TEXT, then admit its packet; the outcome stays UNKNOWN.
 `},

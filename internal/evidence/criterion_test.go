@@ -158,7 +158,7 @@ func TestUncomparableValueIsUnknownNotFalse(t *testing.T) {
 	read := numbersRead("mm", "pose sweep", "poses")
 	read.Values = []model.Scalar{stringScalar("clear")}
 	o := observation(invocationA, read, sizedPopulation(1))
-	wantVerdict(t, evaluate(t, c, o), Unknown, "not comparable")
+	wantVerdict(t, evaluate(t, c, o), Unknown, `member 0: "clear" is not comparable`)
 }
 
 // ---- conditions ----------------------------------------------------------

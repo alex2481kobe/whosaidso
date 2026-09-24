@@ -13,6 +13,7 @@ import (
 	"datum/internal/model"
 	"datum/internal/store"
 	"datum/internal/write"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -60,9 +61,15 @@ func captureVerb(fs *flag.FlagSet) func(*call) error {
 			return err
 		}
 		author := actor(c)
-		ref, count, err := captureCLI(c.ctx, project, model.ID(*id), author, *eventsPath, blobs, c.stdin)
+		ref, events, err := captureCLI(c.ctx, project, model.ID(*id), author, *eventsPath, blobs, c.stdin)
 		if err != nil {
 			return err
+		}
+		count := len(events)
+		for _, line := range createdIDs(events) {
+			if !*jsonOutput { // --json is the one answer on stdout; notes are for a reader
+				fmt.Fprintln(c.stderr, line)
+			}
 		}
 		if *admitAfter {
 			return captureAndAdmit(c.ctx, project, c.stdout, *jsonOutput, ref, count, model.ID(*admitID), author, *reason)
@@ -222,49 +229,49 @@ func handbackDeliveryRefs(path string, stdin io.Reader, refs *[]model.ArtifactRe
 	return nil
 }
 
-func captureCLI(ctx context.Context, project store.Project, id model.ID, author model.Actor, eventsPath string, blobs []string, stdin io.Reader) (model.PacketRef, int, error) {
+func captureCLI(ctx context.Context, project store.Project, id model.ID, author model.Actor, eventsPath string, blobs []string, stdin io.Reader) (model.PacketRef, []model.Event, error) {
 	reader := stdin
 	if eventsPath != "-" {
 		f, err := os.Open(eventsPath)
 		if err != nil {
-			return model.PacketRef{}, 0, err
+			return model.PacketRef{}, nil, err
 		}
 		defer f.Close()
 		reader = f
 	}
 	data, err := io.ReadAll(reader)
 	if err != nil {
-		return model.PacketRef{}, 0, err
+		return model.PacketRef{}, nil, err
 	}
 	// The model's strict decoder refuses duplicate keys, case aliases such as
 	// "TYPE" beside "type", invalid UTF-8 and trailing values, so the packet
 	// binds the author's words rather than encoding/json's choice among them.
 	events, err := model.DecodeEvents(data)
 	if err != nil {
-		return model.PacketRef{}, 0, err
+		return model.PacketRef{}, nil, err
 	}
 	for _, event := range events {
 		if _, err := model.DecodeEvent(event); err != nil {
-			return model.PacketRef{}, 0, err
+			return model.PacketRef{}, nil, err
 		}
 	}
 	readers := make([]io.Reader, 0, len(blobs))
 	for _, path := range blobs {
 		f, err := os.Open(path)
 		if err != nil {
-			return model.PacketRef{}, 0, err
+			return model.PacketRef{}, nil, err
 		}
 		defer f.Close()
 		readers = append(readers, f)
 	}
 	sources, err := sourceBlobs(ctx, project, events)
 	if err != nil {
-		return model.PacketRef{}, 0, err
+		return model.PacketRef{}, nil, err
 	}
 	readers = append(readers, sources...)
 	// The store refuses a source.intake whose bytes are not among the blobs.
 	ref, err := store.WriteIntake(ctx, project, store.IntakeRequest{CommandID: id, Author: author, Blobs: readers, Events: events})
-	return ref, len(events), err
+	return ref, events, err
 }
 
 // sourceBlobs implements capture durability (contract: intake durably saves
@@ -292,4 +299,36 @@ func sourceBlobs(ctx context.Context, project store.Project, events []model.Even
 		}
 	}
 	return readers, nil
+}
+
+// createdIDs names the ids the captured events create (template's minted
+// paths), so the next command can name them: "new      claim.assert id = ID".
+// A criterion.fix past revision 1 reuses its criterion's id, so it is not new.
+func createdIDs(events []model.Event) []string {
+	var out []string
+	for i, event := range events {
+		tree, err := templateValue(event.Data)
+		if err != nil {
+			continue
+		}
+		if event.Type == "criterion.fix" {
+			if rev, _ := templateGet(tree, []templateStep{{key: "revision", index: -1}}); rev != json.Number("1") {
+				continue
+			}
+		}
+		for _, path := range templateMints[event.Type] {
+			steps, err := parseTemplatePath(path)
+			if err != nil {
+				continue
+			}
+			label := string(event.Type)
+			if len(events) > 1 {
+				label = fmt.Sprintf("event %d %s", i, event.Type)
+			}
+			for _, found := range templateGetAll(tree, steps, "") {
+				out = append(out, fmt.Sprintf("new      %s %s = %v", label, found[0], found[1]))
+			}
+		}
+	}
+	return out
 }

@@ -51,7 +51,8 @@ with an ID; false excludes unknown, and an unknown author stays UNKNOWN.
 		{name: "capture", summary: "write a packet to immutable intake; publishes nothing", detail: `Reads a JSON array of typed events (datum template makes one). A
 source.intake is captured with its original bytes, from its reference or
 from --blob; capture refuses a source whose bytes it cannot save. Prints
-"captured PACKET (N events) command ID". With --admit the packet is then
+"captured PACKET (N events) command ID", and (without --json) on stderr
+each id its events create ("new      claim.assert id = ID"). With --admit the packet is then
 admitted as a second act; if that is refused the capture stands, the packet
 stays pending, the retry command is printed and the exit status is 4.
 `, define: captureVerb},
@@ -101,8 +102,10 @@ when the disposal names a git pin. Writes nothing.
 `, define: checkVerb("disposal")},
 		{name: "template", args: "EVENT-TYPE", summary: "print a capture-ready JSON skeleton of one event", detail: `Every "<kind: hint>" string is a placeholder to fill. Datum fills only what
 has one computable answer: minted ids (revision 1), the project id, the
-packet author where admission requires it (from --actor or DATUM_ACTOR), a
-choice with one member, and with bind flags the exact references at their
+packet author where it is the author or the attempt holder (from --actor or
+DATUM_ACTOR), a choice with one member, a handback's commits_denied and
+reconciliation_owed as false (--set them true, as datum handback's flags
+do), and with bind flags the exact references at their
 CURRENT revisions: --from copies a record's current spec into an amend or
 revise (change what changed), except an instrument's validation, a verdict on
 the replaced implementation, which stays a placeholder to judge again; --task, --claim, --criterion and --attempt
@@ -117,15 +120,21 @@ criterion's example (never an observation). Judgment never:
 assertions, falsifiers, blind spots, reasons, dispositions, verdicts,
 acceptance and validation stay placeholders; fill them with --set PATH=VALUE
 (paths as the notes print them, e.g. evidence[0].disposition) or by editing.
+Filling one member of a choice chooses it: --set actor.id=X drops
+actor.unknown_reason, a key of one member sets the tag, and the other
+members' keys nobody filled go; a filled one stays for the gate.
+--set PATH=null omits an optional key; a required one is refused.
 --capture captures the result through capture's own path, refused while any
-placeholder remains; an optional key nobody filled is omitted, and the ids
-it minted are named on stderr. --admit then admits it, as capture --admit
+placeholder remains; an optional key you put nothing into is omitted, and
+the ids it minted are named on stderr. --admit then admits it, as capture --admit
 does. Notes go to stderr. Event types:
 ` + templateEventList() + "\n", define: templateVerb},
 		{name: "home", args: "[PATH]", summary: "show or set where this project's live ledger is", detail: `Bare, shows this project's binding on this machine: its home, or unbound,
 and whether the home is available. With PATH, binds the project to the
 checkout at PATH, which must hold datum.toml declaring the same project id,
-a ledger inside it and a readable history. Binding again elsewhere is the
+a ledger inside it and a readable history. A home every read would refuse
+is not bound: intake that is not owner-only, or a ledger this binary cannot
+decode, is refused with that reason. Binding again elsewhere is the
 move: while the old home exists, PATH's history must continue it bundle for
 bundle; when it is gone, continuity: not-compared is printed.
 `, define: homeVerb},

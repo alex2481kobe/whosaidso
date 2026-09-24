@@ -1,14 +1,16 @@
 package main
 
 // This file holds the home verb: showing and changing where this machine keeps
-// a project's live ledger. The registry itself, binding and its checks live in
-// internal/store (home.go, home_bind.go).
+// a project's live ledger, refusing to bind a home no read could serve. The
+// registry itself, binding and its checks live in internal/store (home.go,
+// home_bind.go).
 
 import (
 	"flag"
 	"fmt"
 	"path/filepath"
 
+	"datum/internal/query"
 	"datum/internal/store"
 )
 
@@ -74,6 +76,9 @@ func bindHome(c *call, path string, jsonOutput bool) error {
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(c.cwd, path)
 	}
+	if err := servable(c, path); err != nil {
+		return err
+	}
 	r, err := store.Bind(c.ctx, c.cwd, path)
 	if err != nil {
 		return err
@@ -91,4 +96,34 @@ func bindHome(c *call, path string, jsonOutput bool) error {
 		text = fmt.Sprintf("moved %s from %s to %s (%d bundles); continuity: not-compared, the old home is gone\n", a.ProjectID, a.Previous, a.HomeRoot, a.Bundles)
 	}
 	return printResult(c.stdout, jsonOutput, a, text)
+}
+
+// servable refuses to bind a home that every read would then refuse: it
+// answers the read todo answers (the ledger decoded and folded by this
+// binary, and the project's intake under the store's own owner-only
+// permission rule) from PATH before the binding is written. A PATH that is
+// not this project's own root is left to store.Bind to refuse.
+func servable(c *call, path string) error {
+	invoked, err := c.checkout()
+	if err != nil {
+		return err
+	}
+	dest, err := store.Discover(path)
+	if err != nil || dest.ID != invoked.ID {
+		return nil
+	}
+	want, err1 := filepath.EvalSymlinks(path)
+	got, err2 := filepath.EvalSymlinks(dest.Root)
+	if err1 != nil || err2 != nil || want != got {
+		return nil
+	}
+	// Replayed, not Load: the probe reads the whole ledger and writes no cache.
+	state, err := store.Replayed(dest)
+	if err == nil {
+		_, err = query.ReadViewFrom(dest, query.ViewRequest{View: "todo"}, state)
+	}
+	if err != nil {
+		return fmt.Errorf("datum home: not bound: every read through %s would refuse: %w", path, err)
+	}
+	return nil
 }

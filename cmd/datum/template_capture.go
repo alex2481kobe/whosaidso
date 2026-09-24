@@ -42,12 +42,12 @@ func (t *boundTemplate) print() error {
 	return err
 }
 
-// capture drops optional keys nobody filled, refuses while a placeholder
+// capture drops optional keys the author left unfilled, refuses while a placeholder
 // remains, then captures (and with --admit admits) through capture's path.
 func (t *boundTemplate) capture(admit bool, reason string) error {
 	for _, n := range t.notes {
 		if n.Kind == "optional" {
-			t.body = templateDropUnfilled(t.body, n.Path)
+			t.body = templateDropUnfilled(t.body, n.Path, "", t.unfilled)
 		}
 	}
 	if left := templatePlaceholders(t.body, ""); len(left) > 0 {
@@ -66,10 +66,11 @@ func (t *boundTemplate) capture(admit bool, reason string) error {
 	if err != nil {
 		return err
 	}
-	ref, count, err := captureCLI(t.c.ctx, project, "", t.author, "-", t.blobs, bytes.NewReader(data))
+	ref, events, err := captureCLI(t.c.ctx, project, "", t.author, "-", t.blobs, bytes.NewReader(data))
 	if err != nil {
 		return err
 	}
+	count := len(events)
 	// The ids this event created, so the next command can name them.
 	for _, n := range t.notes {
 		if n.Kind != "minted" || t.putPaths[templatePath(n.Path)] {
