@@ -110,7 +110,7 @@ func supportNow(t *testing.T, s Snapshot, target model.RecordRef) SupportFacts {
 	return p
 }
 
-func TestU06ClaimAchievementAndRevision(t *testing.T) {
+func TestClaimAchievementAndRevision(t *testing.T) {
 	l := proofLedger(t, true)
 	claim := ref(newID("CMA1"), 1)
 	wantClaim(t, mustReplay(t, l.out[:3]), claim, StatusUnmeasured)
@@ -139,7 +139,7 @@ func TestU06ClaimAchievementAndRevision(t *testing.T) {
 	wantClaim(t, s, claim, StatusProven)
 }
 
-func TestU06FailedAndUnavailableObservations(t *testing.T) {
+func TestFailedAndUnavailableObservations(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		change func(*model.InvocationSeal)
@@ -172,7 +172,7 @@ func TestU06FailedAndUnavailableObservations(t *testing.T) {
 	}
 }
 
-func TestU06ImportedConfidence(t *testing.T) {
+func TestImportedConfidence(t *testing.T) {
 	l := proofLedger(t, true)
 	wantClaim(t, mustReplay(t, l.out), ref(newID("CMA1"), 1), StatusProven)
 	for i, tag := range []string{"VERIFIED", "VENDOR CLAIM", "REPORTED MEASUREMENT"} {
@@ -192,7 +192,7 @@ func withdrawal() *model.TrustWithdraw {
 	return &model.TrustWithdraw{Instrument: ref(newID("HNSS"), 1), Scope: testScope(), RevalidationCondition: "repeat validation with the repaired instrument"}
 }
 
-func TestU06WithdrawnInstrument(t *testing.T) {
+func TestWithdrawnInstrument(t *testing.T) {
 	l := proofLedger(t, true)
 	before := mustReplay(t, l.out)
 	claim := ref(newID("CMA1"), 1)
@@ -227,7 +227,7 @@ func TestU06WithdrawnInstrument(t *testing.T) {
 	}
 }
 
-func TestU06DisposedSupport(t *testing.T) {
+func TestDisposedSupport(t *testing.T) {
 	l := proofLedger(t, true)
 	claim := ref(newID("CMA1"), 1)
 	if supportNow(t, mustReplay(t, l.out), claim).Current() != TruthTrue {
@@ -247,7 +247,7 @@ func TestU06DisposedSupport(t *testing.T) {
 	}
 }
 
-func TestU06TransitiveCorrectionCycle(t *testing.T) {
+func TestTransitiveCorrectionCycle(t *testing.T) {
 	l := proofLedger(t, true)
 	a := ref(newID("CMA1"), 1)
 	b := ref(newID("CMA2"), 1)
@@ -286,7 +286,7 @@ func TestU06TransitiveCorrectionCycle(t *testing.T) {
 	}
 }
 
-func TestU06DecisionDispositionsAndSupersession(t *testing.T) {
+func TestDecisionDispositionsAndSupersession(t *testing.T) {
 	l := newLedger()
 	d := ref(newID("DCSA"), 1)
 	l.add(t, &model.DecisionOpen{ID: d.RecordID, Provenance: provenance("author"), Spec: decisionSpec()})
@@ -321,7 +321,7 @@ func TestU06DecisionDispositionsAndSupersession(t *testing.T) {
 
 func ptrProof[T any](v T) *T { return &v }
 
-func TestU06RefusesUnrelatedProof(t *testing.T) {
+func TestRefusesUnrelatedProof(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		change func(*model.ProofAdmit)
@@ -346,7 +346,7 @@ func TestU06RefusesUnrelatedProof(t *testing.T) {
 	}
 }
 
-func TestU06ChangedSealCannotEstablishObservation(t *testing.T) {
+func TestChangedSealCannotEstablishObservation(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		change func(*model.InvocationSeal)
@@ -379,7 +379,7 @@ func TestU06ChangedSealCannotEstablishObservation(t *testing.T) {
 	}
 }
 
-func TestU06RefusesUnscopedDecisionAndWrongKindWithdrawal(t *testing.T) {
+func TestRefusesUnscopedDecisionAndWrongKindWithdrawal(t *testing.T) {
 	l := proofLedger(t, true)
 	d := ref(newID("DCSA"), 1)
 	l.add(t, &model.DecisionOpen{ID: d.RecordID, Provenance: provenance("author"), Spec: decisionSpec()})
@@ -399,7 +399,7 @@ func TestU06RefusesUnscopedDecisionAndWrongKindWithdrawal(t *testing.T) {
 	wantFault(t, err, CodeInvalidTransition)
 }
 
-func TestU06GoldenNineMeanings(t *testing.T) {
+func TestGoldenNineMeanings(t *testing.T) {
 	l := proofLedger(t, true)
 	l.add(t,
 		&model.TaskCreate{ID: newID("TSKB"), Provenance: provenance("lane-a"), Spec: taskSpec()},
@@ -459,7 +459,7 @@ func TestU06GoldenNineMeanings(t *testing.T) {
 	}
 }
 
-func TestU06TypedCorrectionsAndLateDependents(t *testing.T) {
+func TestTypedCorrectionsAndLateDependents(t *testing.T) {
 	for _, kind := range []string{"criterion", "support"} {
 		t.Run(kind, func(t *testing.T) {
 			l := proofLedger(t, true)
@@ -492,7 +492,7 @@ func TestU06TypedCorrectionsAndLateDependents(t *testing.T) {
 	}
 }
 
-func TestU06LossReachesClosedHistoryWithoutReopeningIt(t *testing.T) {
+func TestLossReachesClosedHistoryWithoutReopeningIt(t *testing.T) {
 	l := proofLedger(t, true)
 	claim := ref(newID("CMA1"), 1)
 	l.add(t, &model.TaskCreate{ID: newID("TSKB"), Provenance: provenance("lane-a"), Spec: taskSpec(withPrerequisite("claim-proof", claim, "forbid", nil))}, closeSuccess(newID("TSKB"), 1))
@@ -512,7 +512,7 @@ func TestU06LossReachesClosedHistoryWithoutReopeningIt(t *testing.T) {
 	}
 }
 
-func TestU06SupportFactsRemainIndependent(t *testing.T) {
+func TestSupportFactsRemainIndependent(t *testing.T) {
 	s := mustReplay(t, proofLedger(t, true).out)
 	claim := ref(newID("CMA1"), 1)
 	for _, tc := range []struct{ evidence, scope, want Truth }{
@@ -527,7 +527,7 @@ func TestU06SupportFactsRemainIndependent(t *testing.T) {
 	}
 }
 
-func TestU06ProofRefusalIsAtomic(t *testing.T) {
+func TestProofRefusalIsAtomic(t *testing.T) {
 	l := proofLedger(t, true)
 	before := mustReplay(t, l.out)
 	claim := ref(newID("CMA1"), 1)
@@ -545,7 +545,7 @@ func TestU06ProofRefusalIsAtomic(t *testing.T) {
 	}
 }
 
-func TestU06UnvalidatedAndForeignInstrumentsCannotProve(t *testing.T) {
+func TestUnvalidatedAndForeignInstrumentsCannotProve(t *testing.T) {
 	for _, name := range []string{"unvalidated", "foreign", "wrong kind"} {
 		t.Run(name, func(t *testing.T) {
 			l := proofLedger(t, true)

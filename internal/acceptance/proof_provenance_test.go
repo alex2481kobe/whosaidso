@@ -15,7 +15,7 @@ import (
 	"whosaidso/internal/reduce"
 )
 
-func astraProofWorld(t *testing.T, example string) *pvWorld {
+func proofExampleWorld(t *testing.T, example string) *pvWorld {
 	t.Helper()
 	w := pvNew(t)
 	pvPut(t, w.p.Root, "out/result.json", []byte(example))
@@ -23,7 +23,7 @@ func astraProofWorld(t *testing.T, example string) *pvWorld {
 	return w
 }
 
-func astraProven(t *testing.T, w *pvWorld, members map[model.ID]string) {
+func requireProven(t *testing.T, w *pvWorld, members map[model.ID]string) {
 	t.Helper()
 	err := w.prove(members)
 	if got := w.status(); err != nil || got != reduce.StatusProven {
@@ -37,11 +37,11 @@ func astraProven(t *testing.T, w *pvWorld, members map[model.ID]string) {
 // when that file has vanished. Neither observes this run's output. (The
 // bare-alias-first route, two locators on one output, is no longer
 // expressible: an output has one name and no locator.)
-func TestAstraProofBareContractPathCannotBorrowAnExample(t *testing.T) {
+func TestProofBareContractPathCannotBorrowAnExample(t *testing.T) {
 	pvOwnOutputControl(t, []byte(pvFail))
 	for _, route := range []string{"shared-example", "store-only"} {
 		t.Run(route, func(t *testing.T) {
-			w := astraProofWorld(t, pvPass)
+			w := proofExampleWorld(t, pvPass)
 			if route == "store-only" {
 				if err := os.Remove(filepath.Join(w.p.Root, "out/result.json")); err != nil {
 					t.Fatal(err)
@@ -65,14 +65,14 @@ func TestAstraProofBareContractPathCannotBorrowAnExample(t *testing.T) {
 // DATUM-CONTRACT.md:513: execution_source_identity makes a different
 // machine a different condition, never a silently comparable one. Observe
 // drops that identity, and comparable checks only the two producer maps.
-func TestAstraProofDifferentMachinesAreNotComparable(t *testing.T) {
+func TestProofDifferentMachinesAreNotComparable(t *testing.T) {
 	for _, different := range []bool{false, true} {
 		name := "control-same-machine"
 		if different {
 			name = "different-machines"
 		}
 		t.Run(name, func(t *testing.T) {
-			w := astraProofWorld(t, pvFail)
+			w := proofExampleWorld(t, pvFail)
 			members := map[model.ID]string{}
 			for i := 0; i < 2; i++ {
 				id := w.id()
@@ -88,7 +88,7 @@ func TestAstraProofDifferentMachinesAreNotComparable(t *testing.T) {
 				members[id] = "supports"
 			}
 			if !different {
-				astraProven(t, w, members)
+				requireProven(t, w, members)
 				return
 			}
 			err := w.prove(members)
@@ -103,7 +103,7 @@ func TestAstraProofDifferentMachinesAreNotComparable(t *testing.T) {
 // a coordinator admits the copied directory, including a worker's captured
 // outputs. R9 still binds each output to its run. Requiring the original run
 // directory after capturing its exact bytes makes this valid flow impossible.
-func TestAstraProofCapturedRunSurvivesProducerCheckoutRemoval(t *testing.T) {
+func TestProofCapturedRunSurvivesProducerCheckoutRemoval(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the producer is a POSIX shell script")
 	}
@@ -113,7 +113,7 @@ func TestAstraProofCapturedRunSurvivesProducerCheckoutRemoval(t *testing.T) {
 			name = "only-durable-intake-survives"
 		}
 		t.Run(name, func(t *testing.T) {
-			w := astraProofWorld(t, pvFail)
+			w := proofExampleWorld(t, pvFail)
 			env, packets, err := w.cliRun(pvProducer(pvPass))
 			if err != nil || env.Outputs.Value == nil {
 				t.Fatalf("control: a real whosaidso run must durably capture its passing output: %v", err)

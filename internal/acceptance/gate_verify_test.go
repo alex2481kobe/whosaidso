@@ -42,7 +42,7 @@ func (f *gateVerifyFixture) id() model.ID { f.n++; return recID(f.n) }
 func (f *gateVerifyFixture) claim(author model.Actor) *model.ClaimAssert {
 	return &model.ClaimAssert{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.ClaimSpec{Assertion: "VERIFIED: all tests passed; this claim is proven", Falsifier: "one counterexample",
-			Scope: laneEReduceScope(), ExternalRefs: []model.ExternalReference{{Tag: "VERIFIED", Citation: "confident external prose"}}}}
+			Scope: reduceScope(), ExternalRefs: []model.ExternalReference{{Tag: "VERIFIED", Citation: "confident external prose"}}}}
 }
 
 func (f *gateVerifyFixture) capture(author model.Actor, events ...model.Event) model.PacketRef {
@@ -132,7 +132,7 @@ func TestGateVerifyClaimAttributionAndUnmeasuredStatus(t *testing.T) {
 		f.unmeasured(c.ID)
 		// A downstream consumer must not interpret the external VERIFIED tag
 		// as satisfaction of its local claim-proof prerequisite.
-		spec := laneEReduceSpec(1)
+		spec := reduceSpec(1)
 		spec.Prerequisites = []model.Prerequisite{{Kind: "claim-proof", Target: model.RecordRef{Project: f.p.ID, RecordID: c.ID, Revision: 1}, WaiverPolicy: "forbid"}}
 		task := &model.TaskCreate{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Spec: spec}
 		if _, err := f.admit(author, author, task); err != nil {
@@ -204,7 +204,7 @@ func TestGateVerifyClosedEventSet(t *testing.T) {
 	f.control()
 	a := model.Actor{ID: "gate-reviewer"}
 	// Exercise the seven pre-U11 allowed operations with satisfiable dependencies.
-	task := &model.TaskCreate{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Spec: laneEReduceSpec(1)}
+	task := &model.TaskCreate{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Spec: reduceSpec(1)}
 	ref := model.RecordRef{Project: f.p.ID, RecordID: task.ID, Revision: 1}
 	body := []byte(`{"ruling":"blocker resolved"}`)
 	gateVerifyPut(t, filepath.Join(f.p.Root, "witness.json"), body)

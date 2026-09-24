@@ -11,7 +11,7 @@ import (
 func TestCopySnapshotNestedMapsAndPointersRemainDetached(t *testing.T) {
 	before, prefix := outsideProofControl(t)
 	first := prefix[len(prefix)-1]
-	after, err := reduce.Apply(before, laneEReduceBundle(t, first, laneEReduceCreate(2, laneEReduceSpec(1))))
+	after, err := reduce.Apply(before, reduceBundle(t, first, reduceCreate(2, reduceSpec(1))))
 	if err != nil {
 		t.Fatalf("control independent snapshot fork must apply: %v", err)
 	}
@@ -20,7 +20,7 @@ func TestCopySnapshotNestedMapsAndPointersRemainDetached(t *testing.T) {
 		t.Fatal("control fork changed an unrelated invocation before any caller mutation")
 	}
 	got := after.Invocations()[0]
-	got.Start.ConfigRequested["sample_count"] = laneEEvidenceNumber("999")
+	got.Start.ConfigRequested["sample_count"] = evidenceNumber("999")
 	*(*got.Seal.ConfigEffective.Value)["sample_count"].Value.Number = "888"
 	(*got.Seal.Outputs.Value)[0].Name = "caller-only"
 	*got.Seal.Outcome.Value.ExitCode = 99
@@ -45,12 +45,12 @@ func TestCopySnapshotTimeLocationCannotRewriteAdmittedTimestamp(t *testing.T) {
 	env.StartedAt = time.Date(2026, 9, 22, 12, 38, 10, 0, time.FixedZone("fixture", 37*60))
 	setup := outsideProofSetup(t, events, true)
 	first := outsideProofRun(t, setup, env, outsideProofEncode(t, proof))
-	before := laneEReduceReplay(t, setup, first)
+	before := reduceReplay(t, setup, first)
 	p, ok := before.ClaimAt(proof.Claim)
 	if !ok || p.Status != reduce.StatusProven {
 		t.Fatalf("control non-hour timestamp must establish PROVEN before testing isolation: %+v", p)
 	}
-	after, err := reduce.Apply(before, laneEReduceBundle(t, first, laneEReduceCreate(2, laneEReduceSpec(1))))
+	after, err := reduce.Apply(before, reduceBundle(t, first, reduceCreate(2, reduceSpec(1))))
 	if err != nil {
 		t.Fatalf("control independent fork must apply: %v", err)
 	}

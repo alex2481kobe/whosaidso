@@ -27,7 +27,7 @@ func familyLedger(t *testing.T, sealSecond bool) (*ledgerBuilder, model.RecordRe
 	return l, claim, failed, passed
 }
 
-func TestU12ProofMustListTheWholeAdmittedFamily(t *testing.T) {
+func TestProofMustListTheWholeAdmittedFamily(t *testing.T) {
 	l, claim, failed, _ := familyLedger(t, true)
 	// Control: listing the failed run too, dispositioned, admits.
 	control := admitProof(claim, newID("RNA1"))
@@ -43,7 +43,7 @@ func TestU12ProofMustListTheWholeAdmittedFamily(t *testing.T) {
 	}
 }
 
-func TestU12ProofWaitsForAnUnsealedFamilyMember(t *testing.T) {
+func TestProofWaitsForAnUnsealedFamilyMember(t *testing.T) {
 	l, claim, failed, _ := familyLedger(t, false)
 	proof := admitProof(claim, newID("RNA1"))
 	proof.Evidence = append(proof.Evidence, model.ObservationDisposition{InvocationRef: model.InvocationRef{Project: testProject, InvocationID: failed.InvocationID}, Disposition: "inconclusive", Reason: "still running"})

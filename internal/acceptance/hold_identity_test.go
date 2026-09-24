@@ -17,7 +17,7 @@ import (
 	"whosaidso/internal/write"
 )
 
-type astraConfirm2World struct {
+type holdIdentityWorld struct {
 	*gateVerifyFixture
 	actor   model.Actor
 	task    *model.TaskCreate
@@ -27,7 +27,7 @@ type astraConfirm2World struct {
 	prefix  []model.Bundle
 }
 
-func astraConfirm2Code(err error) string {
+func holdIdentityCode(err error) string {
 	if err == nil {
 		return ""
 	}
@@ -41,24 +41,24 @@ func astraConfirm2Code(err error) string {
 	return err.Error()
 }
 
-func astraConfirm2New(t *testing.T) *astraConfirm2World {
+func holdIdentityNew(t *testing.T) *holdIdentityWorld {
 	t.Helper()
 	root := t.TempDir()
-	t.Setenv(store.HomeEnv, filepath.Join(t.TempDir(), "review-confirm2-home"))
+	t.Setenv(store.HomeEnv, filepath.Join(t.TempDir(), "hold-identity-home"))
 	t.Setenv(store.NoCacheEnv, "1")
 	f := &gateVerifyFixture{t: t, p: store.Project{ID: recProject, Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}, n: 200}
-	w := &astraConfirm2World{gateVerifyFixture: f, actor: model.Actor{ID: "holder"}}
-	w.task = &model.TaskCreate{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Spec: laneEReduceSpec(1)}
+	w := &holdIdentityWorld{gateVerifyFixture: f, actor: model.Actor{ID: "holder"}}
+	w.task = &model.TaskCreate{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Spec: reduceSpec(1)}
 	w.ref = model.RecordRef{Project: f.p.ID, RecordID: w.task.ID, Revision: 1}
 	w.hold = &model.BlockerHold{Task: w.ref, BlockerID: f.id(), Reason: model.BlockerResume, Actor: w.actor, Criterion: "owner permits resumption"}
 	body := []byte(`{"ruling":"resolved","delivery":"complete"}`)
-	gateVerifyPut(t, filepath.Join(root, "review-confirm2-witness.json"), body)
-	w.witness = gateVerifyContent(body, "review-confirm2-witness.json")
+	gateVerifyPut(t, filepath.Join(root, "hold-identity-witness.json"), body)
+	w.witness = gateVerifyContent(body, "hold-identity-witness.json")
 	w.add(w.task)
 	return w
 }
 
-func (w *astraConfirm2World) add(events ...model.TypedEvent) {
+func (w *holdIdentityWorld) add(events ...model.TypedEvent) {
 	w.t.Helper()
 	b, err := w.admit(w.actor, w.actor, events...)
 	if err != nil {
@@ -67,41 +67,41 @@ func (w *astraConfirm2World) add(events ...model.TypedEvent) {
 	w.prefix = append(w.prefix, b)
 }
 
-func (w *astraConfirm2World) amend(rev model.Revision) *model.TaskAmend {
+func (w *holdIdentityWorld) amend(rev model.Revision) *model.TaskAmend {
 	r := w.ref
 	r.Revision = rev
 	return &model.TaskAmend{Target: r, Replacement: w.task.Spec, Provenance: w.task.Provenance}
 }
 
-func (w *astraConfirm2World) clear(rev model.Revision) *model.BlockerClear {
+func (w *holdIdentityWorld) clear(rev model.Revision) *model.BlockerClear {
 	r := w.ref
 	r.Revision = rev
 	return &model.BlockerClear{Task: r, BlockerID: w.hold.BlockerID, HoldRef: model.BlockerRef{Task: r, BlockerID: w.hold.BlockerID}, ResolvingWitness: w.witness}
 }
 
-func (w *astraConfirm2World) close(rev model.Revision) *model.TaskClose {
+func (w *holdIdentityWorld) close(rev model.Revision) *model.TaskClose {
 	r := w.ref
 	r.Revision = rev
 	return &model.TaskClose{Task: r, Outcome: model.ClosureSuccess,
 		AcceptanceWitnessRefs: []model.AcceptanceWitness{{CriterionID: w.task.Spec.AcceptanceCriteria[0].ID, CriterionRevision: 1, WitnessRef: w.witness}}, DeliveryWitnessRefs: []model.ArtifactRef{w.witness}}
 }
 
-func (w *astraConfirm2World) replay(events []model.TypedEvent, want string) reduce.Snapshot {
+func (w *holdIdentityWorld) replay(events []model.TypedEvent, want string) reduce.Snapshot {
 	w.t.Helper()
 	raw := []model.Event{}
 	for _, e := range events {
 		raw = append(raw, recEncode(w.t, e))
 	}
-	p := model.Packet{Version: model.WireVersion, Project: w.p.ID, CommandID: w.id(), RequestDigest: model.HashBytes([]byte("review-confirm2-packet")), Author: w.actor, CapturedAt: time.Now().UTC(), Events: raw}
+	p := model.Packet{Version: model.WireVersion, Project: w.p.ID, CommandID: w.id(), RequestDigest: model.HashBytes([]byte("hold-identity-packet")), Author: w.actor, CapturedAt: time.Now().UTC(), Events: raw}
 	data, err := model.Encode(p)
 	if err != nil {
 		w.t.Fatal(err)
 	}
 	prior := w.prefix[len(w.prefix)-1]
-	b := model.Bundle{Version: model.WireVersion, Project: w.p.ID, Sequence: prior.Sequence + 1, CommandID: w.id(), Predecessor: prior.CommandID, RequestDigest: model.HashBytes([]byte("review-confirm2-bundle")), Admitter: w.actor, RecordedAt: p.CapturedAt.Add(time.Second), Packets: []model.PacketRef{{CommandID: p.CommandID, Digest: model.HashBytes(data)}}}
-	b.Events = laneEReduceReview(w.t, w.actor, b.Packets, []model.Packet{p})
+	b := model.Bundle{Version: model.WireVersion, Project: w.p.ID, Sequence: prior.Sequence + 1, CommandID: w.id(), Predecessor: prior.CommandID, RequestDigest: model.HashBytes([]byte("hold-identity-bundle")), Admitter: w.actor, RecordedAt: p.CapturedAt.Add(time.Second), Packets: []model.PacketRef{{CommandID: p.CommandID, Digest: model.HashBytes(data)}}}
+	b.Events = reduceReview(w.t, w.actor, b.Packets, []model.Packet{p})
 	s, err := reduce.Replay(append(append([]model.Bundle{}, w.prefix...), b))
-	if astraConfirm2Code(err) != want {
+	if holdIdentityCode(err) != want {
 		w.t.Errorf("ledger-only replay: want %q, got %v", want, err)
 	}
 	return s
@@ -109,7 +109,7 @@ func (w *astraConfirm2World) replay(events []model.TypedEvent, want string) redu
 
 // check and admit consume the same packets; replay independently checks the
 // intended ledger order, which is not necessarily the packets' capture order.
-func (w *astraConfirm2World) probe(groups [][]model.TypedEvent, replay []model.TypedEvent, want string) {
+func (w *holdIdentityWorld) probe(groups [][]model.TypedEvent, replay []model.TypedEvent, want string) {
 	w.t.Helper()
 	w.replay(replay, want)
 	ids := []model.ID{}
@@ -127,7 +127,7 @@ func (w *astraConfirm2World) probe(groups [][]model.TypedEvent, replay []model.T
 	}
 	checked := ""
 	if len(check.Refusals) > 0 {
-		checked = astraConfirm2Code(check.Refusals[0].Err)
+		checked = holdIdentityCode(check.Refusals[0].Err)
 	}
 	if checked != want {
 		w.t.Errorf("check admission: want %q, got %+v", want, check.Refusals)
@@ -136,10 +136,10 @@ func (w *astraConfirm2World) probe(groups [][]model.TypedEvent, replay []model.T
 		w.t.Fatal("dry run changed ledger")
 	}
 	b, err := write.Admit(context.Background(), w.p, write.AdmitRequest{CommandID: w.id(), PacketIDs: ids, Admitter: w.actor, Outcome: "accepted", Reason: "confirm hold identity"})
-	if astraConfirm2Code(err) != checked {
+	if holdIdentityCode(err) != checked {
 		w.t.Errorf("check/admit disagree: check %q, admit %v", checked, err)
 	}
-	if astraConfirm2Code(err) != want {
+	if holdIdentityCode(err) != want {
 		w.t.Errorf("admission: want %q, got %v", want, err)
 	}
 	if err != nil {
@@ -158,11 +158,11 @@ func (w *astraConfirm2World) probe(groups [][]model.TypedEvent, replay []model.T
 // Captured after the amendment, the r1 hold is refused as stale; admission,
 // check admission and replay of the order admission applies (the clear waits
 // for the amendment and the hold, otherwise capture order) agree.
-func TestAstraConfirm2HoldAmendClearCaptureOrders(t *testing.T) {
+func TestHoldIdentityAmendClearCaptureOrders(t *testing.T) {
 	admitted := map[string]string{"HAC": "HAC", "HCA": "HAC", "AHC": "AHC", "ACH": "AHC", "CHA": "HAC", "CAH": "AHC"}
 	for _, order := range []string{"HAC", "HCA", "AHC", "ACH", "CHA", "CAH"} {
 		t.Run(order, func(t *testing.T) {
-			w := astraConfirm2New(t)
+			w := holdIdentityNew(t)
 			events := map[byte]model.TypedEvent{'H': w.hold, 'A': w.amend(1), 'C': w.clear(2)}
 			groups := [][]model.TypedEvent{}
 			for i := range order {
@@ -179,16 +179,16 @@ func TestAstraConfirm2HoldAmendClearCaptureOrders(t *testing.T) {
 		})
 	}
 	t.Run("one-packet", func(t *testing.T) {
-		w := astraConfirm2New(t)
+		w := holdIdentityNew(t)
 		events := []model.TypedEvent{w.hold, w.amend(1), w.clear(2)}
 		w.probe([][]model.TypedEvent{events}, events, "")
 	})
 }
 
-func TestAstraConfirm2HoldLifecycle(t *testing.T) {
+func TestHoldIdentityLifecycle(t *testing.T) {
 	for _, variant := range []string{"clear-current", "clear-stale", "duplicate-clear", "reuse-cleared-id", "another-task", "same-id-other-task", "open-close", "cleared-close", "supersede", "supersede-current", "correction", "correction-current", "changed-contract", "claim-revise"} {
 		t.Run(variant, func(t *testing.T) {
-			w := astraConfirm2New(t)
+			w := holdIdentityNew(t)
 			w.add(w.hold)
 			w.add(w.amend(1))
 			w.add(w.amend(2))
@@ -233,7 +233,7 @@ func TestAstraConfirm2HoldLifecycle(t *testing.T) {
 				w.add(&model.Correction{Target: model.CorrectionTarget{Kind: "record", Record: &r}, AffectedRevisions: []model.RecordRef{r}, Reason: "original scope was incorrect", CorrectiveRef: w.witness})
 			case "changed-contract":
 				a := w.amend(3)
-				a.Replacement = laneEReduceSpec(2)
+				a.Replacement = reduceSpec(2)
 				a.Replacement.Intent = "deliver a different contract"
 				w.add(a)
 				events = []model.TypedEvent{w.clear(4)}
@@ -250,7 +250,7 @@ func TestAstraConfirm2HoldLifecycle(t *testing.T) {
 			}
 			w.probe([][]model.TypedEvent{events}, events, want)
 			if want == "" {
-				s := laneEReduceReplay(t, w.prefix...)
+				s := reduceReplay(t, w.prefix...)
 				b, ok := s.Hold(w.clear(3).HoldRef)
 				if !ok || b.Open() || b.TaskRevision != 1 {
 					t.Errorf("original hold identity lost: %+v %v", b, ok)
@@ -265,12 +265,12 @@ func TestAstraConfirm2HoldLifecycle(t *testing.T) {
 	}
 }
 
-func TestAstraConfirm2HandbackAcrossAmendment(t *testing.T) {
+func TestHoldIdentityHandbackAcrossAmendment(t *testing.T) {
 	for _, outcome := range []model.AttemptOutcome{model.AttemptBlockedMidTask, model.AttemptOutOfScope} {
 		for _, split := range []bool{false, true} {
 			for _, variant := range []string{"amended-before-handback", "hold-receipt-amend", "hold-amend-receipt", "receipt-amend-hold", "hold-amend-receipt-clear"} {
 				t.Run(fmt.Sprintf("%s/%s/split-%t", outcome, variant, split), func(t *testing.T) {
-					w := astraConfirm2New(t)
+					w := holdIdentityNew(t)
 					attempt := w.id()
 					w.add(&model.TaskStart{Task: w.ref, Actor: w.actor, AttemptID: attempt})
 					receipt := &model.AttemptTerminal{Task: w.ref, AttemptID: attempt, Outcome: outcome, Reason: "work cannot continue", NextAction: "owner resolves hold", DeliveryRefs: []model.ArtifactRef{}}
@@ -331,10 +331,10 @@ func TestAstraConfirm2HandbackAcrossAmendment(t *testing.T) {
 	}
 }
 
-func TestAstraConfirm2TakeoverKeepsAmendedHold(t *testing.T) {
+func TestHoldIdentityTakeoverKeepsAmendedHold(t *testing.T) {
 	for _, variant := range []string{"live", "terminal-open", "terminal-cleared", "stale"} {
 		t.Run(variant, func(t *testing.T) {
-			w := astraConfirm2New(t)
+			w := holdIdentityNew(t)
 			attempt := w.id()
 			w.add(&model.TaskStart{Task: w.ref, Actor: w.actor, AttemptID: attempt})
 			if variant != "live" && variant != "stale" {
@@ -357,7 +357,7 @@ func TestAstraConfirm2TakeoverKeepsAmendedHold(t *testing.T) {
 			}
 			events := []model.TypedEvent{&model.TaskTakeover{Task: r, Actor: w.actor, PriorAttemptID: attempt, AttemptID: w.id(), StoppedConfirmationRef: w.witness}}
 			w.probe([][]model.TypedEvent{events}, events, want)
-			s := laneEReduceReplay(t, w.prefix...)
+			s := reduceReplay(t, w.prefix...)
 			h, ok := s.Hold(w.clear(2).HoldRef)
 			if !ok || h.Open() != (variant != "terminal-cleared") {
 				t.Errorf("takeover lost or changed hold: %+v %v", h, ok)

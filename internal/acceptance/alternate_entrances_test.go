@@ -21,17 +21,17 @@ import (
 
 // Contract:99,161-163,362-369: matching execution conditions include the
 // source actually read. Empty source-pin lists do not establish equal source.
-func TestAstraRound2ChangedExecutionSourceCannotCompare(t *testing.T) {
+func TestChangedExecutionSourceCannotCompare(t *testing.T) {
 	for _, change := range []string{"control", "committed", "dirty"} {
 		t.Run(change, func(t *testing.T) {
-			w := astraProofWorld(t, pvFail)
+			w := proofExampleWorld(t, pvFail)
 			script := strings.Replace(pvProducer(pvPass), "printf '%s' '"+pvPass+"'", "cat measurement.json", 1)
 			pvPut(t, w.p.Root, "tools/run.sh", []byte(script))
 			pvPut(t, w.p.Root, "measurement.json", []byte(pvPass))
 			pvPut(t, w.p.Root, ".gitignore", []byte(".whosaidso/\n"))
 			git := func(args ...string) string {
 				t.Helper()
-				cmd := exec.Command("git", append([]string{"-C", w.p.Root, "-c", "user.name=review", "-c", "user.email=review@example.invalid", "-c", "commit.gpgsign=false"}, args...)...)
+				cmd := exec.Command("git", append([]string{"-C", w.p.Root, "-c", "user.name=test", "-c", "user.email=test@example.invalid", "-c", "commit.gpgsign=false"}, args...)...)
 				out, err := cmd.CombinedOutput()
 				if err != nil {
 					t.Fatalf("git fixture: %v: %s", err, out)
@@ -75,7 +75,7 @@ func TestAstraRound2ChangedExecutionSourceCannotCompare(t *testing.T) {
 				members[env.InvocationID] = "supports"
 			}
 			if change == "control" {
-				astraProven(t, w, members)
+				requireProven(t, w, members)
 				return
 			}
 			if err := w.prove(members); err == nil || w.status() == reduce.StatusProven {
@@ -87,7 +87,7 @@ func TestAstraRound2ChangedExecutionSourceCannotCompare(t *testing.T) {
 
 // Contract:120,144: every acknowledged source capture must save its bytes,
 // including callers of the same exported writer used by the CLI.
-func TestAstraRound2SourceCaptureCannotBypassDurability(t *testing.T) {
+func TestSourceCaptureCannotBypassDurability(t *testing.T) {
 	for _, route := range []string{"control", "events", "build-events"} {
 		t.Run(route, func(t *testing.T) {
 			w := pvNew(t)
@@ -122,7 +122,7 @@ func TestAstraRound2SourceCaptureCannotBypassDurability(t *testing.T) {
 
 // Contract:52-53: an acceptance hold prevents dispatch when no attempt is live.
 // Changing the verb to takeover must not reopen a terminal attempt's blocked task.
-func TestAstraRound2TakeoverCannotBypassReady(t *testing.T) {
+func TestTakeoverCannotBypassReady(t *testing.T) {
 	for _, blocked := range []bool{false, true} {
 		t.Run(map[bool]string{false: "control", true: "awaiting-acceptance"}[blocked], func(t *testing.T) {
 			w := flowNew(t)
@@ -159,7 +159,7 @@ func TestAstraRound2TakeoverCannotBypassReady(t *testing.T) {
 
 // Contract:684: a published admission answers an identical retry without
 // requiring access to this machine's intake. Permissions do not change content.
-func TestAstraRound2RetryDoesNotNeedReadableIntake(t *testing.T) {
+func TestRetryDoesNotNeedReadableIntake(t *testing.T) {
 	w := pvNew(t)
 	r := write.AdmitRequest{CommandID: w.id(), PacketIDs: []model.ID{w.capture(w.lane, &model.InvocationStart{Envelope: w.start(w.id(), false)})},
 		Admitter: w.lane, Outcome: "accepted", Reason: "retry the same review"}
@@ -203,13 +203,13 @@ func TestAstraRound2RetryDoesNotNeedReadableIntake(t *testing.T) {
 
 // Contract:584-585,603-616: config names belong to the exact instrument
 // revision; replay must reject the same invalid relationship admission rejects.
-func TestAstraRound2ReplayChecksInstrumentConfigNames(t *testing.T) {
+func TestReplayChecksInstrumentConfigNames(t *testing.T) {
 	w := pvNew(t)
 	env := w.start(w.id(), false)
 	w.mustAdmit(w.lane, &model.InvocationStart{Envelope: env}, w.seal(env, []model.RunOutput{}...))
 	badEnv := w.start(w.id(), false)
 	bad := w.seal(badEnv, []model.RunOutput{}...)
-	bad.Envelope.ConfigEffective = recKnown(map[string]model.Availability[model.Scalar]{"undeclared-camera": recKnown(laneEEvidenceNumber("1"))})
+	bad.Envelope.ConfigEffective = recKnown(map[string]model.Availability[model.Scalar]{"undeclared-camera": recKnown(evidenceNumber("1"))})
 	if err := w.admit(w.lane, &model.InvocationStart{Envelope: badEnv}, bad); recCode(err) != "invalid-field" || !strings.Contains(err.Error(), "config_effective") {
 		t.Fatalf("control: admission must refuse the undeclared effective knob: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestAstraRound2ReplayChecksInstrumentConfigNames(t *testing.T) {
 				t.Fatal(err)
 			}
 			if seal, ok := event.(*model.InvocationSeal); ok {
-				*seal.Envelope.ConfigEffective.Value = map[string]model.Availability[model.Scalar]{"undeclared-camera": recKnown(laneEEvidenceNumber("1"))}
+				*seal.Envelope.ConfigEffective.Value = map[string]model.Availability[model.Scalar]{"undeclared-camera": recKnown(evidenceNumber("1"))}
 				prefix[i].Events[j] = recEncode(t, seal)
 			}
 		}

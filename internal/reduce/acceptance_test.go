@@ -56,7 +56,7 @@ func closeBy(l *ledgerBuilder, t *testing.T, closer string) {
 	l.add(t, authored(l.seq+1, []model.TypedEvent{closure}, closer)...)
 }
 
-func TestR151AccepterAloneMayClose(t *testing.T) {
+func TestAccepterAloneMayClose(t *testing.T) {
 	owner := model.Actor{ID: "owner"}
 	for _, tc := range []struct {
 		name, closer, code string
@@ -81,7 +81,7 @@ func TestR151AccepterAloneMayClose(t *testing.T) {
 	}
 }
 
-func TestR151SelfAccepted(t *testing.T) {
+func TestSelfAccepted(t *testing.T) {
 	for _, tc := range []struct {
 		name, doer, closer string
 		want               Truth

@@ -15,14 +15,14 @@ import (
 // Each replay preserves packet boundaries and authored event order. The
 // expected ordering follows providers first, then capture IDs; reversing a
 // start and amendment deliberately makes the start stale, not reorderable.
-func TestAstraConfirm4StartAmendParity(t *testing.T) {
+func TestStaleStartAmendParity(t *testing.T) {
 	for _, shape := range []string{"split", "merged", "already-admitted"} {
 		for _, order := range []string{"01", "10"} {
 			t.Run(shape+"/"+order, func(t *testing.T) {
-				w := astraConfirm2New(t)
+				w := holdIdentityNew(t)
 				start := &model.TaskStart{Task: w.ref, Actor: w.actor, AttemptID: w.id()}
 				groups := [][]model.TypedEvent{{start}, {w.amend(1)}}
-				groups, capture := astraConfirm3AsAdmitted(groups, order, order)
+				groups, capture := revisionOrderAsAdmitted(groups, order, order)
 				want := ""
 				if order == "10" {
 					want = "revision-conflict"
@@ -34,7 +34,7 @@ func TestAstraConfirm4StartAmendParity(t *testing.T) {
 					w.add(groups[0]...)
 					groups, capture = groups[1:], "0"
 				}
-				astraConfirm3Probe(w.gateVerifyFixture, w.actor, groups, capture, want, want)
+				revisionOrderProbe(w.gateVerifyFixture, w.actor, groups, capture, want, want)
 				if want != "" {
 					return
 				}
@@ -51,26 +51,26 @@ func TestAstraConfirm4StartAmendParity(t *testing.T) {
 	}
 }
 
-func TestAstraConfirm4DependencyParity(t *testing.T) {
+func TestStaleDependencyParity(t *testing.T) {
 	orders := map[string]string{"012": "012", "021": "021", "102": "012", "120": "012", "201": "021", "210": "021"}
 	for capture, admitted := range orders {
 		for _, historical := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/historical-%t", capture, historical), func(t *testing.T) {
-				f := astraConfirm3New(t)
-				a := model.Actor{ID: "review-confirm4"}
-				create := astraConfirm3Task(f, []model.RecordRef{}...)
+				f := revisionOrderNew(t)
+				a := model.Actor{ID: "set-types"}
+				create := revisionOrderTask(f, []model.RecordRef{}...)
 				r1 := model.RecordRef{Project: f.p.ID, RecordID: create.ID, Revision: 1}
 				var use model.TypedEvent = &model.TaskStart{Task: r1, Actor: a, AttemptID: f.id()}
 				if historical {
-					use = astraConfirm3Task(f, r1)
+					use = revisionOrderTask(f, r1)
 				}
 				amend := &model.TaskAmend{Target: r1, Provenance: create.Provenance, Replacement: create.Spec}
-				groups, renumbered := astraConfirm3AsAdmitted([][]model.TypedEvent{{create}, {use}, {amend}}, capture, admitted)
+				groups, renumbered := revisionOrderAsAdmitted([][]model.TypedEvent{{create}, {use}, {amend}}, capture, admitted)
 				want := ""
 				if !historical && admitted == "021" {
 					want = "revision-conflict"
 				}
-				astraConfirm3Probe(f, a, groups, renumbered, want, want)
+				revisionOrderProbe(f, a, groups, renumbered, want, want)
 			})
 		}
 	}
@@ -78,17 +78,17 @@ func TestAstraConfirm4DependencyParity(t *testing.T) {
 
 // This is an end-to-end text control: draft, capture, admission and ledger
 // decoding must all preserve the exact authored bytes in string fields.
-func TestAstraConfirm4SetCapturedText(t *testing.T) {
+func TestSetCapturedText(t *testing.T) {
 	bin := writeVerifyCLI(t)
 	for _, value := range []string{"79461799e564", "1e9999", "0012", "true", "false", `{"meaning":"text"}`, "[1,2]", `"null"`} {
 		t.Run(value, func(t *testing.T) {
-			f := astraConfirmNew(t)
+			f := cliHoldNew(t)
 			a := model.Actor{ID: "holder"}
-			task := astraConfirm3Task(f, []model.RecordRef{}...)
+			task := revisionOrderTask(f, []model.RecordRef{}...)
 			if _, err := f.admit(a, a, task); err != nil {
 				t.Fatal(err)
 			}
-			_, errs, err := astraConfirmCLI(t, f, bin, nil, "template", "task.amend", "--from", string(task.ID),
+			_, errs, err := cliHoldRun(t, f, bin, nil, "template", "task.amend", "--from", string(task.ID),
 				"--set", "provenance.source_refs=[]", "--set", "replacement.intent="+value,
 				"--capture", "--admit", "--reason", "confirm typed text")
 			if err != nil {
@@ -112,17 +112,17 @@ func TestAstraConfirm4SetCapturedText(t *testing.T) {
 
 // Malformed typed values remain malformed; the strict model decoder, rather
 // than an extra template schema, must refuse them before capture writes intake.
-func TestAstraConfirm4SetTypedRefusals(t *testing.T) {
+func TestSetTypedRefusals(t *testing.T) {
 	bin := writeVerifyCLI(t)
-	f := astraConfirmNew(t)
+	f := cliHoldNew(t)
 	a := model.Actor{ID: "holder"}
-	task := astraConfirm3Task(f, []model.RecordRef{}...)
+	task := revisionOrderTask(f, []model.RecordRef{}...)
 	if _, err := f.admit(a, a, task); err != nil {
 		t.Fatal(err)
 	}
 	for _, value := range []string{"1", `"1"`, "true", "1.5", "{}", "[]"} {
 		t.Run(value, func(t *testing.T) {
-			_, errs, err := astraConfirmCLI(t, f, bin, nil, "template", "task.amend", "--from", string(task.ID),
+			_, errs, err := cliHoldRun(t, f, bin, nil, "template", "task.amend", "--from", string(task.ID),
 				"--set", "provenance.source_refs=[]", "--set", "target.revision="+value, "--capture")
 			if value == "1" {
 				if err != nil {
@@ -135,9 +135,9 @@ func TestAstraConfirm4SetTypedRefusals(t *testing.T) {
 	}
 }
 
-func TestAstraConfirm4SetDraftTypes(t *testing.T) {
+func TestSetDraftTypes(t *testing.T) {
 	bin := writeVerifyCLI(t)
-	f := astraConfirmNew(t)
+	f := cliHoldNew(t)
 	cases := []struct {
 		name, event string
 		sets        []string
@@ -163,7 +163,7 @@ func TestAstraConfirm4SetDraftTypes(t *testing.T) {
 			for _, set := range tc.sets {
 				args = append(args, "--set", set)
 			}
-			data := astraConfirmDraft(t, f, bin, args...)
+			data := cliHoldDraft(t, f, bin, args...)
 			if got := flowGet(data, tc.path...); !reflect.DeepEqual(got, tc.want) {
 				t.Errorf("%v: got %#v (%T), want %#v (%T)", tc.path, got, got, tc.want, tc.want)
 			}
@@ -176,20 +176,20 @@ func TestAstraConfirm4SetDraftTypes(t *testing.T) {
 		})
 	}
 	for _, set := range []string{"spec.intent=null", "spec.non_goals=null", "spec.unknown=1", "spec.non_goals[99]=x"} {
-		if _, errs, err := astraConfirmCLI(t, f, bin, nil, "template", "task.create", "--set", set); err == nil {
+		if _, errs, err := cliHoldRun(t, f, bin, nil, "template", "task.create", "--set", set); err == nil {
 			t.Errorf("invalid path or required null %q was accepted: %s", set, errs)
 		}
 	}
 }
 
-func TestAstraConfirm4SetMapTypes(t *testing.T) {
+func TestSetMapTypes(t *testing.T) {
 	bin := writeVerifyCLI(t)
-	f := astraConfirmNew(t)
+	f := cliHoldNew(t)
 	for _, container := range []string{"config_requested", "conditions_declared"} {
 		for _, value := range []string{"8e1", "true", `{"a":1}`, "[1]", `"quoted"`} {
 			t.Run(container+"/"+value, func(t *testing.T) {
 				path := "envelope." + container
-				data := astraConfirmDraft(t, f, bin, "invocation.start", "--set",
+				data := cliHoldDraft(t, f, bin, "invocation.start", "--set",
 					path+`={"label":{"type":"string","string":"x"},"n":{"type":"number","number":1},"b":{"type":"bool","bool":false}}`,
 					"--set", path+".label.string="+value, "--set", path+".n.number=8e1", "--set", path+".b.bool=true")
 				want := strings.Trim(value, `"`)

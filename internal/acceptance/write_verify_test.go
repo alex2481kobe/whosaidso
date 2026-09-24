@@ -169,9 +169,9 @@ func TestWriteVerifyNestedInvocationIntentCopiesAreOwned(t *testing.T) {
 	r.InputRefs = []model.ArtifactRef{gateVerifyContent([]byte("input"), "input.json")}
 	r.InputRefs[0].Git = &model.GitPin{ObjectFormat: "sha1", Commit: strings.Repeat("a", 40), Path: "input.json"}
 	r.ExecutionSourceIdentity.SourceRefs = []model.ArtifactRef{gateVerifyContent([]byte("source"), "source.json")}
-	r.ExecutionSourceIdentity.MachineID = laneEEvidenceKnown(laneEReduceID(90))
-	r.ExecutionSourceIdentity.Head = laneEEvidenceKnown(model.GitHead{ObjectFormat: "sha1", Commit: strings.Repeat("b", 40)})
-	r.ExecutionSourceIdentity.Dirty = laneEEvidenceKnown(true)
+	r.ExecutionSourceIdentity.MachineID = evidenceKnown(reduceID(90))
+	r.ExecutionSourceIdentity.Head = evidenceKnown(model.GitHead{ObjectFormat: "sha1", Commit: strings.Repeat("b", 40)})
+	r.ExecutionSourceIdentity.Dirty = evidenceKnown(true)
 	text, flag := "original", true
 	r.ConditionsDeclared["label"] = model.Scalar{Type: "string", String: &text}
 	r.ConditionsDeclared["flag"] = model.Scalar{Type: "bool", Bool: &flag}
@@ -195,7 +195,7 @@ func TestWriteVerifyNestedInvocationIntentCopiesAreOwned(t *testing.T) {
 		*r.ConditionsDeclared["seed"].Number = "777"
 		text, flag = "reused", false
 		r.CriterionRef.Value.Revision++
-		*r.ExecutionSourceIdentity.MachineID.Value = laneEReduceID(91)
+		*r.ExecutionSourceIdentity.MachineID.Value = reduceID(91)
 		r.ExecutionSourceIdentity.Head.Value.Commit = strings.Repeat("c", 40)
 		*r.ExecutionSourceIdentity.Dirty.Value = false
 		r.InputRefs[0].Git.Path = "reused.json"

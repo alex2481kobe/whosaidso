@@ -48,13 +48,13 @@ func codeChangeLedger(t *testing.T, failedEnv, passedEnv func(model.InvocationEn
 
 func same(env model.InvocationEnvelope) model.InvocationEnvelope { return env }
 
-func TestR142CodeChangeSetsAFailingRunAside(t *testing.T) {
+func TestCodeChangeSetsAFailingRunAside(t *testing.T) {
 	l, claim, proof := codeChangeLedger(t, same, same)
 	l.add(t, proof)
 	wantClaim(t, wantBoth(t, l, ""), claim, StatusProven)
 }
 
-func TestR142CodeChangeRefusals(t *testing.T) {
+func TestCodeChangeRefusals(t *testing.T) {
 	unknownHead := func(env model.InvocationEnvelope) model.InvocationEnvelope {
 		env.ExecutionSourceIdentity.Head = proofUnknown[model.GitHead]()
 		return env
@@ -112,7 +112,7 @@ func TestR142CodeChangeRefusals(t *testing.T) {
 // Without a code change, a failing run of the same revision stays
 // counterevidence: cited as "contradicts" it leaves the claim unproven. (Set
 // aside without one, only the gate can see it fails; internal/write tests it.)
-func TestR142WithoutACodeChangeTheRunStaysCounterevidence(t *testing.T) {
+func TestWithoutACodeChangeTheRunStaysCounterevidence(t *testing.T) {
 	l, _, proof := codeChangeLedger(t, same, same)
 	proof.Evidence[1].Disposition = "contradicts"
 	proof.Evidence[1].CodeChange = nil
@@ -120,7 +120,7 @@ func TestR142WithoutACodeChangeTheRunStaysCounterevidence(t *testing.T) {
 	wantBoth(t, l, CodeInvalidTransition)
 }
 
-func TestR142CodeChangeOnlyForAnExactRevisionRun(t *testing.T) {
+func TestCodeChangeOnlyForAnExactRevisionRun(t *testing.T) {
 	l, claim, proof := codeChangeLedger(t, same, same)
 	l.add(t, criterionRevision(claim, 2))
 	next := atHead(proofEnvelope(claim, newID("RNA3")), newHead)

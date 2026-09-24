@@ -21,7 +21,7 @@ func outsideWriteProject(t *testing.T) store.Project {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	root := t.TempDir()
-	return store.Project{ID: laneEReduceProject, Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
+	return store.Project{ID: reduceProject, Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
 }
 
 // TestWriteAdmissionCannotAcceptItsOwnAuthorsPacket was removed by the
@@ -59,8 +59,8 @@ func outsideRunRequest(project store.Project, report, gate string) write.RunRequ
 		Instrument: events[2].(*model.InstrumentDeclare).Spec, ExecutionSourceIdentity: env.ExecutionSourceIdentity,
 		Argv: []string{os.Args[0], "-test.run=^TestWriteProducerChild$", "--", "outside-producer", report, gate},
 		Dir:  project.Root, Timeout: 10 * time.Second,
-		ConfigRequested:    map[string]model.Scalar{"sample_count": laneEEvidenceNumber("12")},
-		ConditionsDeclared: map[string]model.Scalar{"seed": laneEEvidenceNumber("7")},
+		ConfigRequested:    map[string]model.Scalar{"sample_count": evidenceNumber("12")},
+		ConditionsDeclared: map[string]model.Scalar{"seed": evidenceNumber("7")},
 	}
 }
 
@@ -183,16 +183,16 @@ func TestWriteProducerFreezesCallerIntentBeforeLaunch(t *testing.T) {
 	}
 	// Receiving copied orders all copy reads before these writes. Closing resume
 	// orders these writes before publication and sealing, even if copying regresses.
-	request.ConfigRequested["sample_count"] = laneEEvidenceNumber("999")
-	request.ConditionsDeclared["seed"] = laneEEvidenceNumber("777")
+	request.ConfigRequested["sample_count"] = evidenceNumber("999")
+	request.ConditionsDeclared["seed"] = evidenceNumber("777")
 	resume()
 	answer := <-done
 	if answer.err != nil {
 		t.Fatalf("fixture run must complete after caller storage is reused: %v", answer.err)
 	}
 	start, seal := outsideRunPackets(t, project, answer.result)
-	wantConfig := map[string]model.Scalar{"sample_count": laneEEvidenceNumber("12")}
-	wantConditions := map[string]model.Scalar{"seed": laneEEvidenceNumber("7")}
+	wantConfig := map[string]model.Scalar{"sample_count": evidenceNumber("12")}
+	wantConditions := map[string]model.Scalar{"seed": evidenceNumber("7")}
 	for _, packet := range []struct {
 		name     string
 		envelope model.InvocationEnvelope

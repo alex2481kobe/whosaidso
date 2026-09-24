@@ -22,7 +22,7 @@ import (
 // separately built CLI. A successful capture is not a successful admission.
 func hbVerifyStart(t *testing.T, f *gateVerifyFixture, actor model.Actor) (model.RecordRef, write.HandbackRequest) {
 	t.Helper()
-	task := &model.TaskCreate{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Spec: laneEReduceSpec(1)}
+	task := &model.TaskCreate{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Spec: reduceSpec(1)}
 	ref := model.RecordRef{Project: f.p.ID, RecordID: task.ID, Revision: 1}
 	r := write.HandbackRequest{CommandID: f.id(), Author: actor, AttemptID: f.id(), Outcome: model.AttemptStopped,
 		Reason: "  Stopped: e\u0301 / é\r\n", NextAction: "\tOwner decides; commits denied, reconciliation owed?\n"}
@@ -218,7 +218,7 @@ func TestHandbackVerifyNineOutcomesThroughAPIAndCLI(t *testing.T) {
 					if outcome == model.AttemptSuccess && (len(p.Reasons) != 1 || p.Reasons[0].Kind != reduce.ReasonAwaitingAcceptance) {
 						t.Fatalf("success without witnesses escaped awaiting-acceptance: %+v", p.Reasons)
 					}
-					consumer := &model.TaskCreate{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Spec: laneEReduceSpec(1)}
+					consumer := &model.TaskCreate{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Spec: reduceSpec(1)}
 					consumer.Spec.Prerequisites = []model.Prerequisite{{Kind: "task-success", Target: ref, WaiverPolicy: "forbid"}}
 					if _, err := f.admit(r.Author, r.Author, consumer); err != nil {
 						t.Fatal(err)

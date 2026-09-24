@@ -15,21 +15,21 @@ import (
 	"whosaidso/internal/store"
 )
 
-func laneELedgerProject(t *testing.T) store.Project {
+func ledgerProject(t *testing.T) store.Project {
 	t.Helper()
 	root := t.TempDir()
 	return store.Project{ID: "datum/lane-e-ledger", Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
 }
 
-func laneELedgerID(n int) model.ID { return model.ID(fmt.Sprintf("%026d", n)) }
+func ledgerID(n int) model.ID { return model.ID(fmt.Sprintf("%026d", n)) }
 
-func laneELedgerDigest(n int) model.Digest {
+func ledgerDigest(n int) model.Digest {
 	return model.HashBytes([]byte(fmt.Sprintf("lane-e-ledger-request-%d", n)))
 }
 
-func laneELedgerProposal(n int) func([]model.Bundle) (model.Bundle, error) {
+func ledgerProposal(n int) func([]model.Bundle) (model.Bundle, error) {
 	return func([]model.Bundle) (model.Bundle, error) {
-		packets := []model.PacketRef{{CommandID: laneELedgerID(n + 1000), Digest: laneELedgerDigest(n + 1000)}}
+		packets := []model.PacketRef{{CommandID: ledgerID(n + 1000), Digest: ledgerDigest(n + 1000)}}
 		event, err := model.EncodeEvent(&model.ReviewAdmit{
 			Packets: packets, Outcome: "accepted", Actor: model.Actor{ID: "coordinator"},
 			Reason: fmt.Sprintf("packet %d was independently checked", n),
@@ -41,16 +41,16 @@ func laneELedgerProposal(n int) func([]model.Bundle) (model.Bundle, error) {
 	}
 }
 
-func laneELedgerAdmit(t *testing.T, p store.Project, n int) model.Bundle {
+func ledgerAdmit(t *testing.T, p store.Project, n int) model.Bundle {
 	t.Helper()
-	b, err := store.Transact(context.Background(), p, laneELedgerID(n), laneELedgerDigest(n), laneELedgerProposal(n))
+	b, err := store.Transact(context.Background(), p, ledgerID(n), ledgerDigest(n), ledgerProposal(n))
 	if err != nil {
 		t.Fatalf("valid admission %d must succeed: %v", n, err)
 	}
 	return b
 }
 
-func laneELedgerRead(t *testing.T, p store.Project, count int) []model.Bundle {
+func ledgerRead(t *testing.T, p store.Project, count int) []model.Bundle {
 	t.Helper()
 	bundles, err := store.ReadPrefix(p)
 	if err != nil || len(bundles) != count {
@@ -64,7 +64,7 @@ func laneELedgerRead(t *testing.T, p store.Project, count int) []model.Bundle {
 	return bundles
 }
 
-func laneELedgerPath(t *testing.T, p store.Project, sequence uint64, id model.ID) string {
+func ledgerPath(t *testing.T, p store.Project, sequence uint64, id model.ID) string {
 	t.Helper()
 	name, err := model.BundleName(sequence, id)
 	if err != nil {
@@ -73,7 +73,7 @@ func laneELedgerPath(t *testing.T, p store.Project, sequence uint64, id model.ID
 	return filepath.Join(p.Ledger, name)
 }
 
-func laneELedgerWrite(t *testing.T, path string, b model.Bundle) {
+func ledgerWrite(t *testing.T, path string, b model.Bundle) {
 	t.Helper()
 	data, err := model.Encode(b)
 	if err != nil {
@@ -93,10 +93,10 @@ func laneELedgerWrite(t *testing.T, path string, b model.Bundle) {
 func TestLedgerOneCommandIDCannotNameTwoAdmittedBundles(t *testing.T) {
 	for _, changed := range []bool{false, true} {
 		t.Run(fmt.Sprintf("changed_request_%t", changed), func(t *testing.T) {
-			p := laneELedgerProject(t)
-			first := laneELedgerAdmit(t, p, 1)
-			second := laneELedgerAdmit(t, p, 2)
-			laneELedgerRead(t, p, 2)
+			p := ledgerProject(t)
+			first := ledgerAdmit(t, p, 1)
+			second := ledgerAdmit(t, p, 2)
+			ledgerRead(t, p, 2)
 			called := false
 			retry := func([]model.Bundle) (model.Bundle, error) {
 				called = true
@@ -111,14 +111,14 @@ func TestLedgerOneCommandIDCannotNameTwoAdmittedBundles(t *testing.T) {
 			repeated := first
 			repeated.Sequence, repeated.Predecessor = 3, second.CommandID
 			if changed {
-				replacement, err := laneELedgerProposal(99)(nil)
+				replacement, err := ledgerProposal(99)(nil)
 				if err != nil {
 					t.Fatal(err)
 				}
 				repeated.Events, repeated.Packets = replacement.Events, replacement.Packets
-				repeated.RequestDigest = laneELedgerDigest(99)
+				repeated.RequestDigest = ledgerDigest(99)
 			}
-			laneELedgerWrite(t, laneELedgerPath(t, p, 3, repeated.CommandID), repeated)
+			ledgerWrite(t, ledgerPath(t, p, 3, repeated.CommandID), repeated)
 			if prefix, err := store.ReadPrefix(p); err == nil {
 				t.Errorf("one command id was accepted at sequences 1 and 3 in a %d-bundle prefix, changed request=%t", len(prefix), changed)
 			}
@@ -136,44 +136,44 @@ func TestLedgerRefusesBrokenRelationshipsBeforeReturningOrAppendingAPrefix(t *te
 		breakLedger func(*testing.T, store.Project, []model.Bundle)
 	}{
 		{"filename claims another command", "ledger-corrupt", func(t *testing.T, p store.Project, b []model.Bundle) {
-			if err := os.Rename(laneELedgerPath(t, p, 2, b[1].CommandID), laneELedgerPath(t, p, 2, laneELedgerID(99))); err != nil {
+			if err := os.Rename(ledgerPath(t, p, 2, b[1].CommandID), ledgerPath(t, p, 2, ledgerID(99))); err != nil {
 				t.Fatal(err)
 			}
 		}},
 		{"filename claims another sequence", "ledger-corrupt", func(t *testing.T, p store.Project, b []model.Bundle) {
 			b[1].Sequence = 3
-			laneELedgerWrite(t, laneELedgerPath(t, p, 2, b[1].CommandID), b[1])
+			ledgerWrite(t, ledgerPath(t, p, 2, b[1].CommandID), b[1])
 		}},
 		{"two commands claim one sequence", "ledger-fork", func(t *testing.T, p store.Project, b []model.Bundle) {
-			b[1].CommandID = laneELedgerID(99)
-			laneELedgerWrite(t, laneELedgerPath(t, p, 2, b[1].CommandID), b[1])
+			b[1].CommandID = ledgerID(99)
+			ledgerWrite(t, ledgerPath(t, p, 2, b[1].CommandID), b[1])
 		}},
 		{"a middle sequence is absent", "ledger-discontinuity", func(t *testing.T, p store.Project, b []model.Bundle) {
-			if err := os.Remove(laneELedgerPath(t, p, 2, b[1].CommandID)); err != nil {
+			if err := os.Remove(ledgerPath(t, p, 2, b[1].CommandID)); err != nil {
 				t.Fatal(err)
 			}
 		}},
 		{"predecessor names a real but earlier bundle", "ledger-discontinuity", func(t *testing.T, p store.Project, b []model.Bundle) {
 			b[2].Predecessor = b[0].CommandID
-			laneELedgerWrite(t, laneELedgerPath(t, p, 3, b[2].CommandID), b[2])
+			ledgerWrite(t, ledgerPath(t, p, 3, b[2].CommandID), b[2])
 		}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			p := laneELedgerProject(t)
+			p := ledgerProject(t)
 			for n := 1; n <= 3; n++ {
-				laneELedgerAdmit(t, p, n)
+				ledgerAdmit(t, p, n)
 			}
-			c.breakLedger(t, p, laneELedgerRead(t, p, 3))
+			c.breakLedger(t, p, ledgerRead(t, p, 3))
 			prefix, err := store.ReadPrefix(p)
 			var fault *model.Fault
 			if !errors.As(err, &fault) || fault.Code != c.code || len(prefix) != 0 {
 				t.Errorf("%s returned %d bundles and %v, want no prefix and %s", c.name, len(prefix), err, c.code)
 			}
 			called := false
-			_, err = store.Transact(context.Background(), p, laneELedgerID(4), laneELedgerDigest(4), func(prefix []model.Bundle) (model.Bundle, error) {
+			_, err = store.Transact(context.Background(), p, ledgerID(4), ledgerDigest(4), func(prefix []model.Bundle) (model.Bundle, error) {
 				called = true
-				return laneELedgerProposal(4)(prefix)
+				return ledgerProposal(4)(prefix)
 			})
 			if !errors.As(err, &fault) || fault.Code != c.code || called {
 				t.Errorf("admission reached callback=%t over %s and returned %v", called, c.name, err)
@@ -183,41 +183,41 @@ func TestLedgerRefusesBrokenRelationshipsBeforeReturningOrAppendingAPrefix(t *te
 }
 
 func TestLedgerCreationOrderAndReturnedSliceMutationCannotChangeTheNextRead(t *testing.T) {
-	p := laneELedgerProject(t)
+	p := ledgerProject(t)
 	for n := 1; n <= 6; n++ {
-		laneELedgerAdmit(t, p, n)
+		ledgerAdmit(t, p, n)
 	}
-	want := laneELedgerRead(t, p, 6)
-	other := laneELedgerProject(t)
+	want := ledgerRead(t, p, 6)
+	other := ledgerProject(t)
 	for _, i := range []int{5, 1, 3, 0, 4, 2} {
-		laneELedgerWrite(t, laneELedgerPath(t, other, want[i].Sequence, want[i].CommandID), want[i])
+		ledgerWrite(t, ledgerPath(t, other, want[i].Sequence, want[i].CommandID), want[i])
 	}
-	got := laneELedgerRead(t, other, 6)
+	got := ledgerRead(t, other, 6)
 	if !reflect.DeepEqual(got, want) {
 		t.Fatal("recreating identical bundles in a different file order changed the selected prefix")
 	}
-	got[0].CommandID = laneELedgerID(999)
-	got[0].Packets[0].CommandID = laneELedgerID(999)
+	got[0].CommandID = ledgerID(999)
+	got[0].Packets[0].CommandID = ledgerID(999)
 	got[0].Events[0].Data[0] = '!'
-	if next := laneELedgerRead(t, other, 6); !reflect.DeepEqual(next, want) {
+	if next := ledgerRead(t, other, 6); !reflect.DeepEqual(next, want) {
 		t.Fatal("mutating a returned bundle changed the snapshot seen by a later reader")
 	}
 }
 
 func TestLedgerRecoveryPreservesForeignTemporaryBytesAndRemovesOnlyItsOwnNames(t *testing.T) {
-	p := laneELedgerProject(t)
-	laneELedgerAdmit(t, p, 1)
-	laneELedgerRead(t, p, 1)
-	own := laneELedgerPath(t, p, 2, laneELedgerID(2)) + ".tmp"
+	p := ledgerProject(t)
+	ledgerAdmit(t, p, 1)
+	ledgerRead(t, p, 1)
+	own := ledgerPath(t, p, 2, ledgerID(2)) + ".tmp"
 	if err := os.WriteFile(own, []byte("an interrupted publication"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	laneELedgerRead(t, p, 1)
-	laneELedgerAdmit(t, p, 2)
+	ledgerRead(t, p, 1)
+	ledgerAdmit(t, p, 2)
 	if _, err := os.Stat(own); !os.IsNotExist(err) {
 		t.Fatalf("control recovery left its own temporary: %v", err)
 	}
-	for _, name := range []string{"another-publisher.tmp", "00000003-" + string(laneELedgerID(3)) + ".other.json.tmp"} {
+	for _, name := range []string{"another-publisher.tmp", "00000003-" + string(ledgerID(3)) + ".other.json.tmp"} {
 		t.Run(name, func(t *testing.T) {
 			foreign := filepath.Join(p.Ledger, name)
 			data := []byte("another publisher still owns these exact bytes")
@@ -225,7 +225,7 @@ func TestLedgerRecoveryPreservesForeignTemporaryBytesAndRemovesOnlyItsOwnNames(t
 				t.Fatal(err)
 			}
 			defer os.Remove(foreign)
-			_, err := store.Transact(context.Background(), p, laneELedgerID(3), laneELedgerDigest(3), laneELedgerProposal(3))
+			_, err := store.Transact(context.Background(), p, ledgerID(3), ledgerDigest(3), ledgerProposal(3))
 			if err == nil {
 				t.Error("admission silently passed an unaccountable foreign temporary")
 			}
@@ -234,14 +234,14 @@ func TestLedgerRecoveryPreservesForeignTemporaryBytesAndRemovesOnlyItsOwnNames(t
 			}
 		})
 	}
-	laneELedgerAdmit(t, p, 3)
-	laneELedgerRead(t, p, 3)
+	ledgerAdmit(t, p, 3)
+	ledgerRead(t, p, 3)
 }
 
 func TestLedgerConcurrentAdmissionsSelectDifferentTailsAndPublishACompleteChain(t *testing.T) {
-	p := laneELedgerProject(t)
-	laneELedgerAdmit(t, p, 1)
-	laneELedgerRead(t, p, 1)
+	p := ledgerProject(t)
+	ledgerAdmit(t, p, 1)
+	ledgerRead(t, p, 1)
 	const writers = 12
 	start := make(chan struct{})
 	errs := make(chan error, writers)
@@ -279,9 +279,9 @@ func TestLedgerConcurrentAdmissionsSelectDifferentTailsAndPublishACompleteChain(
 			defer group.Done()
 			<-start
 			var selected model.ID
-			b, err := store.Transact(ctx, p, laneELedgerID(n), laneELedgerDigest(n), func(prefix []model.Bundle) (model.Bundle, error) {
+			b, err := store.Transact(ctx, p, ledgerID(n), ledgerDigest(n), func(prefix []model.Bundle) (model.Bundle, error) {
 				selected = prefix[len(prefix)-1].CommandID
-				return laneELedgerProposal(n)(prefix)
+				return ledgerProposal(n)(prefix)
 			})
 			if err == nil && b.Predecessor != selected {
 				err = fmt.Errorf("writer %d validated tail %s but was appended to %s", n, selected, b.Predecessor)
@@ -301,7 +301,7 @@ func TestLedgerConcurrentAdmissionsSelectDifferentTailsAndPublishACompleteChain(
 			t.Errorf("concurrent admission failed: %v", err)
 		}
 	}
-	prefix := laneELedgerRead(t, p, writers+1)
+	prefix := ledgerRead(t, p, writers+1)
 	seen := map[model.ID]bool{}
 	for _, b := range prefix {
 		if seen[b.CommandID] {
@@ -312,16 +312,16 @@ func TestLedgerConcurrentAdmissionsSelectDifferentTailsAndPublishACompleteChain(
 }
 
 func TestLedgerReaderCompletesWhileAnAdmissionHoldsItsRealOSLock(t *testing.T) {
-	p := laneELedgerProject(t)
-	laneELedgerAdmit(t, p, 1)
-	laneELedgerRead(t, p, 1)
+	p := ledgerProject(t)
+	ledgerAdmit(t, p, 1)
+	ledgerRead(t, p, 1)
 	held, release := make(chan struct{}), make(chan struct{})
 	writer := make(chan error, 1)
 	go func() {
-		_, err := store.Transact(context.Background(), p, laneELedgerID(2), laneELedgerDigest(2), func(prefix []model.Bundle) (model.Bundle, error) {
+		_, err := store.Transact(context.Background(), p, ledgerID(2), ledgerDigest(2), func(prefix []model.Bundle) (model.Bundle, error) {
 			close(held)
 			<-release
-			return laneELedgerProposal(2)(prefix)
+			return ledgerProposal(2)(prefix)
 		})
 		writer <- err
 	}()
@@ -340,13 +340,13 @@ func TestLedgerReaderCompletesWhileAnAdmissionHoldsItsRealOSLock(t *testing.T) {
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	if _, err := store.Transact(ctx, p, laneELedgerID(3), laneELedgerDigest(3), laneELedgerProposal(3)); !errors.Is(err, context.DeadlineExceeded) {
+	if _, err := store.Transact(ctx, p, ledgerID(3), ledgerDigest(3), ledgerProposal(3)); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("second writer did not wait for the first writer's actual OS lock: %v", err)
 	}
 	reader := make(chan error, 1)
 	go func() {
 		prefix, err := store.ReadPrefix(p)
-		if err == nil && (len(prefix) != 1 || prefix[0].CommandID != laneELedgerID(1)) {
+		if err == nil && (len(prefix) != 1 || prefix[0].CommandID != ledgerID(1)) {
 			err = fmt.Errorf("unpublished proposal changed the visible prefix: %+v", prefix)
 		}
 		reader <- err

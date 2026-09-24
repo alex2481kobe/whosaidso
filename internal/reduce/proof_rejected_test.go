@@ -42,7 +42,7 @@ func withMember(p *model.ProofAdmit, member model.InvocationRef, disposition str
 	return p
 }
 
-func TestR10RejectedRunMustBeDispositionedNeverSupport(t *testing.T) {
+func TestRejectedRunMustBeDispositionedNeverSupport(t *testing.T) {
 	for _, outcome := range []string{"rejected", "correction-requested"} {
 		for _, disposition := range []string{"inapplicable", "inconclusive"} {
 			t.Run(outcome+"/"+disposition, func(t *testing.T) {
@@ -72,7 +72,7 @@ func TestR10RejectedRunMustBeDispositionedNeverSupport(t *testing.T) {
 	}
 }
 
-func TestR10RejectedRunBelongsOnlyToItsOwnCriterion(t *testing.T) {
+func TestRejectedRunBelongsOnlyToItsOwnCriterion(t *testing.T) {
 	claim := ref(newID("CMA1"), 1)
 	other := model.CriterionRef{Claim: claim, CriterionID: newID("CRTB"), Revision: 1}
 	l, claim, rejected := rejectedLedger(t, "rejected", other)
@@ -86,7 +86,7 @@ func TestR10RejectedRunBelongsOnlyToItsOwnCriterion(t *testing.T) {
 	wantFault(t, err, CodeInvalidTransition)
 }
 
-func TestR10OnlyAProofMayNameARejectedRun(t *testing.T) {
+func TestOnlyAProofMayNameARejectedRun(t *testing.T) {
 	l, claim, rejected := rejectedLedger(t, "rejected", model.CriterionRef{})
 	seal := sealProof(proofEnvelope(claim, rejected.InvocationID), 0)
 	l.add(t, seal)
@@ -94,7 +94,7 @@ func TestR10OnlyAProofMayNameARejectedRun(t *testing.T) {
 	wantFault(t, err, CodeUnknownReference)
 }
 
-func TestR10AcceptedReviewIsNeverARejectedRecord(t *testing.T) {
+func TestAcceptedReviewIsNeverARejectedRecord(t *testing.T) {
 	claim := ref(newID("CMA1"), 1)
 	// An accepted review carrying invocation facts does not even validate.
 	packet := model.PacketRef{CommandID: newID("PKA0"), Digest: model.HashBytes([]byte("accepted packet"))}

@@ -14,7 +14,7 @@ import (
 	"whosaidso/internal/store"
 )
 
-func fixAccepterNew(t *testing.T) *gateVerifyFixture {
+func accepterChangeNew(t *testing.T) *gateVerifyFixture {
 	t.Helper()
 	root := t.TempDir()
 	t.Setenv(store.HomeEnv, filepath.Join(t.TempDir(), "machine"))
@@ -29,10 +29,10 @@ func fixAccepterNew(t *testing.T) *gateVerifyFixture {
 	return &gateVerifyFixture{t: t, p: p, n: 300}
 }
 
-// fixAccepterTask admits a task naming reviewer as its accepter, authored by lane.
-func fixAccepterTask(t *testing.T, f *gateVerifyFixture, lane, reviewer model.Actor) (model.RecordRef, model.TaskSpec) {
+// accepterChangeTask admits a task naming reviewer as its accepter, authored by lane.
+func accepterChangeTask(t *testing.T, f *gateVerifyFixture, lane, reviewer model.Actor) (model.RecordRef, model.TaskSpec) {
 	t.Helper()
-	spec := laneEReduceSpec(1)
+	spec := reduceSpec(1)
 	spec.Accepter = &reviewer
 	create := &model.TaskCreate{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Spec: spec}
 	if _, err := f.admit(lane, lane, create); err != nil {
@@ -41,23 +41,23 @@ func fixAccepterTask(t *testing.T, f *gateVerifyFixture, lane, reviewer model.Ac
 	return model.RecordRef{Project: f.p.ID, RecordID: create.ID, Revision: 1}, spec
 }
 
-func fixAccepterAmend(ref model.RecordRef, author model.Actor, replacement model.TaskSpec) *model.TaskAmend {
+func accepterChangeAmend(ref model.RecordRef, author model.Actor, replacement model.TaskSpec) *model.TaskAmend {
 	return &model.TaskAmend{Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Target: ref, Replacement: replacement}
 }
 
-func TestFixAccepterAmendmentCannotRemoveTheAccepterThenClose(t *testing.T) {
+func TestAccepterAmendmentCannotRemoveTheAccepterThenClose(t *testing.T) {
 	lane, reviewer := model.Actor{ID: "lane-b-audit"}, model.Actor{ID: "lane-b-reviewer"}
 	for _, change := range []string{"remove", "replace"} {
 		t.Run(change, func(t *testing.T) {
-			f := fixAccepterNew(t)
-			ref, spec := fixAccepterTask(t, f, lane, reviewer)
+			f := accepterChangeNew(t)
+			ref, spec := accepterChangeTask(t, f, lane, reviewer)
 			replacement := spec
 			replacement.Accepter = nil
 			if change == "replace" {
 				replacement.Accepter = &lane
 			}
-			if _, err := f.admit(lane, lane, fixAccepterAmend(ref, lane, replacement)); recCode(err) != reduce.CodeAccepterMismatch {
+			if _, err := f.admit(lane, lane, accepterChangeAmend(ref, lane, replacement)); recCode(err) != reduce.CodeAccepterMismatch {
 				t.Fatalf("expected an amendment by %s that would %s accepter %s to be refused (%s); got %v. Anyone who may amend could otherwise name no one and close the task",
 					lane.ID, change, reviewer.ID, reduce.CodeAccepterMismatch, err)
 			}
@@ -71,11 +71,11 @@ func TestFixAccepterAmendmentCannotRemoveTheAccepterThenClose(t *testing.T) {
 			// and the accepter may hand the task over itself.
 			clearer := spec
 			clearer.Intent = "preserve the admitted task obligation, stated more clearly"
-			if _, err := f.admit(lane, lane, fixAccepterAmend(ref, lane, clearer)); err != nil {
+			if _, err := f.admit(lane, lane, accepterChangeAmend(ref, lane, clearer)); err != nil {
 				t.Fatalf("control: an amendment keeping the accepter must admit for any author: %v", err)
 			}
 			ref.Revision = 2
-			if _, err := f.admit(reviewer, reviewer, fixAccepterAmend(ref, reviewer, replacement)); err != nil {
+			if _, err := f.admit(reviewer, reviewer, accepterChangeAmend(ref, reviewer, replacement)); err != nil {
 				t.Fatalf("control: the accepter itself may %s its accepter: %v", change, err)
 			}
 		})
@@ -84,13 +84,13 @@ func TestFixAccepterAmendmentCannotRemoveTheAccepterThenClose(t *testing.T) {
 
 // Replay decides from the ledger alone: an admitted amendment in which the
 // accepter handed over, re-attributed to another packet author, is refused.
-func TestFixAccepterReplayRefusesAReattributedHandover(t *testing.T) {
-	f := fixAccepterNew(t)
+func TestAccepterReplayRefusesAReattributedHandover(t *testing.T) {
+	f := accepterChangeNew(t)
 	lane, reviewer := model.Actor{ID: "lane-b-audit"}, model.Actor{ID: "lane-b-reviewer"}
-	ref, spec := fixAccepterTask(t, f, lane, reviewer)
+	ref, spec := accepterChangeTask(t, f, lane, reviewer)
 	replacement := spec
 	replacement.Accepter = nil
-	if _, err := f.admit(reviewer, reviewer, fixAccepterAmend(ref, reviewer, replacement)); err != nil {
+	if _, err := f.admit(reviewer, reviewer, accepterChangeAmend(ref, reviewer, replacement)); err != nil {
 		t.Fatalf("control: the accepter's own handover must admit: %v", err)
 	}
 	prefix, err := store.ReadPrefix(f.p)

@@ -22,17 +22,17 @@ import (
 	"whosaidso/internal/store"
 )
 
-func astraClaim(w *flowWorld) *model.ClaimAssert {
+func procClaim(w *flowWorld) *model.ClaimAssert {
 	return &model.ClaimAssert{ID: w.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.ClaimSpec{Assertion: "publication preserves this claim", Falsifier: "the claim disappears on replay", Scope: w.scope, ExternalRefs: []model.ExternalReference{}}}
 }
 
-func astraAdmission(w *flowWorld, packet model.ID) []string {
+func procAdmission(w *flowWorld, packet model.ID) []string {
 	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
 	return []string{"admit", "--command-id", string(w.id()), "--actor", "reviewer", "--outcome", "accepted", "--reason", "independent storage review", "--json", string(packet)}
 }
 
-func astraCommand(w *flowWorld, args ...string) *exec.Cmd {
+func procCommand(w *flowWorld, args ...string) *exec.Cmd {
 	w.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	w.t.Cleanup(cancel)
@@ -42,7 +42,7 @@ func astraCommand(w *flowWorld, args ...string) *exec.Cmd {
 	return cmd
 }
 
-func astraWait(t *testing.T, ready func() bool) {
+func procWait(t *testing.T, ready func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for !ready() {
@@ -55,9 +55,9 @@ func astraWait(t *testing.T, ready func() bool) {
 
 // DATUM-CONTRACT.md:684-685, 692-693: a published retry returns its existing
 // result. The lookup must survive loss of the producer's machine-local inbox.
-func TestAstraStoreRetrySurvivesIntakeLoss(t *testing.T) {
+func TestStoreRetrySurvivesIntakeLoss(t *testing.T) {
 	w := flowNew(t)
-	args := astraAdmission(w, w.capture(flowLane, astraClaim(w)))
+	args := procAdmission(w, w.capture(flowLane, procClaim(w)))
 	want, err := w.cli(nil, args...)
 	if err != nil {
 		t.Fatalf("control: initial admission: %v", err)
@@ -91,19 +91,19 @@ func TestAstraStoreRetrySurvivesIntakeLoss(t *testing.T) {
 
 // R8.1 and DATUM-CONTRACT.md:676,690: real filesystem paths stay confined,
 // including the admission lock, not merely the spelling in whosaidso.toml.
-func TestAstraStoreLockCannotCreateOutsideRoot(t *testing.T) {
+func TestStoreLockCannotCreateOutsideRoot(t *testing.T) {
 	w := flowNew(t)
-	w.mustAdmit(flowLane, astraClaim(w)) // passing ordinary-lock control
+	w.mustAdmit(flowLane, procClaim(w)) // passing ordinary-lock control
 	before := w.ledger()
 	lock := filepath.Join(w.root, ".whosaidso/events/.lock")
 	if err := os.Remove(lock); err != nil {
 		t.Fatal(err)
 	}
-	outside := filepath.Join(t.TempDir(), "review-escaped-lock")
+	outside := filepath.Join(t.TempDir(), "escaped-lock")
 	if err := os.Symlink(outside, lock); err != nil {
 		t.Fatal(err)
 	}
-	args := astraAdmission(w, w.capture(flowLane, astraClaim(w)))
+	args := procAdmission(w, w.capture(flowLane, procClaim(w)))
 	// ReadDir's dotfile omission is intentional; do not follow this dangling
 	// lock through flowWorld.ledger while establishing the pre-admission bytes.
 	_, err := w.cli(nil, args...)
@@ -124,13 +124,13 @@ func TestAstraStoreLockCannotCreateOutsideRoot(t *testing.T) {
 
 // Contract:88-93,149-151,610-614. Five processes overlap capture/admit/run;
 // each admission result must occur once in one replayable, contiguous chain.
-func TestAstraStoreConcurrentProcesses(t *testing.T) {
+func TestStoreConcurrentProcesses(t *testing.T) {
 	w := flowProofWorld(t)
 	gate := make(chan struct{})
 	results := make(chan error, 5)
 	var claims []model.ID
 	for i := 0; i < 4; i++ {
-		claim := astraClaim(w)
+		claim := procClaim(w)
 		claims = append(claims, claim.ID)
 		body, err := model.Encode([]model.Event{recEncode(t, claim)})
 		if err != nil {
@@ -139,7 +139,7 @@ func TestAstraStoreConcurrentProcesses(t *testing.T) {
 		packet := w.id()
 		// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
 		capture := []string{"capture", "--json", "--actor", flowLane, "--command-id", string(packet), "--events", "-"}
-		admit := astraAdmission(w, packet)
+		admit := procAdmission(w, packet)
 		go func() {
 			<-gate
 			first, err := w.cli(body, capture...)
@@ -201,7 +201,7 @@ func TestAstraStoreConcurrentProcesses(t *testing.T) {
 // Contract:690-693. Pause the real admitting process inside artifact validation
 // under its lock, kill it, then recover a partial publication with the next CLI.
 // The git fixture also tests root-relative pins below a repository's top level.
-func TestAstraStoreKilledAdmissionAndNestedGit(t *testing.T) {
+func TestStoreKilledAdmissionAndNestedGit(t *testing.T) {
 	w := flowNew(t)
 	repo := t.TempDir()
 	w.root = filepath.Join(repo, "project")
@@ -210,7 +210,7 @@ func TestAstraStoreKilledAdmissionAndNestedGit(t *testing.T) {
 	pvPut(t, repo, "evidence.json", []byte(`{"scope":"outside"}`))
 	git := func(args ...string) string {
 		t.Helper()
-		out, err := exec.Command("git", append([]string{"-C", repo, "-c", "user.name=review", "-c", "user.email=review@example.invalid", "-c", "commit.gpgsign=false"}, args...)...).CombinedOutput()
+		out, err := exec.Command("git", append([]string{"-C", repo, "-c", "user.name=test", "-c", "user.email=test@example.invalid", "-c", "commit.gpgsign=false"}, args...)...).CombinedOutput()
 		if err != nil {
 			t.Fatalf("git fixture: %v: %s", err, out)
 		}
@@ -219,14 +219,14 @@ func TestAstraStoreKilledAdmissionAndNestedGit(t *testing.T) {
 	git("init", "--quiet")
 	git("add", ".")
 	git("commit", "--quiet", "-m", "nested fixture")
-	claim := astraClaim(w)
+	claim := procClaim(w)
 	pin := pvPin([]byte(`{"scope":"inside"}`), "evidence.json")
 	pin.Kind, pin.Git = "git", &model.GitPin{ObjectFormat: git("rev-parse", "--show-object-format"), Commit: git("rev-parse", "HEAD"), Path: "evidence.json"}
 	claim.Provenance.SourceRefs = []model.ArtifactRef{pin}
 	w.mustAdmit(flowLane, claim)
 	before := w.ledger()
 	claim.ID = w.id()
-	args := astraAdmission(w, w.capture(flowLane, claim))
+	args := procAdmission(w, w.capture(flowLane, claim))
 	shim := t.TempDir()
 	realGit, err := exec.LookPath("git")
 	if err != nil {
@@ -237,14 +237,14 @@ func TestAstraStoreKilledAdmissionAndNestedGit(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(shim, "git"), []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	marker := filepath.Join(shim, "review-ready")
-	cmd := astraCommand(w, args...)
+	marker := filepath.Join(shim, "shim-ready")
+	cmd := procCommand(w, args...)
 	cmd.Env = append(cmd.Env, "PATH="+shim+string(os.PathListSeparator)+os.Getenv("PATH"), "ASTRA_MARKER="+marker, "ASTRA_GIT="+realGit)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = cmd.Process.Kill() })
-	astraWait(t, func() bool { _, err := os.Stat(marker); return err == nil })
+	procWait(t, func() bool { _, err := os.Stat(marker); return err == nil })
 	lock, err := os.OpenFile(filepath.Join(w.root, ".whosaidso/events/.lock"), os.O_RDWR, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -274,10 +274,10 @@ func TestAstraStoreKilledAdmissionAndNestedGit(t *testing.T) {
 }
 
 // Contract:692-693: losing the acknowledgement cannot roll back publication.
-func TestAstraStoreKilledAcknowledgement(t *testing.T) {
+func TestStoreKilledAcknowledgement(t *testing.T) {
 	w := flowNew(t)
-	claim := astraClaim(w)
-	args := astraAdmission(w, w.capture(flowLane, claim))
+	claim := procClaim(w)
+	args := procAdmission(w, w.capture(flowLane, claim))
 	r, output, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -299,14 +299,14 @@ func TestAstraStoreKilledAcknowledgement(t *testing.T) {
 	if err := syscall.SetNonblock(fd, false); err != nil {
 		t.Fatal(err)
 	}
-	cmd := astraCommand(w, args...)
+	cmd := procCommand(w, args...)
 	cmd.Stdout = output // deliberately undrained: acknowledgement blocks
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = cmd.Process.Kill() })
 	var published []byte
-	astraWait(t, func() bool {
+	procWait(t, func() bool {
 		files, _ := filepath.Glob(filepath.Join(w.root, ".whosaidso/events/*-"+args[2]+".json"))
 		if len(files) == 0 {
 			return false

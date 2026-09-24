@@ -531,7 +531,7 @@ func TestWireArtifactKindRequiresItsOwnPinAndValidObjectID(t *testing.T) {
 	}
 }
 
-func TestWireDisagreeingCorroborationRemainsVisibleForU07(t *testing.T) {
+func TestWireDisagreeingCorroborationRemainsVisible(t *testing.T) {
 	// Construct an actual git blob/tree/commit identity in memory: the git pin
 	// binds "git copy", while the content pin binds different bytes at that path.
 	// U01 has no resolver; comparing commit and raw-content hashes is incorrect.
