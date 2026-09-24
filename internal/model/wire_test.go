@@ -49,7 +49,7 @@ func samplePacket(t *testing.T, commandID ID) Packet {
 	}
 }
 
-// TestWireRoundTripAndIdentity is U01's proving test: identity is stable and
+// TestWireRoundTripAndIdentity is the wire format's proving test: identity is stable and
 // separable, encoding is deterministic, and a bundle names itself correctly.
 func TestWireRoundTripAndIdentity(t *testing.T) {
 	packetID := mustID(t, 0x11)

@@ -151,8 +151,8 @@ func (r *Resolver) RunOutput(out model.RunOutput, b []byte) (ResolvedArtifact, e
 		MediaType: out.MediaType, Origin: OriginRunOutput, DeclaredPath: out.Name}, nil
 }
 
-// matchOutput pairs a criterion selector with the run output it names. R8.3/R9:
-// each path the selector declares is an output name inside THIS invocation, so
+// matchOutput pairs a criterion selector with the run output it names.
+// Each path the selector declares is an output name inside THIS invocation, so
 // out/result.json names this run's out/result.json and never another run's
 // file or the criterion's own example. A declared path that is not a valid
 // output name names nothing: refused, not normalized, so no spelling reaches a

@@ -1,6 +1,6 @@
 package main
 
-// What writes print (R19 step 2): one-line acknowledgements by default, the
+// What writes print: one-line acknowledgements by default, the
 // full result with --json, minted admission ids, and capture --admit's
 // honest partial success when its second act is refused.
 

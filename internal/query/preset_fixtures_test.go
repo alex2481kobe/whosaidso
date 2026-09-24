@@ -83,7 +83,7 @@ func envelope(id, attempt, instrument, claim int, inputs ...model.ArtifactRef) m
 func seal(env model.InvocationEnvelope, exit int, after time.Duration) *model.InvocationSeal {
 	env.ObservedAt = known(env.StartedAt.Add(after))
 	env.Outcome = known(model.ProcessOutcome{Kind: "exit", ExitCode: &exit})
-	env.Outputs = known([]model.RunOutput{{Name: "stdout", SHA256: model.HashBytes([]byte("U09")), Length: 3, MediaType: "text/plain"}})
+	env.Outputs = known([]model.RunOutput{{Name: "stdout", SHA256: model.HashBytes([]byte("abc")), Length: 3, MediaType: "text/plain"}})
 	return &model.InvocationSeal{StartRef: model.InvocationRef{Project: projectID, InvocationID: env.InvocationID}, Envelope: env}
 }
 func authority() model.Authority {
@@ -125,7 +125,7 @@ func presetWorld(t *testing.T, p store.Project) {
 
 // admitted appends admission's review to events: one packet per event,
 // authored by the actor the event names (the criterion author, the proof
-// judgment, otherwise lane-a) and captured a minute after presetStart, so the
+// judgment, otherwise agent-a) and captured a minute after presetStart, so the
 // reducer can check authorship and freezing from the ledger.
 func admitted(n int, events ...model.TypedEvent) []model.TypedEvent {
 	return admittedAs(n, nil, events...)

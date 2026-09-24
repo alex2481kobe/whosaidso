@@ -65,7 +65,7 @@ func reduceCreate(n int, spec model.TaskSpec) *model.TaskCreate {
 func reduceClose(n int, revision, criterionRevision model.Revision, outcome model.ClosureOutcome) *model.TaskClose {
 	return &model.TaskClose{
 		Task: reduceRef(n, revision), Outcome: outcome,
-		Authority: &model.Authority{ // R15.1: a closure's authority is optional, so a pointer.
+		Authority: &model.Authority{ // A closure's authority is optional, so a pointer.
 			Actor: model.Actor{ID: "owner"}, SourceRef: reduceArtifact("ruling"),
 			Selector: model.Selector{Kind: "json-pointer", Pointer: "/ruling"}, Scope: reduceScope(),
 		},
@@ -103,7 +103,7 @@ func reduceBundle(t *testing.T, previous model.Bundle, events ...model.TypedEven
 }
 
 // reducePacket is one intake packet as the store captures it: an author
-// and the capture instant intake stamps. review round-2 consolidation, step 1.
+// and the capture instant intake stamps.
 func reducePacket(t *testing.T, n int, author string, captured time.Time, events ...model.TypedEvent) model.Packet {
 	t.Helper()
 	p := model.Packet{Version: model.WireVersion, Project: reduceProject, CommandID: reduceID(n),
@@ -122,12 +122,12 @@ func reducePacket(t *testing.T, n int, author string, captured time.Time, events
 // reduceReview returns the packets' events followed by the accepted
 // review.admit write.Admit records for them: packet authors, capture stamps
 // and the packet of every event, so replay can check attribution and
-// chronology from the ledger alone. review round-2 consolidation, step 1.
+// chronology from the ledger alone.
 func reduceReview(t *testing.T, admitter model.Actor, refs []model.PacketRef, packets []model.Packet) []model.Event {
 	t.Helper()
 	events := []model.Event{}
 	authors := map[model.ID]model.Actor{}
-	// R18.2: a capture time is an Availability, known here.
+	// A capture time is an Availability, known here.
 	captured := map[model.ID]model.Availability[time.Time]{}
 	eventPackets := []model.ID{}
 	for _, p := range packets {
@@ -148,8 +148,7 @@ func reduceReview(t *testing.T, admitter model.Actor, refs []model.PacketRef, pa
 
 // reduceAdmitted is reduceBundle in the shape admission publishes:
 // the bundle binds its packets by digest and ends in their accepted review.
-// Every packet is captured before the bundle is recorded. review round-2
-// consolidation, step 1.
+// Every packet is captured before the bundle is recorded.
 func reduceAdmitted(t *testing.T, previous model.Bundle, packets ...model.Packet) model.Bundle {
 	t.Helper()
 	b := reduceBundle(t, previous)
@@ -283,9 +282,8 @@ func TestReducerReturnedTaskSpecCannotRewriteAnEarlierApplySnapshot(t *testing.T
 }
 
 func TestReducerReturnedTerminalCannotAddReconciliationDebtToAnotherSnapshot(t *testing.T) {
-	// Coordinator edit 2026-09-24 (fix-correct, handback parity): the reducer now
-	// requires a terminal receipt in its holder's packet, so the receipt travels in
-	// worker's reviewed packet instead of an unattributed bundle. The assertion is unchanged.
+	// The reducer requires a terminal receipt in its holder's packet, so the
+	// receipt travels in worker's reviewed packet, not an unattributed bundle.
 	captured := recWhen.Add(time.Hour)
 	first := reduceAdmitted(t, model.Bundle{},
 		reducePacket(t, 2101, "agent-e", captured, reduceCreate(1, reduceSpec(1))),
@@ -394,8 +392,7 @@ func TestReducerIndependentEventOrderDoesNotMoveTaskAnswers(t *testing.T) {
 		}
 		first := reduceBundle(t, model.Bundle{}, create...)
 		second := reduceBundle(t, first, start...)
-		// Coordinator edit 2026-09-24 (fix-correct, handback parity): the terminal
-		// receipt travels in its holder worker-a's reviewed packet. Order is unchanged.
+		// The terminal receipt travels in its holder worker-a's reviewed packet.
 		finished := reduceAdmitted(t, second, reducePacket(t, 2201, "worker-a", recWhen.Add(time.Hour), finish...))
 		return reduceReplay(t, first, second, finished)
 	}

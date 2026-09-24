@@ -23,7 +23,7 @@ type boundFixture struct {
 }
 
 // boundWorld admits, in process, a task, a claim, a KNOWN-validated
-// instrument, a frozen criterion on the claim and an attempt, all by "lane".
+// instrument, a frozen criterion on the claim and an attempt, all by "agent".
 func boundWorld(t *testing.T) boundFixture {
 	t.Helper()
 	root, _ := cliFixture(t)

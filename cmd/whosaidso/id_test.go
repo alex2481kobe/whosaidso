@@ -40,7 +40,7 @@ func TestIDRefusesBadCount(t *testing.T) {
 	for _, arg := range []string{"0", "-1", "x", "--help"} {
 		out, errs, code := cliRun(t, t.TempDir(), nil, "", "id", arg)
 		if arg == "--help" {
-			// R19: id --help is usage, never read as a count.
+			// id --help is usage, never read as a count.
 			if code != 0 || !strings.HasPrefix(out, "whosaidso id [N]\n") || errs != "" {
 				t.Errorf("id --help: exit %d, stdout %q stderr %q", code, out, errs)
 			}

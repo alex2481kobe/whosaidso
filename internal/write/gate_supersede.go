@@ -1,7 +1,7 @@
 package write
 
 // Admission rules for the two owner acts that are not decisions: supersede and
-// artifact.dispose (R10.1 revised: no owner key, no author check; the act
+// artifact.dispose (no owner key, no author check; the act
 // carries a named authority whose carrier must resolve, and the packet author
 // stays whoever wrote it). Also here: once an artifact is disposed, no new
 // admission may treat it as available. Replay-order rules (superseded twice,

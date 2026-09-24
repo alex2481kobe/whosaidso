@@ -185,7 +185,7 @@ func countLines(path string) int {
 // isPackageDoc reports whether a comment attached to the package clause is
 // the package's doc comment by Go convention: it opens "Package" or, for a
 // main package, "Command". The name after it is not checked. Any other attached comment describes
-// its file (cmd/datum once got "the datum id implementation" that way), and a
+// its file (a command once got "the id implementation" as its purpose that way), and a
 // file's comment is never borrowed as the package's purpose.
 func isPackageDoc(doc, name string) bool {
 	f := strings.Fields(doc)

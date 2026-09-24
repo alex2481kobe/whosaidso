@@ -1,6 +1,6 @@
 package reduce
 
-// Packet authorship (R10.1 revised): who wrote the packet that carried an
+// Packet authorship: who wrote the packet that carried an
 // admitted event, read from the review.admit that admitted it. Accountability
 // is visibility, so the author is a ledger fact next to authority and quote.
 // This file records and answers authorship, and computes self-admission from

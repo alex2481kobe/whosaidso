@@ -16,7 +16,7 @@ func TestHistoryPreservesRevisionsOrderSourcesAndIncomingReferences(t *testing.T
 		t.Fatalf("control task history must contain its creation, got %+v", control.Events)
 	}
 	spec := testTask(1).Spec
-	spec.Intent = "Build U09 with explicit JSON export"
+	spec.Intent = "Build the read slice with explicit JSON export"
 	dependent := testTask(2)
 	dependent.Spec.Prerequisites = []model.Prerequisite{{Kind: "task-success", Target: testRef(1, 1), WaiverPolicy: "forbid"}}
 	appendEvents(t, p, 101,

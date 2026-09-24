@@ -1,7 +1,7 @@
 package query
 
 // What the removed INSTRUMENTS, STATE, NOW and TODO reads guaranteed, asserted
-// in the views that absorbed them (R19): show --kind instrument, show --kind
+// in the views that absorbed them: show --kind instrument, show --kind
 // claim and decision, and todo. Run, closure, continue and real-ledger tests
 // have their own files.
 

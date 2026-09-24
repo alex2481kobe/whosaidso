@@ -1,5 +1,4 @@
-// The open-hold success closure (review final-2 adoption review 2026-09-24,
-// finding 1) belongs here: a task.close with outcome success while a hold on
+// The open-hold success closure belongs here: a task.close with outcome success while a hold on
 // the task is open, through admission, the admission dry run and ledger-only
 // replay, and how show and continue display a hold a non-success close left
 // open. Other acceptance specifications do not.

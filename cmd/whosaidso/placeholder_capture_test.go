@@ -4,7 +4,7 @@ package main
 // only template --capture (the decoder owns the rule: model.IsPlaceholder),
 // that authored text which merely resembles one is accepted, and that
 // revising from a template never carries an old judgment across: --from
-// leaves an instrument's validation a placeholder to judge again (R9, R18.1).
+// leaves an instrument's validation a placeholder to judge again.
 
 import (
 	"bytes"

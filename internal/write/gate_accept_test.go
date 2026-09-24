@@ -1,6 +1,6 @@
 package write
 
-// R15.1 through admission: task.close needs no authority carrier, only its
+// Acceptance through admission: task.close needs no authority carrier, only its
 // witnesses; a task that names an accepter is closed only by a packet that
 // actor wrote; the closer is recorded, and closer_authored_receipt compares it with the
 // author of the attempt receipt. The replay-side rules are in internal/reduce.
@@ -13,7 +13,7 @@ import (
 )
 
 // newAcceptWorld is newCloseWorld with an optional accepter on the task. The
-// lane (f.author) starts the attempt and writes its success receipt.
+// agent (f.author) starts the attempt and writes its success receipt.
 func newAcceptWorld(t *testing.T, accepter *model.Actor) *closeWorld {
 	t.Helper()
 	f := newAdmissionFixture(t)

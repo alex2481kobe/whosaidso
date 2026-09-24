@@ -1,6 +1,6 @@
 package reduce
 
-// R14.2's ledger half through Replay and Apply alike: a failing run of the
+// The code-change rule's ledger half through Replay and Apply alike: a failing run of the
 // proof's own criterion revision is set aside as inapplicable only beside a
 // recorded code change whose From is the run's known clean head, whose paths
 // lie under the claim's scope, and whose To is the clean head every supporting

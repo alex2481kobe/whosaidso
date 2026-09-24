@@ -1,6 +1,5 @@
-// Lane E's independent U01 attacks. This is the only Go file owned by this
-// lane; helpers stay here to preserve the ownership boundary. Event semantics,
-// resolved git/content agreement (U07), and ledger history (U04) are not U01.
+// Wire-format attacks belong here, with their helpers. Event semantics,
+// resolved git/content agreement, and ledger history do not.
 package acceptance_test
 
 import (
@@ -155,7 +154,7 @@ func TestWireDefectFixturesHaveAcceptedSingleRepairControls(t *testing.T) {
 			good := bytes.Replace(bad, []byte(tc.defect), []byte(tc.repair), 1)
 			check := func(b []byte) error { return wireDecode(b, false) }
 			if tc.name == "git-content-confusion" {
-				// Data is opaque at U01: explicitly exercise the exported ref validator.
+				// Data is opaque at the wire: explicitly exercise the exported ref validator.
 				check = func(b []byte) error {
 					ref, err := wireSource(b)
 					if err != nil {
@@ -534,7 +533,7 @@ func TestWireArtifactKindRequiresItsOwnPinAndValidObjectID(t *testing.T) {
 func TestWireDisagreeingCorroborationRemainsVisible(t *testing.T) {
 	// Construct an actual git blob/tree/commit identity in memory: the git pin
 	// binds "git copy", while the content pin binds different bytes at that path.
-	// U01 has no resolver; comparing commit and raw-content hashes is incorrect.
+	// The wire has no resolver; comparing commit and raw-content hashes is incorrect.
 	gitBytes, contentBytes := []byte("git copy\n"), []byte("different content copy\n")
 	gitObjectID := func(kind string, data []byte) []byte {
 		h := sha1.New() // Git's declared sha1 object format, not a security choice.
@@ -555,7 +554,7 @@ func TestWireDisagreeingCorroborationRemainsVisible(t *testing.T) {
 		Selector: model.Selector{Kind: "whole"},
 	}
 	if err := model.ValidateArtifactRef(ref, "source"); err != nil {
-		t.Fatalf("both well-formed pins are legal pending U07 resolution: %v", err)
+		t.Fatalf("both well-formed pins are legal pending resolution: %v", err)
 	}
 	out, err := model.Encode(ref)
 	if err != nil {
@@ -563,9 +562,9 @@ func TestWireDisagreeingCorroborationRemainsVisible(t *testing.T) {
 	}
 	var got model.ArtifactRef
 	if err := json.Unmarshal(out, &got); err != nil || !reflect.DeepEqual(got, ref) {
-		t.Fatalf("wire encoding hid/rewrote corroboration before U07 could compare bytes: %v\n%s", err, out)
+		t.Fatalf("wire encoding hid/rewrote corroboration before resolution could compare bytes: %v\n%s", err, out)
 	}
-	t.Log("U07 must resolve git copy and content copy and reject their disagreement; U01 proves preservation only")
+	t.Log("resolution must reject the git copy and content copy disagreeing; the wire proves preservation only")
 }
 
 func TestWireHashBytesBindsExactBytesWithoutNormalization(t *testing.T) {

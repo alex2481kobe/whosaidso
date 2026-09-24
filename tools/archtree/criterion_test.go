@@ -161,7 +161,7 @@ func TestPackagePointerSurvivesANewPackage(t *testing.T) {
 }
 
 // The real module, as `go run ./tools/archtree` prints it now. The verdict
-// depends on what other lanes have written, so it is not pinned; that it is a
+// depends on what other agents have written, so it is not pinned; that it is a
 // verdict at all is.
 func TestThisModuleFileLimitIsDecidable(t *testing.T) {
 	out := archtreeJSON(t, "../..")

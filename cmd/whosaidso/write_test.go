@@ -111,7 +111,7 @@ func cliControl(t *testing.T, root string, data []byte) {
 func TestCLICaptureAdmissionAndExplicitUnavailable(t *testing.T) {
 	root, data := cliFixture(t)
 	cliControl(t, root, data)
-	// run is enabled by U12; TestCLIRunRefusesBeforeLaunch covers its refusals.
+	// run is a real command; TestCLIRunRefusesBeforeLaunch covers its refusals.
 	for _, command := range []string{"publish", "append", "decision", "claim"} {
 		if out, errs, code := cliRun(t, root, nil, "", command); code != 2 || out != "" || !strings.Contains(errs, "unknown command") {
 			t.Fatalf("unknown command %s must be a usage error: %d %q %q", command, code, out, errs)

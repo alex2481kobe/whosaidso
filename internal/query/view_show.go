@@ -1,6 +1,6 @@
 package query
 
-// The show view (COMMAND-SPEC §3.3). show ID describes one record, read
+// The show view. show ID describes one record, read
 // directly: it never builds the whole project. Bare show opens with a summary,
 // then every current record grouped by kind, then the whole run inventory,
 // unsealed runs included; it absorbs the old state preset. --kind restricts

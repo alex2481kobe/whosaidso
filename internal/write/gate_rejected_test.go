@@ -1,8 +1,8 @@
 package write
 
-// Proof family tests for rejected runs (R10.3): a run turned away at review is
+// Proof family tests for rejected runs: a run turned away at review is
 // recorded in the ledger and must be dispositioned inapplicable or
-// inconclusive by any proof of its criterion, on any machine, while U12's
+// inconclusive by any proof of its criterion, on any machine, while the
 // byte-identity rule still refuses a substitute reading. Pending intake and
 // same-set ordering live in gate_family_test.go.
 
@@ -16,7 +16,7 @@ import (
 	"whosaidso/internal/store"
 )
 
-// A rejected contradicting run never leaves the family (R10.3). The review
+// A rejected contradicting run never leaves the family. The review
 // records its invocation facts in the ledger, so the proof must disposition it
 // inapplicable or inconclusive even on a machine whose inbox never held it, and
 // a replacement seal with a different (passing) reading cannot stand in for it.
@@ -129,7 +129,7 @@ func TestProofRejectedRunReadmittedWithTheProof(t *testing.T) {
 }
 
 // A run launched before its criterion froze is refused, and once rejected it
-// stays in that revision's family; R10.3 makes it resolvable by disposition.
+// stays in that revision's family; it is resolvable by disposition.
 func TestProofRefusesCriterionFixedAfterTheRun(t *testing.T) {
 	w := newProofWorld(t, true)
 	late := w.fixEvent(w.claim)
@@ -157,7 +157,7 @@ func TestProofRefusesCriterionFixedAfterTheRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.f.refuse(w.f.request(proof), "rejected-family-member")
-	// R10.3: no longer permanently blocked. The judgment accounts for it.
+	// No longer permanently blocked. The judgment accounts for it.
 	early := model.InvocationRef{Project: w.f.project.ID, InvocationID: env.InvocationID}
 	w.f.refuse(w.f.request(w.f.capture(nil, w.proof(lateRef, map[model.InvocationRef]string{pass: "supports", early: "supports"}))), "rejected-family-member")
 	w.f.accept(w.f.capture(nil, w.proof(lateRef, map[model.InvocationRef]string{pass: "supports", early: "inapplicable"})))

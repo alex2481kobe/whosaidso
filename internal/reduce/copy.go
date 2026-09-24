@@ -15,7 +15,7 @@ import (
 // about the maps and false about the graph they reach. A Closure holds two
 // witness slices; an Attempt holds a *Terminal. Copying the map copies the
 // slice header and the pointer, so two forks that the code calls independent
-// still write to the same backing array. Lane E's fixture caught it three ways:
+// still write to the same backing array. An acceptance fixture caught it three ways:
 // mutating a closure, a task spec and a terminal returned by a LATER snapshot
 // each changed an EARLIER one from CLOSED to BLOCKED, with no admitted event.
 //
@@ -28,7 +28,7 @@ import (
 // state on every event and turns replay quadratic. Reads pay only for what they
 // actually read.
 //
-// Measured on 250 tasks, 500 events, darwin/arm64, 2026-09-22:
+// Measured on 250 tasks, 500 events, darwin/arm64:
 //
 //	Replay      31.0ms/op        write path, unchanged
 //	Tasks        970us/op   416KB, 5007 allocs

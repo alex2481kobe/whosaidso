@@ -1,6 +1,6 @@
 package reduce
 
-// R15.1 through Replay and Apply alike: a task naming an accepter is closed
+// Acceptance through Replay and Apply alike: a task naming an accepter is closed
 // only by a packet that actor wrote; no authority is needed; the closer is
 // projected, and closer_authored_receipt compares it with the receipt's author: TRUE
 // for the same known actor, FALSE for distinct known actors, UNKNOWN when

@@ -22,7 +22,7 @@ func TestEvaluateControl(t *testing.T) {
 	}
 }
 
-// review P's attack: one run finds 0.2mm, a later run finds zero on every pose.
+// The attack: one run finds 0.2mm, a later run finds zero on every pose.
 // Proposing only the later run makes a false claim true. The family answers over
 // both, and the earlier result is not a retry to be dropped.
 func TestCounterexampleSurvivesARetry(t *testing.T) {

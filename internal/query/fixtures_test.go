@@ -28,18 +28,18 @@ func testProject(t *testing.T) store.Project {
 }
 func testScope() model.Scope {
 	return model.Scope{SourcePaths: []string{"internal/query/query.go"}, ContextRefs: []model.RecordRef{},
-		AppliesWhen: "the U09 fixture runs", Limitations: "does not certify production completion"}
+		AppliesWhen: "the read fixture runs", Limitations: "does not certify production completion"}
 }
 func testTask(n int) *model.TaskCreate {
 	return &model.TaskCreate{ID: testID(n), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
-		Spec: model.TaskSpec{Intent: "Build U09 of WhoSaidSo: the first usable read slice", Subject: "WhoSaidSo",
+		Spec: model.TaskSpec{Intent: "Build the first usable read slice of WhoSaidSo", Subject: "WhoSaidSo",
 			Scope: testScope(), NonGoals: []string{"change canonical state during reads"},
 			AcceptanceCriteria: []model.AcceptanceCriterion{{ID: testID(90), Revision: 1, Criterion: "text and JSON agree"}},
 			ContextRefs:        []model.RecordRef{}, ConstraintRefs: []model.RecordRef{}, Prerequisites: []model.Prerequisite{},
 			NextActor: model.Actor{ID: "acceptance-owner"}}}
 }
 func testArtifact() model.ArtifactRef {
-	return model.ArtifactRef{Kind: "content", Content: &model.ContentPin{SHA256: model.HashBytes([]byte("U09")), Length: 3,
+	return model.ArtifactRef{Kind: "content", Content: &model.ContentPin{SHA256: model.HashBytes([]byte("abc")), Length: 3,
 		MediaType: "text/plain", Locators: []model.Locator{}}, Selector: model.Selector{Kind: "whole"}}
 }
 func appendEvents(t *testing.T, project store.Project, n int, events ...model.TypedEvent) model.Bundle {

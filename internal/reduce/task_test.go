@@ -281,7 +281,7 @@ func TestMultipleAttemptsAreAllRetained(t *testing.T) {
 // The prior attempt keeps no terminal receipt, so the task stays IN FLIGHT and
 // the abandoned attempt remains visible instead of being tidied away.
 func TestTakeoverDoesNotEraseTheOldAttempt(t *testing.T) {
-	l := goodLedger(t) // TSKA with live attempt ATTA held by lane-a
+	l := goodLedger(t) // TSKA with live attempt ATTA held by agent-a
 	l.add(t, &model.TaskTakeover{
 		Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-b"},
 		AttemptID: newID("ATTB"), PriorAttemptID: newID("ATTA"),

@@ -32,16 +32,15 @@ func TestCopySnapshotNestedMapsAndPointersRemainDetached(t *testing.T) {
 }
 
 func TestCopySnapshotTimeLocationCannotRewriteAdmittedTimestamp(t *testing.T) {
-	// SPEC CHANGE under ruling R8.4, not a test bent to fit code. This fixture
+	// SPEC CHANGE, not a test bent to fit code. This fixture
 	// assumed a private non-UTC location survived admission, so assigning
 	// through a returned Time.Location() rewrote the admitted timestamp in both
-	// snapshots. R8.4 makes that premise false by design: the wire carries only
+	// snapshots. That premise is false by design: the wire carries only
 	// UTC, EncodeEvent writes the instant as UTC, and decoding refuses any other
 	// offset. The test now asserts the invariant that closes the hole instead.
 	events, env, proof := outsideProofFixture()
 	// A non-hour offset avoids Go's shared fixed-zone cache. The instant is
-	// the fixture's 12:01:10 UTC, after the criterion's bundle (review round-2
-	// consolidation, step 1).
+	// the fixture's 12:01:10 UTC, after the criterion's bundle.
 	env.StartedAt = time.Date(2026, 9, 22, 12, 38, 10, 0, time.FixedZone("fixture", 37*60))
 	setup := outsideProofSetup(t, events, true)
 	first := outsideProofRun(t, setup, env, outsideProofEncode(t, proof))

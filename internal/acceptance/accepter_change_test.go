@@ -1,4 +1,4 @@
-// The named-accepter bypass (principles review 2026-09-24, item 1) belongs
+// The named-accepter bypass belongs
 // here: an amendment that removes or changes a task's accepter, followed by a
 // closure the original accepter never wrote, through admission and through
 // ledger-only replay. Other acceptance specifications do not.
@@ -29,7 +29,7 @@ func accepterChangeNew(t *testing.T) *gateVerifyFixture {
 	return &gateVerifyFixture{t: t, p: p, n: 300}
 }
 
-// accepterChangeTask admits a task naming reviewer as its accepter, authored by lane.
+// accepterChangeTask admits a task naming reviewer as its accepter, authored by agent.
 func accepterChangeTask(t *testing.T, f *gateVerifyFixture, agent, reviewer model.Actor) (model.RecordRef, model.TaskSpec) {
 	t.Helper()
 	spec := reduceSpec(1)
@@ -61,7 +61,7 @@ func TestAccepterAmendmentCannotRemoveTheAccepterThenClose(t *testing.T) {
 				t.Fatalf("expected an amendment by %s that would %s accepter %s to be refused (%s); got %v. Anyone who may amend could otherwise name no one and close the task",
 					agent.ID, change, reviewer.ID, reduce.CodeAccepterMismatch, err)
 			}
-			// The accepter still stands: the lane cannot close the task either way.
+			// The accepter still stands: the agent cannot close the task either way.
 			withdraw := &model.TaskClose{Task: ref, Outcome: model.ClosureWithdrawn,
 				AcceptanceWitnessRefs: []model.AcceptanceWitness{}, DeliveryWitnessRefs: []model.ArtifactRef{}}
 			if _, err := f.admit(agent, agent, withdraw); recCode(err) != reduce.CodeAccepterMismatch {

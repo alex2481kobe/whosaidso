@@ -1,6 +1,6 @@
 package main
 
-// Help honesty (R19 step 2): help names no verb, mode, topic or flag the CLI
+// Help honesty: help names no verb, mode, topic or flag the CLI
 // lacks, and the CLI has no verb help omits. The forms of help, flags after
 // positional ids, and the JSON error object are tested here too.
 

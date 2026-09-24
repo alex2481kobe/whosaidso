@@ -1,7 +1,7 @@
 package write
 
 // Extracting the invocation facts a rejected or correction-requested review
-// records (R10.3) lives here. Whether a proof accounts for them, and U12's
+// records lives here. Whether a proof accounts for them, and the
 // byte-identity rule against an admitted start or seal, are the reducer's proof
 // family checker (internal/reduce/proof_family.go); pending intake and artifact
 // evaluation stay in gate_family.go.

@@ -12,7 +12,8 @@ import (
 )
 
 // CriterionRef names both the assertion revision and the independent criterion
-// revision. U06 retains authorship; U07/U12 compare the entire evaluation family.
+// revision. Authorship is retained; evaluation and proof compare the entire
+// evaluation family.
 type CriterionRef struct {
 	Claim       RecordRef `json:"claim"`
 	CriterionID ID        `json:"criterion_id"`
@@ -86,7 +87,7 @@ func DecimalRat(n json.Number) (*big.Rat, error) {
 	return r, nil
 }
 
-// CompareScalars is the exact predicate used by U07 after it resolves selectors.
+// CompareScalars is the exact predicate evaluation uses after it resolves selectors.
 // Numeric ordering is rational; strings and booleans only support equality.
 func CompareScalars(left Scalar, op ComparisonOperator, right Scalar) (bool, error) {
 	if err := left.validate("left"); err != nil {
@@ -165,7 +166,7 @@ const (
 
 func (r CriterionReducer) validate(p string) error { return oneOf(string(r), p, "all", "any", "count") }
 
-// CriterionExpression is U07's entire executable vocabulary. Count compares
+// CriterionExpression is the evaluator's entire executable vocabulary. Count compares
 // population cardinality; all/any compare each selected scalar with Target.
 // EmptyResult is optional: without an authored meaning, empty is UNKNOWN.
 type CriterionExpression struct {
@@ -193,7 +194,7 @@ func (c CriterionExpression) validate(p string) error {
 	return nil
 }
 
-// EvaluationPolicy freezes family membership and retry handling for U07/U12.
+// EvaluationPolicy freezes family membership and retry handling for evaluation and proof.
 // No option permits dropping an observation because a later attempt passed.
 type EvaluationPolicy struct {
 	Inclusion string `json:"inclusion"`

@@ -1,6 +1,6 @@
 package query
 
-// Revision differences (R21.2): what one amendment changed, computed on read
+// Revision differences: what one amendment changed, computed on read
 // from the two recorded revisions it joins. Every revision is kept, so nothing
 // here is stored: no event, field or change list. One generic, structural diff
 // serves every kind (task, claim, decision, instrument) and is reused by

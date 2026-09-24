@@ -101,7 +101,7 @@ type disposalJSON struct {
 	CitingEvents []reduce.ArtifactCitation `json:"citing_events"`
 }
 
-// R19: disposal-loss is `whosaidso check disposal`, whose first line is its scope.
+// Disposal-loss is `whosaidso check disposal`, whose first line is its scope.
 func TestCLIDisposalLossListIsExactlyWhatAdmissionRequires(t *testing.T) {
 	root, output, dependents := disposalWorld(t)
 	before := fileStamps(t, root)

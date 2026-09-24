@@ -11,8 +11,8 @@ type Provenance struct {
 	SourceRefs []ArtifactRef `json:"source_refs"`
 }
 
-// Creation/replacement payloads feed revision history in U05/U06 and authored
-// context in U13. U08 checks that provenance matches the authored intake.
+// Creation/replacement payloads feed revision history and authored context in
+// the views. Admission checks that provenance matches the authored intake.
 type TaskCreate struct {
 	Provenance Provenance `json:"provenance"`
 	ID         ID         `json:"id"`
@@ -67,7 +67,7 @@ func (e ClaimRevise) validate(p string) error      { return replacementRevision(
 func (e DecisionRevise) validate(p string) error   { return replacementRevision(e.Target, p) }
 func (e InstrumentRevise) validate(p string) error { return replacementRevision(e.Target, p) }
 
-// DecisionDispose supplies U06/U12 a scoped attributable ruling; U13 preserves
+// DecisionDispose supplies a scoped attributable decision; the views preserve
 // the exact quote, including its original whitespace around nonblank words.
 type DecisionDispose struct {
 	Decision    RecordRef `json:"decision"`
@@ -81,8 +81,8 @@ func (e DecisionDispose) validate(p string) error {
 	return oneOf(e.Disposition, p+".disposition", "approved", "rejected", "withdrawn")
 }
 
-// Supersede preserves U06/U13 canonical history. U12 requires Authority when an
-// owner ruling is affected; only stateful admission can identify that circumstance.
+// Supersede preserves canonical history. Proof requires Authority when an
+// owner's decision is affected; only stateful admission can identify that circumstance.
 type Supersede struct {
 	Prior       RecordRef  `json:"prior"`
 	Replacement RecordRef  `json:"replacement"`
@@ -91,7 +91,7 @@ type Supersede struct {
 }
 
 // SupportLink names the exact dependent revision and the evidence whose support
-// is corrected. U06/U12 expand this through the reverse graph, with cycle detection.
+// is corrected. History and proof expand this through the reverse graph, with cycle detection.
 type SupportLink struct {
 	Dependent RecordRef   `json:"dependent"`
 	Evidence  ArtifactRef `json:"evidence"`

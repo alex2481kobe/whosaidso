@@ -95,7 +95,7 @@ func testEnvelope(t *testing.T, id model.ID) model.InvocationEnvelope {
 const testMachine model.ID = "01ARZ3NDEKTSV4RRFFQ69G5FZZ"
 
 // testExecution runs from a known clean checkout of one commit, so fixture runs
-// establish equal source (coordinator decision 2026-09-23) unless a test says otherwise.
+// establish equal source unless a test says otherwise.
 func testExecution() model.ExecutionIdentity {
 	machine := testMachine
 	return model.ExecutionIdentity{Project: projectID, SourceRefs: []model.ArtifactRef{},

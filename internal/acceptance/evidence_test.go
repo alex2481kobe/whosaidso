@@ -485,7 +485,7 @@ func evidenceContent(body string) model.ArtifactRef {
 }
 
 // evidenceStored is where admission keeps an output's bytes: the store,
-// by digest (R9: a run output is a name inside its run plus a content pin).
+// by digest (a run output is a name inside its run plus a content pin).
 func evidenceStored(body string) string {
 	return evidence.DefaultArtifactDir + "/" + string(evidenceDigest(body))
 }
@@ -613,7 +613,7 @@ func evidenceEnvelope(c model.CriterionFix, body string, id int) model.Invocatio
 		CriterionRef:  evidenceKnown(model.CriterionRef{Claim: c.Claim, CriterionID: c.CriterionID, Revision: c.Revision}),
 		ExecutionSourceIdentity: model.ExecutionIdentity{
 			Project: c.Claim.Project, MachineID: evidenceKnown(evidenceMachine),
-			// Coordinator decision 2026-09-23: only a known equal HEAD with clean checkouts (or equal pins) establishes equal source.
+			// Only a known equal HEAD with clean checkouts (or equal pins) establishes equal source.
 			SourceRefs: []model.ArtifactRef{}, Head: evidenceKnown(model.GitHead{ObjectFormat: "sha1", Commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}), Dirty: evidenceKnown(false),
 		},
 		Argv: []string{"fixture-measurement"}, InputRefs: []model.ArtifactRef{}, ConfigRequested: map[string]model.Scalar{},

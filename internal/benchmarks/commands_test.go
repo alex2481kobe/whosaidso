@@ -28,7 +28,7 @@ type readCase struct {
 }
 
 // Names are kept from the pre-view commands so the recorded trail stays
-// comparable. Where a command was removed (R19), its name now measures the
+// comparable. Where a command was removed, its name now measures the
 // view that answers the same question; the comment says which.
 func readCases(f *fixture) []readCase {
 	return []readCase{

@@ -2,7 +2,7 @@ package main
 
 // End-to-end: an agent records the owner's ruling, and fresh `whosaidso show` and
 // `whosaidso history` processes name the packet author beside the authority and
-// the quote (R10.1 revised). Admission rules live in internal/write.
+// the quote. Admission rules live in internal/write.
 
 import (
 	"strings"
@@ -36,8 +36,8 @@ func TestCLIShowAndHistoryNameTheRulingsPacketAuthor(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	show := string(readProcess(t, root, nil, "show", "--json", string(decision))) // R19: --full is removed; --json is complete
-	// The record's own fact (decision.open, by lane) and its disposition (by
+	show := string(readProcess(t, root, nil, "show", "--json", string(decision))) // --full is removed; --json is the complete answer
+	// The record's own fact (decision.open, by the recording agent) and its disposition (by
 	// agent-sol, recording the owner's words) each name their packet.
 	for _, want := range []string{`"packet": "` + string(cliID(20)) + `"`, `"id": "recorder"`, `"packet": "` + string(cliID(22)) + `"`, `"quote": "ship revision one"`} {
 		if !strings.Contains(show, want) {

@@ -1,6 +1,6 @@
 package write
 
-// The ruling-quote rule (R10.1 follow-through, U14 review): an owner act that
+// The ruling-quote rule: an owner act that
 // carries a quote and an authority is admitted only when the quote is exactly
 // the text the authority's selector reads from its pinned source. Today only
 // decision.dispose carries a quote; supersede and artifact.dispose carry an

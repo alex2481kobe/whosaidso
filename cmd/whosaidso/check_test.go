@@ -1,7 +1,7 @@
 package main
 
 // Fresh-process tests for `whosaidso check criterion` and `whosaidso check admission`
-// (R19: formerly criterion check and proof check): each verdict is compared
+// (formerly criterion check and proof check): each verdict is compared
 // with what admission then does with the same inputs, each check opens with
 // its scope, exits by its result, and leaves the project and intake untouched.
 
@@ -94,9 +94,9 @@ func checkProofFile(t *testing.T, criterion model.CriterionRef, member model.Inv
 	return path, proof
 }
 
-// specCriterionScope is COMMAND-SPEC §4's wording, written out rather than
-// read from the constant, so a scope that stops naming what was NOT checked
-// fails here.
+// specCriterionScope is the criterion preview's documented scope, written out
+// rather than read from the constant, so a scope that stops naming what was
+// NOT checked fails here.
 const specCriterionScope = "criterion preview only: instrument validation, proof-family completeness, comparability and admission were NOT checked"
 
 // The criterion check's verdict is the one admission then acts on: TRUE is

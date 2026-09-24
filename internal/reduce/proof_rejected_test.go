@@ -1,6 +1,6 @@
 package reduce
 
-// Replay-time rules for rejected criterion family members (R10.3) live here:
+// Replay-time rules for rejected criterion family members live here:
 // a run recorded by a rejected or correction-requested review must be listed by
 // the proof, only as inapplicable or inconclusive, and never as support. The
 // write path's extraction and byte-identity checks are tested in internal/write.

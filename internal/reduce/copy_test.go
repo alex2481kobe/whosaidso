@@ -11,7 +11,7 @@ import (
 )
 
 // The two tests here protect the deep copy from rotting rather than checking
-// today's fields. Lane E's acceptance fixture proves the BEHAVIOUR from
+// today's fields. An acceptance fixture proves the BEHAVIOUR from
 // outside: mutating a value from a later snapshot must not change an earlier
 // one. These prove the STRUCTURE, so a type added next year is covered the day
 // it is declared and nobody has to remember this file exists.
@@ -67,7 +67,7 @@ func escapingTypes(t *testing.T) map[reflect.Type]string {
 // mutates the receiver, and the only way to change one is to assign through a
 // pointer the caller had to go out of its way to obtain.
 //
-// Ruling R8.4 closed the reachable case. The wire carries only UTC: EncodeEvent
+// The UTC-only wire closes the reachable case. The wire carries only UTC: EncodeEvent
 // writes every timestamp as UTC and decoding refuses any other offset, so an
 // admitted snapshot can no longer hold a private location - none can be
 // admitted. TestInvocationTimestampIsUTCThroughLedgerPublication and

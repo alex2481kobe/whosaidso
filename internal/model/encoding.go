@@ -36,7 +36,7 @@ func Encode(v any) ([]byte, error) {
 	// encoding/json silently replaces invalid UTF-8 with U+FFFD. That makes an
 	// invalid byte and a real U+FFFD produce IDENTICAL bytes and one digest -
 	// two different inputs with one identity, which is the collision a digest
-	// exists to prevent. Found by lane E. Checking the marshalled bytes came too
+	// exists to prevent. Checking the marshalled bytes came too
 	// late: by then "holder-\xff" was already a different, valid actor. So the
 	// value is checked BEFORE marshalling, naming the field.
 	if err := refuseInvalidUTF8(reflect.ValueOf(v), "$"); err != nil {
@@ -145,7 +145,7 @@ func parseOrdered(b []byte) (any, error) {
 		return nil, err
 	}
 	// dec.More() returns false for a stray "}" or "]", so it never saw trailing
-	// garbage. Reading the next token does. Found by lane E.
+	// garbage. Reading the next token does.
 	if _, err := dec.Token(); err != io.EOF {
 		return nil, fault("invalid-json", "$", "trailing content after the top-level value")
 	}
@@ -221,7 +221,7 @@ func parseArray(dec *json.Decoder, path string) (any, error) {
 
 // writeJSONString emits a JSON string literal. strconv.Quote produces GO
 // escapes - it renders a NUL as \x00, which is not valid JSON at all, so any
-// control character made the whole document unparseable. Found by lane E.
+// control character made the whole document unparseable.
 func writeJSONString(w *bytes.Buffer, s string) {
 	// SetEscapeHTML(false) keeps <, > and & literal: still deterministic, and
 	// the bytes stay readable in a diff.

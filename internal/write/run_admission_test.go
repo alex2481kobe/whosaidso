@@ -1,6 +1,6 @@
 package write
 
-// Seal admission of a run's own outputs (R9: each output a name inside the run
+// Seal admission of a run's own outputs (each output a name inside the run
 // and a content pin, its bytes proven from the seal's own captured blobs). Proof
 // families and generic artifact gates are tested in the gate_*_test.go files.
 

@@ -1,6 +1,6 @@
 package main
 
-// `whosaidso show --stale` (R14.2; R19: formerly state --stale) through a fresh
+// `whosaidso show --stale` (formerly state --stale) through a fresh
 // process: the stale-claims section appears only when asked, git runs only
 // when asked, and the flag belongs to show alone. The git that show --stale and
 // continue are handed is the invoking checkout's, never the home's. What

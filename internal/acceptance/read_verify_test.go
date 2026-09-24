@@ -1,8 +1,7 @@
 package acceptance_test
 
-// Coordinator edit 2026-09-24 (principles audit item 8, owner-approved fixes): todo's
-// intake_pending list holds every packet not accepted (unreviewed, correction
-// requested, rejected), so it is renamed packets_not_accepted; contents unchanged.
+// todo's packets_not_accepted list holds every packet not accepted (unreviewed,
+// correction requested, rejected).
 
 import (
 	"bytes"
@@ -61,7 +60,7 @@ func readVerifyAppend(t *testing.T, p store.Project, n int, packets []model.Pack
 	return s
 }
 
-// R19: reads go through the four views; intake pending is todo's section.
+// Reads go through the four views; intake pending is todo's section.
 func readVerifyAnswer(t *testing.T, p store.Project, view string, id model.ID) query.ViewAnswer {
 	t.Helper()
 	a, err := query.ReadView(p, query.ViewRequest{View: view, ID: id})
@@ -88,7 +87,6 @@ func readVerifyReady(t *testing.T, p store.Project) {
 // readVerifyAdmitted captures each group as a real intake packet, then
 // publishes the groups with the accepted review write.Admit records: packet
 // authors, the capture stamps intake assigned, and each event's packet.
-// review round-2 consolidation, step 1.
 func readVerifyAdmitted(t *testing.T, p store.Project, n int, groups ...model.Packet) reduce.Snapshot {
 	t.Helper()
 	ids := make([]model.ID, 0, len(groups))
@@ -203,7 +201,7 @@ func TestReadVerifyPendingCannotIgnoreAReplayedReviewMissingFromEnvelopePackets(
 			review := func(ref model.PacketRef) *model.ReviewAdmit {
 				return &model.ReviewAdmit{Packets: []model.PacketRef{ref}, Outcome: outcome,
 					Actor: model.Actor{ID: "reviewer"}, Reason: "explicit canonical disposition",
-					// R18.2: every review carries authors, captured_at and event_packets.
+					// Every review carries authors, captured_at and event_packets.
 					Authors:    map[model.ID]model.Actor{ref.CommandID: {ID: "author"}},
 					CapturedAt: map[model.ID]model.Availability[time.Time]{ref.CommandID: {State: model.Unknown, Reason: "not recorded"}}, EventPackets: []model.ID{}}
 			}
@@ -277,7 +275,7 @@ func TestReadVerifyAuthoredValuesSurviveTextFromTheAdmittedLedger(t *testing.T) 
 		spec.NextActor = model.Actor{UnknownReason: "author, reviewer and holder cannot assign the next actor"}
 		readVerifyAppend(t, p, 101+i, []model.PacketRef{}, reduceCreate(2+i, spec))
 	}
-	// R19: the views replace the old reads; todo holds the open tasks the
+	// The views replace the old reads; todo holds the open tasks the
 	// removed `task todo` selected. --full is removed: complete strings are
 	// asserted in --json, and the brief is held to the brief's agreement rule.
 	for _, view := range []string{"show", "history", "todo"} {

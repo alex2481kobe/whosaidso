@@ -1,6 +1,6 @@
 package write
 
-// R14.2 through admission: a failing run of the proof's own criterion revision
+// The code-change rule through admission: a failing run of the proof's own criterion revision
 // is set aside only beside a code change git verifies over the claim's scope,
 // in the home repository (the ledger's), never the invoking checkout. The
 // replay-side structure is tested in internal/reduce; the stale-claims read,
@@ -79,7 +79,7 @@ func TestCodeChangeVerifiedByGitSetsTheFailingRunAside(t *testing.T) {
 	}
 }
 
-// Two roots (R19): the checkout the admission is invoked from sits at a HEAD
+// Two roots: the checkout the admission is invoked from sits at a HEAD
 // the home does not have, and holds none of the home's commits, so a gate
 // that asked it would refuse the change as unverified.
 func TestCodeChangeIsVerifiedInTheHomeNotTheInvokingCheckout(t *testing.T) {

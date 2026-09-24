@@ -1,6 +1,6 @@
 package write
 
-// Tests for the ruling-quote rule (R10.1 follow-through, U14 review): a
+// Tests for the ruling-quote rule: a
 // decision.dispose quote must be exactly the text its authority's selector
 // reads. The admitted control and the blank-quote/unnamed-authority refusals
 // live in gate_dispose_test.go.

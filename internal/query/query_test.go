@@ -145,7 +145,7 @@ func TestClaimAndMissingRecordDoNotGainGuessedAnswers(t *testing.T) {
 	p := testProject(t)
 	readyControl(t, p)
 	appendEvents(t, p, 101, &model.ClaimAssert{ID: testID(2), Provenance: testTask(1).Provenance,
-		Spec: model.ClaimSpec{Assertion: "U09 may omit a read-time fact", Falsifier: "compare the export with the admitted ledger",
+		Spec: model.ClaimSpec{Assertion: "The read slice may omit a read-time fact", Falsifier: "compare the export with the admitted ledger",
 			Scope: testScope(), ExternalRefs: []model.ExternalReference{}}})
 	claim := showOf(t, p, testID(2)).Records[0].Claim
 	if claim.Status != reduce.StatusUnmeasured || claim.Support.EvidenceAvailable != reduce.TruthUnknown || claim.Support.ApplicableScope != reduce.TruthFalse {

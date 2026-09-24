@@ -81,7 +81,7 @@ func TestRunIdentityRecordsMachineHeadAndCleanState(t *testing.T) {
 	})
 }
 
-// R13.1: the excluded artifact store is the one beside the configured ledger.
+// The excluded artifact store is the one beside the configured ledger.
 func TestRunIdentityExcludesTheStoreBesideAConfiguredLedger(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	_, root := identityRepo(t)

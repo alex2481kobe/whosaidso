@@ -20,7 +20,7 @@ import (
 )
 
 func cacheReads(output model.ArtifactRef, records []model.RecordRef) [][]string {
-	// R19: the four views and the disposal check replace the old reads.
+	// The four views and the disposal check are the reads.
 	reads := [][]string{{"show"}, {"history"}, {"todo"}, {"show", "--kind", "instrument"}, {"show", "--kind", "claim"},
 		{"check", "disposal", "--digest", string(output.Content.SHA256)}}
 	for _, r := range records {

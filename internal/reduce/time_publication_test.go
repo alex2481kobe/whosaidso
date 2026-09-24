@@ -19,7 +19,7 @@ import (
 	"whosaidso/internal/store"
 )
 
-// Ruling R8.4 flipped this test. It was written to PROVE the hole: a +00:37
+// This test was first written to PROVE a hole: a +00:37
 // invocation timestamp survived packet JSON, durable store.Transact
 // publication, ledger reads and Replay, and assigning through its private
 // decoded Location() rewrote it in every snapshot at once. The wire now
@@ -58,7 +58,7 @@ func TestInvocationTimestampIsUTCThroughLedgerPublication(t *testing.T) {
 	// Exercise packet encoding/decoding as well as bundle encoding/decoding.
 	packetBytes, err := model.Encode(model.Packet{
 		Version: model.WireVersion, Project: project.ID, CommandID: reduce.NewID("PKT1"),
-		RequestDigest: reduce.NewDigest("zone packet"), Author: model.Actor{ID: "agent-a"}, // it carries lane-a's criterion
+		RequestDigest: reduce.NewDigest("zone packet"), Author: model.Actor{ID: "agent-a"}, // it carries agent-a's criterion
 		CapturedAt: env.StartedAt, Events: events,
 	})
 	if err != nil {

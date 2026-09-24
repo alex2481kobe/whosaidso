@@ -1,9 +1,9 @@
-// Lane E's independent U03 attacks on root discovery and durable, lock-free
+// Attacks on root discovery and durable, lock-free
 // intake. Every test redirects the user home to a temporary directory first, so
 // nothing here can reach the real ~/.whosaidso.
 //
-// Out of scope on purpose: the ledger publisher and its lock (U04), and whether
-// a captured packet is admissible (U08). This file only asks whether capture
+// Out of scope on purpose: the ledger publisher and its lock, and whether
+// a captured packet is admissible. This file only asks whether capture
 // keeps its two promises: one inbox per declared project, and nothing readable
 // as complete that is not complete.
 package acceptance_test
@@ -197,13 +197,11 @@ func TestConfigNearestRootWins(t *testing.T) {
 }
 
 // TestConfigLedgerLeavingItsRootContradictsTheCommittedLedgerRule is an open
-// question, not a claim that lane B slipped. internal/store/config_test.go
-// asserts this behaviour on purpose, for a relative parent hop and for an
-// absolute path alike, so the two readings of the contract have to be settled
-// by the owner rather than by either lane.
+// question. internal/store/config_test.go asserts this behaviour on purpose,
+// for a relative parent hop and for an absolute path alike, so the two
+// readings of the rule are in tension.
 //
-// The reading this test encodes: DATUM-CONTRACT.md:676 says every stored path is
-// relative to the whosaidso root, and the storage table puts the ledger in "the
+// The reading this test encodes: every stored path is relative to the whosaidso root, and the storage table puts the ledger in "the
 // project's working tree, committed with the project". A ledger at /tmp or above
 // the root is in no working tree, so it cannot be committed with the project and
 // a rearranged project directory stops finding it.
@@ -237,7 +235,7 @@ func TestConfigLedgerLeavingItsRootContradictsTheCommittedLedgerRule(t *testing.
 			if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 				t.Errorf("ledger %q declared as %q resolves outside its own root %q, "+
 					"so it lives in no working tree and cannot be committed with the project. "+
-					"agent B asserts this behaviour deliberately, so this needs an owner ruling",
+					"internal/store asserts this behaviour deliberately, so the two readings need settling",
 					p.Ledger, e.ledger, p.Root)
 			}
 		})

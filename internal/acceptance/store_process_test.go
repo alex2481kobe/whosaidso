@@ -28,7 +28,7 @@ func procClaim(w *flowWorld) *model.ClaimAssert {
 }
 
 func procAdmission(w *flowWorld, packet model.ID) []string {
-	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	// Writes print a one-line acknowledgement by default; --json is the full result this test decodes.
 	return []string{"admit", "--command-id", string(w.id()), "--actor", "reviewer", "--outcome", "accepted", "--reason", "independent storage review", "--json", string(packet)}
 }
 
@@ -53,7 +53,7 @@ func procWait(t *testing.T, ready func() bool) {
 	}
 }
 
-// DATUM-CONTRACT.md:684-685, 692-693: a published retry returns its existing
+// A published retry returns its existing
 // result. The lookup must survive loss of the producer's machine-local inbox.
 func TestStoreRetrySurvivesIntakeLoss(t *testing.T) {
 	w := flowNew(t)
@@ -67,7 +67,7 @@ func TestStoreRetrySurvivesIntakeLoss(t *testing.T) {
 	}
 	before := w.ledger()
 	reads := map[string]map[string]any{}
-	for _, verb := range []string{"show", "history", "todo"} { // R19: the views replace state, now and context
+	for _, verb := range []string{"show", "history", "todo"} { // the views replace state, now and context
 		reads[verb] = w.readJSON(verb)
 	}
 	// Leave only whosaidso.toml and .whosaidso/events, with an empty machine inbox.
@@ -82,14 +82,14 @@ func TestStoreRetrySurvivesIntakeLoss(t *testing.T) {
 		}
 	}
 	if got, err := w.cli(nil, args...); err != nil || !bytes.Equal(got, want) {
-		t.Errorf("expected the already-published bundle without local intake; got %q, %v; a moved/cloned project cannot recover an admission acknowledgement (contract:684-685,692-693)", got, err)
+		t.Errorf("expected the already-published bundle without local intake; got %q, %v; a moved/cloned project cannot recover an admission acknowledgement", got, err)
 	}
 	if !reflect.DeepEqual(before, w.ledger()) {
 		t.Error("retry rewrote canonical bytes")
 	}
 }
 
-// R8.1 and DATUM-CONTRACT.md:676,690: real filesystem paths stay confined,
+// Real filesystem paths stay confined,
 // including the admission lock, not merely the spelling in whosaidso.toml.
 func TestStoreLockCannotCreateOutsideRoot(t *testing.T) {
 	w := flowNew(t)
@@ -108,7 +108,7 @@ func TestStoreLockCannotCreateOutsideRoot(t *testing.T) {
 	// lock through flowWorld.ledger while establishing the pre-admission bytes.
 	_, err := w.cli(nil, args...)
 	if err == nil {
-		t.Error("expected refusal of an escaping lock symlink; admission succeeded, so its real lock path leaves the whosaidso root (R8.1; contract:676,690)")
+		t.Error("expected refusal of an escaping lock symlink; admission succeeded, so its real lock path leaves the whosaidso root")
 	}
 	if _, err := os.Lstat(outside); !os.IsNotExist(err) {
 		t.Errorf("expected no external file; opening the lock created %s: %v; a confined admission wrote outside its project", outside, err)
@@ -122,7 +122,7 @@ func TestStoreLockCannotCreateOutsideRoot(t *testing.T) {
 	}
 }
 
-// Contract:88-93,149-151,610-614. Five processes overlap capture/admit/run;
+// Five processes overlap capture/admit/run;
 // each admission result must occur once in one replayable, contiguous chain.
 func TestStoreConcurrentProcesses(t *testing.T) {
 	w := flowProofWorld(t)
@@ -137,7 +137,7 @@ func TestStoreConcurrentProcesses(t *testing.T) {
 			t.Fatal(err)
 		}
 		packet := w.id()
-		// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+		// Writes print a one-line acknowledgement by default; --json is the full result this test decodes.
 		capture := []string{"capture", "--json", "--actor", flowAgent, "--command-id", string(packet), "--events", "-"}
 		admit := procAdmission(w, packet)
 		go func() {
@@ -198,7 +198,7 @@ func TestStoreConcurrentProcesses(t *testing.T) {
 	}
 }
 
-// Contract:690-693. Pause the real admitting process inside artifact validation
+// Pause the real admitting process inside artifact validation
 // under its lock, kill it, then recover a partial publication with the next CLI.
 // The git fixture also tests root-relative pins below a repository's top level.
 func TestStoreKilledAdmissionAndNestedGit(t *testing.T) {
@@ -273,7 +273,7 @@ func TestStoreKilledAdmissionAndNestedGit(t *testing.T) {
 	w.record(claim.ID)
 }
 
-// Contract:692-693: losing the acknowledgement cannot roll back publication.
+// Losing the acknowledgement cannot roll back publication.
 func TestStoreKilledAcknowledgement(t *testing.T) {
 	w := flowNew(t)
 	claim := procClaim(w)

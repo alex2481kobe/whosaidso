@@ -21,12 +21,12 @@ func admissionUnknown[T any]() model.Availability[T] {
 	return model.Availability[T]{State: model.Unknown, Reason: "not observed"}
 }
 
-// Ruling R8.4 flipped this test. It was written to PROVE the hole: real intake
+// This test was first written to PROVE a hole: real intake
 // retained a +00:37 invocation timestamp, and only the invocation admission
 // gate stood between it and the ledger. The wire now carries only UTC: an
 // in-process timestamp is captured as the same instant in UTC, and event bytes
-// carrying an offset are refused when decoded. U12 opened invocation.start, so
-// the invariant is now end to end: the start admits and the ledger holds UTC.
+// carrying an offset are refused when decoded. Since invocation.start is admissible,
+// the invariant is end to end: the start admits and the ledger holds UTC.
 func TestInvocationTimestampIsUTCThroughApplicationAdmission(t *testing.T) {
 	// Intake intentionally uses an isolated home so this real capture never
 	// writes to the user's inbox.
@@ -102,7 +102,7 @@ func TestInvocationTimestampIsUTCThroughApplicationAdmission(t *testing.T) {
 		t.Fatalf("an offset in event bytes must be refused at started_at: %v", err)
 	}
 	if _, err := admit(15, packet); err != nil {
-		t.Fatalf("invocation.start must admit since U12: %v", err)
+		t.Fatalf("invocation.start must admit: %v", err)
 	}
 	prefix, err := store.ReadPrefix(project)
 	if err != nil {

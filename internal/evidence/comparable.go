@@ -21,7 +21,7 @@ import (
 // asked for is not what ran.
 //
 // Conditions compared: the project, the exact instrument revision, the machine
-// (contract:513, a different machine is a different condition), the executed
+// (a different machine is a different condition), the executed
 // source (equal non-empty source pins, or a known equal git HEAD with both
 // checkouts known clean), effective configuration, observed conditions, and the
 // visual trust envelope whenever either run observed one or produced a picture.
@@ -71,9 +71,8 @@ func executionDifference(a, b Observation) string {
 	return sourceDifference(a.Execution, b.Execution)
 }
 
-// sourceDifference requires the executed source to be ESTABLISHED equal
-// (coordinator decision, OWNER-RULINGS-DATUM 2026-09-23): equal source pins, or a
-// known equal git HEAD with both checkouts known clean. Two empty pin lists pin
+// sourceDifference requires the executed source to be ESTABLISHED equal:
+// equal source pins, or a known equal git HEAD with both checkouts known clean. Two empty pin lists pin
 // nothing, an unknown HEAD or dirty state is not evidence of sameness, and a
 // dirty checkout differs from HEAD by bytes the ledger never saw.
 func sourceDifference(a, b model.ExecutionIdentity) string {
@@ -116,8 +115,8 @@ func pinKey(ref model.ArtifactRef) string {
 	return key
 }
 
-// visualDifference applies the config_effective rule to pixels (contract,
-// "Visual evidence is the same thing"): a run that observed a frame, or made a
+// visualDifference applies the config_effective rule to pixels (visual
+// evidence is the same thing): a run that observed a frame, or made a
 // picture, is compared on what was true of the frame, and unknown never matches.
 func visualDifference(a, b Observation) string {
 	pictured := a.Visual.State == model.Known || b.Visual.State == model.Known || a.ImageOutput || b.ImageOutput

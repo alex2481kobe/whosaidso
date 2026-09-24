@@ -1,6 +1,6 @@
 package query
 
-// The stale-claims read (R14.2) with a git the test supplies: which claims it
+// The stale-claims read with a git the test supplies: which claims it
 // answers, which run is the last, and the HEAD-only comparison's TRUE, FALSE
 // and UNKNOWN. That the CLI supplies the invoking checkout's git is tested in
 // cmd/whosaidso; the git observer itself in internal/evidence.

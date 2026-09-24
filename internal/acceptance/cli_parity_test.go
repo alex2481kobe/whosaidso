@@ -1,8 +1,8 @@
-// Final adoption probes belong here: independent CLI and ledger counterexamples.
-// Production fixes and other reviewers' specifications do not. Coordinator edit
-// 2026-09-24: fixtures live in test temp dirs, not the repo tree (a scratch dir in
-// the checkout made every observed checkout dirty), and the build uses the
-// caller's GOCACHE instead of one machine's path.
+// End-to-end CLI and ledger counterexamples belong here: forged caches,
+// read/replay parity and CLI refusals. Production fixes and other acceptance
+// specifications do not. Fixtures live in test temp dirs, not the repo tree (a
+// scratch dir in the checkout makes every observed checkout dirty), and the
+// build uses the caller's GOCACHE instead of one machine's path.
 package acceptance_test
 
 import (
@@ -167,15 +167,15 @@ func TestCacheCannotForgeLedgerFact(t *testing.T) {
 	if !ok || rec.Claim.Assertion != c.Spec.Assertion {
 		t.Fatal("full replay control lost the original")
 	}
-	// Coordinator edit 2026-09-24, owner ruling R22.3: a cache rewritten together
+	// A cache rewritten together
 	// with its public checksum is a documented blind spot of the default read
 	// (no lightweight check without a secret or a full replay can detect it).
-	// The ruled defense is WHOSAIDSO_NO_CACHE=1, which reads the whole ledger; the
+	// The defense is WHOSAIDSO_NO_CACHE=1, which reads the whole ledger; the
 	// original assertion that the default path resists forgery became this one.
 	if code != 0 {
 		t.Fatalf("default read over a forged cache must still answer, exit %d", code)
 	}
-	t.Logf("default read over the forged cache shows the fabricated assertion: %t (blind spot, R22.3)",
+	t.Logf("default read over the forged cache shows the fabricated assertion: %t (known blind spot)",
 		bytes.Contains(got, []byte("cache says invented!")))
 	t.Setenv("WHOSAIDSO_NO_CACHE", "1")
 	checked, code := cliParityRun(t, f, "show", string(c.ID), "--json")

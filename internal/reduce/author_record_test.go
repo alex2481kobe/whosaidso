@@ -1,6 +1,6 @@
 package reduce
 
-// Replay of review.admit packet authors and event attribution (R10.1 revised).
+// Replay of review.admit packet authors and event attribution.
 // Admission writing them is tested in internal/write/author_record_test.go.
 
 import (
@@ -42,7 +42,7 @@ func TestDispositionCarriesItsRecordedPacketAuthor(t *testing.T) {
 	}
 }
 
-// R18.2: authors, captured_at and event_packets are required on every review;
+// Authors, captured_at and event_packets are required on every review;
 // an omitted one is refused, never read as unknown. An author recorded as
 // unknown stays unknown and is never replaced by the admitter or provenance.
 func TestReviewWithoutRequiredFieldsIsRefused(t *testing.T) {
@@ -54,8 +54,8 @@ func TestReviewWithoutRequiredFieldsIsRefused(t *testing.T) {
 		before := len(l.out)
 		review := &model.ReviewAdmit{Packets: []model.PacketRef{{CommandID: packet, Digest: newDigest("unknown")}}, Outcome: "accepted",
 			Actor: model.Actor{ID: "coordinator"}, Reason: "reviewed",
-			Authors:      map[model.ID]model.Actor{packet: {UnknownReason: "not recorded at admission (before R10.1)"}},
-			CapturedAt:   map[model.ID]model.Availability[time.Time]{packet: {State: model.Unknown, Reason: "not recorded at admission (before R10.1)"}},
+			Authors:      map[model.ID]model.Actor{packet: {UnknownReason: "not recorded at admission"}},
+			CapturedAt:   map[model.ID]model.Availability[time.Time]{packet: {State: model.Unknown, Reason: "not recorded at admission"}},
 			EventPackets: []model.ID{packet}}
 		dispose := &model.DecisionDispose{Decision: d, Disposition: "approved", Quote: "ship it", Scope: testScope(), Authority: rulingAuthority("owner")}
 		b := l.add(t, dispose, review)
@@ -77,7 +77,7 @@ func TestReviewWithoutRequiredFieldsIsRefused(t *testing.T) {
 	l, b := build("")
 	s := mustReplay(t, l.out)
 	p, _ := s.DecisionAt(d)
-	if got := p.Dispositions[0].Author; got.Packet != packet || got.Author.ID != "" || got.Author.UnknownReason != "not recorded at admission (before R10.1)" {
+	if got := p.Dispositions[0].Author; got.Packet != packet || got.Author.ID != "" || got.Author.UnknownReason != "not recorded at admission" {
 		t.Fatalf("control: an explicit unknown author must project unknown with its reason: %+v", got)
 	}
 	r, _ := s.Review(ReviewKey{Project: testProject, CommandID: packet})

@@ -1,8 +1,8 @@
 package write
 
 // Negative tests for proof family closure over pending intake and same-set
-// ordering, R9 instrument validation (known, resolvable, revocable), and root
-// containment through every operation U12 enabled. The proof fixture and the
+// ordering, instrument validation (known, resolvable, revocable), and root
+// containment through every enabled operation. The proof fixture and the
 // core proof refusals live in gate_proof_test.go.
 
 import (
@@ -164,7 +164,7 @@ func TestInstrumentKnownValidationMustResolve(t *testing.T) {
 	}
 }
 
-// Every operation U12 opened carries artifacts. Each is aimed through a
+// Every enabled operation carries artifacts. Each is aimed through a
 // symlink whose target, outside the root, holds exactly the pinned bytes.
 func TestNewOperationsCannotEscapeRootThroughSymlink(t *testing.T) {
 	for _, door := range []string{"criterion.source", "criterion.selector", "start.input", "seal.output", "claim.revise", "instrument.revise"} {

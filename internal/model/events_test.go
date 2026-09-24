@@ -342,5 +342,5 @@ func TestEveryTerminalAndDispositionRemainsRepresentable(t *testing.T) {
 		proof.Evidence[0].Disposition = d
 		requireSchemaGood(t, proof)
 	}
-	// Schema capture preserves contradictions; U12 is responsible for refusing proof admission.
+	// Schema capture preserves contradictions; proof is responsible for refusing proof admission.
 }

@@ -17,7 +17,7 @@ func outsideProofFixture() ([]model.TypedEvent, model.InvocationEnvelope, *model
 	env := evidenceEnvelope(c, evidenceBody, 81)
 	env.AttemptID = reduceID(70)
 	// After the criterion's bundle is recorded (12:01), before the run's packet
-	// is captured. review round-2 consolidation, step 1.
+	// is captured.
 	env.StartedAt = time.Date(2026, 9, 22, 12, 1, 10, 0, time.UTC)
 	env.ConfigRequested = map[string]model.Scalar{"sample_count": evidenceNumber("12")}
 	env.ConditionsDeclared = map[string]model.Scalar{"seed": evidenceNumber("7")}
@@ -44,7 +44,7 @@ func outsideProofFixture() ([]model.TypedEvent, model.InvocationEnvelope, *model
 	proof := &model.ProofAdmit{Claim: c.Claim, CriterionRef: *env.CriterionRef.Value,
 		Evidence: []model.ObservationDisposition{{InvocationRef: model.InvocationRef{Project: reduceProject, InvocationID: env.InvocationID}, Disposition: "supports", Reason: "both measured poses satisfy the threshold"}},
 		Judgment: model.ResponsibleJudgment{Actor: model.Actor{ID: "reviewer"}, Reason: "the complete fixture family satisfies its frozen criterion"},
-		Verdict:  model.VerdictSupports, // R18.2: every proof states its verdict.
+		Verdict:  model.VerdictSupports, // Every proof states its verdict.
 	}
 	return events, env, proof
 }
@@ -61,8 +61,8 @@ func outsideProofSeal(env model.InvocationEnvelope) *model.InvocationSeal {
 
 // outsideProofSetup admits the fixture's records in the shape write.Admit
 // publishes, each in its author's packet. withCriterion false leaves the
-// criterion out, for a caller that admits it late. review round-2
-// consolidation, step 1: the criterion is admitted in a bundle before the run.
+// criterion out, for a caller that admits it late. Otherwise
+// the criterion is admitted in a bundle before the run.
 func outsideProofSetup(t *testing.T, events []model.TypedEvent, withCriterion bool) model.Bundle {
 	t.Helper()
 	var records, starts []model.TypedEvent
@@ -86,8 +86,7 @@ func outsideProofSetup(t *testing.T, events []model.TypedEvent, withCriterion bo
 // outsideProofRun admits the run and the proof after previous: the start is
 // captured after it began, the seal after it observed, and the proof in its
 // judge's own packet. late events (a criterion fixed after launch) ride in
-// their author's packet between start and seal. review round-2 consolidation,
-// step 1.
+// their author's packet between start and seal.
 func outsideProofRun(t *testing.T, previous model.Bundle, env model.InvocationEnvelope, proof model.Event, late ...model.TypedEvent) model.Bundle {
 	t.Helper()
 	if !env.StartedAt.After(previous.RecordedAt) {
@@ -190,7 +189,7 @@ func TestProofRevisionAndTrustLossStayAttachedToTheirExactSubjects(t *testing.T)
 		t.Fatalf("control verified fixture support must be current: %+v", support)
 	}
 	spec := model.DecisionSpec{Question: "ship this revision", Options: []string{"approve", "reject"}, WaitingActor: model.Actor{ID: "owner"}, Scope: reduceScope()}
-	authority := *reduceClose(1, 1, 1, model.ClosureSuccess).Authority // R15.1: a closure's authority is optional, so a pointer.
+	authority := *reduceClose(1, 1, 1, model.ClosureSuccess).Authority // A closure's authority is optional, so a pointer.
 	ruling := &model.DecisionDispose{Decision: reduceRef(5, 1), Disposition: "approved", Quote: "ship revision one", Scope: spec.Scope, Authority: authority}
 	second := reduceBundle(t, first, &model.DecisionOpen{ID: reduceID(5), Provenance: reduceProvenance(), Spec: spec}, ruling)
 	decided := reduceReplay(t, append(prefix[:len(prefix):len(prefix)], second)...)

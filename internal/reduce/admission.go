@@ -189,7 +189,7 @@ func (s *state) checkReferences(b model.Bundle, idx int, e model.TypedEvent) ([]
 			}
 		case r.Invocation != nil:
 			if _, ok := s.invocations[invocationKey(*r.Invocation)]; !ok {
-				// R10.3: a proof may name a run a non-accepted review recorded;
+				// A proof may name a run a non-accepted review recorded;
 				// the proof family checker decides whether and how it belongs.
 				if _, proof := e.(*model.ProofAdmit); proof && s.rejectedRecorded(invocationKey(*r.Invocation)) {
 					continue

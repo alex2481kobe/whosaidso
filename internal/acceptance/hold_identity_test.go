@@ -1,5 +1,5 @@
 // Hold identity across task changes, packet ordering and handbacks belongs here.
-// Production repairs and unrelated adoption checks do not. Fixtures use TempDir.
+// Production repairs and unrelated acceptance checks do not. Fixtures use TempDir.
 package acceptance_test
 
 import (
@@ -154,7 +154,7 @@ func (w *holdIdentityWorld) probe(groups [][]model.TypedEvent, replay []model.Ty
 	}
 }
 
-// Coordinator decision 2026-09-24: proposals naming a superseded revision are stale by design (optimistic concurrency); the gate does not reorder packets to rescue them.
+// Proposals naming a superseded revision are stale by design (optimistic concurrency); the gate does not reorder packets to rescue them.
 // Captured after the amendment, the r1 hold is refused as stale; admission,
 // check admission and replay of the order admission applies (the clear waits
 // for the amendment and the hold, otherwise capture order) agree.

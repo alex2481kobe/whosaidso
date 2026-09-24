@@ -169,7 +169,7 @@ func rejectRun(t *testing.T, l *ledgerBuilder, env model.InvocationEnvelope, exi
 	return seal
 }
 
-// U12 on replay: a run the ledger recorded as rejected and later admitted must
+// A run the ledger recorded as rejected and later admitted must
 // be admitted with the very start and seal the review recorded.
 func TestProofRejectedDigestMustMatchTheAdmittedRun(t *testing.T) {
 	for _, tc := range []struct {
@@ -213,7 +213,7 @@ func TestProofRejectedDigestMustMatchTheAdmittedRun(t *testing.T) {
 	wantBoth(t, l, CodeInvalidTransition)
 }
 
-// R10.3 on replay: a rejected-only member is listed, set aside, never support.
+// A rejected-only member is listed, set aside, never support.
 func TestProofRejectedOnlyMemberRules(t *testing.T) {
 	for _, disposition := range []string{"inapplicable", "inconclusive", "supports", "contradicts", "omitted"} {
 		t.Run(disposition, func(t *testing.T) {

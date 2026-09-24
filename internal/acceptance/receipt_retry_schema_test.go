@@ -1,4 +1,4 @@
-// Second adoption review probes belong here: independent admission, replay,
+// Receipt, retry and schema counterexamples belong here: admission, replay,
 // schema-fixture and revision-diff counterexamples. Production fixes do not.
 package acceptance_test
 

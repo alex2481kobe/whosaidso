@@ -1,5 +1,5 @@
-// Final stale-proposal parity and schema-typed --set probes belong here.
-// Production repairs and unrelated adoption checks do not; fixtures use TempDir.
+// Stale-proposal parity and schema-typed --set checks belong here.
+// Production repairs and unrelated acceptance checks do not; fixtures use TempDir.
 package acceptance_test
 
 import (

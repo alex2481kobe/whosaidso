@@ -1,5 +1,5 @@
 // Revision-order counterexamples and controls belong here; production repairs
-// and unrelated adoption checks do not. All filesystem fixtures use TempDir.
+// and unrelated acceptance checks do not. All filesystem fixtures use TempDir.
 package acceptance_test
 
 import (
@@ -188,7 +188,7 @@ func TestRevisionOrderHistoricalReferencesFalseCycle(t *testing.T) {
 	}
 }
 
-// Coordinator decision 2026-09-24: proposals naming a superseded revision are stale by design (optimistic concurrency); the gate does not reorder packets to rescue them.
+// Proposals naming a superseded revision are stale by design (optimistic concurrency); the gate does not reorder packets to rescue them.
 // Admission applies packets in capture order after their dependencies, so a
 // second amendment captured before the r2 hold makes the hold stale, and a
 // packet naming claim r1 may land after the revision to r2.
@@ -239,7 +239,7 @@ func TestRevisionOrderControls(t *testing.T) {
 	})
 }
 
-// Coordinator decision 2026-09-24: proposals naming a superseded revision are stale by design (optimistic concurrency); the gate does not reorder packets to rescue them.
+// Proposals naming a superseded revision are stale by design (optimistic concurrency); the gate does not reorder packets to rescue them.
 // A proof captured after its claim's revision still judges a valid historical
 // claim revision and lands after it; one captured after its criterion's fix no
 // longer judges the current criterion and is refused.

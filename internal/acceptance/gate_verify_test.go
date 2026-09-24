@@ -81,7 +81,7 @@ func (f *gateVerifyFixture) unmeasured(id model.ID) {
 	}
 }
 
-// gateVerifyShow is `whosaidso show ID` (R19: read through the show view).
+// gateVerifyShow is `whosaidso show ID` (read through the show view).
 func gateVerifyShow(p store.Project, id model.ID) (*query.ShowAnswer, error) {
 	a, err := query.ReadView(p, query.ViewRequest{View: "show", ID: id})
 	if err != nil {
@@ -146,13 +146,13 @@ func TestGateVerifyClaimAttributionAndUnmeasuredStatus(t *testing.T) {
 		if recCode(err) != "invalid-transition" {
 			t.Errorf("expected refusal of task.start while its claim is unmeasured, got %v; assertion prose must not grant proof or waive the prerequisite", err)
 		}
-		// Consolidation step 7 (C39): self-admission is computed, not written into the reason, so it is read through the query audit.
+		// Self-admission is computed, not written into the reason, so it is read through the query audit.
 		review := recMustDecodeReview(t, b.Events[len(b.Events)-1])
 		want := model.SelfAdmissionTrue
 		if author.ID == "" {
 			want = model.SelfAdmissionUnknown
 		}
-		// R19: read through the history view.
+		// Read through the history view.
 		audit, err := query.ReadView(f.p, query.ViewRequest{View: "history", SelfAdmitted: want})
 		reviews := []query.Review{}
 		if h, ok := audit.(*query.HistoryAnswer); ok {
@@ -203,7 +203,7 @@ func TestGateVerifyClosedEventSet(t *testing.T) {
 	f := gateVerifyNew(t)
 	f.control()
 	a := model.Actor{ID: "gate-reviewer"}
-	// Exercise the seven pre-U11 allowed operations with satisfiable dependencies.
+	// Exercise the seven originally allowed operations with satisfiable dependencies.
 	task := &model.TaskCreate{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Spec: reduceSpec(1)}
 	ref := model.RecordRef{Project: f.p.ID, RecordID: task.ID, Revision: 1}
 	body := []byte(`{"ruling":"blocker resolved"}`)
@@ -238,9 +238,9 @@ func TestGateVerifyClosedEventSet(t *testing.T) {
 		}
 		seen[event.EventType()] = true
 	}
-	// Exception: U11 explicitly enabled task.takeover and attempt.terminal.
-	// Their API and admission integration landed; this is the authorised unit
-	// boundary moving, not permission to weaken tests to match arbitrary code.
+	// Exception: task.takeover and attempt.terminal are enabled, with their
+	// API and admission integration; this is the admission boundary moving,
+	// not permission to weaken tests to match arbitrary code.
 	// Require successful admission AND their own rule refusals before exempting
 	// just these two types from the allowlist expectation. The other 23 stay as-is.
 	gateVerifyU11(t, f, a, allowed[5].(*model.TaskStart))
@@ -284,7 +284,7 @@ func TestGateVerifyClosedEventSet(t *testing.T) {
 			case disabled && recCode(err) != "unavailable-until-integrated":
 				t.Errorf("expected gate allowlist refusal for schema-valid %s, got %v; downstream reference failure would not prove this operation stayed disabled", kind, err)
 			case !disabled && recCode(err) == "unavailable-until-integrated":
-				t.Errorf("%s is enabled by U12 but the allowlist still refused it: %v", kind, err)
+				t.Errorf("%s is enabled but the allowlist still refused it: %v", kind, err)
 			}
 			if err != nil && !bytes.Equal(before, gateVerifyLedger(t, g.p)) {
 				t.Errorf("refused %s changed the ledger; a bundled claim must not be partially admitted", kind)
@@ -298,11 +298,9 @@ func TestGateVerifyClosedEventSet(t *testing.T) {
 	}
 }
 
-// gateVerifyStillDisabled is the admission boundary after U12. U12 enabled
-// task.close, invocation.start/seal, claim.revise, criterion.fix, proof.admit,
+// gateVerifyStillDisabled is the admission boundary. Enabled are task.close, invocation.start/seal, claim.revise, criterion.fix, proof.admit,
 // decision.open/revise, correction, instrument.declare/revise and
-// trust.withdraw, each behind its own rules. Owner ruling R10 then enabled
-// decision.dispose: the ruling quote and a named authority are recorded, and
+// trust.withdraw, each behind its own rules, and decision.dispose: the ruling quote and a named authority are recorded, and
 // accountability is visibility, not an author check. supersede and
 // artifact.dispose followed under the same rule. Packet authors still cannot
 // mint reviews: admission alone writes those.
@@ -358,7 +356,7 @@ func gateVerifyU11(t *testing.T, f *gateVerifyFixture, a model.Actor, start *mod
 	refuse(takeover, "unavailable", "artifact.content")
 	gateVerifyPut(t, filepath.Join(f.p.Root, "stopped.json"), []byte(`{"writer":"stopped"}`))
 	if _, err := f.admit(a, a, takeover); err != nil {
-		t.Fatalf("U11: takeover with resolvable prior-writer confirmation must admit: %v", err)
+		t.Fatalf("takeover with resolvable prior-writer confirmation must admit: %v", err)
 	}
 	terminal := &model.AttemptTerminal{Task: start.Task, AttemptID: takeover.AttemptID, Outcome: model.AttemptBlockedMidTask,
 		Reason: "agent reached a boundary", NextAction: "owner supplies a resolution", DeliveryRefs: []model.ArtifactRef{}}
@@ -366,7 +364,7 @@ func gateVerifyU11(t *testing.T, f *gateVerifyFixture, a model.Actor, start *mod
 	hold := &model.BlockerHold{Task: start.Task, BlockerID: f.id(), Reason: model.BlockerResume, Actor: a, Criterion: "owner resolves the boundary"}
 	bundle, err := f.admit(a, a, terminal, hold)
 	if err != nil {
-		t.Fatalf("U11: blocked-mid-task receipt with its bundled hold must admit: %v", err)
+		t.Fatalf("blocked-mid-task receipt with its bundled hold must admit: %v", err)
 	}
 	prefix, err := store.ReadPrefix(f.p)
 	if err != nil {
@@ -378,7 +376,7 @@ func gateVerifyU11(t *testing.T, f *gateVerifyFixture, a model.Actor, start *mod
 	}
 	projection, ok := snapshot.Task(reduce.Ident{Project: f.p.ID, ID: start.Task.RecordID})
 	if !ok || len(projection.Attempts) != 2 || len(projection.LiveAttempts) != 1 || len(projection.Blockers) != 2 {
-		t.Fatalf("U11 operations did not survive fresh replay: %+v", projection)
+		t.Fatalf("takeover and terminal operations did not survive fresh replay: %+v", projection)
 	}
 	for _, attempt := range projection.Attempts {
 		if attempt.Key.Attempt == start.AttemptID && attempt.Terminal != nil {

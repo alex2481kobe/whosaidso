@@ -19,7 +19,7 @@ import (
 	"whosaidso/internal/write"
 )
 
-// Contract:99,161-163,362-369: matching execution conditions include the
+// Matching execution conditions include the
 // source actually read. Empty source-pin lists do not establish equal source.
 func TestChangedExecutionSourceCannotCompare(t *testing.T) {
 	for _, change := range []string{"control", "committed", "dirty"} {
@@ -79,13 +79,13 @@ func TestChangedExecutionSourceCannotCompare(t *testing.T) {
 				return
 			}
 			if err := w.prove(members); err == nil || w.status() == reduce.StatusProven {
-				t.Errorf("expected incomparable source conditions; got proof=%v, status=%s after %s source changed. The producer read different bytes, but comparison ignores HEAD/dirty and treats two empty source lists as equality (contract:99,161-163)", err, w.status(), change)
+				t.Errorf("expected incomparable source conditions; got proof=%v, status=%s after %s source changed. The producer read different bytes, but comparison ignores HEAD/dirty and treats two empty source lists as equality", err, w.status(), change)
 			}
 		})
 	}
 }
 
-// Contract:120,144: every acknowledged source capture must save its bytes,
+// Every acknowledged source capture must save its bytes,
 // including callers of the same exported writer used by the CLI.
 func TestSourceCaptureCannotBypassDurability(t *testing.T) {
 	for _, route := range []string{"control", "events", "build-events"} {
@@ -114,13 +114,13 @@ func TestSourceCaptureCannotBypassDurability(t *testing.T) {
 				return
 			}
 			if err == nil {
-				t.Errorf("expected refusal before acknowledging unsaved source; got packet %s, later admission=%s. The public intake writer bypasses the CLI-only source check and promises capture with no original bytes (contract:120,144)", packet.CommandID, recCode(w.review("accepted", packet.CommandID)))
+				t.Errorf("expected refusal before acknowledging unsaved source; got packet %s, later admission=%s. The public intake writer bypasses the CLI-only source check and promises capture with no original bytes", packet.CommandID, recCode(w.review("accepted", packet.CommandID)))
 			}
 		})
 	}
 }
 
-// Contract:52-53: an acceptance hold prevents dispatch when no attempt is live.
+// An acceptance hold prevents dispatch when no attempt is live.
 // Changing the verb to takeover must not reopen a terminal attempt's blocked task.
 func TestTakeoverCannotBypassReady(t *testing.T) {
 	for _, blocked := range []bool{false, true} {
@@ -151,13 +151,13 @@ func TestTakeoverCannotBypassReady(t *testing.T) {
 				t.Fatalf("control: a takeover with no outstanding hold must admit: %v", err)
 			}
 			if blocked && err == nil {
-				t.Error("expected refusal while acceptance is owed; takeover admitted a new attempt after the prior attempt ended. READY/BLOCKED must govern dispatch through both verbs (contract:52-53)")
+				t.Error("expected refusal while acceptance is owed; takeover admitted a new attempt after the prior attempt ended. READY/BLOCKED must govern dispatch through both verbs")
 			}
 		})
 	}
 }
 
-// Contract:684: a published admission answers an identical retry without
+// A published admission answers an identical retry without
 // requiring access to this machine's intake. Permissions do not change content.
 func TestRetryDoesNotNeedReadableIntake(t *testing.T) {
 	w := pvNew(t)
@@ -191,7 +191,7 @@ func TestRetryDoesNotNeedReadableIntake(t *testing.T) {
 		t.Skipf("fixture needs enforced file permissions: %v", err)
 	}
 	if got, err := write.Admit(context.Background(), w.p, r); err != nil || !same(got) {
-		t.Errorf("expected the identical published result, got %v. Retry rereads unchanged but inaccessible intake; losing its permissions must not turn an acknowledged ledger fact into a failed command (contract:684)", err)
+		t.Errorf("expected the identical published result, got %v. Retry rereads unchanged but inaccessible intake; losing its permissions must not turn an acknowledged ledger fact into a failed command", err)
 	}
 	if err := os.Chmod(packet, 0600); err != nil {
 		t.Fatal(err)
@@ -201,7 +201,7 @@ func TestRetryDoesNotNeedReadableIntake(t *testing.T) {
 	}
 }
 
-// Contract:584-585,603-616: config names belong to the exact instrument
+// Config names belong to the exact instrument
 // revision; replay must reject the same invalid relationship admission rejects.
 func TestReplayChecksInstrumentConfigNames(t *testing.T) {
 	w := pvNew(t)
@@ -233,6 +233,6 @@ func TestReplayChecksInstrumentConfigNames(t *testing.T) {
 		}
 	}
 	if _, err := reduce.Replay(prefix); err == nil {
-		t.Error("expected replay to refuse an effective config name absent from the instrument; got a valid snapshot. The new admission-only check leaves the invalid relationship expressible in canonical history (contract:584-585,603-616)")
+		t.Error("expected replay to refuse an effective config name absent from the instrument; got a valid snapshot. The new admission-only check leaves the invalid relationship expressible in canonical history")
 	}
 }

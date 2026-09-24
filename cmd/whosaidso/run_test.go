@@ -1,6 +1,6 @@
 package main
 
-// This file holds the U12 end-to-end tests that drive run, proof and
+// This file holds the end-to-end tests that drive run, proof and
 // reconcile through fresh processes, with their fixtures. Capture, admit and
 // handback CLI tests stay in write_test.go.
 
@@ -20,7 +20,7 @@ import (
 	"whosaidso/internal/store"
 )
 
-// ---- U12: run and proof through fresh processes ----------------------------
+// ---- run and proof through fresh processes ----------------------------
 
 const (
 	e2ePass   = `{"results":{"unit":"mm","population":"pose sweep","denominator":"poses","values":[0.0100,0.0200]},"population":{"population":"pose sweep","denominator":"poses","values":["pose-a","pose-b"]}}`
@@ -152,7 +152,7 @@ func e2eStatus(t *testing.T, root string, claim model.RecordRef) reduce.ClaimSta
 // admit the records, a frozen criterion and an attempt, `whosaidso run` a producer,
 // admit its start and seal (MEASURED), then capture and admit proof (PROVEN).
 // The criterion's contract path out/result.json names this run's output
-// out/result.json (R8.3).
+// out/result.json.
 func TestCLIFreshProcessesRunToProven(t *testing.T) {
 	root, criterion, instrument, attempt := e2eWorld(t)
 	out, err := e2eInvoke(t, root, nil, "run", "--attempt-id", string(attempt), "--instrument", string(instrument.RecordID),
@@ -202,7 +202,7 @@ func TestCLIFreshProcessesRunToProven(t *testing.T) {
 }
 
 // A producer outside write.Run declares its output in its own run directory,
-// the one output form (R9); fresh processes carry the claim from UNMEASURED to
+// the one output form; fresh processes carry the claim from UNMEASURED to
 // PROVEN. The bare contract-path form is refused in internal/write tests.
 func TestCLIFreshProcessesCaptureAdmitProofToProven(t *testing.T) {
 	root, criterion, instrument, attempt := e2eWorld(t)
@@ -246,7 +246,7 @@ func TestCLIFreshProcessesCaptureAdmitProofToProven(t *testing.T) {
 	}
 }
 
-// R13.1: the artifact store and run directories sit beside the configured
+// The artifact store and run directories sit beside the configured
 // ledger, in its record folder, never at a second hard-coded location. The
 // fixture's record folder is moved and whosaidso.toml follows it; a real run must
 // then write, admit, store and prove from the moved folder alone.

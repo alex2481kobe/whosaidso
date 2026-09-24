@@ -53,7 +53,7 @@ func TestReadCLIViewsLimitAndContinueObservation(t *testing.T) {
 	}
 }
 
-// The brief is the default text: concise and watermarked. R19: --full and
+// The brief is the default text: concise and watermarked. --full and
 // --brief are removed; --json is the complete answer, and the text is the
 // brief of that same JSON.
 func TestReadCLIBriefIsTheDefault(t *testing.T) {

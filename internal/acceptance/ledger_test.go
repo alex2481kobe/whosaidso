@@ -33,7 +33,7 @@ func ledgerProposal(n int) func([]model.Bundle) (model.Bundle, error) {
 		event, err := model.EncodeEvent(&model.ReviewAdmit{
 			Packets: packets, Outcome: "accepted", Actor: model.Actor{ID: "coordinator"},
 			Reason: fmt.Sprintf("packet %d was independently checked", n),
-			// R18.2: every review carries authors, captured_at and event_packets.
+			// Every review carries authors, captured_at and event_packets.
 			Authors:    map[model.ID]model.Actor{packets[0].CommandID: {ID: "author"}},
 			CapturedAt: map[model.ID]model.Availability[time.Time]{packets[0].CommandID: {State: model.Unknown, Reason: "not recorded"}}, EventPackets: []model.ID{},
 		})

@@ -1,7 +1,7 @@
 package write
 
 // Tests that admission records each reviewed packet's author in the ledger
-// (R10.1 revised: accountability is visibility), and that every admitted event
+// (accountability is visibility), and that every admitted event
 // is attributed to the packet that carried it even when the gate reorders
 // packets by dependency. Decision disposition rules live in gate_dispose_test.go.
 

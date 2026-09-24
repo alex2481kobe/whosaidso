@@ -60,7 +60,7 @@ func testScope() model.Scope {
 	}
 }
 
-// closeAuthority is the authority a pre-R15.1 closure cited; it stays optional.
+// closeAuthority is the authority a closure may cite; it stays optional.
 func closeAuthority() *model.Authority {
 	a := rulingAuthority("owner")
 	return &a

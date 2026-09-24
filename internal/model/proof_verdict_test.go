@@ -1,7 +1,7 @@
 package model
 
-// R14.1 proof verdict decoding: supports and refutes round-trip; an absent
-// verdict (R18.2) and any other spelling, an explicit blank included, are
+// Proof verdict decoding: supports and refutes round-trip; an absent
+// verdict and any other spelling, an explicit blank included, are
 // refused.
 
 import "testing"

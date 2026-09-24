@@ -57,7 +57,7 @@ func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 			return err
 		}
 	}
-	// R14.1: a supports proof counts supporting members and may not carry an
+	// A supports proof counts supporting members and may not carry an
 	// unresolved contradiction; a refutes proof counts contradicting members
 	// and never counts a member as support. Either way the counted members
 	// meet the same observation and instrument bar.
@@ -84,7 +84,7 @@ func (s *state) proofAdmit(b model.Bundle, idx int, e *model.ProofAdmit) error {
 				refusal = faultAt(CodeRejectedFamilyMember, b.Sequence, idx, fmt.Sprintf("evidence[%d].disposition", i),
 					"a rejected run can only be dispositioned inapplicable or inconclusive, never "+member.Disposition)
 			}
-			// R10.3: accounted for, never support
+			// Accounted for, never support
 		case class == MemberOutside || inv.Seal == nil:
 			refusal = faultAt(CodeInvalidTransition, b.Sequence, idx, "evidence", "proof requires local sealed observations of the exact criterion")
 		case class == MemberEarlier:

@@ -99,7 +99,7 @@ func (m *nestMachine) bind(dir string) (string, error) {
 	return a.Continuity, nil
 }
 
-// admit captures events as lane in dir, then admits the packet as coordinator.
+// admit captures events as agent in dir, then admits the packet as coordinator.
 func (m *nestMachine) admit(dir string, events ...model.TypedEvent) error {
 	m.t.Helper()
 	raw := make([]model.Event, len(events))

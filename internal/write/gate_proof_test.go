@@ -1,6 +1,6 @@
 package write
 
-// Fixture and core negative tests for U12 proof admission: empty family,
+// Fixture and core negative tests for proof admission: empty family,
 // contradicting members, unknown validation,
 // unnamed judgment and cross-revision evidence. Family closure over pending
 // intake and artifact containment through the new operations live in
@@ -178,7 +178,7 @@ func TestProofControlReachesProvenWithNoInboxLimit(t *testing.T) {
 	if w.status(t) != reduce.StatusProven {
 		t.Fatal("control proof did not reach PROVEN")
 	}
-	// R10.3: validity is decided from the ledger alone, so no machine limit is recorded.
+	// Validity is decided from the ledger alone, so no machine limit is recorded.
 	review := bundle.Events[len(bundle.Events)-1]
 	if bytes.Contains(review.Data, []byte("inbox")) {
 		t.Fatalf("proof admission still records a per-machine inbox limit: %s", review.Data)

@@ -1,4 +1,4 @@
-// Lane E's independent U02 attacks on the closed event set: the exhaustive
+// Attacks on the closed event set: the exhaustive
 // decode switch, the envelope carried by invocation.start and invocation.seal,
 // and the typed reference walker every later unit is told to reuse.
 //
@@ -94,7 +94,7 @@ func recProof() *model.ProofAdmit {
 			Actor:  recActor("owner"),
 			Reason: "the applicable family is complete and nothing contradicts it",
 		},
-		Verdict: model.VerdictSupports, // R18.2: every proof states its verdict.
+		Verdict: model.VerdictSupports, // Every proof states its verdict.
 	}
 }
 
@@ -168,7 +168,7 @@ func evAll() []model.TypedEvent {
 			DeliveryRefs:  []model.ArtifactRef{recContent(recDigest('e'), 64)},
 			CommitsDenied: true, ReconciliationOwed: false,
 		},
-		&model.TaskClose{ // R15.1: a closure's authority is optional, so it is a pointer.
+		&model.TaskClose{ // A closure's authority is optional, so it is a pointer.
 			Task: recRef(recID(1), 3), Outcome: model.ClosureCancelled, Authority: ptr(recAuthority(recID(80))),
 			AcceptanceWitnessRefs: []model.AcceptanceWitness{{
 				CriterionID: recID(21), CriterionRevision: 1, WitnessRef: recContent(recDigest('f'), 32),
@@ -213,7 +213,7 @@ func evAll() []model.TypedEvent {
 			Packets: []model.PacketRef{{CommandID: recID(94), Digest: recDigest('a')}},
 			Outcome: "correction-requested", Actor: recActor("coordinator"),
 			Reason: "the packet cites a revision that was never admitted",
-			// R18.2: every review carries authors, captured_at and event_packets.
+			// Every review carries authors, captured_at and event_packets.
 			Authors:    map[model.ID]model.Actor{recID(94): recActor("agent")},
 			CapturedAt: map[model.ID]model.Availability[time.Time]{recID(94): {State: model.Unknown, Reason: "not recorded"}}, EventPackets: []model.ID{},
 		},

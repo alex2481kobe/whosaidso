@@ -122,8 +122,8 @@ func (t *boundTemplate) bindFrom(id model.ID) error {
 
 // replacementRejudged are the replacement fields --from leaves as placeholders:
 // a judgment bound to the revision being replaced, never carried to the next.
-// An instrument's validation is the admitter's verdict on THAT implementation
-// (R9); WhoSaidSo never fills a judgment (R18.1). The rest of every spec is the
+// An instrument's validation is the admitter's verdict on THAT implementation;
+// WhoSaidSo never fills a judgment. The rest of every spec is the
 // author's own description (assertion, falsifier, blind spots, scope, options)
 // and is copied as written.
 var replacementRejudged = map[model.Kind][]string{
@@ -199,7 +199,7 @@ func (t *boundTemplate) bindHold(id, task model.ID) error {
 }
 
 // bindAttempt fills the attempt and its task: a receipt carries the revision
-// the attempt started against (R8.2), a takeover the current one.
+// the attempt started against, a takeover the current one.
 func (t *boundTemplate) bindAttempt(id model.ID) error {
 	p, s, err := t.ledger()
 	if err != nil {

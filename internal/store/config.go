@@ -42,10 +42,10 @@ func (p Project) ExecRoot() string {
 }
 
 // ArtifactDir is the project-relative, slash-separated artifact store: the
-// sibling "artifacts" of the ledger inside the ledger's record folder (R13.1:
-// .whosaidso/events beside .whosaidso/artifacts). It is derived from the configured
+// sibling "artifacts" of the ledger inside the ledger's record folder
+// (.whosaidso/events beside .whosaidso/artifacts). It is derived from the configured
 // ledger, never named separately, so the two cannot drift apart, and it is
-// computed lexically under Root, which R8.1 already confines the ledger to.
+// computed lexically under Root, which the ledger is already confined to.
 func (p Project) ArtifactDir() string {
 	rel, err := filepath.Rel(p.Root, p.Ledger)
 	if err != nil {
@@ -109,7 +109,7 @@ func configAt(root string) (Project, error) {
 	return Project{ID: model.ProjectID(values["id"]), Root: root, Ledger: ledger, Checkout: root}, nil
 }
 
-// ledgerInRoot enforces ruling R8.1: the ledger is committed with the project,
+// ledgerInRoot enforces that the ledger is committed with the project,
 // so it may not leave the whosaidso root. Containment is asked of the filesystem by
 // path segments, with symlinks resolved on both sides (macOS /tmp is a link).
 func ledgerInRoot(root, declared, config string) (string, error) {
@@ -201,7 +201,7 @@ func parseConfig(data []byte, path string) (map[string]string, error) {
 		if model.Blank(values[key]) {
 			// Discover never applied the emptiness rule that model already
 			// had, so an id of one space became a real project identity and
-			// then a real inbox name. Found by lane E.
+			// then a real inbox name.
 			return nil, storeFault("config-invalid-value", path,
 				"value of "+key+" renders as nothing")
 		}

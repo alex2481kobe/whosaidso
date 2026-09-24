@@ -1,6 +1,6 @@
 package reduce
 
-// Who may accept a task and who did (R15.1) lives here: a task that names an
+// Who may accept a task and who did lives here: a task that names an
 // accepter can be closed only by a packet that actor wrote, and its accepter
 // removed or changed only by a packet that actor wrote, checked on Apply
 // and Replay alike from the authors the bundle's review records; the closer

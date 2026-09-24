@@ -88,7 +88,7 @@ func hbVerifyCLI(t *testing.T) hbVerifyCapture {
 	}
 	return func(f *gateVerifyFixture, r write.HandbackRequest) (model.PacketRef, error) {
 		stWriteConfig(t, f.p.Root, string(f.p.ID), ".whosaidso/events")
-		// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+		// Writes print a one-line acknowledgement by default; --json is the full result this test decodes.
 		args := []string{"handback", "--json", "--command-id", string(r.CommandID), "--actor", r.Author.ID,
 			"--attempt-id", string(r.AttemptID), "--outcome", string(r.Outcome), "--reason", r.Reason, "--next-action", r.NextAction}
 		if r.CommitsDenied {

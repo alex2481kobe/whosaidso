@@ -23,14 +23,14 @@ import (
 	"whosaidso/internal/model"
 )
 
-// RecordDir is WhoSaidSo's in-repo record folder beside whosaidso.toml (R13.1). This
+// RecordDir is WhoSaidSo's in-repo record folder beside whosaidso.toml. This
 // is the one place the name is spelled in code; whosaidso.toml's ledger names it
 // for a project, and a project's artifact store is derived from that ledger.
 const RecordDir = ".whosaidso"
 
 // DefaultArtifactDir is where admission materializes incoming blobs, keyed by
 // digest, for a resolver built from a root alone. The resolver checks it after
-// the authored locators so a reference stays resolvable when the lane worktree
+// the authored locators so a reference stays resolvable when the worktree
 // that produced it is gone. Production builds its resolver with
 // NewResolverAt and the project's ledger-derived store.
 const DefaultArtifactDir = RecordDir + "/artifacts"

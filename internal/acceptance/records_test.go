@@ -1,11 +1,11 @@
-// Lane E's independent U02 attacks on the four authored payloads and the
-// invocation envelope. This file owns the shared payload constructors used by
+// Attacks on the four authored payloads and the invocation envelope belong
+// here. This file owns the shared payload constructors used by
 // events_test.go too, so the attack fixtures are built once from the contract
 // tables rather than from the implementation under test.
 //
-// Out of scope here on purpose: whether an event is admissible in current state
-// (U08), what a reducer makes of it (U05/U06) and whether pinned bytes actually
-// resolve (U07). This file only asks whether a shape can carry a lie.
+// Out of scope here on purpose: whether an event is admissible in current state,
+// what a reducer makes of it and whether pinned bytes actually
+// resolve. This file only asks whether a shape can carry a lie.
 package acceptance_test
 
 import (
@@ -642,16 +642,16 @@ func TestSchemaReservedStatusNameSurvivesInvisiblePadding(t *testing.T) {
 }
 
 // TestSchemaCheckedInFixturesDecideTheSameWayTheyAreNamed drives the five named
-// U02 fixture families from files rather than from Go values, so the negatives
+// schema fixture families from files rather than from Go values, so the negatives
 // are reviewable data. A file named good must decode. A file named bad must be
 // refused, and the family it sits in says which single relationship it breaks.
 func TestSchemaCheckedInFixturesDecideTheSameWayTheyAreNamed(t *testing.T) {
 	families, err := os.ReadDir(filepath.Join("testdata", "schema"))
 	if err != nil {
-		t.Fatalf("the U02 fixture families are missing: %v", err)
+		t.Fatalf("the schema fixture families are missing: %v", err)
 	}
 	if len(families) == 0 {
-		t.Fatal("no U02 fixture family is checked in, so nothing here is proven")
+		t.Fatal("no schema fixture family is checked in, so nothing here is proven")
 	}
 	for _, family := range families {
 		family := family

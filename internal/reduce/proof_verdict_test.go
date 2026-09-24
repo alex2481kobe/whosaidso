@@ -1,6 +1,6 @@
 package reduce
 
-// R14.1 proof verdicts through Replay and Apply alike: a refutation lists the
+// Proof verdicts through Replay and Apply alike: a refutation lists the
 // contradicting runs of the current criterion revision, counts nothing as
 // support, projects REFUTED, and a later supports proof under a new revision
 // proves the claim again. A proof with no verdict is refused.
@@ -43,7 +43,7 @@ func TestRefutationProjectsRefutedAndEstablishesNothing(t *testing.T) {
 	}
 }
 
-// R18.2: a proof without a verdict is refused, never read as supports: the
+// A proof without a verdict is refused, never read as supports: the
 // event cannot be encoded, and bytes that omit it do not replay.
 func TestProofWithoutVerdictIsRefused(t *testing.T) {
 	l, claim, failed, _ := familyLedger(t, true)
@@ -101,7 +101,7 @@ func TestRefutationRefusals(t *testing.T) {
 	}
 }
 
-// R10.2: the contradicting run stays counterevidence for its own revision; a
+// The contradicting run stays counterevidence for its own revision; a
 // new criterion revision overcomes it, and its later supports proof is in force.
 func TestNewCriterionRevisionProvesARefutedClaim(t *testing.T) {
 	l, claim, failed, _ := familyLedger(t, true)

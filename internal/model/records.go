@@ -8,7 +8,8 @@ import (
 	"fmt"
 )
 
-// Scope is consumed by U07/U12 for applicability and U13 for traversal. Source
+// Scope is consumed by evaluation and proof for applicability and by the views
+// for traversal. Source
 // paths only select candidates; the authored applicability and limits do the work.
 type Scope struct {
 	SourcePaths []string    `json:"source_paths"`
@@ -19,7 +20,7 @@ type Scope struct {
 
 func (s Scope) validate(p string) error { return relativePaths(s.SourcePaths, p+".source_paths") }
 
-// Authority lets U12 resolve an actor's exact words within their actual scope.
+// Authority lets proof resolve an actor's exact words within their actual scope.
 // SourceRef pins the complete source; Selector selects the ruling within it.
 type Authority struct {
 	Actor     Actor       `json:"actor"`
@@ -35,8 +36,8 @@ func (a Authority) validate(p string) error {
 	return nil
 }
 
-// TaskSpec feeds U05 prerequisites/revisions, U11 acceptance and continuation,
-// and U13 context/constraint reads. Revision events retain explicit provenance
+// TaskSpec feeds prerequisites/revisions, acceptance and continuation, and
+// context/constraint reads. Revision events retain explicit provenance
 // so pure replay never needs to fetch an intake packet to recover an author.
 type TaskSpec struct {
 	Intent             string                `json:"intent" semantic:"text"`
@@ -48,7 +49,7 @@ type TaskSpec struct {
 	ConstraintRefs     []RecordRef           `json:"constraint_refs"`
 	Prerequisites      []Prerequisite        `json:"prerequisites"`
 	NextActor          Actor                 `json:"next_actor"`
-	// Accepter (R15.1), when named, is the only actor whose packet may close
+	// Accepter, when named, is the only actor whose packet may close
 	// the task. Absent, anyone may close it; the closer is recorded either way.
 	Accepter *Actor        `json:"accepter,omitempty"`
 	Progress *TaskProgress `json:"progress,omitempty"`
@@ -61,7 +62,7 @@ type AcceptanceCriterion struct {
 	Criterion string   `json:"criterion" semantic:"text"`
 }
 
-// TaskProgress gives U11/U13 witnessed progress and a concrete continuation.
+// TaskProgress gives acceptance and the views witnessed progress and a concrete continuation.
 type TaskProgress struct {
 	Summary     string        `json:"summary,omitempty" semantic:"text"`
 	NextAction  string        `json:"next_action,omitempty" semantic:"text"`
@@ -85,7 +86,7 @@ func (p TaskProgress) validate(at string) error {
 	return nil
 }
 
-// Prerequisite gives U05 a typed predicate at an exact revision. A consumer that
+// Prerequisite gives task reduction a typed predicate at an exact revision. A consumer that
 // accepts a waiver must declare it here and supply the authority for doing so.
 type Prerequisite struct {
 	Kind         string     `json:"kind"`
@@ -130,8 +131,8 @@ func (r Prerequisite) validate(p string) error {
 	return nil
 }
 
-// ClaimSpec feeds U06 assertion history and U12 proof applicability. External
-// references are context for U13; their tags cannot stand in for local observations.
+// ClaimSpec feeds assertion history and proof applicability. External
+// references are context for the views; their tags cannot stand in for local observations.
 type ClaimSpec struct {
 	Assertion    string              `json:"assertion" semantic:"text"`
 	Falsifier    string              `json:"falsifier" semantic:"text"`
@@ -149,7 +150,7 @@ func (r ExternalReference) validate(p string) error {
 	return oneOf(r.Tag, p+".tag", "VERIFIED", "VENDOR CLAIM", "REPORTED MEASUREMENT")
 }
 
-// DecisionSpec feeds U06 revision history and U12/U13 authority and waiting views.
+// DecisionSpec feeds revision history, proof authority and the waiting views.
 // A disposition can only enter through decision.dispose.
 type DecisionSpec struct {
 	Question     string   `json:"question" semantic:"text"`
@@ -165,8 +166,8 @@ func (s DecisionSpec) validate(p string) error {
 	return nil
 }
 
-// InstrumentSpec supplies U07 validity, U10 capture/configuration, U12 trust,
-// and U13 instrument discovery. No validation observation is inferred from a declaration.
+// InstrumentSpec supplies evaluation validity, run capture/configuration, proof
+// trust, and instrument discovery in the views. No validation observation is inferred from a declaration.
 type InstrumentSpec struct {
 	QuestionAnswered  string                             `json:"question_answered" semantic:"text"`
 	BlindTo           string                             `json:"blind_to" semantic:"text"`

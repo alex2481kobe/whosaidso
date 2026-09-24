@@ -71,7 +71,7 @@ func ValidID(s ID) bool {
 	// 26 Crockford characters encode 130 bits, but a ULID is 128. Every id above
 	// 7ZZZZZZZZZZZZZZZZZZZZZZZZZ overflows, and an overflowing spelling could
 	// decode to the same 128 bits as a valid one - two strings, one identity.
-	// Found by lane E: ValidID accepted "80000000000000000000000000".
+	// Without this check ValidID accepted "80000000000000000000000000".
 	if s[0] > '7' {
 		return false
 	}
@@ -98,7 +98,7 @@ func ValidDigest(s Digest) bool {
 }
 
 // blank reports whether a required semantic string is effectively empty. A
-// single space is not a value. This is the defect the contract names directly:
+// single space is not a value. This is the defect the rule exists for:
 // a "non-empty" rule that a space satisfies is not a rule.
 func blank(s string) bool { return Blank(s) }
 
@@ -108,7 +108,7 @@ func blank(s string) bool { return Blank(s) }
 func SameActor(a, b Actor) bool {
 	// An actor carrying BOTH branches is malformed, and two malformed actors
 	// must never compare equal - that would manufacture self-admission out of
-	// invalid input. Found by lane E.
+	// invalid input.
 	if !blank(a.UnknownReason) || !blank(b.UnknownReason) {
 		return false
 	}

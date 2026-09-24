@@ -1,6 +1,6 @@
 package acceptance_test
 
-// Independent review of U12's proof gate: binding of criterion contract paths
+// Independent review of the proof gate: binding of criterion contract paths
 // to a run's named outputs, rejected family members, correction, reconciliation of a
 // dead runner, and a real `whosaidso run` through fresh processes. Every scenario
 // is driven through the public capture/admit/reconcile API or the built CLI,
@@ -195,7 +195,7 @@ func (w *pvWorld) proof(members map[model.ID]string) *model.ProofAdmit {
 	for id, disposition := range members {
 		evidence = append(evidence, model.ObservationDisposition{InvocationRef: model.InvocationRef{Project: w.p.ID, InvocationID: id}, Disposition: disposition, Reason: "dispositioned by the reviewer"})
 	}
-	// R14.1: a new proof states its verdict.
+	// A new proof states its verdict.
 	return &model.ProofAdmit{Claim: w.claim, CriterionRef: w.criterion, Evidence: evidence, Judgment: model.ResponsibleJudgment{Actor: w.agent, Reason: "the complete family satisfies the frozen criterion"}, Verdict: "supports"}
 }
 
@@ -788,7 +788,7 @@ func (w *pvWorld) cli(stdin []byte, args ...string) ([]byte, error) {
 
 func (w *pvWorld) cliAdmit(packets ...model.ID) error {
 	w.t.Helper()
-	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	// Writes print a one-line acknowledgement by default; --json is the full result this test decodes.
 	args := []string{"admit", "--json", "--command-id", string(w.id()), "--actor", "coordinator", "--outcome", "accepted", "--reason", "fresh-process review"}
 	for _, p := range packets {
 		args = append(args, string(p))
@@ -800,11 +800,11 @@ func (w *pvWorld) cliAdmit(packets ...model.ID) error {
 func (w *pvWorld) cliRun(script string) (model.InvocationEnvelope, []model.ID, error) {
 	w.t.Helper()
 	pvPut(w.t, w.p.Root, "tools/run.sh", []byte(script))
-	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	// Writes print a one-line acknowledgement by default; --json is the full result this test decodes.
 	out, err := w.cli(nil, "run", "--json", "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),
 		"--claim", string(w.claim.RecordID), "--claim-revision", "1", "--criterion-id", string(w.criterion.CriterionID), "--criterion-revision", "1", "--", "/bin/sh", "tools/run.sh")
 	var result struct {
-		// whosaidso run prints snake_case keys (coordinator change, in the open).
+		// whosaidso run prints snake_case keys.
 		Envelope    model.InvocationEnvelope `json:"envelope"`
 		StartPacket model.PacketRef          `json:"start_packet"`
 		SealPacket  model.PacketRef          `json:"seal_packet"`
@@ -885,7 +885,7 @@ func TestProofVerifyFreshProcessRunReachesProvenOnItsOwnBytes(t *testing.T) {
 	if err := w.prove(map[model.ID]string{pass.InvocationID: "supports"}); !strings.Contains(fmt.Sprint(err), "reconciliation") {
 		t.Errorf("expected proof to wait for the dead run's reconciliation, got %v", err)
 	}
-	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	// Writes print a one-line acknowledgement by default; --json is the full result this test decodes.
 	out, err := w.cli(nil, "reconcile", "--json", "--invocation-id", string(deadID), "--reason", "observer was killed")
 	if err != nil {
 		t.Fatalf("control: the dead run reconciles through the CLI: %v", err)
@@ -937,7 +937,7 @@ func TestProofVerifyFreshProcessRunReachesProvenOnItsOwnBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// R19: writes print a one-line acknowledgement by default; --json is the full result this test decodes.
+	// Writes print a one-line acknowledgement by default; --json is the full result this test decodes.
 	captured, err := v.cli(proof, "capture", "--json", "--command-id", string(v.id()))
 	if err != nil {
 		t.Fatal(err)
@@ -954,8 +954,8 @@ func TestProofVerifyFreshProcessRunReachesProvenOnItsOwnBytes(t *testing.T) {
 	}
 }
 
-// DATUM-CONTRACT, criterion.fix: "Changing it mints a new criterion revision
-// and cannot erase known counterevidence." The family is matched on the exact
+// Changing a criterion mints a new criterion revision and cannot erase known
+// counterevidence. The family is matched on the exact
 // criterion revision, so a failing run under revision 1 is outside revision
 // 2's family, and re-fixing the same criterion after a failure proves the
 // claim without that failure ever being dispositioned.

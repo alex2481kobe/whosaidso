@@ -14,10 +14,10 @@ const (
 	StatusUnmeasured ClaimStatus = "UNMEASURED"
 	StatusMeasured   ClaimStatus = "MEASURED"
 	StatusProven     ClaimStatus = "PROVEN"
-	// StatusRefuted (R14.1) is a claim whose proof in force, the latest
+	// StatusRefuted is a claim whose proof in force, the latest
 	// admitted on this exact revision, has the verdict refutes. A later
-	// supports proof, under a new criterion revision or after R14.2 set the
-	// failing runs aside, proves it again.
+	// supports proof, under a new criterion revision or after a recorded code
+	// change set the failing runs aside, proves it again.
 	StatusRefuted ClaimStatus = "REFUTED"
 )
 

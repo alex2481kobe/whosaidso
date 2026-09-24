@@ -18,7 +18,6 @@ import (
 // matches case-insensitively, so "Version" lands in Version and neither
 // DisallowUnknownFields nor a duplicate-key check notices. An alias that
 // overwrites a field is indistinguishable from the real one downstream.
-// Found by lane E.
 var envelopeKeys = map[string]map[string]bool{
 	"packet": {"version": true, "project": true, "command_id": true,
 		"request_digest": true, "author": true, "captured_at": true, "events": true},
@@ -42,7 +41,7 @@ func strictUnmarshal(b []byte, into any, what string) error {
 }
 
 // The DECODER accepted invalid UTF-8 even once the encoder refused it: the
-// same collision, entering from the other side. Found by lane E.
+// same collision, entering from the other side.
 func refuseInvalidUTF8Bytes(b []byte, what string) error {
 	if !utf8.Valid(b) {
 		return fault("invalid-json", what, "input contains invalid UTF-8")
@@ -77,7 +76,7 @@ func strictDecodeParsed(b []byte, tree any, into any, what string) error {
 					"unknown field, or a case variant of a known one")
 			}
 			// The envelope check stopped at the top level, so a case alias
-			// INSIDE an event still overwrote its type. Found by lane E.
+			// INSIDE an event still overwrote its type.
 			if m.key != "events" {
 				continue
 			}
@@ -146,11 +145,11 @@ func DecodeArtifactRefs(b []byte, what string) ([]ArtifactRef, error) {
 	return refs, nil
 }
 
-// ---- UTC-only timestamps (ruling R8.4) -------------------------------------
+// ---- UTC-only timestamps -------------------------------------------------
 
 var timeType = reflect.TypeOf(time.Time{})
 
-// refuseNonUTC is the decode half of R8.4: the wire carries only UTC. One
+// refuseNonUTC is the decode half of the UTC rule: the wire carries only UTC. One
 // instant spelled in two zones was two byte strings and two digests, and a
 // decoded private location could be reassigned through Time.Location() in
 // every snapshot at once. Like ValidID refusing lowercase rather than upcasing,
@@ -160,7 +159,7 @@ var timeType = reflect.TypeOf(time.Time{})
 func refuseNonUTC(v reflect.Value, path string) error {
 	return walkWire(v, path, 0, func(v reflect.Value, at string) error {
 		if v.Type() == timeType && v.CanInterface() && v.Interface().(time.Time).Location() != time.UTC {
-			return fault("invalid-field", at, "timestamp must be UTC, spelled Z (ruling R8.4)")
+			return fault("invalid-field", at, "timestamp must be UTC, spelled Z")
 		}
 		return nil
 	})
@@ -266,7 +265,7 @@ func DecodeBundle(b []byte) (Bundle, error) {
 
 // eventKeys is the exact spelling an event object accepts. The envelope check
 // stops at the top level, so a case alias INSIDE an event slipped through and
-// overwrote its type. Found by lane E.
+// overwrote its type.
 var eventKeys = map[string]bool{"type": true, "data": true}
 
 func validEvents(events []Event, path string) error {
@@ -278,7 +277,7 @@ func validEvents(events []Event, path string) error {
 			return faultAt("unknown-event", path, i, "empty event type")
 		}
 		// Shape only. Whether this type is in the closed set, and whether its
-		// fields make sense, is U02's job.
+		// fields make sense, is decided by typed event decoding.
 		trimmed := bytes.TrimSpace(e.Data)
 		if len(trimmed) == 0 || trimmed[0] != '{' {
 			return faultAt("invalid-field", path, i, "event data must be a JSON object")

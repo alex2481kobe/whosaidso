@@ -1,7 +1,7 @@
 package model
 
 // Wire and validation tests for review.admit packet authors and event
-// attribution (R10.1 revised). Self-admission states live in
+// attribution. Self-admission states live in
 // self_admission_test.go.
 
 import (
@@ -68,7 +68,7 @@ func TestReviewAuthorsInvalidSchema(t *testing.T) {
 	if _, err := EncodeEvent(authoredReview()); err != nil {
 		t.Fatalf("control: the unedited review must encode: %v", err)
 	}
-	// R18.2: omission is never read as unknown; an unknown author is explicit.
+	// Omission is never read as unknown; an unknown author is explicit.
 	for _, edit := range []func(*ReviewAdmit){
 		func(e *ReviewAdmit) { e.Authors = nil },
 		func(e *ReviewAdmit) { e.EventPackets = nil },

@@ -21,7 +21,7 @@ import (
 
 // Run with -run '^$' -bench BenchmarkCommands -benchmem -benchtime=1x.
 // WHOSAIDSO_BENCH_ROOT optionally retains fixtures across processes; use an empty,
-// lane-prefixed scratch directory. HOME is isolated inside this test binary only;
+// agent-prefixed scratch directory. HOME is isolated inside this test binary only;
 // the invoking Go tool uses its configured shared cache, without a GOCACHE override.
 // Large fixtures use Encode/DecodeBundle, ReadVerifiedIntake and Replay, then write
 // validated immutable files in bulk. They do not pay O(N²) historical admission

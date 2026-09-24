@@ -49,7 +49,7 @@ func encodeProjectID(id model.ProjectID) (string, error) {
 	// a true measurement of the wrong property: the inbox is a filesystem PATH,
 	// and macOS APFS folds case, so "examples/aaa" and "examples/aaG" encode to names
 	// differing only in case and become ONE directory. Both projects' packets
-	// land together and then neither can read its own. Found by lane E.
+	// land together and then neither can read its own.
 	//
 	// Hex has one case, so two different ids cannot fold onto each other.
 	return hex.EncodeToString([]byte(id)), nil

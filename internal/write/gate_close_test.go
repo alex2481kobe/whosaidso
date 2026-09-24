@@ -1,9 +1,9 @@
 package write
 
-// Tests for the operations U12 opened outside proof: task.close (a cited
+// Tests for the operations outside proof: task.close (a cited
 // authority's carrier, terminal attempts, success witnesses, containment) and
 // decision.open/revise. Decision disposition is tested in gate_dispose_test.go;
-// closing with no authority and the accepter (R15.1) in gate_accept_test.go.
+// closing with no authority and the accepter in gate_accept_test.go.
 
 import (
 	"context"
@@ -99,7 +99,7 @@ func TestTaskCloseSuccessRequiresWitnessesAndTerminalAttempts(t *testing.T) {
 	}
 }
 
-// R15.1 made the authority optional; one a closure does cite is still checked.
+// The authority is optional; one a closure does cite is still checked.
 func TestTaskCloseAuthorityNeedsItsCarrier(t *testing.T) {
 	for _, route := range []string{"no-carrier", "other-speaker", "unknown-actor", "scope-omits-task", "ruling-selector-absent", "witness-escape"} {
 		t.Run(route, func(t *testing.T) {

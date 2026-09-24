@@ -180,7 +180,7 @@ func TestAdmissionCaptureForwardReferenceReplayAndRetry(t *testing.T) {
 	}
 	review, err := model.DecodeEvent(bundle.Events[3])
 	if err != nil || review.(*model.ReviewAdmit).Reason != request.Reason || strings.Contains(string(bundle.Events[3].Data), "self_admission") {
-		t.Fatalf("C39: self-admission is computed, never stored or written as prose: %v, %v", review, err)
+		t.Fatalf("self-admission is computed, never stored or written as prose: %v, %v", review, err)
 	}
 	for _, ref := range []model.PacketRef{first, second} {
 		if got := review.(*model.ReviewAdmit).Authors[ref.CommandID]; got != f.author {
@@ -239,7 +239,7 @@ func TestAdmissionStructuredSelfAdmission(t *testing.T) {
 					t.Fatal(err)
 				}
 				review := raw.(*model.ReviewAdmit)
-				// C39: no stored comparison; the recorded author is the fact.
+				// No stored comparison; the recorded author is the fact.
 				if strings.Contains(string(bundle.Events[len(bundle.Events)-1].Data), "self_admission") || len(review.Authors) != len(refs) {
 					t.Fatalf("admission must record every author and store no comparison: %+v", review)
 				}
