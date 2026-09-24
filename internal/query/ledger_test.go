@@ -22,7 +22,7 @@ func realLedger(t *testing.T) (store.Project, reduce.Snapshot) {
 		t.Fatal(err)
 	}
 	p, err := store.Discover(cwd)
-	if err != nil || p.ID != "datum/datum" {
+	if err != nil || p.ID != "whosaidso/whosaidso" {
 		t.Fatalf("the repository's own whosaidso.toml must be discoverable from the query package, got %+v, %v", p, err)
 	}
 	prefix, err := store.ReadPrefix(p)

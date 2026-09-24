@@ -56,7 +56,7 @@ func requireUnknownInstrument(t *testing.T, s Snapshot, target model.RecordRef) 
 // The committed ledger's sequence 3 declares two real instruments whose
 // validation is UNKNOWN. They must decode, replay, and stay untrusted.
 func TestInstrumentValidationRealSequenceThreeReplay(t *testing.T) {
-	paths, err := filepath.Glob("../../.datum/events/*.json")
+	paths, err := filepath.Glob("../../.whosaidso/events/*.json")
 	if err != nil || len(paths) < 3 {
 		t.Fatalf("need the committed bundles through sequence 3: %v, %v", paths, err)
 	}

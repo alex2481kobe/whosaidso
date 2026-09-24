@@ -1,7 +1,4 @@
 # WhoSaidSo marks its own project root. The nearest whosaidso.toml wins,
 # walking up from the working directory.
-# The id predates the rename to WhoSaidSo; it stays because the ledger records it.
-id     = "datum/datum"
-# The ledger stays in .datum/ for the same reason: recorded runs name their
-# outputs under .datum/artifacts/runs/, and a run output matches only there.
-ledger = ".datum/events"
+id     = "whosaidso/whosaidso"
+ledger = ".whosaidso/events"

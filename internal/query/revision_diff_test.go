@@ -255,7 +255,7 @@ func TestDiffListRules(t *testing.T) {
 // two items to revision 2 (revision 3). Comparing only the latest pair would
 // hide the removal again; continue must show both, from the fixed prefix 1..76.
 func TestCommittedPlanShowsStepZeroRemovedAtRevisionTwo(t *testing.T) {
-	paths, err := filepath.Glob("../../.datum/events/*.json")
+	paths, err := filepath.Glob("../../.whosaidso/events/*.json")
 	if err != nil || len(paths) < 76 {
 		t.Fatalf("committed history 1..76 missing: %d %v", len(paths), err)
 	}
@@ -275,7 +275,7 @@ func TestCommittedPlanShowsStepZeroRemovedAtRevisionTwo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	answer, err := ReadViewFrom(store.Project{ID: "datum/datum"}, ViewRequest{View: "continue", ID: "01M37TMPM2553VCNV9KK3PXWXP"}, replayed{s, bundles})
+	answer, err := ReadViewFrom(store.Project{ID: "whosaidso/whosaidso"}, ViewRequest{View: "continue", ID: "01M37TMPM2553VCNV9KK3PXWXP"}, replayed{s, bundles})
 	if err != nil {
 		t.Fatal(err)
 	}

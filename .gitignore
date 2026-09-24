@@ -10,8 +10,8 @@ coverage.*
 
 # Ledger working files. The lock lives inside the ledger directory by design,
 # and a crash can leave a publication temporary. Neither is a record.
-.datum/events/.lock
-.datum/events/*.json.tmp
+.whosaidso/events/.lock
+.whosaidso/events/*.json.tmp
 
 # OS / editor
 .DS_Store
@@ -19,4 +19,4 @@ coverage.*
 
 # WhoSaidSo's disposable snapshot cache, rebuilt from the ledger whenever it is
 # missing, stale or damaged. Never a record.
-.datum/cache/
+.whosaidso/cache/
