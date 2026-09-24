@@ -23,7 +23,7 @@ func cliFixture(t *testing.T) (string, []byte) {
 	}
 	bindTestHome(t, root)
 	task, err := model.EncodeEvent(&model.TaskCreate{
-		ID: cliID(1), Provenance: model.Provenance{Author: model.Actor{ID: "lane"}, SourceRefs: []model.ArtifactRef{}},
+		ID: cliID(1), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.TaskSpec{
 			Intent: "exercise the CLI", Subject: "an intake packet",
 			Scope:    model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this fixture", Limitations: "not a real ledger"},

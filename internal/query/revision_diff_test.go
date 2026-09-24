@@ -103,7 +103,7 @@ func planWorld(t *testing.T, p store.Project) (model.ID, model.ID, model.ID) {
 	// only the named accepter remove it, so owner writes this amendment.
 	third := admitWrittenBy(t, p, 400, "owner", "anyone may accept",
 		&model.TaskAmend{Target: testRef(5, 3), Replacement: r4,
-			Provenance: model.Provenance{Author: model.Actor{ID: "owner"}, SourceRefs: plan.Provenance.SourceRefs}})
+			Provenance: model.Provenance{SourceRefs: plan.Provenance.SourceRefs}})
 	return first, second, third
 }
 

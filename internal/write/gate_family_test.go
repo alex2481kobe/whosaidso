@@ -207,7 +207,7 @@ func TestNewOperationsCannotEscapeRootThroughSymlink(t *testing.T) {
 			case "instrument.revise":
 				spec := f.instrument().Spec
 				spec.Validation = proofKnown(model.InstrumentValidation{Ref: pin, Version: "v2"})
-				event = &model.InstrumentRevise{Provenance: model.Provenance{Author: f.author, SourceRefs: []model.ArtifactRef{}}, Target: w.instrument, Replacement: spec}
+				event = &model.InstrumentRevise{Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Target: w.instrument, Replacement: spec}
 			}
 			before := f.snapshot().Watermark()
 			_, err := Admit(context.Background(), f.project, f.request(f.capture([][]byte{[]byte("instrument implementation")}, event)))

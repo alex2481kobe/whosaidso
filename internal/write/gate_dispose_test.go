@@ -32,7 +32,7 @@ func newDisposeWorld(t *testing.T) *disposeWorld {
 	f := newAdmissionFixture(t)
 	proofPut(t, f.project.Root, "rulings/decision.json", disposeRuling)
 	scope := f.task().Spec.Scope
-	open := &model.DecisionOpen{ID: f.id(), Provenance: model.Provenance{Author: f.author, SourceRefs: []model.ArtifactRef{}},
+	open := &model.DecisionOpen{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.DecisionSpec{Question: "ship revision one", Options: []string{"yes", "no"}, WaitingActor: model.Actor{ID: "owner"}, Scope: scope}}
 	f.accept(f.capture(nil, open))
 	return &disposeWorld{f: f, id: open.ID, scope: scope}
@@ -122,7 +122,7 @@ func TestDecisionDisposeKeepsEarlierHistoryVisible(t *testing.T) {
 	w := newDisposeWorld(t)
 	w.f.accept(w.f.capture(nil, w.dispose(1, "approved")))
 	open := w.decision(t, 1)
-	revise := &model.DecisionRevise{Provenance: model.Provenance{Author: w.f.author, SourceRefs: []model.ArtifactRef{}}, Target: w.f.ref(w.id, 1), Replacement: *open.Spec}
+	revise := &model.DecisionRevise{Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Target: w.f.ref(w.id, 1), Replacement: *open.Spec}
 	w.f.accept(w.f.capture(nil, revise))
 	w.f.accept(w.f.capture(nil, w.dispose(2, "withdrawn")))
 	if first := w.decision(t, 1); len(first.Dispositions) != 1 || first.Dispositions[0].Disposition.Disposition != "approved" {

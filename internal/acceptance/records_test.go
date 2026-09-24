@@ -90,10 +90,7 @@ func recAuthority(context model.ID) model.Authority {
 }
 
 func recProvenance() model.Provenance {
-	return model.Provenance{
-		Author:     recActor("lane-e"),
-		SourceRefs: []model.ArtifactRef{recGit("documentation/design/research/BUILD-PLAN-DATUM.md")},
-	}
+	return model.Provenance{SourceRefs: []model.ArtifactRef{recGit("documentation/design/research/BUILD-PLAN-DATUM.md")}}
 }
 
 func recTaskSpec() model.TaskSpec {

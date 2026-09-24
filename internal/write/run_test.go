@@ -244,7 +244,7 @@ func TestRunCommandFailureDoesNotEndAttempt(t *testing.T) {
 	if result.Envelope.ConfigEffective.State != model.Unknown || result.Envelope.ConditionsObserved.State != model.Unknown || result.Envelope.Isolation.State != model.Unknown {
 		t.Fatal("request became an observation")
 	}
-	provenance := model.Provenance{Author: r.Author, SourceRefs: []model.ArtifactRef{}}
+	provenance := model.Provenance{SourceRefs: []model.ArtifactRef{}}
 	taskRef := model.RecordRef{Project: project.ID, RecordID: runTestID(1), Revision: 1}
 	prefix := []model.TypedEvent{
 		&model.TaskCreate{ID: taskRef.RecordID, Provenance: provenance, Spec: model.TaskSpec{Intent: "observe subprocesses", Subject: "runner", Scope: model.Scope{SourcePaths: []string{"internal/write"}, ContextRefs: []model.RecordRef{}, AppliesWhen: "running", Limitations: "fixture only"}, NonGoals: []string{"no task closure"}, AcceptanceCriteria: []model.AcceptanceCriterion{{ID: runTestID(4), Revision: 1, Criterion: "observations are honest"}}, ContextRefs: []model.RecordRef{}, ConstraintRefs: []model.RecordRef{}, Prerequisites: []model.Prerequisite{}, NextActor: r.Author}},

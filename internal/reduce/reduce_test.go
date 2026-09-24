@@ -76,10 +76,7 @@ func rulingAuthority(actor string) model.Authority {
 }
 
 func provenance(actor string) model.Provenance {
-	return model.Provenance{
-		Author:     model.Actor{ID: actor},
-		SourceRefs: []model.ArtifactRef{blobRef("intake-" + actor)},
-	}
+	return model.Provenance{SourceRefs: []model.ArtifactRef{blobRef("intake-" + actor)}}
 }
 
 type taskOpt func(*model.TaskSpec)

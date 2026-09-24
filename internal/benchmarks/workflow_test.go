@@ -28,7 +28,7 @@ func pin(body []byte, path string) model.ArtifactRef {
 }
 
 func provenance() model.Provenance {
-	return model.Provenance{Author: author, SourceRefs: []model.ArtifactRef{}}
+	return model.Provenance{SourceRefs: []model.ArtifactRef{}}
 }
 func scope() model.Scope {
 	return model.Scope{SourcePaths: []string{"internal/service"}, ContextRefs: []model.RecordRef{}, AppliesWhen: "the frozen request corpus on the recorded source revision", Limitations: "synthetic measurements; no production load or network jitter"}

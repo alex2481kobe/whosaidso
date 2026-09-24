@@ -55,7 +55,7 @@ func TestInvocationTimestampIsUTCThroughApplicationAdmission(t *testing.T) {
 			Admitter: model.Actor{ID: "reviewer"}, Outcome: "accepted", Reason: "timestamp reachability experiment",
 		})
 	}
-	task := &model.TaskCreate{ID: id(1), Provenance: model.Provenance{Author: author, SourceRefs: []model.ArtifactRef{}},
+	task := &model.TaskCreate{ID: id(1), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.TaskSpec{
 			Intent: "test admission", Subject: "timestamp reachability",
 			Scope:    model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this test", Limitations: "fixture"},

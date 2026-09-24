@@ -138,34 +138,20 @@ func gatePackets(project model.ProjectID, snapshot reduce.Snapshot, packets []mo
 }
 
 func gateOperation(event model.TypedEvent, author model.Actor) error {
-	var provenance *model.Provenance
 	switch e := event.(type) {
 	case *model.SourceIntake:
 		// A source speaker can differ from the person who captured the words.
-	case *model.TaskCreate:
-		provenance = &e.Provenance
-	case *model.TaskAmend:
-		provenance = &e.Provenance
-	case *model.ClaimAssert:
-		// Claims start UNMEASURED; observation/proof operations stay disabled.
-		provenance = &e.Provenance
+	case *model.TaskCreate, *model.TaskAmend, *model.ClaimAssert:
+		// Claims start UNMEASURED. A record's author is its packet's author,
+		// recorded by the review, never a second copy in the record.
 	case *model.InstrumentDeclare:
 		// R9: known validation is admitted when its pinned artifact resolves;
 		// the admitter is the judgment and trust.withdraw revokes it.
-		if err := gateValidation(e.Spec.Validation); err != nil {
-			return err
-		}
-		provenance = &e.Provenance
+		return gateValidation(e.Spec.Validation)
 	case *model.TaskStart, *model.TaskTakeover, *model.AttemptTerminal, *model.BlockerHold, *model.BlockerClear:
 	default:
 		// Packet authors cannot mint reviews, closures or DECISION authority.
-		var err error
-		if provenance, err = gateProofOperation(event, author); err != nil {
-			return err
-		}
-	}
-	if provenance != nil && provenance.Author != author {
-		return admissionFault("attribution-mismatch", "provenance.author", "record author must match the immutable packet author")
+		return gateProofOperation(event, author)
 	}
 	return nil
 }

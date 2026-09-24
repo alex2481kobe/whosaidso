@@ -109,8 +109,8 @@ func TestInstrumentValidationRealSequenceThreeReplay(t *testing.T) {
 			t.Fatal("real instrument or its unknown reason changed")
 		}
 		record, ok := replayed.Record(target)
-		if !ok || record.Provenance.Author != declaration.Provenance.Author {
-			t.Fatal("real instrument author changed")
+		if author := replayed.EventAuthor(record.Origin).Author; !ok || author.ID == "" {
+			t.Fatalf("real instrument lost its packet author: %+v", author)
 		}
 		// Editing an exported copy is not an admitted validation fact.
 		p.Spec.Validation = proofKnown(model.InstrumentValidation{Ref: blobRef("forged"), Version: "self-certified"})

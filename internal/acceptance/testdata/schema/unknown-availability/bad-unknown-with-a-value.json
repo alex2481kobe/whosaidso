@@ -2,9 +2,6 @@
   "data": {
     "id": "01K5V8R0040000000000000000",
     "provenance": {
-      "author": {
-        "id": "lane-e"
-      },
       "source_refs": [
         {
           "git": {

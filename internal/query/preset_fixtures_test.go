@@ -26,7 +26,7 @@ func notKnown[T any](why string) model.Availability[T] {
 	return model.Availability[T]{State: model.Unknown, Reason: why}
 }
 func prov(who string) model.Provenance {
-	return model.Provenance{Author: model.Actor{ID: who}, SourceRefs: []model.ArtifactRef{}}
+	return model.Provenance{SourceRefs: []model.ArtifactRef{}}
 }
 func gitInput(path string) model.ArtifactRef {
 	return model.ArtifactRef{Kind: "git", Git: &model.GitPin{ObjectFormat: "sha1", Commit: strings.Repeat("a", 40), Path: path},

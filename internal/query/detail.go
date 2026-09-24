@@ -103,7 +103,7 @@ func (d *detailer) detail(fact reduce.Record) (Detail, []Attention) {
 	if v.CurrentSupport == reduce.TruthUnknown {
 		v.SupportUnknownBecause = unknownPremises(support)
 	}
-	author := fact.Provenance.Author
+	author := s.EventAuthor(fact.Origin).Author
 	switch fact.Kind {
 	case model.Claim:
 		if p, ok := s.ClaimAt(ref); ok {

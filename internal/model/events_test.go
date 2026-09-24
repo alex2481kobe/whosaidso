@@ -33,7 +33,7 @@ func schemaAuthority() Authority {
 	return Authority{Actor: Actor{ID: "owner"}, SourceRef: schemaArtifact(), Selector: Selector{Kind: "json-pointer", Pointer: "/ruling"}, Scope: schemaScope()}
 }
 func schemaProvenance() Provenance {
-	return Provenance{Author: Actor{ID: "lane-a"}, SourceRefs: []ArtifactRef{schemaArtifact()}}
+	return Provenance{SourceRefs: []ArtifactRef{schemaArtifact()}}
 }
 func schemaTask() TaskSpec {
 	return TaskSpec{Intent: "validate authored payloads", Subject: "WhoSaidSo model", Scope: schemaScope(), NonGoals: []string{"no admission logic"}, AcceptanceCriteria: []AcceptanceCriterion{{ID: schemaID(3), Revision: 1, Criterion: "malformed payloads are refused"}}, ContextRefs: []RecordRef{schemaRef(4)}, ConstraintRefs: []RecordRef{schemaRef(5)}, Prerequisites: []Prerequisite{{Kind: "task-success", Target: schemaRef(6), WaiverPolicy: "forbid"}}, NextActor: Actor{ID: "coordinator"}, Progress: &TaskProgress{Summary: "fixtures authored", NextAction: "run them", WitnessRefs: []ArtifactRef{schemaArtifact()}}}
@@ -233,7 +233,7 @@ func TestStrictEventJSON(t *testing.T) {
 		bad.Data = []byte(data)
 		requireSchemaRefusal(t, bad, "invalid-field")
 	}
-	for name, at := range map[string]string{"null spec": "spec", "missing author": "provenance.author", "missing expected semantic": "spec.intent", "missing empty-capable array": "spec.context_refs"} {
+	for name, at := range map[string]string{"null spec": "spec", "missing source refs": "provenance.source_refs", "missing expected semantic": "spec.intent", "missing empty-capable array": "spec.context_refs"} {
 		t.Run(name, func(t *testing.T) {
 			requireSchemaRefusal(t, mutateSchema(t, raw, at, nil, name != "null spec"), "invalid-field")
 		})

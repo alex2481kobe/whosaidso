@@ -31,7 +31,7 @@ func testScope() model.Scope {
 		AppliesWhen: "the U09 fixture runs", Limitations: "does not certify production completion"}
 }
 func testTask(n int) *model.TaskCreate {
-	return &model.TaskCreate{ID: testID(n), Provenance: model.Provenance{Author: model.Actor{ID: "author"}, SourceRefs: []model.ArtifactRef{}},
+	return &model.TaskCreate{ID: testID(n), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.TaskSpec{Intent: "Build U09 of WhoSaidSo: the first usable read slice", Subject: "WhoSaidSo",
 			Scope: testScope(), NonGoals: []string{"change canonical state during reads"},
 			AcceptanceCriteria: []model.AcceptanceCriterion{{ID: testID(90), Revision: 1, Criterion: "text and JSON agree"}},

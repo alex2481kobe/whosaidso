@@ -43,7 +43,7 @@ func laneEReduceScope() model.Scope {
 }
 
 func laneEReduceProvenance() model.Provenance {
-	return model.Provenance{Author: model.Actor{ID: "lane-e"}, SourceRefs: []model.ArtifactRef{laneEReduceArtifact("request")}}
+	return model.Provenance{SourceRefs: []model.ArtifactRef{laneEReduceArtifact("request")}}
 }
 
 func laneEReduceSpec(criterionRevision model.Revision) model.TaskSpec {

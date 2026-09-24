@@ -46,7 +46,7 @@ func disposalWorld(t *testing.T) (string, model.ArtifactRef, []model.RecordRef) 
 	if err := e2eAdmitOne(t, root, proof, 901, 902, "lane"); err != nil {
 		t.Fatal(err)
 	}
-	lane := model.Provenance{Author: model.Actor{ID: "lane"}, SourceRefs: []model.ArtifactRef{}}
+	lane := model.Provenance{SourceRefs: []model.ArtifactRef{}}
 	open := func(id int, context model.RecordRef) *model.DecisionOpen {
 		scope := model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{context}, AppliesWhen: "this fixture", Limitations: "not a real ledger"}
 		return &model.DecisionOpen{ID: cliID(id), Provenance: lane, Spec: model.DecisionSpec{Question: "ship on this claim?", Options: []string{"yes", "no"}, WaitingActor: model.Actor{ID: "owner"}, Scope: scope}}

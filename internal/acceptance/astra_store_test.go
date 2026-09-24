@@ -23,7 +23,7 @@ import (
 )
 
 func astraClaim(w *flowWorld) *model.ClaimAssert {
-	return &model.ClaimAssert{ID: w.id(), Provenance: model.Provenance{Author: model.Actor{ID: flowLane}, SourceRefs: []model.ArtifactRef{}},
+	return &model.ClaimAssert{ID: w.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.ClaimSpec{Assertion: "publication preserves this claim", Falsifier: "the claim disappears on replay", Scope: w.scope, ExternalRefs: []model.ExternalReference{}}}
 }
 

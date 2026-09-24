@@ -1,9 +1,6 @@
 {
   "data": {
     "provenance": {
-      "author": {
-        "id": "lane-e"
-      },
       "source_refs": [
         {
           "git": {

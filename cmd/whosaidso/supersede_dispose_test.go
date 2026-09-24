@@ -35,7 +35,7 @@ func e2eRuling(t *testing.T, root, path, body string) model.Authority {
 func TestCLISupersededRecordStaysInShowAndHistory(t *testing.T) {
 	root, _ := cliFixture(t)
 	authority := e2eRuling(t, root, "rulings/supersede.json", `{"ruling":"the second question replaces the first"}`)
-	lane := model.Provenance{Author: model.Actor{ID: "lane"}, SourceRefs: []model.ArtifactRef{}}
+	lane := model.Provenance{SourceRefs: []model.ArtifactRef{}}
 	open := func(id int, question string) *model.DecisionOpen {
 		return &model.DecisionOpen{ID: cliID(id), Provenance: lane, Spec: model.DecisionSpec{Question: question, Options: []string{"yes", "no"}, WaitingActor: model.Actor{ID: "owner"}, Scope: authority.Scope}}
 	}

@@ -67,9 +67,6 @@ var templateBindEvents = map[string][]model.EventType{
 // known; --set replaces it. An actor who is someone else (a hold's assignee,
 // an authority, a waiting or next actor) is never filled.
 var templateAuthorPaths = map[model.EventType]string{
-	"task.create": "provenance.author", "task.amend": "provenance.author", "claim.assert": "provenance.author",
-	"claim.revise": "provenance.author", "decision.open": "provenance.author", "decision.revise": "provenance.author",
-	"instrument.declare": "provenance.author", "instrument.revise": "provenance.author",
 	"criterion.fix": "author", "proof.admit": "judgment.actor", "task.takeover": "actor", "task.start": "actor",
 }
 

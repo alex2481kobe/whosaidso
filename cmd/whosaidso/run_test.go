@@ -95,7 +95,7 @@ func e2eWorld(t *testing.T) (string, model.CriterionRef, model.RecordRef, model.
 			t.Fatal(err)
 		}
 	}
-	lane := model.Provenance{Author: model.Actor{ID: "lane"}, SourceRefs: []model.ArtifactRef{}}
+	lane := model.Provenance{SourceRefs: []model.ArtifactRef{}}
 	scope := model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this fixture", Limitations: "not a real ledger"}
 	task := &model.TaskCreate{ID: next(), Provenance: lane, Spec: model.TaskSpec{Intent: "measure", Subject: "pose sweep", Scope: scope, NonGoals: []string{"production writes"},
 		AcceptanceCriteria: []model.AcceptanceCriterion{{ID: next(), Revision: 1, Criterion: "measured"}}, ContextRefs: []model.RecordRef{}, ConstraintRefs: []model.RecordRef{}, Prerequisites: []model.Prerequisite{}, NextActor: model.Actor{ID: "lane"}}}

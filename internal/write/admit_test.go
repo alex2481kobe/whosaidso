@@ -41,7 +41,7 @@ func (f *admissionFixture) id() model.ID {
 
 func (f *admissionFixture) task() *model.TaskCreate {
 	return &model.TaskCreate{
-		ID: f.id(), Provenance: model.Provenance{Author: f.author, SourceRefs: []model.ArtifactRef{}},
+		ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.TaskSpec{
 			Intent: "verify admission", Subject: "a test task",
 			Scope:    model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this test", Limitations: "no production evidence"},

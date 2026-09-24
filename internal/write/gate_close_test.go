@@ -135,14 +135,11 @@ func TestTaskCloseAuthorityNeedsItsCarrier(t *testing.T) {
 func TestDecisionOpenAndReviseAdmitWithoutDisposition(t *testing.T) {
 	f := newAdmissionFixture(t)
 	scope := f.task().Spec.Scope
-	open := &model.DecisionOpen{ID: f.id(), Provenance: model.Provenance{Author: f.author, SourceRefs: []model.ArtifactRef{}},
+	open := &model.DecisionOpen{ID: f.id(), Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}},
 		Spec: model.DecisionSpec{Question: "ship this", Options: []string{"yes", "no"}, WaitingActor: model.Actor{ID: "owner"}, Scope: scope}}
 	f.accept(f.capture(nil, open))
 	ref := f.ref(open.ID, 1)
 	revise := &model.DecisionRevise{Provenance: open.Provenance, Target: ref, Replacement: open.Spec}
-	forged := *revise
-	forged.Provenance.Author = model.Actor{ID: "someone-else"}
-	f.refuse(f.request(f.capture(nil, &forged)), "attribution-mismatch")
 	f.accept(f.capture(nil, revise))
 	d, ok := f.snapshot().Decision(reduce.Ident{Project: f.project.ID, ID: open.ID})
 	if !ok || d.Status != reduce.StatusOpen || d.Decision.Revision != 2 {

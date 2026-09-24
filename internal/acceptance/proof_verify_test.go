@@ -80,7 +80,7 @@ func pvNew(t *testing.T) *pvWorld {
 	impl, validation := []byte(`{"tool":"measure"}`), []byte(`{"validated":"against a known pose sweep"}`)
 	pvPut(t, root, "tools/measure.json", impl)
 	pvPut(t, root, "validation/measure.json", validation)
-	prov := model.Provenance{Author: w.lane, SourceRefs: []model.ArtifactRef{}}
+	prov := model.Provenance{SourceRefs: []model.ArtifactRef{}}
 	scope := model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{}, AppliesWhen: "this fixture", Limitations: "not a real ledger"}
 	task := &model.TaskCreate{ID: w.id(), Provenance: prov, Spec: model.TaskSpec{Intent: "measure", Subject: "pose sweep", Scope: scope, NonGoals: []string{"production writes"},
 		AcceptanceCriteria: []model.AcceptanceCriterion{{ID: w.id(), Revision: 1, Criterion: "measured"}}, ContextRefs: []model.RecordRef{}, ConstraintRefs: []model.RecordRef{}, Prerequisites: []model.Prerequisite{}, NextActor: w.lane}}

@@ -4,10 +4,10 @@ package model
 // Task execution, evidence admission, and event encoding do not.
 // This file stays below 200 lines because authored record history is a complete group.
 
-// Provenance travels with each authored revision because Bundle retains packet
-// digests, not packet bodies. Pure replay cannot recover authors from intake.
+// Provenance is what an authored revision cites as its sources. Its author is
+// not here: the review that admits the packet records the packet's author, so
+// replay attributes every event to it (reduce/authorship.go).
 type Provenance struct {
-	Author     Actor         `json:"author"`
 	SourceRefs []ArtifactRef `json:"source_refs"`
 }
 
