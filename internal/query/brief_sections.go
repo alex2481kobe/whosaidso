@@ -74,6 +74,17 @@ func briefRecord(b *briefWriter, indent int, r cur) {
 		closed = append(append(closed, "by"), who(c.at("closer", "actor"))...)
 		b.line(indent+1, append(closed, "closer authored a receipt", c.at("closer_authored_receipt"))...)
 	}
+	// A CLOSED task lists no blocked reasons, so a hold a cancelled, withdrawn
+	// or waived close left uncleared is printed here rather than lost.
+	if r.at("task", "status").text() == "CLOSED" {
+		for _, h := range r.at("task", "blockers").items() {
+			if h.at("cleared").ok() {
+				continue
+			}
+			pieces := append([]any{"open hold:", h.at("key", "blocker"), h.at("reason"), "waits on"}, who(h.at("actor"))...)
+			b.line(indent+1, append(pieces, "-", prefix(h.at("criterion")))...)
+		}
+	}
 	for _, h := range r.at("task", "attempt_holders").items() {
 		b.line(indent+1, append([]any{"attempt", h.at("attempt", "attempt"), "held by"}, who(h.at("actor"))...)...)
 	}

@@ -134,10 +134,7 @@ func (s *state) owed(id Ident, rec Record, closure Closure, closed bool, prereqs
 	}
 
 	// An open hold is owed by definition, whatever its typed reason.
-	for _, b := range s.blockersFor(id) {
-		if !b.Open() {
-			continue
-		}
+	for _, b := range s.openHolds(id) {
 		reasons = append(reasons, BlockedReason{
 			Kind:      string(b.Reason),
 			Detail:    b.Criterion,
@@ -219,6 +216,19 @@ func (s *state) owed(id Ident, rec Record, closure Closure, closed bool, prereqs
 		return reasons[i].Detail < reasons[j].Detail
 	})
 	return reasons
+}
+
+// openHolds is the one open-hold evaluation: the task's holds with no admitted
+// clear, in ledger order. owed lists them as BLOCKED reasons and a success
+// closure is refused while any remain.
+func (s *state) openHolds(id Ident) []Blocker {
+	out := []Blocker{}
+	for _, b := range s.blockersFor(id) {
+		if b.Open() {
+			out = append(out, b)
+		}
+	}
+	return out
 }
 
 // reconciled reports whether a reconciliation hold was cleared after the given

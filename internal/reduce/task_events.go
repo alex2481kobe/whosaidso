@@ -6,6 +6,7 @@ package reduce
 
 import (
 	"fmt"
+	"strings"
 
 	"whosaidso/internal/model"
 )
@@ -183,12 +184,16 @@ func (s *state) close(b model.Bundle, idx int, o Origin, e *model.TaskClose) err
 	// task.go. They are not refused here: an authorised closure is a fact, and
 	// dropping it would hide that someone closed a task with a writer still in
 	// it. The admission gate refuses, the reducer records and then projects.
-	// Unmet prerequisites on a success closure are the exception, refused below.
+	// Unmet prerequisites and open holds on a success closure are the
+	// exceptions, refused below.
 	who := ident(e.Task)
 	if _, ok := s.closed[who]; ok {
 		return faultAt(CodeInvalidTransition, b.Sequence, idx, "task", "the task is already closed")
 	}
 	if err := s.requirePrerequisites(b, idx, rec, e.Outcome); err != nil {
+		return err
+	}
+	if err := s.requireHoldsCleared(b, idx, who, e.Outcome); err != nil {
 		return err
 	}
 	s.closed[who] = Closure{
@@ -222,6 +227,32 @@ func (s *state) requirePrerequisites(b model.Bundle, idx int, rec Record, outcom
 		}
 	}
 	return nil
+}
+
+// requireHoldsCleared extends the success-closure rule to holds: a task closes
+// as success only if none of its holds is open at this ledger position. A hold
+// cleared earlier, including by a blocker.clear earlier in the same bundle, no
+// longer counts. It reads the same open-hold set that makes the task BLOCKED
+// (openHolds), and like requirePrerequisites it is reached by Apply and Replay
+// alike. Cancelled, withdrawn and waived closures may still abandon held work.
+func (s *state) requireHoldsCleared(b model.Bundle, idx int, who Ident, outcome model.ClosureOutcome) error {
+	if outcome != model.ClosureSuccess {
+		return nil
+	}
+	open := s.openHolds(who)
+	if len(open) == 0 {
+		return nil
+	}
+	named := make([]string, 0, len(open))
+	for _, h := range open {
+		waits := h.Actor.ID
+		if waits == "" {
+			waits = "UNKNOWN: " + h.Actor.UnknownReason
+		}
+		named = append(named, fmt.Sprintf("hold %s (%s) waits on %s: %s", h.Key.Blocker, h.Reason, waits, h.Criterion))
+	}
+	return faultAt(CodeInvalidTransition, b.Sequence, idx, "outcome",
+		"a success closure needs every hold cleared first (blocker.clear); open: "+strings.Join(named, "; "))
 }
 
 func (s *state) hold(b model.Bundle, idx int, o Origin, e *model.BlockerHold) error {
