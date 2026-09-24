@@ -129,6 +129,9 @@ func DecodeEvent(raw Event) (TypedEvent, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err = refusePlaceholders(tree, "event.data"); err != nil { // placeholder.go
+		return nil, err
+	}
 	if err = checkJSONShape(tree, reflect.TypeOf(event), "event.data"); err != nil {
 		return nil, err
 	}

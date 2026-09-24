@@ -104,7 +104,8 @@ has one computable answer: minted ids (revision 1), the project id, the
 packet author where admission requires it (from --actor or DATUM_ACTOR), a
 choice with one member, and with bind flags the exact references at their
 CURRENT revisions: --from copies a record's current spec into an amend or
-revise (change what changed), --task, --claim, --criterion and --attempt
+revise (change what changed), except an instrument's validation, a verdict on
+the replaced implementation, which stays a placeholder to judge again; --task, --claim, --criterion and --attempt
 fill those references (a proof gets its criterion's whole family as
 evidence), --hold finds an open hold for blocker.clear. --pin NAME=PATH
 builds a reference from real bytes: PATH (project-relative) is a content pin

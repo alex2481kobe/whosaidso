@@ -73,7 +73,8 @@ func (t *boundTemplate) current(id model.ID, kind model.Kind) (model.RecordRef, 
 	return model.RecordRef{Project: p.ID, RecordID: id, Revision: rec.Key.Revision}, rec, nil
 }
 
-// bindFrom copies the record's current spec, as written, as the replacement.
+// bindFrom copies the record's current spec, as written, as the replacement,
+// except the judgments replacementRejudged names, which stay placeholders.
 // The revise names that revision as its target and expected revision.
 func (t *boundTemplate) bindFrom(id model.ID) error {
 	kind := map[model.EventType]model.Kind{"task.amend": model.Task, "claim.revise": model.Claim,
@@ -100,7 +101,36 @@ func (t *boundTemplate) bindFrom(id model.ID) error {
 	if err := t.put("expected_revision", revisionNumber(ref.Revision), from); err != nil {
 		return err
 	}
-	return t.put("replacement", spec, from+"'s spec as written, its judgment included: change what changed")
+	// The replacement's re-judged fields go back to the template's own
+	// placeholders; everything else is the author's wording, copied.
+	var rejudge []templateMember
+	for _, path := range replacementRejudged[kind] {
+		steps, _ := parseTemplatePath(path)
+		if skeleton, ok := templateGet(t.body, steps); ok {
+			rejudge = append(rejudge, templateMember{path, templateClone(skeleton)})
+		}
+	}
+	if err := t.put("replacement", spec, from+"'s spec as written: change what changed"); err != nil {
+		return err
+	}
+	for _, r := range rejudge {
+		steps, _ := parseTemplatePath(r.key)
+		if t.body, err = templateSet(t.body, steps, r.value, ""); err != nil {
+			return err
+		}
+		t.filled = append(t.filled, r.key+": NOT copied from "+from+"; a verdict on the replaced spec, judge it again")
+	}
+	return nil
+}
+
+// replacementRejudged are the replacement fields --from leaves as placeholders:
+// a judgment bound to the revision being replaced, never carried to the next.
+// An instrument's validation is the admitter's verdict on THAT implementation
+// (R9); Datum never fills a judgment (R18.1). The rest of every spec is the
+// author's own description (assertion, falsifier, blind spots, scope, options)
+// and is copied as written.
+var replacementRejudged = map[model.Kind][]string{
+	model.Instrument: {"replacement.validation"},
 }
 
 // bindTask fills the task at its current revision, the one admission checks
