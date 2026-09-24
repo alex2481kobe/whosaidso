@@ -53,3 +53,24 @@ func TestSetValueUnderAMapKeyIsTypedByTheDraft(t *testing.T) {
 		t.Errorf("a number under a map key: got %#v (%T)", got, got)
 	}
 }
+
+// Number, boolean and integer leaves the skeleton holds as placeholders take
+// VALUE as JSON; a text leaf beside them stays text.
+func TestSetValueFillsTypedPlaceholders(t *testing.T) {
+	f := boundWorld(t)
+	fix := boundPrint(t, f.root, "criterion.fix", "--set", "expression.target.number=5e-2", "--set", "expression.empty_result=true", "--set", "expression.unit=1e3")
+	seal := boundPrint(t, f.root, "invocation.seal", "--set", "envelope.outcome.value.exit_code=3")
+	for path, c := range map[string]struct {
+		data map[string]any
+		want any
+	}{
+		"expression.target.number":         {fix, 0.05},
+		"expression.empty_result":          {fix, true},
+		"expression.unit":                  {fix, "1e3"},
+		"envelope.outcome.value.exit_code": {seal, float64(3)},
+	} {
+		if got := boundAt(c.data, path); got != c.want {
+			t.Errorf("%s: got %#v (%T), want %#v (%T)", path, got, got, c.want, c.want)
+		}
+	}
+}
