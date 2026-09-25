@@ -20,7 +20,7 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
-//go:embed index.html ui.css ui.js ui-home.js ui-records.js ui-detail.js ui-kinds.js ui-history.js favicon-32.png favicon-180.png
+//go:embed index.html ui.css ui-screens.css ui.js ui-icons.js ui-parts.js ui-derive.js ui-home.js ui-records.js ui-detail.js ui-kinds.js ui-history.js favicon-32.png favicon-180.png owl.png
 var files embed.FS
 
 // staticFiles maps each served path to its embedded file and media type.
@@ -28,12 +28,17 @@ var files embed.FS
 // table and the two API paths is not found.
 var staticFiles = map[string][2]string{
 	"/ui.css":          {"ui.css", "text/css; charset=utf-8"},
+	"/ui-screens.css":  {"ui-screens.css", "text/css; charset=utf-8"},
 	"/ui.js":           {"ui.js", "text/javascript; charset=utf-8"},
 	"/ui-home.js":      {"ui-home.js", "text/javascript; charset=utf-8"},
 	"/ui-records.js":   {"ui-records.js", "text/javascript; charset=utf-8"},
 	"/ui-detail.js":    {"ui-detail.js", "text/javascript; charset=utf-8"},
 	"/ui-kinds.js":     {"ui-kinds.js", "text/javascript; charset=utf-8"},
 	"/ui-history.js":   {"ui-history.js", "text/javascript; charset=utf-8"},
+	"/ui-icons.js":     {"ui-icons.js", "text/javascript; charset=utf-8"},
+	"/ui-parts.js":     {"ui-parts.js", "text/javascript; charset=utf-8"},
+	"/ui-derive.js":    {"ui-derive.js", "text/javascript; charset=utf-8"},
+	"/owl.png":         {"owl.png", "image/png"},
 	"/favicon-32.png":  {"favicon-32.png", "image/png"},
 	"/favicon-180.png": {"favicon-180.png", "image/png"},
 	"/favicon.ico":     {"favicon-32.png", "image/png"},

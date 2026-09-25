@@ -1,15 +1,22 @@
 // The viewer's core: API calls, the header (project switcher and theme),
 // hash routing, the live watermark poll, and the small helpers every screen
-// shares. Each screen lives in its own ui-*.js module. Everything shown is
+// shares. Each screen lives in its own ui-*.js module; icons are in
+// ui-icons.js, shared screen parts in ui-parts.js. Everything shown is
 // read from the views' own JSON; nothing here writes anywhere.
 import { renderHome } from "./ui-home.js";
 import { renderRecords } from "./ui-records.js";
 import { renderDetail } from "./ui-detail.js";
 import { renderHistory } from "./ui-history.js";
+import { icon } from "./ui-icons.js";
+
+export { icon };
 
 const token = new URLSearchParams(location.search).get("token") || "";
 const main = document.getElementById("main");
 const state = { projects: [], project: "", mark: "", cache: new Map() };
+
+// project is the id of the project on screen.
+export const project = () => state.project;
 
 // ---- data
 export async function api(path, params = {}) {
@@ -90,28 +97,6 @@ export function link(id, text = id, className = "link") {
   return a;
 }
 
-// icon draws one line icon: the six Home cards' and the disclosure chevrons.
-const paths = {
-  progress: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2",
-  back: "M9 10l-5 5 5 5M4 15h11a5 5 0 0 0 0-10h-3",
-  blocked: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM5.6 5.6l12.8 12.8",
-  ready: "M5 21V4M5 4h12l-2.5 4 2.5 4H5",
-  decision: "M12 21V3M6 5h10l3 3-3 3H6zM18 13H8l-3 3 3 3h10z",
-  proposal: "M3 13h5l1.5 3h5l1.5-3h5M5.5 5h13L21 13v6H3v-6z",
-  chevron: "M9 6l6 6-6 6",
-  copy: "M9 9h10v12H9zM5 15V3h10",
-  open: "M14 4h6v6M20 4l-9 9M18 14v6H4V6h6",
-};
-export function icon(name) {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("aria-hidden", "true");
-  svg.classList.add("icon");
-  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  path.setAttribute("d", paths[name]);
-  svg.append(path);
-  return svg;
-}
 // copyButton is a real button that copies text and says so for a moment.
 export function copyButton(label, text) {
   const words = el("span", "", label);
@@ -297,7 +282,7 @@ async function route() {
   }
   try {
     let node;
-    if (screen === "records") node = await renderRecords(new URLSearchParams(rest).get("tab") || "all");
+    if (screen === "records") node = await renderRecords(new URLSearchParams(rest));
     else if (screen === "record") node = await renderDetail(parts[1]);
     else if (screen === "history") node = await renderHistory();
     else node = await renderHome(await view("todo"));

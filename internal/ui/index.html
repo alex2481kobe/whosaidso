@@ -1,7 +1,8 @@
 <!doctype html>
 <!-- The viewer's one page: the header (the owl and the name with the project
      switch beside them; the tabs and the theme switch on the right), and the
-     main area ui.js renders each screen into. Screens live in the ui-*.js modules, styles in ui.css. -->
+     main area ui.js renders each screen into. Screens live in the ui-*.js modules, styles in ui.css
+     and ui-screens.css. -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -10,12 +11,13 @@
   <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
   <link rel="apple-touch-icon" href="/favicon-180.png">
   <link rel="stylesheet" href="/ui.css">
+  <link rel="stylesheet" href="/ui-screens.css">
   <script type="module" src="/ui.js"></script>
 </head>
 <body>
   <header class="topbar">
     <div class="header-start">
-      <a class="brand" href="#/"><img src="/favicon-180.png" alt="" width="22" height="44"><span>WhoSaidSo</span></a>
+      <a class="brand" href="#/"><img src="/owl.png" alt="" width="24" height="39"><span>WhoSaidSo</span></a>
       <div class="project">
         <button id="project-button" class="project-button" type="button" aria-haspopup="listbox" aria-expanded="false">
           <span id="project-name">Projects</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
