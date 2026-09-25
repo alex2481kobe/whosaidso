@@ -4,7 +4,7 @@
 // proposed and who approved it, the review's reason and the record, with the
 // values under "What happened". A bundle's review sits inside the rows it admitted; a review
 // with nothing admitted (a rejection, a correction request) is its own row.
-import { el, view, times, titles, when, actorName, copyButton, openButton, facts, disclose, icon } from "./ui.js";
+import { el, view, times, titles, when, actorName, copyButton, openButton, facts, disclose, icon, tablePanel } from "./ui.js";
 import { packetTitle } from "./ui-home.js";
 
 const happened = {
@@ -55,9 +55,8 @@ export async function renderHistory() {
     disclose(tr, more, body);
     return body;
   });
-  const table = el("table", "table history",
-    el("thead", "", el("tr", "", ["Time", "What happened", "Record", "By"].map((h) => el("th", "", h)))), rows);
   return el("div", "screen fill",
     answer.result === "UNKNOWN" ? el("p", "notice", "UNKNOWN: " + answer.reason) : null,
-    el("div", "table-panel", table, rows.length ? null : el("p", "empty", "empty...")));
+    tablePanel("history", ["Time", "What happened", "Record", "By"], ["var(--time-col)", "190px", "", "130px"],
+      rows, rows.length ? null : el("p", "empty", "empty...")));
 }
