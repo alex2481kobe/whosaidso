@@ -46,10 +46,19 @@ export async function times() {
   return (origin) => (origin ? at.get(`${origin.sequence}:${origin.event_index}`) || null : null);
 }
 
-// titles names every current record and admitted source by its label.
+// fullTitle is a record's whole semantic text, the text its label is cut
+// from (a label stops at its first line and 80 characters); the label when
+// the record carries none.
+export function fullTitle(record) {
+  const f = record.fact || {};
+  const text = f.task?.intent || f.claim?.assertion || f.decision?.question || f.instrument?.question_answered || "";
+  return text.trim() || record.label;
+}
+
+// titles names every current record in full and every admitted source.
 export async function titles() {
   const show = await view("show");
-  const names = new Map(show.records.map((r) => [r.ref.record_id, r.label]));
+  const names = new Map(show.records.map((r) => [r.ref.record_id, fullTitle(r)]));
   for (const s of show.sources || []) names.set(s.intake.source_id, sourceTitle(s));
   return names;
 }
@@ -81,6 +90,8 @@ const paths = {
   decision: "M12 21V3M6 5h10l3 3-3 3H6zM18 13H8l-3 3 3 3h10z",
   proposal: "M3 13h5l1.5 3h5l1.5-3h5M5.5 5h13L21 13v6H3v-6z",
   chevron: "M9 6l6 6-6 6",
+  copy: "M9 9h10v12H9zM5 15V3h10",
+  open: "M14 4h6v6M20 4l-9 9M18 14v6H4V6h6",
 };
 export function icon(name) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -92,16 +103,27 @@ export function icon(name) {
   svg.append(path);
   return svg;
 }
+// copyButton is a real button that copies text and says so for a moment.
 export function copyButton(label, text) {
-  const button = el("button", "button", label);
+  const words = el("span", "", label);
+  const button = el("button", "button", icon("copy"), words);
   button.type = "button";
+  button.title = text;
   button.addEventListener("click", async (e) => {
     e.stopPropagation();
-    try { await navigator.clipboard.writeText(text); button.textContent = "Copied"; }
-    catch { button.textContent = "Copy failed"; }
-    setTimeout(() => { button.textContent = label; }, 1400);
+    try { await navigator.clipboard.writeText(text); words.textContent = "Copied"; button.classList.add("copied"); }
+    catch { words.textContent = "Copy failed"; }
+    setTimeout(() => { words.textContent = label; button.classList.remove("copied"); }, 1400);
   });
   return button;
+}
+
+// openButton is a link to a record drawn as a button.
+export function openButton(id) {
+  const a = link(id, "", "button");
+  a.append(icon("open"), el("span", "", "Open record"));
+  a.addEventListener("click", (e) => e.stopPropagation());
+  return a;
 }
 
 // facts is a labelled list of [label, value] pairs; empty values are left out.
@@ -149,7 +171,7 @@ export function item(title, value, detail, tone = "") {
 // section is one titled panel whose list scrolls inside itself.
 export function section(title, items) {
   return el("section", "panel", el("h2", "", el("span", "", title), el("span", "count", String(items.length))),
-    el("div", "panel-body", items.length ? el("ul", "items", items) : el("p", "empty", "Empty")));
+    el("div", "panel-body", items.length ? el("ul", "items", items) : el("p", "empty", "empty...")));
 }
 
 // ---- words: the ledger's values, labelled for people

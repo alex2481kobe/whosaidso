@@ -1,26 +1,27 @@
-// One record's detail: the shared frame (back link, title, status with its
-// Copy id, a labelled details row, then titled sections of one-line items
-// that open on click), the task and plan screens, the "Changes over time"
+// One record's detail: the shared frame (back link, the full title, a
+// labelled details row led by the status and ending in Copy id, then titled
+// sections of one-line items that open on click, each as tall as its items), the task and plan screens, the "Changes over time"
 // section every kind shares, and the dispatch to ui-kinds.js for claims,
 // decisions, instruments and sources. A task reads from continue; dates are
 // when WhoSaidSo captured the events (times()).
-import { el, link, facts, item, section, copyButton, view, times, titles, actorName, status, stamp, when, titleCase } from "./ui.js";
+import { el, facts, item, section, copyButton, openButton, view, times, titles, actorName, status, stamp, when, titleCase, fullTitle } from "./ui.js";
 import { renderClaim, renderDecision, renderInstrument, renderSource } from "./ui-kinds.js";
 
-// frame is every detail screen: title, status and Copy id (and any chip
-// beside them), the details row, and the sections filling the rest.
+// frame is every detail screen: the full title, the details row (the status
+// and any chip beside it first, Copy id last), and the sections below.
 export function frame({ id, title, tone, statusLabel, chip, details }, ...sections) {
-  const back = el("a", "back", "Back to records");
+  const back = el("a", "back", "← Back to records");
   back.href = "#/records";
   const shown = sections.filter(Boolean);
   const grid = el("div", "sections", shown);
   grid.style.setProperty("--cols", String(shown.length === 4 ? 2 : Math.max(1, shown.length)));
-  return el("div", "screen detail fill",
+  const row = facts([["Status", [el("span", "tone-text " + tone, statusLabel), chip?.[0]]], ...details], "facts details");
+  row.append(el("div", "details-end", copyButton("Copy id", id)));
+  return el("div", "screen detail",
     back,
     el("h1", "detail-title", title),
-    el("div", "status-row", el("strong", "tone-text " + tone, statusLabel), copyButton("Copy id", id), chip?.[0]),
+    row,
     chip?.[1],
-    facts(details, "facts details"),
     grid);
 }
 
@@ -107,7 +108,7 @@ function planItems(answer) {
     const [word, tone] = words[p.satisfied] || ["UNKNOWN", "muted"];
     const reason = (answer.owed.reasons || []).find((r) => r.target?.record_id === target)?.detail || (p.satisfied === "TRUE" ? "" : "no reason recorded");
     return item(answer.records[`${target}@${p.target.revision}`]?.label || target, word,
-      facts([["Kind", titleCase(p.kind)], ["Status", p.status], ["Waived", p.waived ? "Yes" : ""], ["Reason", reason], ["Record", link(target, "Open record")]]), tone);
+      facts([["Kind", titleCase(p.kind)], ["Status", p.status], ["Waived", p.waived ? "Yes" : ""], ["Reason", reason], ["Record", openButton(target)]]), tone);
   }));
 }
 
@@ -115,7 +116,7 @@ function renderTask({ id, root, answer, at, names, dates }) {
   const [label, tone] = status(root);
   const items = answer.owed.items || [];
   const plan = (root.fact.task.prerequisites || []).length > 0;
-  return frame({ id, title: root.label, tone, statusLabel: label, details: [["Subject", root.fact.task.subject],
+  return frame({ id, title: fullTitle(root), tone, statusLabel: label, details: [["Subject", root.fact.task.subject],
     ["Author", actorName(root.author?.actor)], ["Approved by", actorName(root.admitted_by)],
     ["Progress", plan ? `${items.filter((i) => i.satisfied === "TRUE").length} of ${items.length} met` : ""],
     ["Created", stamp(dates[0])], ["Updated", stamp(dates[1])]] },

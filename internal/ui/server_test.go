@@ -193,11 +193,15 @@ func TestProjectsListsAnUnavailableHomeWithItsReason(t *testing.T) {
 }
 
 // The page is plain by rule: no dot separators or bullet glyphs in its text,
-// no illustration or image other than the favicons, and every status is a
-// word, never a coloured circle. The one circle is the theme switch's knob.
-// A file that brings any of them back fails here.
+// no illustration or image other than the owl (the header logo is the
+// favicon itself), and every status is a word, never a coloured circle. The
+// one circle is the theme switch's knob. A file that brings any of them back
+// fails here.
 func TestPageCarriesNoDotsOrDrawings(t *testing.T) {
-	allowed := map[string]int{"ui.css border-radius: 50%": 1}
+	allowed := map[string]int{"ui.css border-radius: 50%": 1, "index.html <img": 1}
+	if page, _ := files.ReadFile("index.html"); !strings.Contains(string(page), `<img src="/favicon-180.png"`) {
+		t.Error("index.html's one image is not the owl favicon")
+	}
 	for _, file := range []string{"index.html", "ui.css", "ui.js", "ui-home.js", "ui-records.js", "ui-detail.js", "ui-kinds.js", "ui-history.js"} {
 		b, err := files.ReadFile(file)
 		if err != nil {
