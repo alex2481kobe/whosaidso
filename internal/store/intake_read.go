@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // IntakeIDs lists the currently visible published packets in command-id order,

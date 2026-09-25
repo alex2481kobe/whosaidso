@@ -14,10 +14,10 @@ import (
 	"context"
 	"fmt"
 
-	"whosaidso/internal/evidence"
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
-	"whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/evidence"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 func gateProofFamily(ctx context.Context, project store.Project, after reduce.Snapshot, intake *pendingIntake, e *model.ProofAdmit, dry *dryRun) error {

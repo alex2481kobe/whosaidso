@@ -4,8 +4,8 @@ package query
 // Views, rendering and request checks do not.
 
 import (
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
 )
 
 // Source is one selected ledger prefix: the snapshot reduced from it, and the

@@ -11,8 +11,8 @@ package query
 import (
 	"fmt"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
 )
 
 // Detail is one exact admitted revision. Exactly one of Task, Claim,

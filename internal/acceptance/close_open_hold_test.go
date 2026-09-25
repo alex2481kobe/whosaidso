@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
 )
 
 // openHoldWorld is a task whose attempt handed back success and which then got

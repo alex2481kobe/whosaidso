@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 type thousandWorld struct {

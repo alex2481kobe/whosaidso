@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"whosaidso/internal/evidence"
-	"whosaidso/internal/model"
-	"whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/evidence"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 // RunExecutionIdentity observes where and from what a run executes. Every field

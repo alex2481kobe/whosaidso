@@ -20,8 +20,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
 )
 
 // State is one selected ledger prefix and the snapshot reduced from it. Its

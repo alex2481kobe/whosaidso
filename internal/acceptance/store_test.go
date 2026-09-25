@@ -19,8 +19,8 @@ import (
 	"sync"
 	"testing"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 // stHome redirects the user home and proves the redirection took effect before

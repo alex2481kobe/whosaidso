@@ -22,10 +22,10 @@ import (
 	"testing"
 	"time"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
-	"whosaidso/internal/store"
-	"whosaidso/internal/write"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/write"
 )
 
 const (
@@ -761,7 +761,7 @@ func pvWhoSaidSo(t *testing.T) string {
 			return
 		}
 		pvBinary = filepath.Join(dir, "whosaidso")
-		out, err := exec.Command("go", "build", "-o", pvBinary, "whosaidso/cmd/whosaidso").CombinedOutput()
+		out, err := exec.Command("go", "build", "-o", pvBinary, "github.com/alex2481kobe/whosaidso/cmd/whosaidso").CombinedOutput()
 		if err != nil {
 			pvBinaryErr = fmt.Errorf("%v: %s", err, out)
 		}

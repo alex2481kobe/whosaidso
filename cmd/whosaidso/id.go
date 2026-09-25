@@ -19,7 +19,7 @@ import (
 	"strconv"
 	"time"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // idVerb prints N fresh ids, one per line (default one). A count that is not

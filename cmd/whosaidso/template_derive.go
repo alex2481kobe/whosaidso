@@ -23,8 +23,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"whosaidso/internal/evidence"
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/evidence"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // criterionSelectors are the criterion.fix references whose readings state metadata.

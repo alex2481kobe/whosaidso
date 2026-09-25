@@ -8,7 +8,7 @@ package reduce
 // on authorship.
 
 import (
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // PacketAuthor is the packet an admitted event came from and the Actor that

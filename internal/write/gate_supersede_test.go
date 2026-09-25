@@ -9,7 +9,7 @@ import (
 	"context"
 	"testing"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 func (w *disposeWorld) supersede(prior, replacement model.RecordRef, authority *model.Authority) *model.Supersede {

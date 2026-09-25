@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // checkPrerequisites refuses a typed prerequisite pointed at the wrong kind of

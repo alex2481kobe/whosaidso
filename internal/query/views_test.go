@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
-	"whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 // viewsWorld is richWorld plus the task shapes todo must file: task 5 awaiting

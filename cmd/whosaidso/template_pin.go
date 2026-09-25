@@ -23,9 +23,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"whosaidso/internal/evidence"
-	"whosaidso/internal/model"
-	"whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/evidence"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 // pin builds one --pin and puts it at NAME.

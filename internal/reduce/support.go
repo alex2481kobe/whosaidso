@@ -5,7 +5,7 @@ package reduce
 // Achievement projections and reverse-reference graph traversal do not.
 
 import (
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // SupportLossFact identifies the cause even when it reached this record indirectly.

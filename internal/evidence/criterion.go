@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // Verdict is three-valued on purpose. UNKNOWN is not a soft FALSE: it is the

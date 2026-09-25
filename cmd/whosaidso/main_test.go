@@ -6,8 +6,8 @@ import (
 	"os/exec"
 	"testing"
 
-	"whosaidso/internal/reduce"
-	"whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 func TestWhoSaidSoMainProcess(t *testing.T) {

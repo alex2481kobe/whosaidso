@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // comparable checks that the family measured the same thing under the same

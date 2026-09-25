@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
 )
 
 func (w *proofWorld) correction(target model.CorrectionTarget) *model.Correction {

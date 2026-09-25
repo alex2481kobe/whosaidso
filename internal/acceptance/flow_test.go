@@ -37,8 +37,8 @@ import (
 	"testing"
 	"time"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/query"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/query"
 )
 
 type flowWorld struct {

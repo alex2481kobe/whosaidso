@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // Every output of a sealed run resolves from the configured content store by

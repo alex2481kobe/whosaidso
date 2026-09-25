@@ -14,8 +14,8 @@ import (
 	"strings"
 	"testing"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 // cliRun runs one command in process and returns stdout, stderr and the exit status.

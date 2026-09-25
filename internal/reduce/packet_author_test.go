@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // authoredReview attributes the one event before it to a packet whose recorded

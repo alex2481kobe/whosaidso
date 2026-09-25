@@ -11,7 +11,7 @@ package main
 import (
 	"reflect"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // templateEvents is the closed event set, in the model's registry order.

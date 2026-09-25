@@ -8,7 +8,7 @@ package reduce
 import (
 	"fmt"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // crossProject is the UNKNOWN reason for a target in another project: this

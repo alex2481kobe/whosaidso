@@ -15,9 +15,9 @@ import (
 	"strings"
 	"testing"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
-	"whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 // disposalWorld admits a proof that cites a run output, then two decisions

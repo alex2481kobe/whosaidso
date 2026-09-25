@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/store"
-	"whosaidso/internal/write"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/write"
 )
 
 // bundleName is the bundle's ledger file stem: sequence and admission id.

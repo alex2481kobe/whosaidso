@@ -6,7 +6,7 @@ package reduce
 import (
 	"reflect"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // supportNode is a tagged key, so equal-looking ids in different namespaces

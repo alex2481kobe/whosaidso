@@ -16,8 +16,8 @@ import (
 	"testing"
 	"unicode"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 // upperKeys returns every object key in v with an uppercase letter, by path.

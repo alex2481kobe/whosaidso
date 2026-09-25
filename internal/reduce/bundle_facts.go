@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"time"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // bundleFacts is the inventory of one candidate bundle. It exists only while

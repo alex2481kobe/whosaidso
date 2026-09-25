@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // review builds a complete review.admit alone in its bundle: every required

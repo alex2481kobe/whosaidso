@@ -5,8 +5,8 @@ package query
 // read is the views'; reading pending intake stays in query.go.
 
 import (
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
 )
 
 func actor(a model.Actor) any {

@@ -14,8 +14,8 @@ import (
 	"os/exec"
 	"runtime"
 
-	"whosaidso/internal/store"
-	"whosaidso/internal/ui"
+	"github.com/alex2481kobe/whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/ui"
 )
 
 func uiVerb(fs *flag.FlagSet) func(*call) error {

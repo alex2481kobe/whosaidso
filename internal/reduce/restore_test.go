@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // restoreFixtures are ledgers that between them reach every event kind the
@@ -123,7 +123,7 @@ func TestRestoreAtEverySplitEqualsReplay(t *testing.T) {
 
 // The golden ledger's image is pinned. A change that moves it must also move
 // snapshotFormat or the state's types, so older images are refused.
-const goldenImageSHA256 = "d50af34f80d1a3a72c69e9b93c7c1ea6e3a761cd3c4a65a46386aecd49e649f8"
+const goldenImageSHA256 = "efecf587712934a86e835bfb3e544010235d3e06355a102e78456d58ee601c5d" // repinned for the module path github.com/alex2481kobe/whosaidso: the shape fingerprint hashes package paths, so the snapshot version changes and old caches rebuild
 
 func TestGoldenImageIsPinned(t *testing.T) {
 	image := mustEncode(t, mustReplay(t, goldenLedger(t).bundles()))

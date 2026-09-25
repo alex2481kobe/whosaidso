@@ -11,7 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // Project keeps absolute paths at the runtime boundary. Only ID is persisted in

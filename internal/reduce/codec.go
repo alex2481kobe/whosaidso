@@ -22,7 +22,7 @@ import (
 	"sort"
 	"time"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 var codecTimeType = reflect.TypeOf(time.Time{})

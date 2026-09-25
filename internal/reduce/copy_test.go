@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // The two tests here protect the deep copy from rotting rather than checking

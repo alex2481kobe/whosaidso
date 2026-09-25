@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"whosaidso/internal/query"
-	"whosaidso/internal/store"
-	"whosaidso/internal/write"
+	"github.com/alex2481kobe/whosaidso/internal/query"
+	"github.com/alex2481kobe/whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/write"
 )
 
 // homeAnswer is `whosaidso home` with no PATH: the binding, never a refusal.

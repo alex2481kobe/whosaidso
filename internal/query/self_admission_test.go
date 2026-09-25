@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // uncaptured records every packet's capture time as unknown: these reviews

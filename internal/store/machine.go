@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // MachineIDFile is the machine identity's name in the WhoSaidSo home (Home). It holds one

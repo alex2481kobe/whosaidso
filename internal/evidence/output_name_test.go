@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // observeOutput observes one run whose single output is out/result.json.

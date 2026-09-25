@@ -13,7 +13,7 @@ import (
 	"runtime"
 	"time"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // IntakeRequest separates authored facts from storage's clock, ids and hashes.

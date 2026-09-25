@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
 )
 
 // runCriterion is the criterion reference the admitted run recorded.

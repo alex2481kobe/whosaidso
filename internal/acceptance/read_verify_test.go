@@ -15,11 +15,11 @@ import (
 	"testing"
 	"time"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/query"
-	"whosaidso/internal/reduce"
-	"whosaidso/internal/store"
-	"whosaidso/internal/write"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/query"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/write"
 )
 
 func readVerifyProject(t *testing.T) store.Project {

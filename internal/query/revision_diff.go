@@ -13,8 +13,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
 )
 
 // Amendment is one recorded revision after the first: the event that made it,

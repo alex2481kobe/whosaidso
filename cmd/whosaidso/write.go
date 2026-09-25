@@ -12,14 +12,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/alex2481kobe/whosaidso/internal/evidence"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/write"
 	"io"
 	"os"
 	"strings"
 	"time"
-	"whosaidso/internal/evidence"
-	"whosaidso/internal/model"
-	"whosaidso/internal/store"
-	"whosaidso/internal/write"
 )
 
 type blobPaths []string

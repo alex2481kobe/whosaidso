@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // ---- observations --------------------------------------------------------

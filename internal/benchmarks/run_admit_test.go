@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
-	"whosaidso/internal/store"
-	"whosaidso/internal/write"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/write"
 )
 
 // Run with -run '^$' -bench BenchmarkRunAdmit -benchmem. Timed: the CLI's

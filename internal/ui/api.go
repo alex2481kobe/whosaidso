@@ -11,9 +11,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/query"
-	"whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/query"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 // projectRow is one registry entry as the page lists it. Watermark and

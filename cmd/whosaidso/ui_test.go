@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"whosaidso/internal/ui"
+	"github.com/alex2481kobe/whosaidso/internal/ui"
 )
 
 func uiGet(t *testing.T, address, token, path string) (int, string) {

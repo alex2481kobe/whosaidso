@@ -18,7 +18,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 const wirePacketID = "01K5V8Q1110000000000000000"

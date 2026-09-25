@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/query"
-	"whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/query"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
 )
 
 func e2eAdmitOne(t *testing.T, root string, event model.TypedEvent, packet, admission int, author string) error {

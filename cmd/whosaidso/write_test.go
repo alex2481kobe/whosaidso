@@ -5,13 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
-	"whosaidso/internal/store"
 )
 
 func cliFixture(t *testing.T) (string, []byte) {

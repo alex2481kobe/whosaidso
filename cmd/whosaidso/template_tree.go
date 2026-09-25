@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // templateStep is one step of a field path: an object key or an array index.

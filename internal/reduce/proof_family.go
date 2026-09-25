@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"sort"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // Proof family refusal codes. Admission reports these same codes because it

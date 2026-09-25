@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"time"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // Freezing refusal codes. Admission reports these same codes because it

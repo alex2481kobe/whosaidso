@@ -15,10 +15,10 @@ import (
 	"fmt"
 	"strings"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
-	"whosaidso/internal/store"
-	"whosaidso/internal/write"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/write"
 )
 
 const scopeFamily = "proof family at watermark %d: every run the gate counts for this criterion, confirmed by an admission dry run; dispositions, reasons, judgment and verdict were NOT chosen"

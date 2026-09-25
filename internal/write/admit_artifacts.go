@@ -15,9 +15,9 @@ import (
 	"slices"
 	"strings"
 
-	"whosaidso/internal/evidence"
-	"whosaidso/internal/model"
-	"whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/evidence"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 // materializeAdmission resolves every accepted artifact and hands verified
