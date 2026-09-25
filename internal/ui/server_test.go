@@ -10,6 +10,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -144,7 +146,7 @@ func TestStaticFilesAreServedWithTheirTypes(t *testing.T) {
 			t.Errorf("%s: %d %q, want 200 %q with its embedded bytes", path, got, header.Get("Content-Type"), kind)
 		}
 	}
-	if len(staticFiles) != 10 {
+	if len(staticFiles) != 15 {
 		t.Fatalf("every embedded file but the page is served: %d paths", len(staticFiles))
 	}
 	got, header, body := do(t, host, probe{"GET", "/?token=" + token, host, "", ""})
@@ -192,25 +194,47 @@ func TestProjectsListsAnUnavailableHomeWithItsReason(t *testing.T) {
 	}
 }
 
-// The page is plain by rule: no dot separators or bullet glyphs in its text,
-// no illustration or image other than the owl (the header logo is the
-// favicon itself), and every status is a word, never a coloured circle. The
-// one circle is the theme switch's knob. A file that brings any of them back
-// fails here.
-func TestPageCarriesNoDotsOrDrawings(t *testing.T) {
-	allowed := map[string]int{"ui.css border-radius: 50%": 1, "index.html <img": 1}
-	if page, _ := files.ReadFile("index.html"); !strings.Contains(string(page), `<img src="/favicon-180.png"`) {
-		t.Error("index.html's one image is not the owl favicon")
-	}
-	for _, file := range []string{"index.html", "ui.css", "ui.js", "ui-home.js", "ui-records.js", "ui-detail.js", "ui-kinds.js", "ui-history.js"} {
+// The owner's design rules, checked in the files that draw the page: no
+// dot separators or bullet glyphs in its text; no pill-shaped tags (the one
+// capsule is the theme switch, and no other corner is rounder than 16px);
+// no checkboxes on rows, no avatars or profile pictures, no saved views; and
+// no picture but the owl and the favicons, all served from this package.
+// A file that brings any of them back fails here.
+func TestPageKeepsTheOwnersDesignRules(t *testing.T) {
+	page := []string{"index.html", "ui.css", "ui-screens.css", "ui.js", "ui-icons.js", "ui-parts.js", "ui-derive.js",
+		"ui-home.js", "ui-records.js", "ui-detail.js", "ui-kinds.js", "ui-history.js"}
+	images := regexp.MustCompile(`/[A-Za-z0-9_-]+\.(png|jpe?g|gif|webp|svg)\b`)
+	radius := regexp.MustCompile(`border-radius:\s*(\d+)px`)
+	capsules := 0
+	for _, file := range page {
 		b, err := files.ReadFile(file)
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, banned := range []string{"·", "•", "<img", "<template", "border-radius: 50%", ".svg"} {
-			if n := strings.Count(string(b), banned); n > allowed[file+" "+banned] {
-				t.Errorf("%s carries %q %d times", file, banned, n)
+		text := string(b)
+		lower := strings.ToLower(text)
+		for _, banned := range []string{"·", "•", "<template", "type=\"checkbox\"", "type = \"checkbox\"", "type: \"checkbox\"", "avatar", "profile", "saved view"} {
+			if strings.Contains(lower, strings.ToLower(banned)) {
+				t.Errorf("%s carries %q", file, banned)
 			}
 		}
+		for _, image := range images.FindAllString(text, -1) {
+			if image != "/owl.png" && image != "/favicon-32.png" && image != "/favicon-180.png" {
+				t.Errorf("%s draws %s; the owl and the favicons are the only pictures", file, image)
+			}
+		}
+		for _, m := range radius.FindAllStringSubmatch(text, -1) {
+			if px, _ := strconv.Atoi(m[1]); px >= 99 {
+				capsules++
+			} else if px > 16 {
+				t.Errorf("%s rounds a corner %dpx, rounder than a rounded rectangle", file, px)
+			}
+		}
+	}
+	if capsules != 1 {
+		t.Errorf("%d capsule shapes; only the theme switch is one", capsules)
+	}
+	if page, _ := files.ReadFile("index.html"); !strings.Contains(string(page), `<img src="/owl.png"`) {
+		t.Error("the header's logo is not the owl")
 	}
 }

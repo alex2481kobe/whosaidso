@@ -4,12 +4,15 @@
 // section every kind shares, and the dispatch to ui-kinds.js for claims,
 // decisions, instruments and sources. A task reads from continue; dates are
 // when WhoSaidSo captured the events (times()).
-import { el, facts, item, section, copyButton, openButton, view, times, titles, actorName, status, stamp, when, titleCase, fullTitle } from "./ui.js";
+import { el, facts, item, section, copyButton, openButton, view, times, titles, actorName, status, stamp, when, titleCase, fullTitle, icon, project } from "./ui.js";
+import { hero } from "./ui-parts.js";
+import { kinds } from "./ui-icons.js";
 import { renderClaim, renderDecision, renderInstrument, renderSource } from "./ui-kinds.js";
 
-// frame is every detail screen: the full title, the details row (the status
+// frame is every detail screen: the hero naming the record's kind, then one
+// panel with the back link, the full title and the details row (the status
 // and any chip beside it first, Copy id last), and the sections below.
-export function frame({ id, title, tone, statusLabel, chip, details }, ...sections) {
+export function frame({ id, kind, title, tone, statusLabel, chip, details }, ...sections) {
   const back = el("a", "back", "← Back to records");
   back.href = "#/records";
   const shown = sections.filter(Boolean);
@@ -17,11 +20,10 @@ export function frame({ id, title, tone, statusLabel, chip, details }, ...sectio
   grid.style.setProperty("--cols", String(shown.length === 4 ? 2 : Math.max(1, shown.length)));
   const row = facts([["Status", [el("span", "tone-text " + tone, statusLabel), chip?.[0]]], ...details], "facts details");
   row.append(el("div", "details-end", copyButton("Copy id", id)));
+  const k = kinds[kind] || kinds.task;
   return el("div", "screen detail",
-    back,
-    el("h1", "detail-title", title),
-    row,
-    chip?.[1],
+    hero("detail", k.one, el("span", "tile tone-tint " + k.tone, icon(k.icon)), [`One ${k.one.toLowerCase()} in `, project(), "."], "Everything the ledger records about it."),
+    el("section", "panel detail-head", back, el("h2", "detail-title", title), row, chip?.[1]),
     grid);
 }
 
@@ -116,7 +118,7 @@ function renderTask({ id, root, answer, at, names, dates }) {
   const [label, tone] = status(root);
   const items = answer.owed.items || [];
   const plan = (root.fact.task.prerequisites || []).length > 0;
-  return frame({ id, title: fullTitle(root), tone, statusLabel: label, details: [["Subject", root.fact.task.subject],
+  return frame({ id, kind: "task", title: fullTitle(root), tone, statusLabel: label, details: [["Subject", root.fact.task.subject],
     ["Author", actorName(root.author?.actor)], ["Approved by", actorName(root.admitted_by)],
     ["Progress", plan ? `${items.filter((i) => i.satisfied === "TRUE").length} of ${items.length} met` : ""],
     ["Created", stamp(dates[0])], ["Updated", stamp(dates[1])]] },

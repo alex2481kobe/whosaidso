@@ -50,7 +50,7 @@ export function renderClaim({ id, root, answer, history, at, names }, stale) {
   const proofRows = proofs.map((p) => item(`Proof ${p.admission.verdict || "UNKNOWN"} the claim`, when(at(p.origin)),
     facts([["Judged by", actorName(p.admission.judgment?.actor)], ["Reason", p.admission.judgment?.reason],
       ["Evidence", el("ul", "plain", p.admission.evidence.map((ev) => el("li", "", `${titleCase(ev.disposition)}: ${ev.reason || "no reason recorded"}`)))]])));
-  return frame({ id, title: fullTitle(root), tone, statusLabel: label, chip: staleChip(stale.stale?.claims?.find((c) => c.claim.record_id === id)),
+  return frame({ id, kind: "claim", title: fullTitle(root), tone, statusLabel: label, chip: staleChip(stale.stale?.claims?.find((c) => c.claim.record_id === id)),
     details: [["Standing", claim.standing], ["Criterion", criterion(history)], ["Author", who(root.author?.actor)], ["Approved by", who(root.admitted_by)]] },
   section("Measurement runs", runs), section("Proofs", proofRows), changes(answer, at, names, proofs));
 }
@@ -58,7 +58,7 @@ export function renderClaim({ id, root, answer, history, at, names }, stale) {
 export function renderDecision({ id, root, answer, at, names, dates }) {
   const d = root.decision;
   const [label, tone] = status(root);
-  return frame({ id, title: fullTitle(root), tone, statusLabel: label, details: [["Question", d.question], ["Authorizes", d.authorizes],
+  return frame({ id, kind: "decision", title: fullTitle(root), tone, statusLabel: label, details: [["Question", d.question], ["Authorizes", d.authorizes],
     ["Waiting on", who(d.waiting_actor)], ["Author", who(root.author?.actor)], ["Approved by", who(root.admitted_by)], ["Created", stamp(dates[0])], ["Updated", stamp(dates[1])]] },
   section("Options", d.options.map((o) => item(o, "", el("p", "", o)))),
   section("Rulings", d.rulings.map((r) => item(titleCase(r.disposition.disposition), when(at(r.origin)),
@@ -71,7 +71,7 @@ export function renderInstrument({ id, root, answer, at, names, dates }) {
   const [label, tone] = status(root);
   const v = i.validation;
   const joined = (xs) => (xs.length ? xs.join("; ") : "none");
-  return frame({ id, title: fullTitle(root), tone, statusLabel: label, details: [["Validation", v.state === "KNOWN" ? `Version ${v.version}` : "UNKNOWN: " + v.reason],
+  return frame({ id, kind: "instrument", title: fullTitle(root), tone, statusLabel: label, details: [["Validation", v.state === "KNOWN" ? `Version ${v.version}` : "UNKNOWN: " + v.reason],
     ["Valid range", i.valid_range], ["Author", who(root.author?.actor)], ["Approved by", who(root.admitted_by)], ["Created", stamp(dates[0])]] },
   panel("What it measures", facts([["Answers", i.question_answered], ["Blind to", i.blind_to], ["Does not answer", i.not_answered],
     ["Config surface", joined(i.config_surface)], ["Dangerous defaults", joined(i.dangerous_defaults)],
@@ -83,7 +83,7 @@ export function renderInstrument({ id, root, answer, at, names, dates }) {
 export function renderSource(source, history, at, names) {
   const s = source.intake;
   const dates = span(history, at);
-  return frame({ id: s.source_id, title: `${actorName(s.speaker)} said, ${s.length} bytes`, tone: "green", statusLabel: "Captured",
+  return frame({ id: s.source_id, kind: "source", title: `${actorName(s.speaker)} said, ${s.length} bytes`, tone: "green", statusLabel: "Captured",
     details: [["Speaker", who(s.speaker)], ["Captured by", who(source.author?.actor)], ["Approved by", who(source.admitted_by)], ["Order", String(s.order)], ["Created", stamp(dates[0])]] },
   section("Concerns", s.referents.map((r) => el("li", "item", link(r.record_id, names.get(r.record_id) || r.record_id, "item-link")))),
   panel("Bytes", facts([["Digest", mono(s.original_digest)], ["Length", String(s.length)], ["Media type", s.source_ref?.content?.media_type || "UNKNOWN"]])));
