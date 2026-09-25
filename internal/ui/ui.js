@@ -1,15 +1,15 @@
-// The viewer's core: API calls, the header (project switcher, watermark,
-// theme), hash routing, the live watermark poll, and the small helpers every
-// screen shares. Each screen lives in its own ui-*.js module. Everything
-// shown is read from the views' own JSON; nothing here writes anywhere.
+// The viewer's core: API calls, the header (project switcher and theme),
+// hash routing, the live watermark poll, and the small helpers every screen
+// shares. Each screen lives in its own ui-*.js module. Everything shown is
+// read from the views' own JSON; nothing here writes anywhere.
 import { renderHome } from "./ui-home.js";
 import { renderRecords } from "./ui-records.js";
 import { renderDetail } from "./ui-detail.js";
-import { renderHistory, renderProjects } from "./ui-history.js";
+import { renderHistory } from "./ui-history.js";
 
 const token = new URLSearchParams(location.search).get("token") || "";
 const main = document.getElementById("main");
-const state = { projects: [], project: "", mark: "", cache: new Map(), lastRecord: "" };
+const state = { projects: [], project: "", mark: "", cache: new Map() };
 
 // ---- data
 export async function api(path, params = {}) {
@@ -46,6 +46,15 @@ export async function times() {
   return (origin) => (origin ? at.get(`${origin.sequence}:${origin.event_index}`) || null : null);
 }
 
+// titles names every current record and admitted source by its label.
+export async function titles() {
+  const show = await view("show");
+  const names = new Map(show.records.map((r) => [r.ref.record_id, r.label]));
+  for (const s of show.sources || []) names.set(s.intake.source_id, sourceTitle(s));
+  return names;
+}
+export const sourceTitle = (s) => `${actorName(s.intake.speaker)} said, ${s.intake.length} bytes`;
+
 // ---- DOM helpers: text only, never HTML from the ledger
 export function el(tag, className = "", ...children) {
   const node = document.createElement(tag);
@@ -57,15 +66,23 @@ export function el(tag, className = "", ...children) {
   return node;
 }
 export const mono = (text, className = "") => el("span", "mono " + className, text);
-export function link(id, text = id, className = "mono link") {
+export function link(id, text = id, className = "link") {
   const a = el("a", className, text);
   a.href = "#/record/" + encodeURIComponent(id);
   return a;
 }
-// art is a copy of one of index.html's static illustrations.
-export const art = (id) => document.getElementById(id).content.firstElementChild.cloneNode(true);
+
+// icon draws one line icon: the six Home cards' and the disclosure chevrons.
+const paths = {
+  progress: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2",
+  back: "M9 10l-5 5 5 5M4 15h11a5 5 0 0 0 0-10h-3",
+  blocked: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM5.6 5.6l12.8 12.8",
+  ready: "M5 21V4M5 4h12l-2.5 4 2.5 4H5",
+  decision: "M12 21V3M6 5h10l3 3-3 3H6zM18 13H8l-3 3 3 3h10z",
+  proposal: "M3 13h5l1.5 3h5l1.5-3h5M5.5 5h13L21 13v6H3v-6z",
+  chevron: "M9 6l6 6-6 6",
+};
 export function icon(name) {
-  const paths = { copy: "M8 8h10v12H8zM5 16V4h10", command: "M9 9h10v10H9zM5 15V5h10", back: "M19 12H5m6-6-6 6 6 6", warn: "M12 3 2 21h20L12 3zm0 7v5m0 3v.5", owed: "M4 6h16M4 12h10M4 18h7" };
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("aria-hidden", "true");
@@ -75,37 +92,81 @@ export function icon(name) {
   svg.append(path);
   return svg;
 }
-export function copyButton(label, text, glyph = "copy") {
-  const button = el("button", "button", icon(glyph), el("span", "", label));
+export function copyButton(label, text) {
+  const button = el("button", "button", label);
   button.type = "button";
-  button.addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText(text); button.lastChild.textContent = "Copied"; }
-    catch { button.lastChild.textContent = "Copy failed"; }
-    setTimeout(() => { button.lastChild.textContent = label; }, 1400);
+  button.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    try { await navigator.clipboard.writeText(text); button.textContent = "Copied"; }
+    catch { button.textContent = "Copy failed"; }
+    setTimeout(() => { button.textContent = label; }, 1400);
   });
   return button;
+}
+
+// facts is a labelled list of [label, value] pairs; empty values are left out.
+export function facts(pairs, className = "facts") {
+  return el("dl", className, pairs.filter(([, v]) => v !== null && v !== undefined && v !== "")
+    .map(([k, v]) => el("div", "", el("dt", "", k), el("dd", "", v))));
+}
+
+// disclose wires a button to open and close one detail. Rows that are
+// alternatives share a list, and the list holds one open row at a time.
+export function disclose(button, detail, row) {
+  detail.hidden = true;
+  button.setAttribute("aria-expanded", "false");
+  if (button.tagName !== "BUTTON") {
+    button.tabIndex = 0;
+    button.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); button.click(); } });
+  }
+  button.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const opening = detail.hidden;
+    for (const open of row.parentElement?.querySelectorAll(":scope > .open") || []) open.dispatchEvent(new Event("collapse"));
+    detail.hidden = !opening;
+    row.classList.toggle("open", opening);
+    button.setAttribute("aria-expanded", String(opening));
+  });
+  row.addEventListener("collapse", () => {
+    detail.hidden = true;
+    row.classList.remove("open");
+    button.setAttribute("aria-expanded", "false");
+  });
+}
+
+// item is one collapsed line: a title, a short value on the right, and the
+// detail it opens on click.
+export function item(title, value, detail, tone = "") {
+  const head = el("button", "item-head", icon("chevron"), el("span", "item-title", title),
+    value ? el("span", "item-value tone-text " + tone, value) : null);
+  head.type = "button";
+  const body = el("div", "item-body", detail);
+  const li = el("li", "item", head, body);
+  disclose(head, body, li);
+  return li;
+}
+
+// section is one titled panel whose list scrolls inside itself.
+export function section(title, items) {
+  return el("section", "panel", el("h2", "", el("span", "", title), el("span", "count", String(items.length))),
+    el("div", "panel-body", items.length ? el("ul", "items", items) : el("p", "empty", "Empty")));
 }
 
 // ---- words: the ledger's values, labelled for people
 export function actorName(actor) {
   if (!actor) return "UNKNOWN";
-  if (actor.id) return actor.id;
-  return "UNKNOWN";
-}
-export function actorReason(actor) {
-  return actor?.unknown_reason || actor?.reason || "";
+  if (typeof actor === "string") return actor;
+  return actor.id || "UNKNOWN";
 }
 const monthDay = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 const clock = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
 const fullDay = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" });
-export const day = (d) => (d ? fullDay.format(d) : "UNKNOWN");
 export const stamp = (d) => (d ? `${fullDay.format(d)} ${clock.format(d)}` : "UNKNOWN");
 export const when = (d) => (d ? `${monthDay.format(d)}, ${clock.format(d)}` : "UNKNOWN");
 export function since(d) {
   if (!d) return "since UNKNOWN";
   return new Date().toDateString() === d.toDateString() ? "since " + clock.format(d) : "since " + monthDay.format(d);
 }
-export const truth = (t) => ({ TRUE: "TRUE", FALSE: "FALSE" }[t] || "UNKNOWN");
 export const titleCase = (s) => String(s).toLowerCase().replace(/(^|[\s-])\S/g, (c) => c.toUpperCase());
 
 // status is a record's real status, labelled, with the tone that colours it.
@@ -114,7 +175,7 @@ export function status(record) {
     const t = record.task;
     if (t.status === "IN FLIGHT") return ["In progress", "blue"];
     if (t.status === "READY") return ["Ready", "amber"];
-    if (t.status === "CLOSED") return [t.outcome === "success" ? "Closed" : "Closed · " + t.outcome, "muted"];
+    if (t.status === "CLOSED") return [t.outcome === "success" ? "Closed" : "Closed, " + t.outcome, "muted"];
     if (t.status === "BLOCKED") {
       const awaiting = (t.reasons || []).length > 0 && t.reasons.every((r) => r.kind === "awaiting-acceptance");
       return awaiting ? ["Awaiting acceptance", "amber"] : ["Blocked", "red"];
@@ -127,51 +188,43 @@ export function status(record) {
   }
   if (record.decision) return [titleCase(record.decision.status), record.decision.status === "OPEN" ? "amber" : "green"];
   if (record.instrument) {
-    const trust = record.instrument.trust;
-    return [trust === "TRUE" ? "Trusted" : trust === "FALSE" ? "Not trusted" : "Trust UNKNOWN", trust === "TRUE" ? "green" : trust === "FALSE" ? "red" : "muted"];
+    // Active means no trust withdrawal is recorded, not that trust is known.
+    const withdrawn = (record.instrument.withdrawals || []).length > 0;
+    const validated = record.instrument.validation?.state === "KNOWN" ? "validated" : "not validated";
+    return [withdrawn ? "Withdrawn" : "Active, " + validated, withdrawn ? "red" : "green"];
   }
   if (record.intake) return ["Captured", "green"];
   return ["UNKNOWN", "muted"];
 }
 export const kindOf = (record) => (record.intake ? "Source" : titleCase(record.fact?.kind || "record"));
 
-// ---- header, theme, projects
-function applyTheme(dark) {
-  document.documentElement.dataset.theme = dark ? "dark" : "light";
-  const toggle = document.getElementById("theme-toggle");
-  toggle.setAttribute("aria-checked", String(dark));
+// ---- header: theme and projects
+const toggle = document.getElementById("theme-toggle");
+function setTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  toggle.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
+  toggle.setAttribute("aria-label", `Switch to ${theme === "dark" ? "light" : "dark"} mode`);
+  try { localStorage.setItem("whosaidso-theme", theme); } catch {}
 }
 function initTheme() {
   let saved = null;
   try { saved = localStorage.getItem("whosaidso-theme"); } catch {}
-  applyTheme(saved ? saved === "dark" : matchMedia("(prefers-color-scheme: dark)").matches);
-  document.getElementById("theme-toggle").addEventListener("click", () => {
-    const dark = document.documentElement.dataset.theme !== "dark";
-    applyTheme(dark);
-    try { localStorage.setItem("whosaidso-theme", dark ? "dark" : "light"); } catch {}
-  });
+  toggle.addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
+  setTheme(saved || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
 }
 
-function renderHeader(todo) {
-  const entry = state.projects.find((p) => p.id === state.project);
-  document.getElementById("project-name").textContent = state.project || "All projects";
-  const w = todo?.watermark || entry?.watermark;
-  const head = w?.head?.recorded_at ? clock.format(new Date(w.head.recorded_at)) : "UNKNOWN";
-  document.getElementById("project-meta").textContent = w ? `latest #${w.sequence} · ${w.events} entries · updated ${head}` : `${state.projects.length} projects on this machine`;
-  renderMenu();
-}
 function renderMenu() {
+  document.getElementById("project-name").textContent = state.project || "No project";
   const menu = document.getElementById("project-menu");
   menu.replaceChildren(...state.projects.map((p) => {
-    const row = el("button", "menu-row" + (p.id === state.project ? " selected" : ""), el("span", "menu-name", p.id),
-      el("span", "menu-note", p.available ? `${p.totals.in_flight} in flight · ${p.totals.blocked} blocked · ${p.totals.ready} ready` : "unavailable: " + p.reason));
+    const row = el("button", "menu-row", p.id);
     row.type = "button";
+    row.setAttribute("role", "option");
+    row.setAttribute("aria-selected", String(p.id === state.project));
     row.disabled = !p.available;
     row.addEventListener("click", () => { closeMenu(); select(p.id); });
     return row;
-  }), el("a", "menu-row menu-all", "All projects on this machine"));
-  menu.lastChild.href = "#/projects";
-  menu.lastChild.addEventListener("click", closeMenu);
+  }));
 }
 function closeMenu() {
   document.getElementById("project-menu").hidden = true;
@@ -202,49 +255,49 @@ function select(id) {
 async function route() {
   const [path, rest = ""] = location.hash.replace(/^#/, "").split("?");
   const parts = path.split("/").filter(Boolean).map(decodeURIComponent);
-  const screen = !state.project || parts[0] === "projects" ? "projects" : parts[0] || "home";
+  const screen = parts[0] || "home";
   for (const a of document.querySelectorAll("[data-nav]")) {
-    a.classList.toggle("active", a.dataset.nav === (screen === "record" ? "records" : screen));
+    a.setAttribute("aria-selected", String(a.dataset.nav === (screen === "record" ? "records" : screen)));
+  }
+  renderMenu();
+  if (!state.project) {
+    main.replaceChildren(el("p", "notice", "No WhoSaidSo project is registered on this machine."));
+    return;
   }
   try {
-    const todo = state.project ? await view("todo") : null;
-    renderHeader(todo);
     let node;
-    if (screen === "projects") node = renderProjects(state.projects, select);
-    else if (screen === "records") node = await renderRecords(new URLSearchParams(rest).get("tab") || "all");
-    else if (screen === "record") { state.lastRecord = parts[1]; node = await renderDetail(parts[1]); }
-    else if (screen === "history") node = await renderHistory(parts[1] || "", state.lastRecord);
-    else node = await renderHome(todo);
+    if (screen === "records") node = await renderRecords(new URLSearchParams(rest).get("tab") || "all");
+    else if (screen === "record") node = await renderDetail(parts[1]);
+    else if (screen === "history") node = await renderHistory();
+    else node = await renderHome(await view("todo"));
     main.replaceChildren(node);
   } catch (error) {
-    main.replaceChildren(el("section", "notice", "Could not read this project: " + error.message));
+    main.replaceChildren(el("p", "notice", "Could not read this project: " + error.message));
   }
 }
 
 const markOf = (w) => (w ? `${w.sequence}:${w.head?.command_id || ""}` : "");
 
-// poll reads the selected project's watermark through its todo view (the
-// project list when none is selected) and re-renders only when it moved.
+// poll reads the selected project's watermark through its todo view and
+// re-renders only when it moved. A stopped viewer says so in the header.
 async function poll() {
+  const offline = document.getElementById("offline");
   try {
-    let mark;
-    if (state.project) {
-      mark = markOf((await api("/api/view", { project: state.project, view: "todo" })).watermark);
-    } else {
-      const list = await api("/api/projects");
-      mark = JSON.stringify(list.projects.map((p) => [p.id, p.available, markOf(p.watermark)]));
-      state.projects = list.projects;
-    }
+    if (!state.project) return;
+    const mark = markOf((await api("/api/view", { project: state.project, view: "todo" })).watermark);
+    offline.hidden = true;
     if (mark !== state.mark) {
       state.mark = mark;
       state.cache.clear();
       route();
     }
   } catch {
-    document.getElementById("project-meta").textContent = "Viewer disconnected. Run whosaidso ui again.";
+    offline.hidden = false;
   }
 }
 
+// boot opens the project this tab last showed, else the one the command ran
+// in, else the first available one. The dropdown is the only switch.
 async function boot() {
   initTheme();
   initMenu();
@@ -253,11 +306,11 @@ async function boot() {
   let remembered = "";
   try { remembered = sessionStorage.getItem("whosaidso-project") || ""; } catch {}
   const usable = (id) => state.projects.some((p) => p.id === id && p.available);
-  state.project = usable(remembered) ? remembered : usable(list.current) ? list.current : "";
+  state.project = usable(remembered) ? remembered : usable(list.current) ? list.current : state.projects.find((p) => p.available)?.id || "";
   state.mark = markOf(state.projects.find((p) => p.id === state.project)?.watermark);
   window.addEventListener("hashchange", route);
   await route();
   setInterval(poll, 3000);
 }
 
-boot().catch((error) => main.replaceChildren(el("section", "notice", "The viewer could not start: " + error.message)));
+boot().catch((error) => main.replaceChildren(el("p", "notice", "The viewer could not start: " + error.message)));

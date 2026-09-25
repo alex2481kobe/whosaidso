@@ -1,90 +1,91 @@
-// Home, "What's owed": one card per section of the todo view, in its order,
-// each counted by todo's own totals. An empty section reads "none"; nothing
-// is hidden. The list of every project lives in ui-history.js.
-import { el, mono, link, art, actorName, since, times } from "./ui.js";
+// Home: one card per section of the todo view, in its order, each counted by
+// todo's own totals. A row is the record's title first, then who and when;
+// a blocked row's reasons open under a one-line summary. An empty card says
+// so; nothing is hidden.
+import { el, link, icon, disclose, facts, actorName, since, times, titles } from "./ui.js";
 
-// card is one tinted section: dot, title, count, a one-line meaning, rows.
-export function card(tone, title, meaning, count, rows) {
-  const body = rows.length ? rows : [el("p", "none", "none")];
-  return el("section", "owed-card tone-" + tone,
-    el("header", "owed-head", el("span", "dot"), el("h2", "", title), el("span", "count", String(count)), el("p", "meaning", meaning)),
-    el("div", "owed-body", body));
+// card is one section: icon, title, count, then its rows, scrolling inside.
+function card(glyph, tone, title, count, rows) {
+  return el("section", "card",
+    el("header", "card-head", el("span", "card-icon tone-text " + tone, icon(glyph)), el("h2", "", title), el("span", "count", String(count))),
+    el("div", "card-body", rows.length ? el("ul", "rows", rows) : el("p", "empty", "Empty")));
 }
 
-// row is one owed item: id and label on the left, then who, then a note.
-// why, when given, is the reasons list under the row, one per line.
-function row(id, label, who, note, noteTone = "", why = []) {
-  return el("div", "owed-row",
-    el("div", "owed-what", id ? link(id, id, "mono link plain") : null, el("span", "owed-label", label)),
-    el("span", "owed-who", who),
-    el("span", "owed-note " + noteTone, note),
-    why.length ? el("div", "owed-why", why.map((w) => el("div", "", w))) : null);
+// row opens its record; meta is the muted who-and-when line; more, when
+// given, is a [summary, detail] pair that opens under the row.
+function row(id, title, meta, more) {
+  const main = el(id ? "a" : "div", "row-main", el("span", "row-title", title), el("span", "row-meta", meta.filter(Boolean).map((m) => el("span", "", m))));
+  if (id) main.href = "#/record/" + encodeURIComponent(id);
+  const li = el("li", "row", main);
+  if (more) {
+    const button = el("button", "why", more[0], icon("chevron"));
+    button.type = "button";
+    const detail = el("div", "why-detail", more[1]);
+    disclose(button, detail, li);
+    li.append(button, detail);
+  }
+  return li;
 }
 
-function holder(task) {
-  const holders = task.task.attempt_holders || [];
-  return holders.length ? holders.map((h) => actorName(h.actor)).join(", ") : "—";
-}
+const holder = (task) => (task.task.attempt_holders || []).map((h) => actorName(h.actor)).join(", ");
 
 function liveSince(task, at) {
   const live = (task.task.attempts || []).filter((a) => !a.terminal);
   return since(live.length ? at(live[live.length - 1].started) : null);
 }
 
-function lastHandback(task, at) {
-  const done = (task.task.attempts || []).filter((a) => a.terminal);
-  return done.length ? done[done.length - 1] : null;
+// A prerequisite's reason reads "prerequisite N (kind) is TRUTH: why"; its
+// target is named by title and the why kept, in the ledger's own words.
+const prerequisite = /^prerequisite \d+ \([^)]+\) is \w+: (?:(?:claim|decision|task) \S+ revision \d+ is )?(.*)$/;
+
+// reasons is a blocked task's summary line and its full reasons, one each.
+function reasons(task, names) {
+  const list = task.task.reasons || [];
+  if (!list.length) return ["No reason recorded", el("p", "", "BLOCKED with no reason recorded")];
+  const prereqs = list.filter((r) => r.kind === "prerequisite" && prerequisite.test(r.detail));
+  const summary = prereqs.length === list.length
+    ? (list.length === 1 ? "1 prerequisite not met" : `${list.length} prerequisites not met`)
+    : list.length === 1 ? list[0].detail.split(/[;.]/)[0] : `${list.length} reasons`;
+  return [summary, el("ul", "why-list", list.map((r) => {
+    const m = r.kind === "prerequisite" && r.detail.match(prerequisite);
+    const target = r.target?.record_id;
+    return el("li", "", m && target ? [link(target, names.get(target) || target), el("span", "muted", m[1])] : r.detail);
+  }))];
 }
 
-// packetLabel names an intake packet by what its first event proposes.
-function packetLabel(packet) {
-  const event = packet.packet?.events?.[0];
-  const spec = event?.data?.spec || {};
-  const words = spec.intent || spec.question || spec.assertion || spec.question_answered;
-  const more = packet.packet?.events?.length > 1 ? ` (+${packet.packet.events.length - 1} events)` : "";
-  return (words ? `${event.type}: ${words}` : event?.type || "empty packet") + more;
+// packetTitle names a proposal by what its first event proposes.
+export function packetTitle(packet) {
+  const events = packet.packet?.events || [];
+  const spec = events[0]?.data?.spec || {};
+  const words = spec.intent || spec.question || spec.assertion || spec.question_answered || events[0]?.type || "Empty proposal";
+  return events.length > 1 ? `${words} (+${events.length - 1} more)` : words;
 }
 
 export async function renderHome(todo) {
-  const at = await times();
+  const [at, names] = await Promise.all([times(), titles()]);
   const t = todo.totals;
-  const hero = el("div", "hero",
-    el("div", "", el("h1", "", "What's owed"), el("p", "lede", "A read-only view of what still needs attention.")),
-    art("hero-art"));
-
-  const inFlight = todo.in_flight.map((x) => row(x.ref.record_id, x.label, holder(x), liveSince(x, at)));
+  const inFlight = todo.in_flight.map((x) => row(x.ref.record_id, x.label, [holder(x), liveSince(x, at)]));
   const awaiting = todo.awaiting_acceptance.map((x) => {
-    const back = lastHandback(x, at);
-    const accepter = typeof x.accepter === "string" ? x.accepter : actorName(x.accepter);
-    return row(x.ref.record_id, x.label, back ? actorName(back.actor) : "—",
-      (back ? since(at(back.terminal.origin)) + " · " : "") + "accepter " + accepter);
+    const done = (x.task.attempts || []).filter((a) => a.terminal);
+    const back = done[done.length - 1];
+    return row(x.ref.record_id, x.label, [back && actorName(back.actor), back && since(at(back.terminal.origin)), "accepter " + actorName(x.accepter)]);
   });
-  const blocked = todo.blocked.map((x) => {
-    const reasons = (x.task.reasons || []).map((r) => r.detail);
-    return row(x.ref.record_id, x.label, (x.task.waiting_actors || []).map(actorName).join(", ") || "—",
-      reasons.length === 1 ? "1 reason" : `${reasons.length} reasons`, "", reasons.length ? reasons : ["BLOCKED with no reason recorded"]);
-  });
-  const ready = todo.ready.map((x) => row(x.ref.record_id, x.label, actorName(x.task.expected_next_actor), "next actor"));
-  const decisions = todo.open_decisions.map((x) => row(x.ref.record_id, x.label, actorName(x.decision?.waiting_actor), "awaiting a ruling", "blue"));
-  const listed = todo.packets_not_accepted.filter((p) => p.disposition !== "rejected");
-  const proposals = listed.map((p) => row("", "", actorName(p.packet?.author),
-    p.disposition === "pending" ? "awaiting review" : p.disposition + (p.review?.reason ? `: ${p.review.reason}` : ""),
-    p.disposition === "pending" ? "" : "amber"));
-  listed.forEach((p, i) => proposals[i].firstChild.replaceChildren(mono(p.command_id, "strong"), el("span", "owed-label", packetLabel(p))));
+  const blocked = todo.blocked.map((x) => row(x.ref.record_id, x.label,
+    [(x.task.waiting_actors || []).map(actorName).join(", ")], reasons(x, names)));
+  const ready = todo.ready.map((x) => row(x.ref.record_id, x.label, ["next " + actorName(x.task.expected_next_actor)]));
+  const omitted = todo.omitted?.ready?.omitted;
+  if (omitted) ready.push(el("li", "row more", `${omitted} more not listed`));
+  const decisions = todo.open_decisions.map((x) => row(x.ref.record_id, x.label, ["waiting on " + actorName(x.decision?.waiting_actor)]));
+  const proposals = todo.packets_not_accepted.filter((p) => p.disposition !== "rejected").map((p) =>
+    row("", packetTitle(p), [actorName(p.packet?.author), p.disposition === "pending" ? "awaiting review" : null],
+      p.disposition === "pending" ? null : [p.disposition === "correction-requested" ? "Correction requested" : p.disposition,
+        facts([["Reason", p.review?.reason || "no reason recorded"], ["Reviewed by", actorName(p.review?.actor)]])]));
 
-  const omitted = todo.omitted?.ready?.omitted ? ` (${todo.omitted.ready.omitted} more omitted)` : "";
-  const counts = [`${t.intake_unreviewed} unreviewed`];
-  if (t.intake_correction_requested) counts.push(`${t.intake_correction_requested} correction requested`);
-  if (t.intake_rejected) counts.push(`${t.intake_rejected} rejected, owing nothing`);
-  const proposalMeaning = counts.join(" · ") + ".";
-
-  return el("div", "screen",
-    hero,
-    el("div", "owed-grid",
-      card("blue", "Work in progress", "Actively being worked on.", t.in_flight, inFlight),
-      card("green", "Handed back / awaiting acceptance", "Handed back; waiting for acceptance.", t.awaiting_acceptance, awaiting),
-      card("red", "Blocked work", "Can't proceed until resolved.", t.blocked, blocked),
-      card("amber", "Ready to start", "Nothing blocks these." + omitted, t.ready, ready),
-      card("purple", "Open decisions", "Needs a decision.", t.open_decisions, decisions),
-      card("sky", "Proposals waiting for review", proposalMeaning, t.intake_unreviewed + t.intake_correction_requested, proposals)));
+  return el("div", "screen home",
+    card("progress", "blue", "Work in progress", t.in_flight, inFlight),
+    card("back", "green", "Handed back", t.awaiting_acceptance, awaiting),
+    card("blocked", "red", "Blocked", t.blocked, blocked),
+    card("ready", "amber", "Ready to start", t.ready, ready),
+    card("decision", "purple", "Open decisions", t.open_decisions, decisions),
+    card("proposal", "sky", "Proposals", t.intake_unreviewed + t.intake_correction_requested, proposals));
 }
