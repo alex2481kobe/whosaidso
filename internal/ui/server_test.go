@@ -132,7 +132,7 @@ func TestViewerRefusesEveryMethodButGet(t *testing.T) {
 func TestStaticFilesAreServedWithTheirTypes(t *testing.T) {
 	host, token := testUI(t, &stubWorld{})
 	// The types are stated here, not read from the table they check.
-	types := map[string]string{".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml", ".ico": "image/svg+xml"}
+	types := map[string]string{".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".png": "image/png", ".ico": "image/png"}
 	for path, file := range staticFiles {
 		want, err := files.ReadFile(file[0])
 		if err != nil {
@@ -189,5 +189,24 @@ func TestProjectsListsAnUnavailableHomeWithItsReason(t *testing.T) {
 	}
 	if w.reads.Load() != 1 {
 		t.Fatalf("todo is read for the available project only, read %d", w.reads.Load())
+	}
+}
+
+// The page is plain by rule: no dot separators or bullet glyphs in its text,
+// no illustration or image other than the favicons, and every status is a
+// word, never a coloured circle. The one circle is the theme switch's knob.
+// A file that brings any of them back fails here.
+func TestPageCarriesNoDotsOrDrawings(t *testing.T) {
+	allowed := map[string]int{"ui.css border-radius: 50%": 1}
+	for _, file := range []string{"index.html", "ui.css", "ui.js", "ui-home.js", "ui-records.js", "ui-detail.js", "ui-kinds.js", "ui-history.js"} {
+		b, err := files.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, banned := range []string{"·", "•", "<img", "<template", "border-radius: 50%", ".svg"} {
+			if n := strings.Count(string(b), banned); n > allowed[file+" "+banned] {
+				t.Errorf("%s carries %q %d times", file, banned, n)
+			}
+		}
 	}
 }
