@@ -74,6 +74,15 @@ export function el(tag, className = "", ...children) {
   }
   return node;
 }
+// tablePanel keeps a table's header row OUTSIDE its scroller: the header stays inside the panel's rounded
+// frame and only the rows scroll beneath it. Both tables share one colgroup and one reserved scrollbar
+// gutter, so their columns line up.
+export function tablePanel(className, headers, widths, bodies, empty) {
+  const cols = () => el("colgroup", "", widths.map((w) => { const c = el("col"); if (w) c.style.width = w; return c; }));
+  const head = el("table", "table " + className, cols(), el("thead", "", el("tr", "", headers.map((h) => el("th", "", h)))));
+  return el("div", "table-panel", el("div", "table-head", head),
+    el("div", "table-scroll", el("table", "table " + className, cols(), bodies), empty));
+}
 export const mono = (text, className = "") => el("span", "mono " + className, text);
 export function link(id, text = id, className = "link") {
   const a = el("a", className, text);

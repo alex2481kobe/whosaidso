@@ -2,7 +2,7 @@
 // source, title first, each status the record's own, labelled. A row is one
 // line; a cell too long for it ends in an ellipsis and holds its whole text
 // as a tooltip. A row opens the record's detail (ui-detail.js).
-import { el, view, status, kindOf, actorName, sourceTitle, fullTitle } from "./ui.js";
+import { el, view, status, kindOf, actorName, sourceTitle, fullTitle, tablePanel } from "./ui.js";
 
 const kinds = [["all", "All"], ["task", "Tasks"], ["claim", "Claims"], ["decision", "Decisions"], ["instrument", "Instruments"], ["source", "Sources"]];
 const yesNo = (s) => ({ true: "Yes", false: "No" }[s] || "UNKNOWN");
@@ -18,9 +18,7 @@ function rowsOf(show) {
 export async function renderRecords(kind) {
   const rows = rowsOf(await view("show"));
   const shown = kind === "all" ? rows : rows.filter((r) => r.kind === kind);
-  const table = el("table", "table",
-    el("thead", "", el("tr", "", ["Title", "Kind", "Status", "Author", "Self-approved"].map((h) => el("th", "", h)))),
-    el("tbody", "", shown.map((r) => {
+  const body = el("tbody", "", shown.map((r) => {
       const [label, tone] = status(r.record);
       const tr = el("tr", "", cell("title-cell", r.title), cell("", kindOf(r.record)),
         cell("tone-text " + tone, label), cell("", actorName(r.record.author?.actor)), cell("", yesNo(r.record.self_admitted)));
@@ -29,7 +27,7 @@ export async function renderRecords(kind) {
       tr.addEventListener("click", open);
       tr.addEventListener("keydown", (e) => { if (e.key === "Enter") open(); });
       return tr;
-    })));
+    }));
   return el("div", "screen fill",
     el("nav", "chipstrip", kinds.map(([key, name]) => {
       const a = el("a", "chip", name);
@@ -37,5 +35,6 @@ export async function renderRecords(kind) {
       a.setAttribute("aria-selected", String(key === kind));
       return a;
     })),
-    el("div", "table-panel", table, shown.length ? null : el("p", "empty", "empty...")));
+    tablePanel("", ["Title", "Kind", "Status", "Author", "Self-approved"], ["", "120px", "200px", "130px", "130px"],
+      body, shown.length ? null : el("p", "empty", "empty...")));
 }
