@@ -1,6 +1,24 @@
-# WhoSaidSo
+<p align="center">
+  <img src="assets/whosaidso-mark.png" alt="WhoSaidSo" width="140" height="140" />
+</p>
 
-<img src="internal/ui/favicon-180.png" alt="WhoSaidSo owl" height="120">
+<h1 align="center">WhoSaidSo</h1>
+
+<p align="center">
+  <strong>A project record you can check, not just believe.</strong><br />
+  Work is written down as it happens, and every answer points back to who said so.
+</p>
+
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#the-60-second-loop">The 60-second loop</a> ·
+  <a href="#learn-more">Learn more</a>
+</p>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-dark.png" />
+  <img src="assets/ui-light.png" alt="The WhoSaidSo viewer's Home screen, with sample data" width="912" />
+</picture>
 
 WhoSaidSo keeps a project accountable. Work is recorded as it happens in an
 append-only ledger inside the repository, and every answer, from what is owed
