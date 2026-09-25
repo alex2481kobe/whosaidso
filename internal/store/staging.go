@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // MakeRunStaging creates the fresh, private directory one invocation writes

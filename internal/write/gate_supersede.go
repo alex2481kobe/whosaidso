@@ -11,8 +11,8 @@ package write
 import (
 	"fmt"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
 )
 
 // gateOwnerActOperation: an authority, when present, names who ruled. Whether a

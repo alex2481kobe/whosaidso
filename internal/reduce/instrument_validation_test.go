@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 func unknownInstrument() model.InstrumentSpec {

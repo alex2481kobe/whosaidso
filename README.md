@@ -26,13 +26,17 @@ anything that could not be compared is UNKNOWN, never a guessed default.
 
 ## Install
 
-You need Go 1.22 or later. From a checkout of this repository:
+You need Go 1.22 or later:
 
 ```sh
-go build -o whosaidso ./cmd/whosaidso
+go install github.com/alex2481kobe/whosaidso/cmd/whosaidso@latest
 ```
 
-Put the binary on your `PATH`. There are no other dependencies.
+That puts `whosaidso` in Go's bin folder (`$(go env GOPATH)/bin`); make sure it is on your `PATH`. From a
+checkout, `go build -o whosaidso ./cmd/whosaidso` does the same. There are no other dependencies.
+
+Then, in any project, `whosaidso help` is the whole manual and `whosaidso ui` opens a local, read-only viewer
+of the record.
 
 ## The 60-second loop
 
@@ -95,7 +99,7 @@ interface or a callback.
 
 <!-- archtree:begin -->
 ```text
-whosaidso
+github.com/alex2481kobe/whosaidso
 |-- cmd/
 |   `-- whosaidso      whole command surface: the write side that captures and admits, and the read side that answers from what was admitted
 |          25 files, tested -- uses evidence, model, query, reduce, store, ui, write

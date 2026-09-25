@@ -8,9 +8,9 @@ package query
 // READY tasks and says how many it cut. Rendering lives in view_render.go.
 
 import (
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
-	"whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 type TodoAnswer struct {

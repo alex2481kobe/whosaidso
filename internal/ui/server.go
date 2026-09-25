@@ -16,8 +16,8 @@ import (
 	"net/http"
 	"time"
 
-	"whosaidso/internal/query"
-	"whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/query"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 //go:embed index.html ui.css ui.js ui-home.js ui-records.js ui-detail.js ui-kinds.js ui-history.js logo.svg favicon.svg

@@ -8,7 +8,7 @@ package reduce
 // lives in authorship.go; provenance authors of records do not live here.
 
 import (
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // CodeAttributionMismatch is an authored act whose named actor is not the

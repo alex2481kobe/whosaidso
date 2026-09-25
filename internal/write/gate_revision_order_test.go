@@ -11,7 +11,7 @@ import (
 	"context"
 	"testing"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // admitBoth runs check admission and admission on the same packets and fails

@@ -7,7 +7,7 @@ package reduce
 // translation is admission's clerical rewrite and stays in write.
 
 import (
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // CodeMissingHold is a blocked-mid-task or out-of-scope receipt whose bundle

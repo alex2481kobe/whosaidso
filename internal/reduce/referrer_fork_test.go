@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"testing"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // citing asserts a new claim whose scope cites target, so the event lands in

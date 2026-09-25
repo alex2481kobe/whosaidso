@@ -6,7 +6,7 @@ package reduce
 import (
 	"sort"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // ---- Snapshot ------------------------------------------------------------

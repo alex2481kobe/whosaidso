@@ -11,11 +11,11 @@ import (
 	"reflect"
 	"testing"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/query"
-	"whosaidso/internal/reduce"
-	"whosaidso/internal/store"
-	"whosaidso/internal/write"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/query"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/write"
 )
 
 // These tests use the public capture/admission/read boundaries, including a

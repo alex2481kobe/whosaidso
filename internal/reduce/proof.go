@@ -4,7 +4,7 @@ package reduce
 // Transition validation and current-support loss traversal do not.
 
 import (
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // ClaimStatus records achievement at one assertion revision, not current support.

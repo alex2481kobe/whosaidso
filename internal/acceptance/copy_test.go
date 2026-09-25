@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
 )
 
 func TestCopySnapshotNestedMapsAndPointersRemainDetached(t *testing.T) {

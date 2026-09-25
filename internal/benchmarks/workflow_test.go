@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 var resultBody = []byte(`{"results":{"unit":"ms","population":"request corpus","denominator":"requests","values":[10,20]},"population":{"population":"request corpus","denominator":"requests","values":["request-a","request-b"]},"diagnostic":"` + strings.Repeat("x", 4096) + `"}`)

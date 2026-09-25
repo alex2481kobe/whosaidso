@@ -3,7 +3,7 @@ package reduce
 import (
 	"sort"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // TaskStatus is one of the contract's four TASK statuses. The spelling matches

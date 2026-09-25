@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"whosaidso/internal/evidence"
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/evidence"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 const (
@@ -165,7 +165,7 @@ func TestPackagePointerSurvivesANewPackage(t *testing.T) {
 // verdict at all is.
 func TestThisModuleFileLimitIsDecidable(t *testing.T) {
 	out := archtreeJSON(t, "../..")
-	c := fileLimit(t, out, "/readings/file_lines", "production Go files in module whosaidso", 300)
+	c := fileLimit(t, out, "/readings/file_lines", "production Go files in module github.com/alex2481kobe/whosaidso", 300)
 	ev := evaluate(t, c, out)
 	if ev.Verdict == evidence.Unknown {
 		t.Fatalf("module-wide file limit is UNKNOWN: %s", ev.Describe())

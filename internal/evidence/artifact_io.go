@@ -17,7 +17,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // readContent finds a copy of the pinned bytes and verifies it. Locators are

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // lockName is the admission lock's file, inside the ledger directory so one

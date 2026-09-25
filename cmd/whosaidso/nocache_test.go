@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 func TestNoCacheReadsTheLedgerPastATamperedImage(t *testing.T) {

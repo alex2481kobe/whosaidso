@@ -7,7 +7,7 @@ package write
 // evaluation stay in gate_family.go.
 
 import (
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // reviewedInvocations extracts, for a packet set that is not accepted, every

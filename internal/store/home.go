@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // HomeEnv overrides the whole per-machine home: registry, intake, staging and

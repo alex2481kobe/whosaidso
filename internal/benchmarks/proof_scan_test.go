@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/store"
-	"whosaidso/internal/write"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/write"
 )
 
 // Each proof re-admits a different three-run family's proof already in the

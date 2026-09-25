@@ -6,7 +6,7 @@ package reduce
 import (
 	"fmt"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // Fault codes. The code and the location are the invariant. The diagnostic

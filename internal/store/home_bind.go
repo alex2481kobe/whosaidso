@@ -11,7 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // Continuity says what relocation could establish about the new home.

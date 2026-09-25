@@ -19,7 +19,7 @@ import (
 	"sort"
 	"strings"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // snapshotFormat names the encoding. Change it with any change to codec.go or

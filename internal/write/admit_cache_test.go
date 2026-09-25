@@ -12,7 +12,7 @@ import (
 	"reflect"
 	"testing"
 
-	"whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 func requireCacheParity(t *testing.T, p store.Project, restored int) {

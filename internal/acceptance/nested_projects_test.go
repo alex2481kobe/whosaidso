@@ -26,7 +26,7 @@ import (
 	"strings"
 	"testing"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // nestMachine is one machine: its own WhoSaidSo home and user home. ids is

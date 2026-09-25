@@ -10,10 +10,10 @@ import (
 	"fmt"
 	"time"
 
-	"whosaidso/internal/evidence"
-	"whosaidso/internal/model"
-	"whosaidso/internal/query"
-	"whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/evidence"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/query"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 // A bare audit flag means true, while explicit values retain all three states.

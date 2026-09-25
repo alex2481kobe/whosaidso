@@ -16,7 +16,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // CapturedBlob describes bytes copied into a packet, never their original path.

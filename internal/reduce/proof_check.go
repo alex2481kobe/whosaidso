@@ -6,7 +6,7 @@ package reduce
 // proof_family.go, which route each refusal through refuseProof; nothing here
 // decides whether a proof is admissible.
 
-import "whosaidso/internal/model"
+import "github.com/alex2481kobe/whosaidso/internal/model"
 
 // ApplyCollectingProofRefusals folds b onto s like Apply, except that a
 // proof.admit refusal is recorded and checking continues: the remaining

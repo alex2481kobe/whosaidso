@@ -6,8 +6,8 @@ package query
 // the invoking checkout through internal/evidence; this package never runs git.
 
 import (
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
 )
 
 // StaleClaim answers one observed current claim. Stale is TRUE when scoped

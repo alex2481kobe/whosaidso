@@ -8,8 +8,8 @@ package write
 import (
 	"testing"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
 )
 
 // newAcceptWorld is newCloseWorld with an optional accepter on the task. The

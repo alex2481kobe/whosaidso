@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // evClosedSet is the closed event set as the plan's event table names it,

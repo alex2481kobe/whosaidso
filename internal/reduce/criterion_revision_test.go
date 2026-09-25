@@ -8,7 +8,7 @@ package reduce
 import (
 	"testing"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // revisedLedger admits a failing run under revision 1, then revision 2 of the

@@ -14,9 +14,9 @@ import (
 	"strings"
 	"testing"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/query"
-	"whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/query"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 // bindTestHome gives the test its own WhoSaidSo home (WHOSAIDSO_HOME: registry,

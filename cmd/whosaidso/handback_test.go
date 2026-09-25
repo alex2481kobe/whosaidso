@@ -7,13 +7,13 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
-	"whosaidso/internal/model"
-	"whosaidso/internal/store"
 )
 
 func cliHandbackControl(t *testing.T) (string, store.Project, []string) {

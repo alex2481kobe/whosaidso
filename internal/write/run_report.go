@@ -15,8 +15,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"whosaidso/internal/model"
-	"whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 // ProducerReport is the version 1 JSON artifact written to WHOSAIDSO_RUN_REPORT.

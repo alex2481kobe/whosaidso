@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sort"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // witnessed checks a success closure against the acceptance criteria of the

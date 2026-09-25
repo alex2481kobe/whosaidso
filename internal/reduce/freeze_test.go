@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // freezeLedger fixes the criterion in its own bundle and returns the time that

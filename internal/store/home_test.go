@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // homeWorld is one isolated WhoSaidSo home and a project root declaring id.

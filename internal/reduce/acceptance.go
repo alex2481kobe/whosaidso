@@ -11,7 +11,7 @@ package reduce
 import (
 	"fmt"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // CodeAccepterMismatch is a task.close whose packet author is not the actor

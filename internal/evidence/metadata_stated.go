@@ -6,7 +6,7 @@ package evidence
 // against the same declarations at evaluation. Selecting bytes lives in
 // selectors.go; comparing a criterion with a run lives in observations.go.
 
-import "whosaidso/internal/model"
+import "github.com/alex2481kobe/whosaidso/internal/model"
 
 // StatedMetadata is each of "unit", "population" and "denominator" that the
 // readings establish uniquely: at least one declaration is present, every

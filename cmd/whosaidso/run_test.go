@@ -8,6 +8,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
+	"github.com/alex2481kobe/whosaidso/internal/store"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,9 +18,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"whosaidso/internal/model"
-	"whosaidso/internal/reduce"
-	"whosaidso/internal/store"
 )
 
 // ---- run and proof through fresh processes ----------------------------

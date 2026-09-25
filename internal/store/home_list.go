@@ -13,7 +13,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 // Registration is one registry entry: the project id its file name encodes,
