@@ -1,7 +1,7 @@
 // The detail screens of claims, decisions, instruments and sources, in the
 // frame ui-detail.js draws. A claim adds show --stale's code-changed chip,
 // its criterion from its history, its runs, its proofs and every change.
-import { el, link, facts, item, section, disclose, copyButton, mono, icon, actorName, status, stamp, when, titleCase } from "./ui.js";
+import { el, link, facts, item, section, disclose, copyButton, mono, icon, actorName, status, stamp, when, titleCase, fullTitle } from "./ui.js";
 import { frame, panel, span, changes, short } from "./ui-detail.js";
 
 const ops = { eq: "=", ne: "≠", lt: "<", le: "≤", gt: ">", ge: "≥" };
@@ -50,7 +50,7 @@ export function renderClaim({ id, root, answer, history, at, names }, stale) {
   const proofRows = proofs.map((p) => item(`Proof ${p.admission.verdict || "UNKNOWN"} the claim`, when(at(p.origin)),
     facts([["Judged by", actorName(p.admission.judgment?.actor)], ["Reason", p.admission.judgment?.reason],
       ["Evidence", el("ul", "plain", p.admission.evidence.map((ev) => el("li", "", `${titleCase(ev.disposition)}: ${ev.reason || "no reason recorded"}`)))]])));
-  return frame({ id, title: root.label, tone, statusLabel: label, chip: staleChip(stale.stale?.claims?.find((c) => c.claim.record_id === id)),
+  return frame({ id, title: fullTitle(root), tone, statusLabel: label, chip: staleChip(stale.stale?.claims?.find((c) => c.claim.record_id === id)),
     details: [["Standing", claim.standing], ["Criterion", criterion(history)], ["Author", who(root.author?.actor)], ["Approved by", who(root.admitted_by)]] },
   section("Measurement runs", runs), section("Proofs", proofRows), changes(answer, at, names, proofs));
 }
@@ -58,7 +58,7 @@ export function renderClaim({ id, root, answer, history, at, names }, stale) {
 export function renderDecision({ id, root, answer, at, names, dates }) {
   const d = root.decision;
   const [label, tone] = status(root);
-  return frame({ id, title: root.label, tone, statusLabel: label, details: [["Question", d.question], ["Authorizes", d.authorizes],
+  return frame({ id, title: fullTitle(root), tone, statusLabel: label, details: [["Question", d.question], ["Authorizes", d.authorizes],
     ["Waiting on", who(d.waiting_actor)], ["Author", who(root.author?.actor)], ["Approved by", who(root.admitted_by)], ["Created", stamp(dates[0])], ["Updated", stamp(dates[1])]] },
   section("Options", d.options.map((o) => item(o, "", el("p", "", o)))),
   section("Rulings", d.rulings.map((r) => item(titleCase(r.disposition.disposition), when(at(r.origin)),
@@ -71,7 +71,7 @@ export function renderInstrument({ id, root, answer, at, names, dates }) {
   const [label, tone] = status(root);
   const v = i.validation;
   const joined = (xs) => (xs.length ? xs.join("; ") : "none");
-  return frame({ id, title: root.label, tone, statusLabel: label, details: [["Validation", v.state === "KNOWN" ? `Version ${v.version}` : "UNKNOWN: " + v.reason],
+  return frame({ id, title: fullTitle(root), tone, statusLabel: label, details: [["Validation", v.state === "KNOWN" ? `Version ${v.version}` : "UNKNOWN: " + v.reason],
     ["Valid range", i.valid_range], ["Author", who(root.author?.actor)], ["Approved by", who(root.admitted_by)], ["Created", stamp(dates[0])]] },
   panel("What it measures", facts([["Answers", i.question_answered], ["Blind to", i.blind_to], ["Does not answer", i.not_answered],
     ["Config surface", joined(i.config_surface)], ["Dangerous defaults", joined(i.dangerous_defaults)],

@@ -1,28 +1,32 @@
 // Home: one card per section of the todo view, in its order, each counted by
-// todo's own totals. A row is the record's title first, then who and when;
-// a blocked row's reasons open under a one-line summary. An empty card says
+// todo's own totals. A row is one line: the record's title first, then who
+// and when; a blocked row's reasons open under a one-line summary at its end. An empty card says
 // so; nothing is hidden.
-import { el, link, icon, disclose, facts, actorName, since, times, titles } from "./ui.js";
+import { el, link, icon, disclose, facts, actorName, since, times, titles, fullTitle } from "./ui.js";
 
 // card is one section: icon, title, count, then its rows, scrolling inside.
 function card(glyph, tone, title, count, rows) {
   return el("section", "card",
     el("header", "card-head", el("span", "card-icon tone-text " + tone, icon(glyph)), el("h2", "", title), el("span", "count", String(count))),
-    el("div", "card-body", rows.length ? el("ul", "rows", rows) : el("p", "empty", "Empty")));
+    el("div", "card-body", rows.length ? el("ul", "rows", rows) : el("p", "empty", "empty...")));
 }
 
 // row opens its record; meta is the muted who-and-when line; more, when
 // given, is a [summary, detail] pair that opens under the row.
 function row(id, title, meta, more) {
-  const main = el(id ? "a" : "div", "row-main", el("span", "row-title", title), el("span", "row-meta", meta.filter(Boolean).map((m) => el("span", "", m))));
+  const words = meta.filter(Boolean);
+  const main = el(id ? "a" : "div", "row-main", el("span", "row-title", title), el("span", "row-meta", words.map((m) => el("span", "", m))));
+  main.title = [title, ...words].join("\n");
   if (id) main.href = "#/record/" + encodeURIComponent(id);
-  const li = el("li", "row", main);
+  const line = el("div", "row-line", main);
+  const li = el("li", "row", line);
   if (more) {
-    const button = el("button", "why", more[0], icon("chevron"));
+    const button = el("button", "why", el("span", "", more[0]), icon("chevron"));
     button.type = "button";
     const detail = el("div", "why-detail", more[1]);
     disclose(button, detail, li);
-    li.append(button, detail);
+    line.append(button);
+    li.append(detail);
   }
   return li;
 }
@@ -64,18 +68,18 @@ export function packetTitle(packet) {
 export async function renderHome(todo) {
   const [at, names] = await Promise.all([times(), titles()]);
   const t = todo.totals;
-  const inFlight = todo.in_flight.map((x) => row(x.ref.record_id, x.label, [holder(x), liveSince(x, at)]));
+  const inFlight = todo.in_flight.map((x) => row(x.ref.record_id, fullTitle(x), [holder(x), liveSince(x, at)]));
   const awaiting = todo.awaiting_acceptance.map((x) => {
     const done = (x.task.attempts || []).filter((a) => a.terminal);
     const back = done[done.length - 1];
-    return row(x.ref.record_id, x.label, [back && actorName(back.actor), back && since(at(back.terminal.origin)), "accepter " + actorName(x.accepter)]);
+    return row(x.ref.record_id, fullTitle(x), [back && actorName(back.actor), back && since(at(back.terminal.origin)), "accepter " + actorName(x.accepter)]);
   });
-  const blocked = todo.blocked.map((x) => row(x.ref.record_id, x.label,
+  const blocked = todo.blocked.map((x) => row(x.ref.record_id, fullTitle(x),
     [(x.task.waiting_actors || []).map(actorName).join(", ")], reasons(x, names)));
-  const ready = todo.ready.map((x) => row(x.ref.record_id, x.label, ["next " + actorName(x.task.expected_next_actor)]));
+  const ready = todo.ready.map((x) => row(x.ref.record_id, fullTitle(x), ["next " + actorName(x.task.expected_next_actor)]));
   const omitted = todo.omitted?.ready?.omitted;
   if (omitted) ready.push(el("li", "row more", `${omitted} more not listed`));
-  const decisions = todo.open_decisions.map((x) => row(x.ref.record_id, x.label, ["waiting on " + actorName(x.decision?.waiting_actor)]));
+  const decisions = todo.open_decisions.map((x) => row(x.ref.record_id, fullTitle(x), ["waiting on " + actorName(x.decision?.waiting_actor)]));
   const proposals = todo.packets_not_accepted.filter((p) => p.disposition !== "rejected").map((p) =>
     row("", packetTitle(p), [actorName(p.packet?.author), p.disposition === "pending" ? "awaiting review" : null],
       p.disposition === "pending" ? null : [p.disposition === "correction-requested" ? "Correction requested" : p.disposition,

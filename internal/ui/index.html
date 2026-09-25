@@ -1,6 +1,7 @@
 <!doctype html>
-<!-- The viewer's one page: the header, and the main area ui.js renders each
-     screen into. Screens live in the ui-*.js modules, styles in ui.css. -->
+<!-- The viewer's one page: the header (the owl and the name with the project
+     switch beside them; the tabs and the theme switch on the right), and the
+     main area ui.js renders each screen into. Screens live in the ui-*.js modules, styles in ui.css. -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -13,19 +14,22 @@
 </head>
 <body>
   <header class="topbar">
-    <nav class="tabstrip" role="tablist" aria-label="Screens">
-      <a data-nav="home" role="tab" href="#/">Home</a>
-      <a data-nav="records" role="tab" href="#/records">Records</a>
-      <a data-nav="history" role="tab" href="#/history">History</a>
-    </nav>
-    <div class="project">
-      <button id="project-button" class="project-button" type="button" aria-haspopup="listbox" aria-expanded="false">
-        <span id="project-name">Projects</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-      </button>
-      <div id="project-menu" class="menu" role="listbox" hidden></div>
+    <div class="header-start">
+      <a class="brand" href="#/"><img src="/favicon-180.png" alt="" width="22" height="44"><span>WhoSaidSo</span></a>
+      <div class="project">
+        <button id="project-button" class="project-button" type="button" aria-haspopup="listbox" aria-expanded="false">
+          <span id="project-name">Projects</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div id="project-menu" class="menu" role="listbox" hidden></div>
+      </div>
     </div>
     <div class="header-end">
       <span id="offline" class="offline" hidden>Viewer stopped. Run whosaidso ui again.</span>
+      <nav class="tabstrip" role="tablist" aria-label="Screens">
+        <a data-nav="home" role="tab" href="#/">Home</a>
+        <a data-nav="records" role="tab" href="#/records">Records</a>
+        <a data-nav="history" role="tab" href="#/history">History</a>
+      </nav>
       <div class="theme-control">
         <span class="theme-label" aria-hidden="true">☀</span>
         <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false"><span></span></button>

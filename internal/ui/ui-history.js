@@ -1,9 +1,10 @@
 // History: the history view's events newest first, one table row each: when,
-// what happened in plain words, the record it names and who proposed it. A
-// row opens to who proposed and who approved it, the review's reason and the
-// record id. A bundle's review sits inside the rows it admitted; a review
+// what happened in plain words, the record it names and who proposed it, one
+// line each. An opened row shows its title and proposer whole, then who
+// proposed and who approved it, the review's reason and the record, with the
+// values under "What happened". A bundle's review sits inside the rows it admitted; a review
 // with nothing admitted (a rejection, a correction request) is its own row.
-import { el, link, view, times, titles, when, actorName, copyButton, facts, disclose, icon } from "./ui.js";
+import { el, view, times, titles, when, actorName, copyButton, openButton, facts, disclose, icon } from "./ui.js";
 import { packetTitle } from "./ui-home.js";
 
 const happened = {
@@ -45,9 +46,10 @@ export async function renderHistory() {
     const title = target ? names.get(target) || target : proposals.get(packet) || "";
     const detail = el("td", "", facts([["Proposed by", actorName(proposer)], [alone ? "Reviewed by" : "Approved by", actorName(alone ? data.actor : row.admitter)],
       ["Reason", review?.reason || ""],
-      ["Record", target ? el("span", "id-line", link(target, "Open record"), el("span", "mono", target), copyButton("Copy id", target)) : ""]], "facts wide"));
+      ["Record", target ? el("span", "id-line", openButton(target), copyButton("Copy id", target), el("span", "mono muted", target)) : ""]], "facts wide"));
     detail.colSpan = 4;
-    const tr = el("tr", "event", el("td", "time", el("span", "chev", icon("chevron")), when(at(row.origin))), el("td", "", what), el("td", "title-cell", title), el("td", "", actorName(proposer)));
+    const cell = (className, text) => { const td = el("td", className, text); td.title = text; return td; };
+    const tr = el("tr", "event", el("td", "time", el("span", "chev", icon("chevron")), when(at(row.origin))), cell("", what), cell("title-cell", title), cell("", actorName(proposer)));
     const more = el("tr", "event-detail", detail);
     const body = el("tbody", "", tr, more);
     disclose(tr, more, body);
@@ -57,5 +59,5 @@ export async function renderHistory() {
     el("thead", "", el("tr", "", ["Time", "What happened", "Record", "By"].map((h) => el("th", "", h)))), rows);
   return el("div", "screen fill",
     answer.result === "UNKNOWN" ? el("p", "notice", "UNKNOWN: " + answer.reason) : null,
-    el("div", "table-panel", table, rows.length ? null : el("p", "empty", "Empty")));
+    el("div", "table-panel", table, rows.length ? null : el("p", "empty", "empty...")));
 }
