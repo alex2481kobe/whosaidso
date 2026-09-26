@@ -1,16 +1,23 @@
-// Records: every current record and admitted source, with the stat cards,
-// search, kind tabs, the views and filters sidebar, the sort menu and the
-// list or grid format. Filtering and sorting happen here in the browser over
-// the show view's rows; each status is the record's own, labelled, in
-// coloured text. A list row is one line; a cell too long for it ends in an
-// ellipsis and holds its whole text as a tooltip. A row opens its record.
+// Records: every current record and admitted source, with the search, the
+// kind tabs, the views and status sidebar (a Filters disclosure above the
+// list on narrow windows), the sort menu and the list or grid format.
+// Filtering and sorting happen here in the browser over the show view's rows;
+// each status is the record's own, labelled, in coloured text. A wide list row
+// is one line; a cell too long for it ends in an ellipsis and holds its whole
+// text as a tooltip. Narrow windows stack each row so the title keeps its
+// width. A row opens its record; its id is copied on the record's page.
 import { el, view, status, actorName, sourceTitle, fullTitle, tablePanel, when, icon } from "./ui.js";
 import { activity, within, count } from "./ui-derive.js";
-import { hero, statCard, head, chip, dropdown, rowMenu } from "./ui-parts.js";
+import { hero, head, chip, dropdown } from "./ui-parts.js";
 import { kinds } from "./ui-icons.js";
 
-// state survives re-renders from the live poll, so a filter stays put.
-const state = { view: "all", kinds: new Set(), statuses: new Set(), search: "", sort: "recent", layout: "list" };
+// state survives re-renders from the live poll, so a filter stays put, and so
+// does the narrow-window Filters disclosure. kind is one kind or "" for all.
+const state = { view: "all", kind: "", statuses: new Set(), search: "", sort: "recent", layout: "list", filtersOpen: false };
+// clearAll clears every filter: the view, the kind, the statuses and the search.
+// Sort and layout are how the list is shown, not what it holds, so they stay.
+const clearAll = () => { Object.assign(state, { view: "all", kind: "", search: "" }); state.statuses.clear(); };
+const filtered = () => state.view !== "all" || state.kind !== "" || state.statuses.size > 0 || state.search.trim() !== "";
 // OTHER stands for every status past the four most common, when there are more than five.
 const OTHER = "\u0000other";
 const yesNo = (s) => ({ true: "Yes", false: "No" }[s] || "UNKNOWN");
@@ -40,25 +47,19 @@ const kindCell = (kind) => el("span", "kind tone-text " + kinds[kind].tone, icon
 const cell = (className, content, text) => { const td = el("td", className, content); td.title = text ?? content; return td; };
 const open = (id) => { location.hash = "#/record/" + encodeURIComponent(id); };
 
-// actions is a row's "more" menu: open the record or copy its id.
-function actions(id) {
-  const td = el("td", "row-actions", rowMenu("Record actions", [["Open record", () => open(id)],
-    ["Copy id", () => navigator.clipboard.writeText(id).catch(() => {})]]));
-  td.addEventListener("click", (e) => e.stopPropagation());
-  return td;
-}
-
 function table(rows) {
   const body = el("tbody", "", rows.map((r) => {
     const tr = el("tr", "", cell("title-cell", r.title), cell("", kindCell(r.kind), kinds[r.kind].one), cell("tone-text " + r.tone, r.status),
-      cell("", r.author), cell("", r.self), cell("muted", when(r.updated)), actions(r.id));
+      cell("author", r.author), cell("self", r.self), cell("muted updated", when(r.updated)));
     tr.tabIndex = 0;
     tr.addEventListener("click", () => open(r.id));
     tr.addEventListener("keydown", (e) => { if (e.key === "Enter") open(r.id); });
     return tr;
   }));
-  return tablePanel("records", ["Title", "Kind", "Status", "Author", "Self-approved", "Updated", ""], ["", "130px", "190px", "140px", "120px", "130px", "52px"],
+  const panel = tablePanel("records", ["Title", "Kind", "Status", "Author", "Self-approved", "Updated"], ["", "130px", "190px", "140px", "120px", "130px"],
     body, rows.length ? null : el("p", "empty", "empty..."));
+  panel.classList.add("records-table");
+  return panel;
 }
 
 function grid(rows) {
@@ -92,16 +93,15 @@ function side(rows, recent, paint, statuses) {
     b.addEventListener("click", onPick);
     return b;
   };
-  const views = [["all", "All records", "file", rows.length], ["review", "Needs review", "review", count(rows, (r) => r.review)], ["recent", "Recently added", "progress", recent]];
+  // "Needs attention" counts the show view's attention items, which are not only reviews.
+  const views = [["all", "All records", "file", rows.length], ["review", "Needs attention", "review", count(rows, (r) => r.review)], ["recent", "Recently added", "progress", recent]];
   const clear = el("button", "button wide", icon("refresh"), el("span", "", "Clear filters"));
   clear.type = "button";
-  clear.addEventListener("click", () => { Object.assign(state, { view: "all", search: "" }); state.kinds.clear(); state.statuses.clear(); paint(true); });
+  clear.addEventListener("click", () => { clearAll(); paint(true); });
   return el("aside", "panel side",
     el("h3", "side-head", icon("bars"), "Views"),
     views.map(([key, text, glyph, n]) => option(state.view === key, icon(glyph), text, n, () => { state.view = key; paint(); })),
     el("h3", "side-head ruled", icon("filter"), "Filters"),
-    el("h4", "", "Kind"),
-    Object.entries(kinds).map(([key, k]) => option(state.kinds.has(key), el("span", "box"), k.many, count(rows, (r) => r.kind === key), () => toggle(state.kinds, key), "checkbox")),
     el("h4", "", "Status"),
     statuses.map(([label, [tone, n]]) => option(state.statuses.has(label), el("span", "dot tone-fill " + tone), label === OTHER ? "Other" : label, n, () => toggle(state.statuses, label), "checkbox")),
     clear);
@@ -111,28 +111,23 @@ export async function renderRecords() {
   const [show, act] = await Promise.all([view("show"), activity()]);
   const rows = rowsOf(show, act);
   const recent = count(rows, (r) => within(r.created, 7));
-  const byKind = (k) => rows.filter((r) => r.kind === k);
-  const tasks = byKind("task"), claims = byKind("claim"), instruments = byKind("instrument");
-  const closed = count(tasks, (r) => r.record.task?.status === "CLOSED");
-  const withdrawn = count(instruments, (r) => r.status === "Withdrawn");
 
   const search = el("input", "search-input");
   Object.assign(search, { type: "search", id: "records-search", placeholder: "Search records...", value: state.search, spellcheck: false });
   search.setAttribute("aria-label", "Search records");
-  // New record has no write path yet: it says so in a small note under it
-  // that closes on the next click anywhere.
-  const note = el("span", "soon-note", "Adding records from the UI is coming later.");
-  note.hidden = true;
-  const add = el("button", "primary", icon("plus"), el("span", "", "New record"), el("span", "primary-split", icon("down")));
-  add.type = "button";
-  add.addEventListener("click", (e) => {
-    e.stopPropagation();
-    note.hidden = !note.hidden;
-    if (!note.hidden) document.addEventListener("click", () => { note.hidden = true; }, { once: true });
-  });
-  const tabs = el("nav", "chiprow");
+  const tabs = el("nav", "chiprow kind-tabs");
+  tabs.setAttribute("aria-label", "Kind");
   const sidebar = el("div", "side-holder");
+  sidebar.id = "records-filters";
   const listing = el("section", "panel listing");
+  const body = el("div", "records-body", sidebar, listing);
+  // On narrow windows the sidebar folds into this disclosure above the list,
+  // closed until opened; wider windows hide the button and show the sidebar.
+  const filterCount = el("span", "filters-count");
+  const filters = el("button", "button filters-toggle", icon("filter"), el("span", "", "Filters"), filterCount, icon("down", "caret"));
+  filters.type = "button";
+  filters.setAttribute("aria-controls", sidebar.id);
+  filters.addEventListener("click", () => { state.filtersOpen = !state.filtersOpen; paint(); });
 
   // "Other" is every status the sidebar does not name
   const statuses = statusList(rows);
@@ -142,12 +137,18 @@ export async function renderRecords() {
     if (reset) search.value = state.search;
     const q = state.search.trim().toLowerCase();
     const shown = rows.filter((r) => (state.view !== "review" || r.review) && (state.view !== "recent" || within(r.created, 7))
-      && (!state.kinds.size || state.kinds.has(r.kind)) && statusOk(r)
+      && (!state.kind || state.kind === r.kind) && statusOk(r)
       && (!q || [r.title, r.id, r.author, r.status, kinds[r.kind].one].some((t) => t.toLowerCase().includes(q)))).sort(order[state.sort]);
-    const one = state.kinds.size === 1 ? [...state.kinds][0] : "";
-    tabs.replaceChildren(chip("All", !state.kinds.size, () => { state.kinds.clear(); paint(); }),
-      ...Object.entries(kinds).map(([key, k]) => chip(k.many, one === key, () => { state.kinds.clear(); state.kinds.add(key); paint(); })));
+    // "All" is pressed only while nothing is filtered, and picking it clears every filter.
+    tabs.replaceChildren(chip("All", !filtered(), () => { clearAll(); paint(true); }),
+      ...Object.entries(kinds).map(([key, k]) => chip(k.many, state.kind === key, () => { state.kind = key; paint(); })));
     sidebar.replaceChildren(side(rows, recent, paint, statuses));
+    // the count is the filters inside the disclosure: a view other than All records, and each status
+    const inside = (state.view !== "all" ? 1 : 0) + state.statuses.size;
+    filterCount.textContent = inside ? `(${inside})` : "";
+    filters.setAttribute("aria-label", inside ? `Filters, ${inside} active` : "Filters");
+    filters.setAttribute("aria-expanded", String(state.filtersOpen));
+    body.classList.toggle("filters-open", state.filtersOpen);
     const layout = (key, glyph, label) => {
       const b = el("button", "icon-button", icon(glyph));
       b.type = "button";
@@ -166,21 +167,7 @@ export async function renderRecords() {
   paint();
 
   return el("div", "screen records",
-    hero("records", "Records", null, ["Browse and manage all records in ", show.project, "."], "Tasks, claims, decisions, instruments, and sources, all in one place."),
-    el("div", "records-top",
-      el("div", "stats four",
-        statCard({ glyph: "list", tone: "blue", value: rows.length, label: "Total records", note: `Across ${new Set(rows.map((r) => r.kind)).size} kinds`, layout: "ruled" }),
-        statCard({ glyph: "check", tone: "green", value: closed, label: "Closed", note: tasks.length ? `${Math.round((closed / tasks.length) * 100)}% of tasks` : "No tasks yet", layout: "ruled" }),
-        statCard({ glyph: "claim", tone: "violet", value: claims.length, label: "Claims", note: claims.length ? `${count(claims, (r) => r.record.claim?.status === "PROVEN")} proven` : "None yet", layout: "ruled" }),
-        statCard({ glyph: "instrument", tone: "amber", value: instruments.length, label: "Instruments", note: !instruments.length ? "None yet" : withdrawn ? `${withdrawn} withdrawn` : "All active", layout: "ruled" })),
-      el("div", "records-tools",
-        el("div", "tool-line", el("label", "search", icon("search"), search, el("kbd", "", "⌘ K")), el("div", "new-record", add, note)),
-        el("div", "tool-line", tabs))),
-    el("div", "records-body", sidebar, listing));
+    hero("records", "Records", null, ["Browse all records in ", show.project, "."], "Tasks, claims, decisions, instruments, and sources, all in one place."),
+    el("div", "records-top", el("label", "search", icon("search"), search), tabs),
+    filters, body);
 }
-
-// ⌘K (or Ctrl+K) puts the cursor in the records search when it is on screen.
-document.addEventListener("keydown", (e) => {
-  const input = document.getElementById("records-search");
-  if (input && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); input.focus(); input.select(); }
-});
