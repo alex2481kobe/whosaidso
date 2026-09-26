@@ -1,12 +1,12 @@
 // Home: the greeting, six stat cards counted by the todo view's own totals,
-// then recent activity (or the list behind a picked stat card), next steps
-// derived from the same totals, and the project summary. Sparklines and
-// "this week" are counted from the history's events (ui-derive.js). A list
-// row is one line: the record's title first, then who and when; a blocked
-// row's reasons open under a one-line summary at its end.
+// then recent activity (or the list behind a picked stat card) beside the
+// project summary. "In 7 days" is counted from the history's events
+// (ui-derive.js). A list row is one line: the record's title first, then who
+// and when; a blocked row's reasons open under a one-line summary at its end.
+// Every note and message says only what the counts it reads say.
 import { el, link, icon, disclose, facts, actorName, since, fullTitle, view, when, status } from "./ui.js";
-import { activity, perDay, within, count, packetTitle } from "./ui-derive.js";
-import { hero, statCard, sparkline, head, more } from "./ui-parts.js";
+import { activity, within, count, packetTitle } from "./ui-derive.js";
+import { hero, statCard, head, more } from "./ui-parts.js";
 import { mark } from "./ui-icons.js";
 
 // focus is the stat card whose list replaces recent activity; "" shows activity.
@@ -94,67 +94,57 @@ export function activityRow(r) {
   return a;
 }
 
-// steps are up to three next steps the totals call for, most urgent first;
-// each button opens the matching list.
-function steps(t, proposals, pick) {
-  const all = [
-    [proposals, "Triage new proposals", "Review and decide on pending proposals.", "View proposals", "proposal", "blue"],
-    [t.blocked, "Look at blocked items", "Make sure nothing is stuck.", "View blocked", "blocked", "red"],
-    [t.awaiting_acceptance, "Review handed-back work", "Accept or hold what came back.", "View handed back", "back", "green"],
-    [t.open_decisions, "Settle open decisions", "Rule on what is waiting for an answer.", "View decisions", "decision", "purple"],
-    [t.ready, "Plan upcoming work", "Browse ready-to-start items.", "View ready to start", "ready", "amber"],
-  ].filter((s) => s[0] > 0).slice(0, 3);
-  if (!all.length) return [el("p", "step-none", "Nothing needs you right now. Enjoy the quiet.")];
-  return all.map(([, title, sub, label, key, tone]) => {
-    const b = el("button", "step-button tone-soft " + tone, label);
-    b.type = "button";
-    b.addEventListener("click", () => pick(key, true));
-    return el("div", "step", el("span", "tile small tone-tint amber", icon("ready")), el("div", "step-words", el("strong", "", title), el("span", "", sub)), b);
-  });
+// proposalNote splits the Proposals count into its two parts: packets no
+// review has judged, and packets a review sent back for correction.
+export function proposalNote(unreviewed, correction) {
+  if (!unreviewed && !correction) return "No proposals waiting.";
+  const parts = [];
+  if (unreviewed) parts.push(`${unreviewed} awaiting review`);
+  if (correction) parts.push(`${correction} correction requested`);
+  return parts.join(", ") + ".";
 }
 
-// message is the summary footer's line, chosen by the project's state.
-function message(t, proposals, total) {
-  if (!total) return ["Nothing here yet.", "Capture a first record."];
-  if (t.blocked) return ["Some work is stuck.", "Take a look."];
-  if (t.in_flight || t.awaiting_acceptance) return ["Nice work!", "Keep building. ✨"];
-  if (proposals || t.open_decisions) return ["Your call.", "Things are waiting on you."];
-  return ["All clear!", "Everything is in order."];
+// message is the summary footer's line. Each one claims only what its own
+// test checked, most pressing first; "nothing is owed" needs every todo
+// section and the intake to be empty.
+export function message(t, attention) {
+  const waiting = t.intake_unreviewed + t.intake_correction_requested + t.awaiting_acceptance + t.open_decisions;
+  if (t.blocked) return ["Some work is blocked.", "Take a look."];
+  if (waiting) return ["Some work is waiting on a review or a ruling.", ""];
+  if (attention) return ["Some records need attention.", ""];
+  if (t.in_flight || t.ready) return ["Work is in progress or ready to start.", "Keep building. ✨"];
+  return ["Nothing is owed right now.", ""];
 }
 
 export async function renderHome(todo) {
   const [act, show] = await Promise.all([activity(), view("show")]);
   const t = todo.totals;
   const proposals = t.intake_unreviewed + t.intake_correction_requested;
-  // packets no review has judged yet; judged ones are in act.captured
-  const pending = todo.packets_not_accepted.filter((p) => p.disposition === "pending").map((p) => (p.packet?.captured_at ? new Date(p.packet.captured_at) : null));
-  const series = (test) => perDay(act.rows.filter((r) => test(r.type)).map((r) => r.time));
-  // [key, tone, count, label, note when zero, note, sparkline counts, what the sparkline counts]
+  // [key, tone, count, label, note]; a note restates its own card's count and nothing else
   const cards = [
-    ["progress", "blue", t.in_flight, "Work in progress", "No active work right now.", (n) => `${n} being worked on.`, series((x) => x === "task.start"), "Work started"],
-    ["back", "green", t.awaiting_acceptance, "Handed back", "Nothing handed back.", (n) => `${n} waiting for acceptance.`, series((x) => x === "attempt.terminal"), "Handbacks"],
-    ["blocked", "red", t.blocked, "Blocked", "All clear!", (n) => `${n} need${n === 1 ? "s" : ""} unblocking.`, series((x) => x === "blocker.hold"), "Holds"],
-    ["ready", "amber", t.ready, "Ready to start", "Nothing waiting.", (n) => `${n} ready to pick up.`, series((x) => x === "task.create"), "Tasks created"],
-    ["decision", "purple", t.open_decisions, "Open decisions", "No open decisions.", (n) => `${n} waiting for a ruling.`, series((x) => x.startsWith("decision.")), "Decision events"],
-    ["proposal", "sky", proposals, "Proposals", "No proposals waiting.", (n) => `${n} waiting for review.`, perDay(act.captured.concat(pending)), "Proposals captured"],
+    ["progress", "blue", t.in_flight, "Work in progress", t.in_flight ? `${t.in_flight} being worked on.` : "No work in progress."],
+    ["back", "green", t.awaiting_acceptance, "Handed back", t.awaiting_acceptance ? `${t.awaiting_acceptance} waiting for acceptance.` : "Nothing handed back."],
+    ["blocked", "red", t.blocked, "Blocked", t.blocked ? `${t.blocked} blocked.` : "Nothing blocked."],
+    ["ready", "amber", t.ready, "Ready to start", t.ready ? `${t.ready} ready to pick up.` : "Nothing ready to start."],
+    ["decision", "purple", t.open_decisions, "Open decisions", t.open_decisions ? `${t.open_decisions} waiting for a ruling.` : "No open decisions."],
+    ["proposal", "sky", proposals, "Proposals", proposalNote(t.intake_unreviewed, t.intake_correction_requested)],
   ];
   const lists_ = lists(todo, act.at, act.names);
   const main = el("div", "home-main");
   const stats = el("div", "stats six");
   // pick shows a card's list in place of recent activity; picking it again,
-  // or "Recent activity", goes back. A next-step button always shows its list.
-  const pick = (key, keep) => { focus = focus === key && !keep ? "" : key; paint(); };
+  // or "Recent activity", goes back.
+  const pick = (key) => { focus = focus === key ? "" : key; paint(); };
   function paint() {
-    stats.replaceChildren(...cards.map(([key, tone, n, label, zero, note, values, what]) => statCard({
-      glyph: key, tone, value: n, label, note: n ? note(n) : zero, selected: focus === key, onPick: () => pick(key),
-      spark: sparkline(values, tone, false, `${what} per day, last 14 days`),
+    stats.replaceChildren(...cards.map(([key, tone, n, label, note]) => statCard({
+      glyph: key, tone, value: n, label, note, selected: focus === key, onPick: () => pick(key),
     })));
     const card = cards.find((c) => c[0] === focus);
     main.replaceChildren(card
       ? el("section", "panel fill", head(card[0], card[1], card[3], `${card[2]} ${card[2] === 1 ? "item" : "items"}`, more("Recent activity", () => pick(focus))),
         el("div", "panel-scroll", lists_[focus].length ? el("ul", "rows", lists_[focus]) : el("p", "empty", "empty...")))
       : el("section", "panel fill", head("progress", "blue", "Recent activity", null, more("View all", () => { location.hash = "#/history"; })),
-        el("div", "panel-scroll", act.rows.length ? el("div", "act-list", act.rows.slice(-60).reverse().map(activityRow)) : el("p", "empty", "empty..."))));
+        el("div", "panel-scroll", act.rows.length ? el("div", "act-list", act.rows.slice(-30).reverse().map(activityRow)) : el("p", "empty", "empty..."))));
   }
   paint();
 
@@ -168,24 +158,21 @@ export async function renderHome(todo) {
   const proven = count(claims, (r) => r.claim?.status === "PROVEN");
   const metric = (glyph, value, label, note, tone) => el("div", "metric", el("span", "tile round tone-tint slate", icon(glyph)),
     el("div", "metric-words", el("span", "metric-value", String(value)), el("span", "metric-label", label), el("span", "metric-note tone-text " + tone, note)));
-  const [strong, rest] = message(t, proposals, everything.length);
+  const [strong, rest] = message(t, (todo.attention || []).length);
   const owl = el("img", "summary-owl");
   owl.src = "/owl.png";
   owl.alt = "";
   const summary = el("section", "panel", head("bars", "blue", "Project summary", null, more("View records", () => { location.hash = "#/records"; })),
     el("div", "metrics",
-      metric("file", everything.length, "Total records", `+${added} this week`, added ? "green" : "muted"),
+      metric("file", everything.length, "Total records", `+${added} in 7 days`, added ? "green" : "muted"),
       metric("check", closed, "Closed tasks", tasks.length ? `${Math.round((closed / tasks.length) * 100)}% of tasks` : "No tasks yet", "muted"),
       metric("claim", claims.length, "Claims", claims.length ? `${proven} proven` : "None yet", proven ? "green" : "muted"),
-      metric("box", instruments.length, "Instruments", !instruments.length ? "None yet" : withdrawn ? `${withdrawn} withdrawn` : "All active", !instruments.length ? "muted" : withdrawn ? "red" : "green")),
+      metric("box", instruments.length, "Instruments", !instruments.length ? "None yet" : withdrawn ? `${withdrawn} withdrawn` : "None withdrawn", !instruments.length ? "muted" : withdrawn ? "red" : "green")),
     el("div", "summary-foot", owl, el("p", "", el("strong", "", strong), rest ? " " + rest : ""), el("span", "summary-tag", "Small steps. Solid records.")));
 
   const [hello, emoji] = greeting();
   return el("div", "screen home",
     hero("home", hello, emoji, ["Here's what's happening in ", todo.project, "."], "Track progress, review recent activity, and keep things moving."),
     stats,
-    el("div", "home-body", main,
-      el("div", "home-side",
-        el("section", "panel", head("target", "red", "Next steps", "Suggested next steps to keep things moving."), el("div", "steps", steps(t, proposals, pick))),
-        summary)));
+    el("div", "home-body", main, el("div", "home-side", summary)));
 }

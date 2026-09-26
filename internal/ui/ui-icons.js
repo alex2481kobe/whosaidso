@@ -9,7 +9,10 @@ const paths = {
   back: "M9 10l-5 5 5 5M4 15h11a5 5 0 0 0 0-10h-3",
   blocked: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM5.6 5.6l12.8 12.8",
   ready: "M5 21V4M5 4h12l-2.5 4 2.5 4H5",
-  decision: "M12 21V3M6 5h10l3 3-3 3H6zM18 13H8l-3 3 3 3h10z",
+  // a signpost: one pole, two small rounded signs pointing opposite ways; the
+  // pole is left out where a sign covers it
+  decision: "M12 3v1.5M12 9.5V12M12 17v4M8 4.5h8.3q.5 0 .85.35l1.9 1.8q.35.35 0 .7l-1.9 1.8q-.35.35-.85.35H8q-1.2 0-1.2-1.2v-2.6q0-1.2 1.2-1.2z"
+    + "M16 12H7.7q-.5 0-.85.35l-1.9 1.8q-.35.35 0 .7l1.9 1.8q.35.35.85.35H16q1.2 0 1.2-1.2v-2.6q0-1.2-1.2-1.2z",
   proposal: "M3 13h5l1.5 3h5l1.5-3h5M5.5 5h13L21 13v6H3v-6z",
   chevron: "M9 6l6 6-6 6",
   down: "M6 9l6 6 6-6",

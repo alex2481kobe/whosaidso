@@ -1,5 +1,5 @@
-/* Each screen's layout and its own rows: Home (stats, recent activity, next
-   steps, summary), Records (tools, sidebar, table and cards), History
+/* Each screen's layout and its own rows: Home (stats, recent activity,
+   summary), Records (tools, sidebar, table and cards), History
    (filter bar, log, breakdown), the record detail, and the tables, rows,
    items and facts they share. Every collapsed row is one line of one
    height; lists scroll inside their panel with the thin custom scrollbar.
@@ -34,7 +34,7 @@
 .event-word { display: inline-flex; align-items: center; gap: 10px; }
 .table-scroll > .empty { height: 40px; }
 
-/* home: stats, then recent activity (or a picked card's list) beside next steps and the summary */
+/* home: stats, then recent activity (or a picked card's list) beside the summary */
 .home-body { flex: 1 1 auto; display: grid; grid-template-columns: minmax(0, 1.34fr) minmax(0, 1fr); grid-template-rows: minmax(max-content, 1fr); gap: 18px; }
 .home-main { display: flex; min-height: 0; contain: size; }
 .home-main > .panel { flex: 1 1 auto; }
@@ -62,25 +62,18 @@ a.row-main:hover { background: var(--hover-fill); }
 .why-detail { padding: 0 12px 10px; font-size: 12.5px; }
 .why-list li { display: flex; flex-wrap: wrap; gap: 0 8px; padding: 2px 0; }
 .why-list a:hover, .link:hover { text-decoration: underline; text-underline-offset: 3px; }
-.steps { border-top: 1px solid var(--line-2); padding: 0 16px 6px; }
-.step { display: flex; align-items: center; gap: 14px; min-height: 60px; padding: 8px 2px; }
-.step + .step { border-top: 1px solid var(--line-2); }
-.step-words { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
-.step-words strong { font-size: 14px; font-weight: 620; }
-.step-words span { color: var(--muted); font-size: 12.5px; }
-.step-button { flex: 0 0 auto; height: 36px; padding: 0 18px; border: 0; border-radius: 9px; font-size: 13.5px; font-weight: 620; cursor: pointer; }
-.step-button:hover { filter: brightness(.97) saturate(1.1); }
-.step-none { padding: 16px 2px; color: var(--muted); }
-.metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 4px 18px 14px; }
+/* the summary's metrics sit in two columns, so a label never runs into the next icon; words wrap */
+.metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; padding: 4px 18px 16px; }
 .metric { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
 .metric .tile { color: var(--muted); }
 .metric-words { display: flex; flex-direction: column; min-width: 0; }
 .metric-value { font-size: 20px; line-height: 1.2; font-weight: 720; }
-.metric-label, .metric-note { font-size: 12.5px; white-space: nowrap; }
+.metric-label, .metric-note { font-size: 12.5px; overflow-wrap: break-word; }
 .metric-label { color: var(--muted); }
 .metric-note { margin-top: 4px; }
-.summary-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; white-space: nowrap; margin: 0 16px 16px; padding: 8px 16px 8px 12px; background: var(--foot); border-radius: 12px; font-size: 13.5px; }
-.summary-owl { width: 26px; height: 42px; }
+.summary-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0 16px 16px; padding: 8px 16px 8px 12px; background: var(--foot); border-radius: 12px; font-size: 13.5px; }
+.summary-owl { flex: 0 0 auto; width: 26px; height: 42px; }
+.summary-foot p { flex: 1 1 12em; min-width: 0; }
 .summary-foot strong { font-weight: 680; }
 .summary-tag { margin-left: auto; color: var(--muted); font-size: 12.5px; text-align: right; }
 
@@ -193,24 +186,39 @@ a.row-main:hover { background: var(--hover-fill); }
   .filter-bar .search { flex: 1 1 100%; }
   .filter-controls { flex: 1 1 100%; }
 }
+/* below 900px the header and hero go compact: the header wraps (the project
+   name may wrap too), and the hero drops its art so nothing crowds the title */
+@media (max-width: 900px) {
+  .topbar { flex-basis: auto; flex-wrap: wrap; row-gap: 8px; padding: 8px 16px; }
+  .header-start { flex: 1 1 auto; gap: 14px; }
+  .project { flex: 0 1 auto; }
+  .project-button { height: auto; min-height: 38px; padding-top: 6px; padding-bottom: 6px; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+  .header-end { gap: 12px; margin-left: auto; }
+  .theme-label { display: none; }
+  .hero { min-height: 0; padding-top: 18px; }
+  .hero-art { display: none; }
+  .hero-text { max-width: 100%; }
+}
+/* phones: panel controls go on the row under the panel title, the tabs and
+   theme switch take the header's second row, and a stat card's icon sits
+   above its number so the label keeps the card's whole width */
+@media (max-width: 600px) {
+  .head-end { flex-basis: 100%; margin-left: 32px; }
+  .header-end { flex: 1 1 100%; justify-content: space-between; margin-left: 0; }
+  .stat-top { flex-direction: column; align-items: flex-start; gap: 8px; }
+}
 @media (max-width: 900px), (max-height: 600px) {
   body { overflow: auto; }
   .page { overflow: visible; }
   .sections { grid-template-columns: 1fr; }
-  .stats.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 760px) {
-  .topbar { flex-basis: auto; flex-wrap: wrap; padding: 8px 16px; }
-  .brand span { display: none; }
-  .header-end { gap: 12px; }
-  .theme-label { display: none; }
-  .hero-art { display: none; }
-  .hero-text { max-width: 100%; }
   .stats.six { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .act-row { grid-template-columns: 96px minmax(0, 1fr); }
-  .act-row .act-what, .act-row .act-by { display: none; }
-  .stat-label { white-space: normal; }
+  /* an activity row keeps what happened: its title moves under it */
+  .act-row { grid-template-columns: 92px minmax(0, 1fr); grid-template-rows: auto auto; row-gap: 2px; height: 58px; align-content: center; }
+  .act-row .act-time { grid-row: 1 / 3; }
+  .act-row .act-title { grid-column: 2; color: var(--muted); font-size: 12.5px; }
+  .act-row .act-by { display: none; }
   .tool-line { flex-wrap: wrap; }
   /* phones keep the title, kind and status columns; the rest is on the record */
   .table.records col:nth-child(n+4):nth-child(-n+6), .table.history col:nth-child(4) { visibility: collapse; }
