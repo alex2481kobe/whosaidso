@@ -139,6 +139,24 @@ const menuRow = (text, extra, selected, onPick) => {
   return row;
 };
 
+// place keeps an open menu inside the window: it slides left or right until
+// both edges are 8px in (CSS caps its width to the window), and it opens
+// upwards when there is more room above its button than below, scrolling
+// inside whatever height that side has.
+export function place(list, anchor) {
+  list.classList.remove("up");
+  list.style.transform = "";
+  list.style.maxHeight = "";
+  const r = list.getBoundingClientRect();
+  const shift = r.left + Math.min(0, innerWidth - 8 - r.right) < 8 ? 8 - r.left : Math.min(0, innerWidth - 8 - r.right);
+  if (shift) list.style.transform = `translateX(${shift}px)`;
+  const a = anchor.getBoundingClientRect();
+  const below = innerHeight - a.bottom - 14, above = a.top - 14;
+  const up = r.height > below && above > below;
+  list.classList.toggle("up", up);
+  list.style.maxHeight = Math.max(0, up ? above : below) + "px";
+}
+
 // placeholder, when given, is the button's word while no option is chosen.
 export function dropdown({ glyph, options, value, onPick, prefix = "", className = "", placeholder = "" }) {
   const chosen = options.find((o) => o[0] === value) || (placeholder ? [null, placeholder] : options[0]);
@@ -155,11 +173,7 @@ export function dropdown({ glyph, options, value, onPick, prefix = "", className
     close();
     if (!opening) return;
     list.hidden = false;
-    // a menu that would cross the window's right edge opens leftwards
-    list.classList.remove("flip");
-    list.classList.toggle("flip", list.getBoundingClientRect().right > innerWidth - 8);
-    // and stops above the window's bottom edge, scrolling inside
-    list.style.maxHeight = Math.max(160, innerHeight - list.getBoundingClientRect().top - 16) + "px";
+    place(list, button);
     button.setAttribute("aria-expanded", "true");
     current = () => { list.hidden = true; button.setAttribute("aria-expanded", "false"); };
   });

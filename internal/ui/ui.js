@@ -1,5 +1,5 @@
 // The viewer's core: API calls, the header (project switcher and theme),
-// hash routing, the live watermark poll, and the small helpers every screen
+// hash routing, the live poll of the todo answer, and the small helpers every screen
 // shares. Each screen lives in its own ui-*.js module; icons are in
 // ui-icons.js, shared screen parts in ui-parts.js. Everything shown is
 // read from the views' own JSON; nothing here writes anywhere.
@@ -8,6 +8,7 @@ import { renderRecords } from "./ui-records.js";
 import { renderDetail } from "./ui-detail.js";
 import { renderHistory } from "./ui-history.js";
 import { icon } from "./ui-icons.js";
+import { place } from "./ui-parts.js";
 
 export { icon };
 
@@ -27,7 +28,7 @@ export async function api(path, params = {}) {
   return body;
 }
 
-// view answers one view for the selected project, once per watermark.
+// view answers one view for the selected project, once per mark (see markOf).
 export function view(name, params = {}) {
   const key = JSON.stringify([state.project, state.mark, name, params]);
   if (!state.cache.has(key)) state.cache.set(key, api("/api/view", { project: state.project, view: name, ...params }).catch((e) => { state.cache.delete(key); throw e; }));
@@ -253,16 +254,20 @@ function initMenu() {
     const menu = document.getElementById("project-menu");
     menu.hidden = !menu.hidden;
     button.setAttribute("aria-expanded", String(!menu.hidden));
-    if (!menu.hidden) api("/api/projects").then((list) => { state.projects = list.projects; renderMenu(); }).catch(() => {});
+    if (!menu.hidden) {
+      place(menu, button);
+      api("/api/projects").then((list) => { state.projects = list.projects; renderMenu(); place(menu, button); }).catch(() => {});
+    }
   });
   document.addEventListener("click", closeMenu);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
 }
-function select(id) {
+async function select(id) {
   state.project = id;
   state.mark = "";
   state.cache.clear();
   try { sessionStorage.setItem("whosaidso-project", id); } catch {}
+  await check().catch(() => {});
   location.hash = "#/";
   route();
 }
@@ -292,23 +297,47 @@ async function route() {
   }
 }
 
-const markOf = (w) => (w ? `${w.sequence}:${w.head?.command_id || ""}` : "");
+// markOf is what the screens are drawn from: the ledger watermark AND the
+// todo answer's owed counts and proposals. A captured packet changes the
+// proposals without moving the watermark, so the watermark alone would leave
+// Home showing a stale Proposals count.
+function markOf(todo) {
+  const w = todo.watermark;
+  const packets = (todo.packets_not_accepted || []).map((p) => `${p.command_id}:${p.disposition}`).sort();
+  return JSON.stringify([w ? `${w.sequence}:${w.head?.command_id || ""}` : "", todo.totals || {}, (todo.attention || []).length, packets]);
+}
 
-// poll reads the selected project's watermark through its todo view and
-// re-renders only when it moved. A stopped viewer says so in the header.
+// check reads the selected project's todo answer; when its mark differs from
+// the one on screen it drops every cached answer, keeps this todo answer for
+// the next render, and says so.
+async function check() {
+  const asked = state.project;
+  const todo = await api("/api/view", { project: asked, view: "todo" });
+  const mark = markOf(todo);
+  // an answer for a project no longer on screen is dropped
+  if (asked !== state.project || mark === state.mark) return false;
+  state.mark = mark;
+  state.cache.clear();
+  state.cache.set(JSON.stringify([state.project, state.mark, "todo", {}]), Promise.resolve(todo));
+  return true;
+}
+
+// poll re-renders only when the mark moved. It skips while the tab is hidden
+// and runs at once when the tab shows again; one read is in flight at a time.
+// A stopped viewer says so in the header.
+let polling = false;
 async function poll() {
   const offline = document.getElementById("offline");
+  if (!state.project || polling || document.visibilityState === "hidden") return;
+  polling = true;
   try {
-    if (!state.project) return;
-    const mark = markOf((await api("/api/view", { project: state.project, view: "todo" })).watermark);
+    const moved = await check();
     offline.hidden = true;
-    if (mark !== state.mark) {
-      state.mark = mark;
-      state.cache.clear();
-      route();
-    }
+    if (moved) route();
   } catch {
     offline.hidden = false;
+  } finally {
+    polling = false;
   }
 }
 
@@ -323,10 +352,11 @@ async function boot() {
   try { remembered = sessionStorage.getItem("whosaidso-project") || ""; } catch {}
   const usable = (id) => state.projects.some((p) => p.id === id && p.available);
   state.project = usable(remembered) ? remembered : usable(list.current) ? list.current : state.projects.find((p) => p.available)?.id || "";
-  state.mark = markOf(state.projects.find((p) => p.id === state.project)?.watermark);
+  if (state.project) await check().catch(() => {});
   window.addEventListener("hashchange", route);
   await route();
   setInterval(poll, 3000);
+  document.addEventListener("visibilitychange", poll);
 }
 
 boot().catch((error) => main.replaceChildren(el("p", "notice", "The viewer could not start: " + error.message)));

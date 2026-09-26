@@ -15,10 +15,7 @@
   <a href="#learn-more">Learn more</a>
 </p>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/ui-dark.png" />
-  <img src="assets/ui-light.png" alt="The WhoSaidSo viewer's Home screen, with sample data" width="912" />
-</picture>
+<img src="assets/ui-light.png" alt="The WhoSaidSo viewer's Home screen, with sample data" width="912" />
 
 WhoSaidSo keeps a project accountable. Work is recorded as it happens in an
 append-only ledger inside the repository, and every answer, from what is owed
