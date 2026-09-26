@@ -1,22 +1,29 @@
-// History: stat cards per event group with sparklines, the filter bar
-// (search, event family, date range, event chips), the history log and, on
-// the right, the event breakdown and recent activity. All filtering happens
+// History: stat cards per event group with their events per day, the filter
+// bar (search, one event filter, the date range), the history log and, on
+// the right, the event breakdown of the date range. All filtering happens
 // here over the history view's events (ui-derive.js). A log row is one line:
 // when, what happened in plain words, the record it names and who proposed
 // it. An opened row shows its title and proposer whole, then who proposed
-// and who approved it, the review's reason and the record.
+// and who approved it, the review's reason and the record. Narrow windows
+// stack each row (ui-screens.css); the log is the screen's only scroller.
 import { el, when, copyButton, openButton, facts, disclose, icon, tablePanel, project } from "./ui.js";
 import { activity, perDay, within, count } from "./ui-derive.js";
-import { hero, statCard, sparkline, head, more, chip, dropdown, rowMenu } from "./ui-parts.js";
-import { groups, other, families, inFamily, mark } from "./ui-icons.js";
+import { hero, statCard, sparkline, head, chip, dropdown, rowMenu } from "./ui-parts.js";
+import { groups, other, mark } from "./ui-icons.js";
 
-// state survives re-renders from the live poll, so a filter stays put.
-const state = { search: "", family: "all", range: "all", type: "all", sort: "newest" };
+// state survives re-renders from the live poll, so a filter stays put. event
+// is the ONE event filter: "all", a group's key (its event type), "other"
+// (every event outside the groups) or one other event's words. The chips and
+// the event menu both set it.
+const state = { search: "", event: "all", range: "all", sort: "newest" };
 const ranges = [["7", "Last 7 days"], ["30", "Last 30 days"], ["all", "All time"]];
+// The log is in ledger order, so newest means latest recorded, whatever the
+// capture times beside the rows say.
 const sorts = [["newest", "Newest first"], ["oldest", "Oldest first"]];
+const orderNote = { newest: "latest recorded first", oldest: "earliest recorded first" };
 const inRange = (r) => state.range === "all" || within(r.time, Number(state.range));
-// a group's key is its event type, so one comparison serves groups and the rest
-const inType = (r) => state.type === "all" || (state.type === "other" ? r.group === other : r.type === state.type);
+const matches = (event) => (r) => event === "all" || (event === "other" ? r.group === other
+  : groups.some((g) => g.key === event) ? r.type === event : r.group === other && r.what === event);
 
 function logRow(r) {
   const detail = el("td", "", facts([["Proposed by", r.proposer], [r.approverLabel, r.approver], ["Reason", r.reason],
@@ -27,7 +34,7 @@ function logRow(r) {
     ["Copy id", () => navigator.clipboard.writeText(r.target).catch(() => {})]]) : null);
   menu.addEventListener("click", (e) => e.stopPropagation());
   const tr = el("tr", "event", el("td", "time", el("span", "chev", icon("chevron")), when(r.time)),
-    cell("", el("span", "event-word", mark(r.group), el("span", "", r.what)), r.what), cell("title-cell", r.title), cell("", r.proposer), menu);
+    cell("what-cell", el("span", "event-word", mark(r.group), el("span", "", r.what)), r.what), cell("title-cell", r.title), cell("by-cell", r.proposer), menu);
   const more_ = el("tr", "event-detail", detail);
   const body = el("tbody", "", tr, more_);
   disclose(tr, more_, body);
@@ -47,65 +54,49 @@ function breakdown(rows) {
   }));
 }
 
-function recent(rows) {
-  const last = rows.slice(-5).reverse();
-  if (!last.length) return el("p", "empty", "empty...");
-  return el("ul", "recent", last.map((r) => {
-    const a = el("a", "recent-row", mark(r.group), el("span", "recent-time", when(r.time)),
-      el("span", "recent-words", el("strong", "", r.what), el("span", "", r.title)));
-    a.href = r.target ? "#/record/" + encodeURIComponent(r.target) : "#/history";
-    a.title = [r.what, r.title].filter(Boolean).join("\n");
-    return el("li", "", a);
-  }));
-}
-
 export async function renderHistory() {
   const act = await activity();
   const all = act.rows;
   const series = (test) => perDay(all.filter(test).map((r) => r.time));
-  const stat = (g, value, note) => statCard({ glyph: g.icon === "dot" ? "progress" : g.icon, tone: g.tone, value, label: g.label, note, noteTone: "up", layout: "compact",
-    spark: sparkline(series((r) => r.group === g), g.tone, true, `${g.label} per day, last 14 days`) });
+  const perDayLabel = (label) => `${label} per day, last 14 days`;
+  const stat = (g, value) => statCard({ glyph: g.icon === "dot" ? "progress" : g.icon, tone: g.tone, value, label: g.label, layout: "compact",
+    spark: sparkline(series((r) => r.group === g), g.tone, true, perDayLabel(g.label + " events")) });
   const week = count(all, (r) => within(r.time, 7));
-  const totalCard = statCard({ glyph: "progress", tone: "blue", value: all.length, label: "Total events", note: el("span", "", icon("up"), `+${week} this week`), noteTone: "up",
-    layout: "compact", spark: sparkline(series(() => true), "blue", true, "Events per day, last 14 days") });
+  const totalCard = statCard({ glyph: "progress", tone: "blue", value: all.length, label: "Total events", note: el("span", "", icon("up"), `+${week} this\u00a0week`), noteTone: "up",
+    layout: "compact", spark: sparkline(series(() => true), "blue", true, perDayLabel("Events")) });
 
   const search = el("input", "search-input");
   Object.assign(search, { type: "search", placeholder: "Search history...", value: state.search, spellcheck: false });
   search.setAttribute("aria-label", "Search history");
   const controls = el("div", "filter-controls");
   const log = el("section", "panel log");
-  const side = el("div", "history-side");
+  const side = el("section", "panel breakdown-panel");
 
-  function paint(reset) {
-    if (reset) search.value = state.search;
+  function paint() {
     const q = state.search.trim().toLowerCase();
     const ranged = all.filter(inRange);
-    const shown = ranged.filter((r) => inFamily(state.family, r.type) && inType(r)
+    const shown = ranged.filter((r) => matches(state.event)(r)
       && (!q || [r.what, r.title, r.proposer, r.approver, r.reason, r.target].some((t) => (t || "").toLowerCase().includes(q))));
     if (state.sort === "newest") shown.reverse();
-    const set = (key, value) => () => { state[key] = value; paint(); };
+    const pick = (key) => (v) => { state[key] = v; paint(); };
+    // the menu counts what each choice would show in the date range
+    const n = (event) => count(ranged, matches(event));
     const extras = [...new Set(all.filter((r) => r.group === other).map((r) => r.what))];
-    const otherType = (what) => all.find((r) => r.what === what)?.type;
-    const moreOptions = [["other", "All other events", count(all, (r) => r.group === other)], ...extras.map((w) => [otherType(w), w, count(all, (r) => r.what === w)])];
-    const moreChosen = moreOptions.some((o) => o[0] === state.type);
+    const options = [["all", "All events", n("all")], ...groups.map((g) => [g.key, g.label, n(g.key)]),
+      ["other", "All other events", n("other")], ...extras.map((w) => [w, w, n(w)])];
+    const sort = dropdown({ glyph: "sort", options: sorts, value: state.sort, onPick: pick("sort") });
+    sort.title = "Ordered by when each event was recorded in the ledger";
     controls.replaceChildren(
-      dropdown({ glyph: "list", options: families, value: state.family, onPick: (v) => { state.family = v; paint(); } }),
-      dropdown({ glyph: "calendar", options: ranges, value: state.range, onPick: (v) => { state.range = v; paint(); } }),
-      el("div", "chiprow events", chip("All", state.type === "all", set("type", "all")),
-        ...groups.map((g) => chip(g.label, state.type === g.key, set("type", g.key), el("span", "dot tone-fill " + g.tone))),
-        dropdown({ options: moreOptions, value: state.type, placeholder: "More", onPick: (v) => { state.type = v; paint(); }, className: moreChosen ? "chosen" : "" })));
+      dropdown({ glyph: "list", options, value: state.event, onPick: pick("event"), className: "event-menu" + (state.event === "all" ? "" : " chosen") }),
+      dropdown({ glyph: "calendar", options: ranges, value: state.range, onPick: pick("range") }),
+      // wide screens show the common events as chips; narrower ones fold them into the menu
+      el("div", "chiprow event-chips", groups.map((g) => chip(g.label, state.event === g.key,
+        () => pick("event")(state.event === g.key ? "all" : g.key), el("span", "dot tone-fill " + g.tone)))));
     log.replaceChildren(
-      head("history", "blue", "History log", `Showing ${shown.length} of ${all.length} events`,
-        dropdown({ glyph: "sort", options: sorts, value: state.sort, onPick: (v) => { state.sort = v; paint(); } })),
+      head("history", "blue", "History log", `Showing ${shown.length} of ${all.length} events, ${orderNote[state.sort]}`, sort),
       tablePanel("history", ["Time", "Event", "Record", "By", ""], ["var(--time-col)", "190px", "", "150px", "52px"],
         shown.map(logRow), shown.length ? null : el("p", "empty", "empty...")));
-    side.replaceChildren(
-      el("section", "panel", head("bars", "blue", "Event breakdown", null,
-        dropdown({ options: ranges, value: state.range, onPick: (v) => { state.range = v; paint(); }, className: "small" })), breakdown(ranged)),
-      el("section", "panel", head("bolt", "blue", "Recent activity", null, more("View all", () => {
-        Object.assign(state, { search: "", family: "all", range: "all", type: "all", sort: "newest" });
-        paint(true);
-      })), recent(all)));
+    side.replaceChildren(head("bars", "blue", "Event breakdown", ranges.find((r) => r[0] === state.range)[1]), breakdown(ranged));
   }
   search.addEventListener("input", () => { state.search = search.value; paint(); });
   paint();

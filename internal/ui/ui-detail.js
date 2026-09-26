@@ -1,28 +1,42 @@
 // One record's detail: the shared frame (back link, the full title, a
 // labelled details row led by the status and ending in Copy id, then titled
-// sections of one-line items that open on click, each as tall as its items), the task and plan screens, the "Changes over time"
-// section every kind shares, and the dispatch to ui-kinds.js for claims,
-// decisions, instruments and sources. A task reads from continue; dates are
-// when WhoSaidSo captured the events (times()).
+// sections of one-line items that open on click, each as tall as its items),
+// the task and plan screens with why a blocked task waits and on whom, the
+// "Changes over time" and "Needs attention" sections every kind shares, and
+// the dispatch to ui-kinds.js for claims, decisions, instruments and
+// sources. A task reads from continue; dates are when WhoSaidSo captured the
+// events (times()).
 import { el, facts, item, section, copyButton, openButton, view, times, titles, actorName, status, stamp, when, titleCase, fullTitle, icon, project } from "./ui.js";
 import { hero } from "./ui-parts.js";
 import { kinds } from "./ui-icons.js";
 import { renderClaim, renderDecision, renderInstrument, renderSource } from "./ui-kinds.js";
 
+// origin is the screen a record was opened from, so Back returns there: Home,
+// Records (with its query) or History. Moving from record to record keeps
+// it; a record opened directly goes back to Records.
+const origins = [[/^#\/records/, "records"], [/^#\/history/, "history"], [/^(#\/?)?$/, "home"]];
+let origin = ["#/records", "records"];
+window.addEventListener("hashchange", (e) => {
+  const from = new URL(e.oldURL).hash;
+  if (!location.hash.startsWith("#/record/") || from.startsWith("#/record/")) return;
+  const found = origins.find(([pattern]) => pattern.test(from));
+  origin = found ? [from || "#/", found[1]] : ["#/records", "records"];
+});
+
 // frame is every detail screen: the hero naming the record's kind, then one
 // panel with the back link, the full title and the details row (the status
 // and any chip beside it first, Copy id last), and the sections below.
 export function frame({ id, kind, title, tone, statusLabel, chip, details }, ...sections) {
-  const back = el("a", "back", "← Back to records");
-  back.href = "#/records";
+  const back = el("a", "back", "← Back to " + origin[1]);
+  back.href = origin[0];
   const shown = sections.filter(Boolean);
   const grid = el("div", "sections", shown);
-  grid.style.setProperty("--cols", String(shown.length === 4 ? 2 : Math.max(1, shown.length)));
+  grid.style.setProperty("--cols", String(shown.length === 4 ? 2 : Math.min(3, Math.max(1, shown.length))));
   const row = facts([["Status", [el("span", "tone-text " + tone, statusLabel), chip?.[0]]], ...details], "facts details");
   row.append(el("div", "details-end", copyButton("Copy id", id)));
   const k = kinds[kind] || kinds.task;
   return el("div", "screen detail",
-    hero("detail", k.one, el("span", "tile tone-tint " + k.tone, icon(k.icon)), [`One ${k.one.toLowerCase()} in `, project(), "."], "Everything the ledger records about it."),
+    hero("detail", k.one, el("span", "tile tone-tint " + k.tone, icon(k.icon)), [`One ${k.one.toLowerCase()} in `, project(), "."], "What the ledger records about it."),
     el("section", "panel detail-head", back, el("h2", "detail-title", title), row, chip?.[1]),
     grid);
 }
@@ -34,6 +48,16 @@ export const panel = (title, body) => el("section", "panel", el("h2", "", el("sp
 export function span(history, at) {
   const events = history.events;
   return [events.length ? at(events[0].origin) : null, events.length ? at(events[events.length - 1].origin) : null];
+}
+
+// attention is what the continue view raises about the record, less the kinds
+// the screen already shows in full (a blocked task's owed reasons).
+export function attention(answer, shown = []) {
+  const notes = (answer.attention || []).filter((a) => !shown.includes(a.kind));
+  if (!notes.length) return null;
+  return section("Needs attention", notes.map((a) => item(a.label || a.ref?.record_id || a.kind, titleCase(a.kind.replace(/-/g, " ")),
+    facts([["Reason", a.reason], ["Waiting on", a.waiting_actor && actorName(a.waiting_actor)],
+      ["Record", a.ref?.record_id && a.ref.record_id !== answer.record?.record_id ? openButton(a.ref.record_id) : ""]]), "amber")));
 }
 
 const list = (xs) => (xs.length ? el("ul", "plain", xs.map((x) => el("li", "", x))) : "");
@@ -114,13 +138,29 @@ function planItems(answer) {
   }));
 }
 
+// blocked is what a blocked task waits on: each owed reason, whom it waits
+// on, and the hold or record it names. An unknown actor stays UNKNOWN.
+function blocked(answer, names) {
+  const reasons = answer.owed.reasons || [];
+  if (!reasons.length) return null;
+  return section("What it waits on", reasons.map((r) => {
+    const target = r.target?.record_id;
+    return item(r.detail || titleCase(r.kind.replace(/-/g, " ")), actorName(r.waiting_actor),
+      facts([["Kind", titleCase(r.kind.replace(/-/g, " "))], ["Reason", r.detail || "no reason recorded"], ["Waiting on", actorName(r.waiting_actor)],
+        ["Hold", r.blocker_id ? el("span", "mono", r.blocker_id) : ""],
+        ["Record", target ? el("span", "id-line", el("span", "", names.get(target) || target), openButton(target)) : ""]]), "red");
+  }));
+}
+
 function renderTask({ id, root, answer, at, names, dates }) {
   const [label, tone] = status(root);
   const items = answer.owed.items || [];
   const plan = (root.fact.task.prerequisites || []).length > 0;
   return frame({ id, kind: "task", title: fullTitle(root), tone, statusLabel: label, details: [["Subject", root.fact.task.subject],
+    ["Next actor", answer.owed.next_actor ? actorName(answer.owed.next_actor) : ""],
     ["Author", actorName(root.author?.actor)], ["Approved by", actorName(root.admitted_by)],
     ["Progress", plan ? `${items.filter((i) => i.satisfied === "TRUE").length} of ${items.length} met` : ""],
     ["Created", stamp(dates[0])], ["Updated", stamp(dates[1])]] },
-  plan ? planItems(answer) : null, criteria(root), attempts(root, at), changes(answer, at, names));
+  blocked(answer, names), plan ? planItems(answer) : null, criteria(root), attempts(root, at),
+  attention(answer, ["task-blocked-owed"]), changes(answer, at, names));
 }
