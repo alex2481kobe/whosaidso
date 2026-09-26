@@ -179,31 +179,3 @@ export function dropdown({ glyph, options, value, onPick, prefix = "", className
   });
   return el("div", "dropdown " + className, button, list);
 }
-
-// rowMenu is a row's "more" button: a small menu of [text, action] pairs
-// floating beside it, above the row's clipping, flipped up near the bottom.
-export function rowMenu(label, items) {
-  const button = el("button", "icon-button quiet", icon("dots"));
-  button.type = "button";
-  button.setAttribute("aria-label", label);
-  button.setAttribute("aria-haspopup", "menu");
-  button.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const wasOpen = button.getAttribute("aria-expanded") === "true";
-    close();
-    if (wasOpen) return;
-    const menu = el("div", "menu floating", items.map(([text, act]) => menuRow(text, undefined, false, act)));
-    menu.setAttribute("role", "menu");
-    document.body.append(menu);
-    const r = button.getBoundingClientRect();
-    const below = r.bottom + 4 + menu.offsetHeight <= innerHeight;
-    menu.style.left = Math.max(8, r.right - menu.offsetWidth) + "px";
-    menu.style.top = (below ? r.bottom + 4 : r.top - 4 - menu.offsetHeight) + "px";
-    button.setAttribute("aria-expanded", "true");
-    const scroller = button.closest(".table-scroll, .panel-scroll, .page");
-    const onScroll = () => close();
-    scroller?.addEventListener("scroll", onScroll, { once: true });
-    current = () => { menu.remove(); button.setAttribute("aria-expanded", "false"); scroller?.removeEventListener("scroll", onScroll); };
-  });
-  return button;
-}

@@ -95,17 +95,6 @@ export const groups = [
 export const other = { key: "other", label: "Other events", tone: "slate", mark: "dot", icon: "dots" };
 export const groupOf = (type) => groups.find((g) => g.key === type) || other;
 
-// families sort event types into the history screen's "events" menu.
-export const families = [
-  ["all", "All events"], ["task", "Task events"], ["claim", "Claim events"], ["decision", "Decision events"],
-  ["instrument", "Instrument events"], ["source", "Source events"], ["review", "Reviews"],
-];
-const familyTypes = {
-  task: ["task.", "attempt.", "blocker."], claim: ["claim.", "criterion.", "invocation.", "proof."], decision: ["decision."],
-  instrument: ["instrument.", "trust."], source: ["source."], review: ["review."],
-};
-export const inFamily = (family, type) => family === "all" || (familyTypes[family] || []).some((p) => type.startsWith(p));
-
 // mark is an event's small coloured sign: a check, a play, a back arrow or a dot.
 export function mark(group) {
   const node = document.createElement("span");

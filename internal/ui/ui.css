@@ -93,7 +93,6 @@ h1, h2, h3, h4, p { margin: 0; }
 /* menus: the project switch, dropdowns and row menus share one look */
 /* a menu is never wider than the window; place() in ui-parts.js slides it inside and opens it upwards when needed */
 .menu { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; width: max-content; min-width: max(100%, 200px); max-width: calc(100vw - 16px); max-height: 60vh; overflow: auto; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .16); }
-.menu.floating { position: fixed; top: 0; left: 0; min-width: 160px; }
 .menu.up { top: auto; bottom: calc(100% + 6px); }
 .head-end .menu { left: auto; right: 0; }
 .menu-row { display: flex; align-items: center; gap: 16px; width: 100%; padding: 8px 12px; border: 0; border-radius: 7px; background: none; text-align: left; overflow-wrap: anywhere; cursor: pointer; font-size: 13.5px; }
@@ -196,7 +195,6 @@ button.stat[aria-pressed="true"] { border-color: color-mix(in srgb, var(--text) 
 .icon-button { display: inline-grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; }
 .icon-button:hover { background: var(--hover-fill); color: var(--text); }
 .icon-button[aria-pressed="true"] { background: color-mix(in srgb, var(--blue) var(--tint), var(--surface)); color: var(--blue); }
-.icon-button.quiet { width: 30px; height: 28px; }
 .segmented { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 10px; }
 
 /* search: an input in a rounded box with its icon */
