@@ -1,6 +1,6 @@
 // Numbers and rows derived in the browser from the views' own JSON: the
 // history's events as rows people read, when each record was first and last
-// named by an event, per-day counts for sparklines and "this week" counts.
+// named by an event, per-day counts for sparklines and "last 7 days" counts.
 // Every number here is counted from rows the ledger returned; nothing is
 // estimated, and an event whose capture time is unknown is counted in no day.
 import { view, times, titles, actorName } from "./ui.js";
@@ -26,19 +26,17 @@ export function packetTitle(packet) {
 
 // activity is the history as rows, oldest first. A bundle's review sits in
 // the rows it admitted; a review that admitted nothing (a rejection, a
-// correction request) is its own row. created and updated are the first and
-// the latest time an event named each record; captured is the capture time
-// of every packet a review judged.
+// correction request) is its own row. created and updated are the capture
+// times of the first and the latest event naming each record, each its own
+// event's time or null when that time is unknown; never another event's.
 export async function activity() {
   const [answer, at, names, todo] = await Promise.all([view("history"), times(), titles(), view("todo")]);
   const proposals = new Map(todo.packets_not_accepted.map((p) => [p.command_id, packetTitle(p)]));
   const reviews = new Map();
   const others = new Set();
-  const packets = new Map();
   for (const row of answer.events) {
     if (row.event.type !== "review.admit") { others.add(row.origin.sequence); continue; }
     reviews.set(row.origin.sequence, row.event.data);
-    for (const [id, stamp] of Object.entries(row.event.data.captured_at || {})) packets.set(id, stamp?.state === "known" ? new Date(stamp.value) : null);
   }
   const created = new Map();
   const updated = new Map();
@@ -49,7 +47,7 @@ export async function activity() {
     const target = alone ? "" : recordOf(data);
     const packet = alone ? (data.packets || [])[0]?.command_id : "";
     const time = at(row.origin);
-    if (target && time) {
+    if (target) {
       if (!created.has(target)) created.set(target, time);
       updated.set(target, time);
     }
@@ -62,8 +60,7 @@ export async function activity() {
       reason: review?.reason || "",
     };
   });
-  // captured is when each reviewed packet was captured, one date per packet
-  return { rows, created, updated, names, at, captured: [...packets.values()], result: answer.result, reason: answer.reason };
+  return { rows, created, updated, names, at, result: answer.result, reason: answer.reason };
 }
 
 // startOfDay is local midnight of a date.

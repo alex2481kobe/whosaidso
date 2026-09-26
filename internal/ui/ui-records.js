@@ -6,14 +6,15 @@
 // is one line; a cell too long for it ends in an ellipsis and holds its whole
 // text as a tooltip. Narrow windows stack each row so the title keeps its
 // width. A row opens its record; its id is copied on the record's page.
-import { el, view, status, actorName, sourceTitle, fullTitle, tablePanel, when, icon } from "./ui.js";
+import { el, view, status, actorName, sourceTitle, fullTitle, tablePanel, when, icon, project } from "./ui.js";
 import { activity, within, count } from "./ui-derive.js";
 import { hero, head, chip, dropdown } from "./ui-parts.js";
 import { kinds } from "./ui-icons.js";
 
 // state survives re-renders from the live poll, so a filter stays put, and so
 // does the narrow-window Filters disclosure. kind is one kind or "" for all.
-const state = { view: "all", kind: "", statuses: new Set(), search: "", sort: "recent", layout: "list", filtersOpen: false };
+// The filters belong to one project: a switch to another clears them.
+const state = { project: "", view: "all", kind: "", statuses: new Set(), search: "", sort: "recent", layout: "list", filtersOpen: false };
 // clearAll clears every filter: the view, the kind, the statuses and the search.
 // Sort and layout are how the list is shown, not what it holds, so they stay.
 const clearAll = () => { Object.assign(state, { view: "all", kind: "", search: "" }); state.statuses.clear(); };
@@ -109,6 +110,7 @@ function side(rows, recent, paint, statuses) {
 
 export async function renderRecords() {
   const [show, act] = await Promise.all([view("show"), activity()]);
+  if (state.project !== project()) { clearAll(); state.project = project(); }
   const rows = rowsOf(show, act);
   const recent = count(rows, (r) => within(r.created, 7));
 

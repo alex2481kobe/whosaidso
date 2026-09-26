@@ -14,7 +14,9 @@ export { icon };
 
 const token = new URLSearchParams(location.search).get("token") || "";
 const main = document.getElementById("main");
-const state = { projects: [], project: "", mark: "", cache: new Map() };
+// switches counts project changes and renders counts navigations: an answer
+// or a screen started before a newer one is dropped, never drawn over it.
+const state = { projects: [], project: "", mark: "", cache: new Map(), switches: 0, renders: 0 };
 
 // project is the id of the project on screen.
 export const project = () => state.project;
@@ -213,7 +215,6 @@ export function status(record) {
   if (record.intake) return ["Captured", "green"];
   return ["UNKNOWN", "muted"];
 }
-export const kindOf = (record) => (record.intake ? "Source" : titleCase(record.fact?.kind || "record"));
 
 // ---- header: theme and projects
 const toggle = document.getElementById("theme-toggle");
@@ -263,6 +264,8 @@ function initMenu() {
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
 }
 async function select(id) {
+  state.switches++;
+  state.renders++;
   state.project = id;
   state.mark = "";
   state.cache.clear();
@@ -274,6 +277,8 @@ async function select(id) {
 
 // ---- routing and the live poll
 async function route() {
+  const mine = ++state.renders;
+  const show = (node) => { if (mine === state.renders) main.replaceChildren(node); };
   const [path, rest = ""] = location.hash.replace(/^#/, "").split("?");
   const parts = path.split("/").filter(Boolean).map(decodeURIComponent);
   const screen = parts[0] || "home";
@@ -282,7 +287,7 @@ async function route() {
   }
   renderMenu();
   if (!state.project) {
-    main.replaceChildren(el("p", "notice", "No WhoSaidSo project is registered on this machine."));
+    show(el("p", "notice", "No WhoSaidSo project is registered on this machine."));
     return;
   }
   try {
@@ -291,9 +296,9 @@ async function route() {
     else if (screen === "record") node = await renderDetail(parts[1]);
     else if (screen === "history") node = await renderHistory();
     else node = await renderHome(await view("todo"));
-    main.replaceChildren(node);
+    show(node);
   } catch (error) {
-    main.replaceChildren(el("p", "notice", "Could not read this project: " + error.message));
+    show(el("p", "notice", "Could not read this project: " + error.message));
   }
 }
 
@@ -311,11 +316,11 @@ function markOf(todo) {
 // the one on screen it drops every cached answer, keeps this todo answer for
 // the next render, and says so.
 async function check() {
-  const asked = state.project;
-  const todo = await api("/api/view", { project: asked, view: "todo" });
+  const asked = state.switches;
+  const todo = await api("/api/view", { project: state.project, view: "todo" });
   const mark = markOf(todo);
-  // an answer for a project no longer on screen is dropped
-  if (asked !== state.project || mark === state.mark) return false;
+  // an answer asked before a project switch is dropped, even when the switch came back to the same project
+  if (asked !== state.switches || mark === state.mark) return false;
   state.mark = mark;
   state.cache.clear();
   state.cache.set(JSON.stringify([state.project, state.mark, "todo", {}]), Promise.resolve(todo));

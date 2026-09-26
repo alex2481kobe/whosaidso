@@ -8,9 +8,12 @@ import { frame, panel, span, changes, short, attention } from "./ui-detail.js";
 const ops = { eq: "=", ne: "≠", lt: "<", le: "≤", gt: ">", ge: "≥" };
 const who = (a) => actorName(a) + (a?.reason || a?.unknown_reason ? ": " + (a.reason || a.unknown_reason) : "");
 
-// fixed is the claim's newest fixed criterion, as its history records it.
-function fixed(history) {
-  const fixes = history.events.filter((e) => e.event.type === "criterion.fix");
+// fixed is the criterion fixed for the claim's current revision: the latest
+// criterion.fix whose claim reference names this exact project, record and
+// revision. A fix for an earlier revision is not the current criterion.
+function fixed(history, ref) {
+  const fixes = history.events.filter((e) => e.event.type === "criterion.fix" && e.event.data.claim?.project === ref.project
+    && e.event.data.claim?.record_id === ref.record_id && e.event.data.claim?.revision === ref.revision);
   return fixes[fixes.length - 1]?.event.data;
 }
 
@@ -21,24 +24,31 @@ function test(e) {
   return `${ops[e.operator] || e.operator} ${target}${e.unit ? " " + e.unit : ""}`;
 }
 
-// reads names an artifact selection: the file it reads and what it selects.
+// reads names an artifact selection: the file it reads and what it selects,
+// then the pinned bytes it names (a git commit or a content digest), cut
+// short with the whole identity as its tooltip.
 function reads(ref) {
   if (!ref) return "";
   const path = ref.content?.locators?.[0]?.path || ref.git?.path || ref.kind;
   const sel = ref.selector || {};
   const pick = Object.entries(sel).filter(([k, v]) => k !== "kind" && typeof v !== "object").map(([, v]) => v).join(" ");
-  return [path, [sel.kind, pick].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  const pins = [ref.git?.commit && ["commit", ref.git.commit], ref.content?.sha256 && ["sha256", ref.content.sha256]].filter(Boolean);
+  const pin = pins.length ? mono(pins.map(([k, v]) => `${k} ${short(v)}`).join(", "), "muted") : "";
+  if (pin) pin.title = pins.map(([k, v]) => `${k} ${v}`).join("\n");
+  return el("span", "", [path, [sel.kind, pick].filter(Boolean).join(" ")].filter(Boolean).join(", "), pin ? " " : "", pin);
 }
 
-// criterionPanel is the whole frozen criterion: the comparison and how many
-// of which population it is taken over, what it reads, and its policy.
-function criterionPanel(fix) {
+// criterionPanel is the whole frozen criterion of the claim's current
+// revision: which criterion it is, the comparison and how many of which
+// population it is taken over, what it reads (pinned), and its policy. An
+// empty population with no authored meaning is UNKNOWN.
+function criterionPanel(fix, ref) {
   const e = fix?.expression;
-  if (!e) return panel("Criterion", facts([["Test", "none fixed"]]));
+  if (!e) return panel("Criterion", facts([["Test", `none fixed for revision ${ref.revision}`]]));
   const p = e.population || {};
-  return panel("Criterion", facts([["Test", test(e)], ["Reducer", e.reducer], ["Population", [p.identity, p.denominator].filter(Boolean).join(", ")],
+  return panel("Criterion", facts([["Test", test(e)], ["Criterion", [mono(fix.criterion_id), `, revision ${fix.revision}`]], ["Reducer", e.reducer], ["Population", [p.identity, p.denominator].filter(Boolean).join(", ")],
     ["Population reads", reads(p.selector)], ["Result reads", reads(e.result_selector)],
-    ["When empty", e.empty_result === undefined || e.empty_result === null ? "" : e.empty_result ? "Passes" : "Fails"],
+    ["When empty", e.empty_result === undefined || e.empty_result === null ? "UNKNOWN: no meaning authored" : e.empty_result ? "Passes" : "Fails"],
     ["Policy", [fix.policy?.inclusion, fix.policy?.retry].filter(Boolean).join(", ")]]));
 }
 
@@ -87,7 +97,7 @@ export function renderClaim({ id, root, answer, history, at, names }, stale) {
       ["Evidence", el("ul", "plain", p.admission.evidence.map((ev) => el("li", "", `${titleCase(ev.disposition)}: ${ev.reason || "no reason recorded"}`)))]])));
   return frame({ id, kind: "claim", title: fullTitle(root), tone, statusLabel: label, chip: staleChip(stale.stale?.claims?.find((c) => c.claim.record_id === id)),
     details: [["Standing", claim.standing], ["Author", who(root.author?.actor)], ["Approved by", who(root.admitted_by)]] },
-  scopePanel(claim, names), criterionPanel(fixed(history)), section("Measurement runs", runs), section("Proofs", proofRows),
+  scopePanel(claim, names), criterionPanel(fixed(history, answer.record), answer.record), section("Measurement runs", runs), section("Proofs", proofRows),
   attention(answer), changes(answer, at, names, proofs));
 }
 
