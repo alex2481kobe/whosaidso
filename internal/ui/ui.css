@@ -60,12 +60,10 @@ h1, h2, h3, h4, p { margin: 0; }
 .tone-fill.purple { --tone: var(--purple); } .tone-fill.violet { --tone: var(--violet); } .tone-fill.sky { --tone: var(--sky); } .tone-fill.slate { --tone: var(--slate); }
 .tone-fill.muted { --tone: var(--faint); }
 .tone-fill { background: var(--tone); color: var(--tone); }
-.tone-tint.blue, .tone-soft.blue { --tone: var(--blue); } .tone-tint.green, .tone-soft.green { --tone: var(--green); } .tone-tint.red, .tone-soft.red { --tone: var(--red); }
-.tone-tint.amber, .tone-soft.amber { --tone: var(--amber); } .tone-tint.purple, .tone-soft.purple { --tone: var(--purple); } .tone-tint.violet { --tone: var(--violet); }
+.tone-tint.blue { --tone: var(--blue); } .tone-tint.green { --tone: var(--green); } .tone-tint.red { --tone: var(--red); }
+.tone-tint.amber { --tone: var(--amber); } .tone-tint.purple { --tone: var(--purple); } .tone-tint.violet { --tone: var(--violet); }
 .tone-tint.sky { --tone: var(--sky); } .tone-tint.slate { --tone: var(--slate); }
 .tone-tint { background: color-mix(in srgb, var(--tone) var(--tint), var(--surface)); color: var(--tone); }
-.tone-soft { background: color-mix(in srgb, var(--tone) var(--tint), var(--surface)); color: color-mix(in srgb, var(--tone) 82%, var(--text)); }
-.tone-soft.amber { color: var(--amber-text); }
 .dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; }
 
 /* header: the owl and the name, the project switch beside them; the tabs
@@ -105,7 +103,6 @@ h1, h2, h3, h4, p { margin: 0; }
 .select .icon { color: var(--muted); }
 .select .caret { width: 14px; height: 14px; }
 .select:hover { background: var(--surface-2); }
-.dropdown.small .select { height: 32px; font-size: 12.5px; }
 .dropdown.chosen .select { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 35%, var(--line)); background: color-mix(in srgb, var(--blue) var(--tint), var(--surface)); }
 
 /* page frame: the screen scrolls in the area below the header */
@@ -161,8 +158,6 @@ button.stat[aria-pressed="true"] { border-color: color-mix(in srgb, var(--text) 
 .stat-top { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .tile { flex: 0 0 auto; display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; }
 .tile .icon { width: 22px; height: 22px; stroke-width: 1.9; }
-.tile.small { width: 36px; height: 36px; border-radius: 10px; }
-.tile.small .icon { width: 18px; height: 18px; }
 .tile.round { width: 38px; height: 38px; border-radius: 50%; }
 .tile.round .icon { width: 19px; height: 19px; }
 .stat-words { display: flex; flex-direction: column; min-width: 0; }
@@ -171,8 +166,6 @@ button.stat[aria-pressed="true"] { border-color: color-mix(in srgb, var(--text) 
 .stat-note { color: var(--muted); font-size: 12.5px; overflow-wrap: break-word; }
 .stat-note.up { display: inline-flex; align-items: center; gap: 4px; color: var(--text); }
 .stat-note.up .icon { width: 13px; height: 13px; color: var(--green); stroke-width: 2.2; }
-.stat.ruled { gap: 12px; padding-bottom: 12px; }
-.stat.ruled > .stat-note { padding-top: 10px; border-top: 1px solid var(--line-2); }
 .spark { display: block; width: 100%; height: 26px; overflow: visible; }
 .spark-line { fill: none; stroke: currentColor; stroke-width: 1.6; opacity: .38; }
 .spark-area { fill: currentColor; opacity: .1; }

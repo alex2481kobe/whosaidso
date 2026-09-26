@@ -14,8 +14,10 @@ import { groups, other, mark } from "./ui-icons.js";
 // state survives re-renders from the live poll, so a filter stays put. event
 // is the ONE event filter: "all", a group's key (its event type), "other"
 // (every event outside the groups) or one other event's words. The chips and
-// the event menu both set it.
-const state = { search: "", event: "all", range: "all", sort: "newest" };
+// the event menu both set it. search and event belong to one project: a
+// switch to another project clears them (range and sort are not project
+// specific and stay).
+const state = { project: "", search: "", event: "all", range: "all", sort: "newest" };
 const ranges = [["7", "Last 7 days"], ["30", "Last 30 days"], ["all", "All time"]];
 // The log is in ledger order, so newest means latest recorded, whatever the
 // capture times beside the rows say.
@@ -53,13 +55,15 @@ function breakdown(rows) {
 
 export async function renderHistory() {
   const act = await activity();
+  if (state.project !== project()) Object.assign(state, { project: project(), search: "", event: "all" });
   const all = act.rows;
   const series = (test) => perDay(all.filter(test).map((r) => r.time));
   const perDayLabel = (label) => `${label} per day, last 14 days`;
   const stat = (g, value) => statCard({ glyph: g.icon === "dot" ? "progress" : g.icon, tone: g.tone, value, label: g.label, layout: "compact",
     spark: sparkline(series((r) => r.group === g), g.tone, true, perDayLabel(g.label + " events")) });
   const week = count(all, (r) => within(r.time, 7));
-  const totalCard = statCard({ glyph: "progress", tone: "blue", value: all.length, label: "Total events", note: el("span", "", icon("up"), `+${week} this\u00a0week`), noteTone: "up",
+  // a row is an event or a review that admitted nothing; accepted reviews sit in the rows they admitted
+  const totalCard = statCard({ glyph: "progress", tone: "blue", value: all.length, label: "Total entries", note: el("span", "", icon("up"), `+${week}, last 7\u00a0days`), noteTone: "up",
     layout: "compact", spark: sparkline(series(() => true), "blue", true, perDayLabel("Events")) });
 
   const search = el("input", "search-input");
@@ -81,6 +85,8 @@ export async function renderHistory() {
     const extras = [...new Set(all.filter((r) => r.group === other).map((r) => r.what))];
     const options = [["all", "All events", n("all")], ...groups.map((g) => [g.key, g.label, n(g.key)]),
       ["other", "All other events", n("other")], ...extras.map((w) => [w, w, n(w)])];
+    // a filter this project has no option for is cleared, so the menu always shows the filter applied
+    if (!options.some((o) => o[0] === state.event)) { state.event = "all"; paint(); return; }
     const sort = dropdown({ glyph: "sort", options: sorts, value: state.sort, onPick: pick("sort") });
     sort.title = "Ordered by when each event was recorded in the ledger";
     controls.replaceChildren(
@@ -90,7 +96,7 @@ export async function renderHistory() {
       el("div", "chiprow event-chips", groups.map((g) => chip(g.label, state.event === g.key,
         () => pick("event")(state.event === g.key ? "all" : g.key), el("span", "dot tone-fill " + g.tone)))));
     log.replaceChildren(
-      head("history", "blue", "History log", `Showing ${shown.length} of ${all.length} events, ${orderNote[state.sort]}`, sort),
+      head("history", "blue", "History log", `Showing ${shown.length} of ${all.length} entries, ${orderNote[state.sort]}`, sort),
       tablePanel("history", ["Time", "Event", "Record", "By"], ["var(--time-col)", "190px", "", "150px"],
         shown.map(logRow), shown.length ? null : el("p", "empty", "empty...")));
     side.replaceChildren(head("bars", "blue", "Event breakdown", ranges.find((r) => r[0] === state.range)[1]), breakdown(ranged));

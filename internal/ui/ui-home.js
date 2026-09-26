@@ -108,9 +108,12 @@ export function proposalNote(unreviewed, correction) {
 // test checked, most pressing first; "nothing is owed" needs every todo
 // section and the intake to be empty.
 export function message(t, attention) {
-  const waiting = t.intake_unreviewed + t.intake_correction_requested + t.awaiting_acceptance + t.open_decisions;
+  // a correction request waits on its author's correction, not on a review
+  const review = t.intake_unreviewed + t.awaiting_acceptance + t.open_decisions;
   if (t.blocked) return ["Some work is blocked.", "Take a look."];
-  if (waiting) return ["Some work is waiting on a review or a ruling.", ""];
+  if (review && t.intake_correction_requested) return ["Some work is waiting on a review, a ruling or a correction.", ""];
+  if (review) return ["Some work is waiting on a review or a ruling.", ""];
+  if (t.intake_correction_requested) return ["Some proposals are waiting on a correction.", ""];
   if (attention) return ["Some records need attention.", ""];
   if (t.in_flight || t.ready) return ["Work is in progress or ready to start.", "Keep building. ✨"];
   return ["Nothing is owed right now.", ""];
