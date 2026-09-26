@@ -77,18 +77,18 @@ a.row-main:hover { background: var(--hover-fill); }
 .summary-foot strong { font-weight: 680; }
 .summary-tag { margin-left: auto; color: var(--muted); font-size: 12.5px; text-align: right; }
 
-/* records: stat cards beside the search and kind tabs; the sidebar beside the listing */
-.records-top { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; align-items: start; }
-.records-top .stat { padding: 14px 14px 12px; }
-.records-top .stat-top { gap: 10px; }
-.records-top .tile { width: 40px; height: 40px; border-radius: 11px; }
-.records-top .tile .icon { width: 20px; height: 20px; }
-.records-top .stat-label { font-size: 13px; }
-.records-tools { display: flex; flex-direction: column; gap: 14px; padding-top: 4px; }
-.tool-line { display: flex; align-items: center; gap: 14px; min-width: 0; }
-.tool-line .search { flex: 1 1 auto; }
-.new-record { position: relative; flex: 0 0 auto; }
-.soon-note { position: absolute; z-index: 20; top: calc(100% + 8px); right: 0; padding: 8px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 10px 30px rgba(0, 0, 0, .14); color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+/* records: the search beside the kind tabs (wrapping below it when narrow);
+   the sidebar beside the listing, or a Filters disclosure above it when narrow */
+.records-top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
+.records-top .search { flex: 1 1 300px; max-width: 520px; }
+.kind-tabs { flex: 0 1 auto; min-width: 0; }
+.filters-toggle { display: none; align-self: flex-start; height: 36px; font-size: 13.5px; }
+.filters-count { color: var(--blue); font-weight: 650; }
+.filters-count:empty { display: none; }
+.filters-toggle .caret { transition: transform .12s; }
+.filters-toggle[aria-expanded="true"] .caret { transform: rotate(180deg); }
+/* the listing's head keeps its whole title; the sort and layout controls wrap below it when they do not fit */
+.listing .panel-head { flex-wrap: wrap; row-gap: 8px; }
 .records-body { flex: 1 1 auto; display: grid; grid-template-columns: 236px minmax(0, 1fr); grid-template-rows: minmax(max-content, 1fr); gap: 16px; }
 .side-holder { display: flex; min-width: 0; min-height: 0; contain: size; }
 .side { flex: 1 1 auto; padding: 12px 12px 14px; gap: 1px; overflow: auto; }
@@ -103,8 +103,6 @@ a.row-main:hover { background: var(--hover-fill); }
 .side-count { color: var(--muted); font-size: 12.5px; }
 .side-row[aria-pressed="true"] { background: color-mix(in srgb, var(--blue) var(--tint), var(--surface)); color: var(--blue); font-weight: 600; }
 .side-row[aria-pressed="true"] .icon, .side-row[aria-pressed="true"] .side-count { color: var(--blue); }
-.box { flex: 0 0 auto; width: 15px; height: 15px; border: 1.5px solid var(--line-strong); border-radius: 4px; }
-.side-row[aria-checked="true"] .box { background: var(--blue); border-color: var(--blue); box-shadow: inset 0 0 0 2.5px var(--surface); }
 .side-row[aria-checked="true"] .side-text { font-weight: 600; }
 .side .button.wide { margin-top: 12px; }
 .listing { min-height: 0; contain: size; }
@@ -182,6 +180,9 @@ a.row-main:hover { background: var(--hover-fill); }
   .home-main, .listing, .log { contain: none; height: 70vh; }
   .side-holder, .history-side { contain: none; }
   .chiprow.events { flex-wrap: wrap; margin-left: 0; }
+  /* records: the sidebar is a disclosure above the list, closed until opened */
+  .filters-toggle { display: inline-flex; }
+  .records-body:not(.filters-open) .side-holder { display: none; }
   .filter-bar, .filter-controls { flex-wrap: wrap; }
   .filter-bar .search { flex: 1 1 100%; }
   .filter-controls { flex: 1 1 100%; }
@@ -211,6 +212,18 @@ a.row-main:hover { background: var(--hover-fill); }
   body { overflow: auto; }
   .page { overflow: visible; }
   .sections { grid-template-columns: 1fr; }
+  /* records: each row stacks, the title on its own line over kind, status, author and date */
+  .records-table .table-head { display: none; }
+  .records-table .table.records, .records-table .table.records tbody { display: block; }
+  .records-table .table.records colgroup { display: none; }
+  .records-table .table.records tr { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; padding: 10px 16px 10px 20px; border-bottom: 1px solid var(--line-2); }
+  .records-table .table.records tbody tr:hover { background: var(--hover-fill); }
+  .records-table .table.records tr:hover td { background: none; }
+  .records-table .table.records td { height: auto; padding: 0; border: 0; font-size: 12.5px; }
+  .records-table .table.records td.title-cell { flex: 1 1 100%; padding: 0; font-size: 13.5px; white-space: normal; overflow-wrap: anywhere; }
+  .records-table .table.records td.author { color: var(--muted); min-width: 0; }
+  .records-table .table.records td.self { display: none; }
+  .records-table .table.records td.updated { margin-left: auto; }
 }
 @media (max-width: 760px) {
   .stats.six { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -221,6 +234,6 @@ a.row-main:hover { background: var(--hover-fill); }
   .act-row .act-by { display: none; }
   .tool-line { flex-wrap: wrap; }
   /* phones keep the title, kind and status columns; the rest is on the record */
-  .table.records col:nth-child(n+4):nth-child(-n+6), .table.history col:nth-child(4) { visibility: collapse; }
+  .table.history col:nth-child(4) { visibility: collapse; }
 }
 @media (prefers-reduced-motion: reduce) { .theme-toggle span, .icon, .button { transition: none; } }
