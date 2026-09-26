@@ -8,7 +8,7 @@
 // stack each row (ui-screens.css); the log is the screen's only scroller.
 import { el, when, copyButton, openButton, facts, disclose, icon, tablePanel, project } from "./ui.js";
 import { activity, perDay, within, count } from "./ui-derive.js";
-import { hero, statCard, sparkline, head, chip, dropdown, rowMenu } from "./ui-parts.js";
+import { hero, statCard, sparkline, head, chip, dropdown } from "./ui-parts.js";
 import { groups, other, mark } from "./ui-icons.js";
 
 // state survives re-renders from the live poll, so a filter stays put. event
@@ -28,13 +28,10 @@ const matches = (event) => (r) => event === "all" || (event === "other" ? r.grou
 function logRow(r) {
   const detail = el("td", "", facts([["Proposed by", r.proposer], [r.approverLabel, r.approver], ["Reason", r.reason],
     ["Record", r.target ? el("span", "id-line", openButton(r.target), copyButton("Copy id", r.target), el("span", "mono muted", r.target)) : ""]], "facts wide"));
-  detail.colSpan = 5;
+  detail.colSpan = 4;
   const cell = (className, content, text) => { const td = el("td", className, content); td.title = text ?? content; return td; };
-  const menu = el("td", "row-actions", r.target ? rowMenu("Event actions", [["Open record", () => { location.hash = "#/record/" + encodeURIComponent(r.target); }],
-    ["Copy id", () => navigator.clipboard.writeText(r.target).catch(() => {})]]) : null);
-  menu.addEventListener("click", (e) => e.stopPropagation());
   const tr = el("tr", "event", el("td", "time", el("span", "chev", icon("chevron")), when(r.time)),
-    cell("what-cell", el("span", "event-word", mark(r.group), el("span", "", r.what)), r.what), cell("title-cell", r.title), cell("by-cell", r.proposer), menu);
+    cell("what-cell", el("span", "event-word", mark(r.group), el("span", "", r.what)), r.what), cell("title-cell", r.title), cell("by-cell", r.proposer));
   const more_ = el("tr", "event-detail", detail);
   const body = el("tbody", "", tr, more_);
   disclose(tr, more_, body);
@@ -94,7 +91,7 @@ export async function renderHistory() {
         () => pick("event")(state.event === g.key ? "all" : g.key), el("span", "dot tone-fill " + g.tone)))));
     log.replaceChildren(
       head("history", "blue", "History log", `Showing ${shown.length} of ${all.length} events, ${orderNote[state.sort]}`, sort),
-      tablePanel("history", ["Time", "Event", "Record", "By", ""], ["var(--time-col)", "190px", "", "150px", "52px"],
+      tablePanel("history", ["Time", "Event", "Record", "By"], ["var(--time-col)", "190px", "", "150px"],
         shown.map(logRow), shown.length ? null : el("p", "empty", "empty...")));
     side.replaceChildren(head("bars", "blue", "Event breakdown", ranges.find((r) => r[0] === state.range)[1]), breakdown(ranged));
   }
