@@ -1,4 +1,0 @@
-# WhoSaidSo marks its own project root. The nearest whosaidso.toml wins,
-# walking up from the working directory.
-id     = "whosaidso/whosaidso"
-ledger = ".whosaidso/events"
