@@ -53,6 +53,14 @@ Full steps and the first loop are in [Usage and setup](USAGE.md).
 ## Works with
 
 Any project and any agent that can run a command. Tested on macOS and, in CI, on Linux; Windows is untested. Early:
-the design is still settling.
+the design is still settling. Until 1.0 the ledger format may change; when it does, the release includes a one-time
+converter.
+
+## What could come next
+
+- **SQLite for large ledgers**, behind the same commands, if a project outgrows plain files.
+- **Sub-projects**: tag records by sub-project in one ledger, so folders can move without losing their records.
+- **Moving records between ledgers**, when a sub-project leaves for its own repo.
+- **Adding records from the viewer**, through the same capture and admit.
 
 Apache-2.0.

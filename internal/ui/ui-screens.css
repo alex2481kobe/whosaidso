@@ -189,8 +189,9 @@ a.row-main:hover { background: var(--hover-fill); }
 .item-body { padding: 2px 10px 12px 30px; }
 
 /* narrower windows: fewer columns; the page scrolls and panels take fixed heights */
+/* six stat cards in a row only while the longest label fits on one line */
+@media (max-width: 1440px) { .stats.six { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 1180px) {
-  .stats.six { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .home-body, .records-top, .records-body, .history-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
   .home-main, .listing, .log { contain: none; height: 70vh; }
   .side-holder { contain: none; }
@@ -248,3 +249,5 @@ a.row-main:hover { background: var(--hover-fill); }
   .table.history col:nth-child(4) { visibility: collapse; }
 }
 @media (prefers-reduced-motion: reduce) { .theme-toggle span, .icon, .button { transition: none; } }
+/* the smallest phones: one stat card per row, so no note is cut off */
+@media (max-width: 380px) { .stats.six { grid-template-columns: minmax(0, 1fr); } }
