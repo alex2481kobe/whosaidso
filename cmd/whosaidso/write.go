@@ -65,12 +65,12 @@ func captureVerb(fs *flag.FlagSet) func(*call) error {
 			return err
 		}
 		count := len(events)
-		for _, line := range createdIDs(events) {
-			if !*jsonOutput { // --json is the one answer on stdout; notes are for a reader
+		created := createdRecords(events, nil)
+		if !*jsonOutput { // --json is the one answer on stdout; notes are for a reader
+			for _, line := range createdIDs(created, count) {
 				fmt.Fprintln(c.stderr, line)
 			}
 		}
-		created := createdRecords(events)
 		if *admitAfter {
 			return captureAndAdmit(c.ctx, project, c.stdout, *jsonOutput, ref, count, created, model.ID(*admitID), author, *reason)
 		}

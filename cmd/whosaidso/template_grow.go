@@ -19,11 +19,11 @@ const projectPlaceholder = "<project: the id declared in whosaidso.toml>"
 // revision 1, as element 0 did, and never copies one already minted. False
 // when the schema has nothing there.
 func (t *boundTemplate) skeletonAt(steps []templateStep) (any, bool) {
-	skeleton, _, err := buildTemplateTree(t.event)
+	skeleton, notes, err := buildTemplateTree(t.event)
 	if err != nil {
 		return nil, false
 	}
-	fresh := &boundTemplate{c: t.c, event: t.event, body: skeleton, author: t.author, projectID: t.projectID}
+	fresh := &boundTemplate{c: t.c, event: t.event, body: skeleton, notes: notes, minted: t.minted, author: t.author, projectID: t.projectID}
 	if err := fresh.fillUnflagged(); err != nil {
 		return nil, false
 	}

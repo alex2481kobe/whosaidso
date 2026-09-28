@@ -47,8 +47,10 @@ whosaidso continue TASK_ID                   # awaiting acceptance, with its rec
 
 Each command prints the ids the next one needs. In a script, add `--json` to
 `capture` or `template --capture`: the answer's `created` list holds every new
-id. A success handback ends the attempt, not the task: a `task.close` with its
-witnesses does that (`whosaidso help accept`).
+id (a `task.amend`'s new criteria only from `template --capture`, which minted
+them; raw, its event cannot tell them from the ones it carries). A success
+handback ends the attempt, not the task: a `task.close` with its witnesses does
+that (`whosaidso help accept`).
 
 In zsh (the macOS default), quote empty lists: `--set 'spec.prerequisites=[]'`,
 since zsh reads `[]` as a filename pattern.

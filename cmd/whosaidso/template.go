@@ -25,6 +25,7 @@ type templateNote struct {
 	Kind   string // "choose", "optional" or "minted"
 	Union  templateUnion
 	Detail string
+	ID     string // "minted": the id minted there
 }
 
 type templateObject []templateMember
@@ -119,7 +120,7 @@ func (b *templateBuilder) walk(t reflect.Type, path []string, field reflect.Stru
 			if minted == templatePath(here) {
 				id, err := model.NewID(time.Now(), rand.Reader)
 				if err == nil {
-					b.notes = append(b.notes, templateNote{Path: here, Kind: "minted", Detail: templateMintNotes[b.event]})
+					b.notes = append(b.notes, templateNote{Path: here, Kind: "minted", Detail: templateMintNotes[b.event], ID: string(id)})
 					return string(id)
 				}
 			}
@@ -295,7 +296,7 @@ func renderTemplateNotes(event model.EventType, notes []templateNote) string {
 				fmt.Fprintf(&b, "optional %s: absent; --set or --pin %s adds it\n", at, at)
 				continue
 			}
-			fmt.Fprintf(&b, "optional %s: delete the key to omit it\n", at)
+			fmt.Fprintf(&b, "optional %s: --capture leaves it out while unfilled, or --set %s=null; editing the JSON, delete the key\n", at, at)
 		case "choose":
 			if at == "" {
 				at = "(the event)"

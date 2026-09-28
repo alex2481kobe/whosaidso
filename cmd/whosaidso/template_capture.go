@@ -73,25 +73,10 @@ func (t *boundTemplate) capture(admit bool, reason string, jsonOutput bool) erro
 		return err
 	}
 	count := len(events)
-	created := createdRecords(events)
-	// The ids this event created, so the next command can name them; with
-	// --json they are in the answer instead.
-	for _, n := range t.notes {
-		if jsonOutput {
-			break
-		}
-		if n.Kind != "minted" || t.putPaths[templatePath(n.Path)] {
-			continue // a bind flag or --set replaced the minted id
-		}
-		steps := make([]templateStep, len(n.Path))
-		for i, part := range n.Path {
-			steps[i] = templateStep{key: part, index: -1}
-			if part == "0" {
-				steps[i] = templateStep{index: 0}
-			}
-		}
-		if id, ok := templateGet(t.body, steps); ok {
-			fmt.Fprintf(t.c.stderr, "minted   %s = %v\n", templatePath(n.Path), id)
+	created := createdRecords(events, t.minted)
+	for _, r := range created {
+		if !jsonOutput && t.minted[r.ID] { // --json carries them in the answer instead
+			fmt.Fprintf(t.c.stderr, "minted   %s = %s\n", r.Path, r.ID)
 		}
 	}
 	if admit {

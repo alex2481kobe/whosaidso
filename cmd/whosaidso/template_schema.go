@@ -27,6 +27,7 @@ var templateEvents = []model.TypedEvent{
 // are minted fresh; every other id is a reference the author must look up.
 var templateMints = map[model.EventType][]string{
 	"task.create":        {"id", "spec.acceptance_criteria[0].id"},
+	"task.amend":         {"replacement.acceptance_criteria[0].id"},
 	"claim.assert":       {"id"},
 	"decision.open":      {"id"},
 	"instrument.declare": {"id"},
@@ -40,6 +41,7 @@ var templateMints = map[model.EventType][]string{
 
 var templateMintNotes = map[model.EventType]string{
 	"criterion.fix": "criterion_id is fresh for revision 1; a later revision reuses the criterion's existing id",
+	"task.amend":    "fresh for a new criterion, at revision 1; an existing criterion keeps its id and revision (--from copies them)",
 }
 
 // templateEnumTypes are named string types whose members a validate method lists.

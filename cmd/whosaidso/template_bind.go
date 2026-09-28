@@ -37,6 +37,7 @@ type boundTemplate struct {
 	notes    []templateNote
 	filled   []string        // "PATH: from WHAT", printed on stderr
 	putPaths map[string]bool // the paths put filled
+	minted   map[string]bool // every id this draft's skeletons minted, appended elements' too
 	blobs    []string        // files whose bytes a capture must carry
 	author   model.Actor
 	bound    bool // a bind flag, --set or --pin was given: list what is left
@@ -80,6 +81,7 @@ var templateDefaults = map[model.EventType][]string{
 // id's first revision is 1.
 var templateMintRevisions = map[model.EventType][]string{
 	"task.create": {"spec.acceptance_criteria[0].revision"}, "criterion.fix": {"revision"},
+	"task.amend": {"replacement.acceptance_criteria[0].revision"},
 }
 
 // templateVerb prints one event's skeleton, filled as far as the bind flags
@@ -252,6 +254,14 @@ func (t *boundTemplate) textField(path string) bool {
 // revision. An element a path appends is filled by the same code
 // (skeletonAt), so it is the same fresh instance element 0 is.
 func (t *boundTemplate) fillUnflagged() error {
+	if t.minted == nil {
+		t.minted = map[string]bool{}
+	}
+	for _, n := range t.notes {
+		if n.Kind == "minted" {
+			t.minted[n.ID] = true
+		}
+	}
 	if t.projectID != "" {
 		t.replaceAll(projectPlaceholder, t.projectID, "whosaidso.toml")
 	}
@@ -282,8 +292,12 @@ func (t *boundTemplate) omit(path string) error {
 		return usageError("whosaidso template: %v", err)
 	}
 	if !t.optionalPath(path) {
+		node, ok := templateGet(t.body, steps)
+		if _, known := t.skeletonAt(steps); !ok && !known {
+			return usageError("whosaidso template %s: --set %s=null: %s has no field %s", t.event, path, t.event, path)
+		}
 		how := "fill it"
-		switch node, _ := templateGet(t.body, steps); node.(type) {
+		switch node.(type) {
 		case []any:
 			how = fmt.Sprintf("to leave the list empty, --set '%s=[]' where the rules allow none (quoted, since zsh reads [] as a filename pattern)", path)
 		case templateObject:

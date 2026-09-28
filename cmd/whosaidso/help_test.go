@@ -202,6 +202,9 @@ func TestJSONFailuresPrintAnErrorObject(t *testing.T) {
 	}{
 		"show --json bad-id": {2, "usage"},
 		"admit --json --outcome x --reason r " + string(cliID(3)): {1, "refused"},
+		// a flag error stops parsing before or after --json; the request stands
+		"capture --json --typo":              {2, "usage"},
+		"template task.create --typo --json": {2, "usage"},
 	} {
 		out, _, code := cliRun(t, root, nil, "", strings.Fields(args)...)
 		var e struct {
@@ -211,7 +214,9 @@ func TestJSONFailuresPrintAnErrorObject(t *testing.T) {
 			t.Fatalf("%s: want exit %d and error code %q, got %d %q", args, want.code, want.name, code, out)
 		}
 	}
-	if out, _, code := cliRun(t, root, nil, "", "show", "bad-id"); code != 2 || out != "" {
-		t.Fatalf("without --json a failure prints nothing on stdout, got %d %q", code, out)
+	for _, args := range [][]string{{"show", "bad-id"}, {"run", "--typo", "--", "tool", "--json"}} {
+		if out, _, code := cliRun(t, root, nil, "", args...); code != 2 || out != "" {
+			t.Fatalf("%v: without --json a failure prints nothing on stdout (a --json after -- is the tool's), got %d %q", args, code, out)
+		}
 	}
 }

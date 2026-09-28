@@ -160,8 +160,12 @@ func TestNotesAreReadFromTheFinalTree(t *testing.T) {
 		t.Errorf("an id a bind flag replaced is not minted:\n%s", revised)
 	}
 	if amend := notes("task.amend", "--from", string(f.task)); !strings.Contains(amend, "optional replacement.progress: absent; --set or --pin replacement.progress adds it") ||
-		strings.Contains(amend, "optional replacement.accepter: delete") {
-		t.Errorf("an absent optional key is noted as addable, and no delete note for a key not there:\n%s", amend)
+		strings.Contains(amend, "optional replacement.accepter: --capture") {
+		t.Errorf("an absent optional key is noted as addable, and no omit note for a key not there:\n%s", amend)
+	}
+	// An optional key present says how to omit it without editing the JSON.
+	if create := notes("task.create"); !strings.Contains(create, "optional spec.progress: --capture leaves it out while unfilled, or --set spec.progress=null") {
+		t.Errorf("an optional key's note must name --set PATH=null:\n%s", create)
 	}
 	for _, event := range templateEvents {
 		out, _, _ := cliRun(t, f.root, nil, "agent", "template", string(event.EventType()))

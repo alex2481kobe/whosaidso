@@ -122,7 +122,7 @@ func TestCaptureNamesTheIDsItsEventsCreate(t *testing.T) {
 		t.Fatalf("capture must name the task and criterion ids it creates: %d %q", code, errs)
 	}
 	two := []model.Event{{Type: "task.create", Data: json.RawMessage(`{"id":"A","spec":{"acceptance_criteria":[{"id":"B"},{"id":"C"}]}}`)}}
-	if got := strings.Join(createdIDs(two), "|"); got != "new      task.create id = A|new      task.create spec.acceptance_criteria[0].id = B|new      task.create spec.acceptance_criteria[1].id = C" {
+	if got := strings.Join(createdIDs(createdRecords(two, nil), len(two)), "|"); got != "new      task.create id = A|new      task.create spec.acceptance_criteria[0].id = B|new      task.create spec.acceptance_criteria[1].id = C" {
 		t.Fatalf("every acceptance criterion's id is named: %s", got)
 	}
 	f := boundWorld(t)
@@ -143,7 +143,54 @@ func TestCaptureNamesTheIDsItsEventsCreate(t *testing.T) {
 	if err := json.Unmarshal([]byte(printed), &events); err != nil {
 		t.Fatal(err)
 	}
-	if got := createdIDs(events); len(got) != 1 || got[0] != fmt.Sprintf("new      criterion.fix criterion_id = %v", id) {
+	if got := createdIDs(createdRecords(events, nil), len(events)); len(got) != 1 || got[0] != fmt.Sprintf("new      criterion.fix criterion_id = %v", id) {
 		t.Fatalf("a revision-1 criterion's id is new: %v", got)
+	}
+}
+
+// A criterion appended to a task.amend is minted at revision 1 and named as
+// created; the criteria --from carried and an id the author supplied are not,
+// and an amend captured raw names none, since its event cannot tell new from
+// carried.
+func TestAmendNamesOnlyTheCriteriaItMinted(t *testing.T) {
+	root, data := cliFixture(t)
+	if out, errs, code := cliRun(t, root, data, "agent", "capture", "--admit", "--reason", "fixture"); code != 0 {
+		t.Fatalf("control: the task must admit: %d %s %s", code, out, errs)
+	}
+	amend := []string{"template", "task.amend", "--from", string(cliID(1)), "--set", "provenance.source_refs=[]"}
+	if _, errs, code := cliRun(t, root, nil, "agent", amend...); code != 0 || strings.Contains(errs, "minted   replacement") {
+		t.Fatalf("a copied criterion is not noted as minted: %d %s", code, errs)
+	}
+	if _, errs, code := cliRun(t, root, nil, "agent", append(amend, "--set", "replacement.acceptance_criteria[1].criterion=second",
+		"--set", "replacement.acceptance_criteria[1].id="+string(cliID(99)), "--capture")...); code != 0 || strings.Contains(errs, "minted   ") {
+		t.Fatalf("carried and supplied ids are not minted: %d %s", code, errs)
+	}
+	out, errs, code := cliRun(t, root, nil, "agent", append(amend, "--set", "replacement.acceptance_criteria[1].criterion=second",
+		"--capture", "--admit", "--reason", "fixture", "--json")...)
+	var answer struct {
+		Capture captureAnswer `json:"capture"`
+	}
+	if code != 0 || json.Unmarshal([]byte(out), &answer) != nil {
+		t.Fatalf("the appended amend must admit: %d %s %s", code, out, errs)
+	}
+	rec, ok := boundSnapshot(t, root).Current(reduce.Ident{Project: "test/cli", ID: cliID(1)})
+	if !ok || len(rec.Task.AcceptanceCriteria) != 2 || rec.Task.AcceptanceCriteria[1].Revision != 1 {
+		t.Fatalf("the appended criterion must land at revision 1: %+v", rec.Task)
+	}
+	want := []createdRecord{{Event: 0, Type: "task.amend", Path: "replacement.acceptance_criteria[1].id", ID: string(rec.Task.AcceptanceCriteria[1].ID)}}
+	if fmt.Sprint(answer.Capture.Created) != fmt.Sprint(want) {
+		t.Fatalf("created = %+v, want only the appended criterion %+v", answer.Capture.Created, want)
+	}
+	project, err := store.Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packets, err := store.ReadVerifiedIntake(project, []model.ID{answer.Capture.CommandID})
+	if err != nil || len(packets) != 1 {
+		t.Fatalf("control: the amend's packet must read back: %v", err)
+	}
+	raw, _ := json.Marshal(packets[0].Packet.Events)
+	if out, errs, code := cliRun(t, root, raw, "agent", "capture", "--json"); code != 0 || !strings.Contains(out, `"created": []`) {
+		t.Fatalf("an amend captured raw names no criterion: %d %s %s", code, out, errs)
 	}
 }

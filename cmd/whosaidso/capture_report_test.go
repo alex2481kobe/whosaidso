@@ -57,8 +57,23 @@ func TestCaptureNamesEveryPlaceholderAtOnce(t *testing.T) {
 	if strings.Contains(errs, "event.data.spec.intent  (inside optional") {
 		t.Errorf("a required field must not be marked optional: %s", errs)
 	}
+	// next_actor.id and unknown_reason are one choice: filling both is refused.
+	if !strings.Contains(errs, "of a choice's members fill the one you mean and delete the rest") {
+		t.Errorf("the refusal must not tell the author to fill every member of a choice: %s", errs)
+	}
 	if got := intakeCount(t, f.root); got != before {
 		t.Fatalf("a refused capture must write nothing to intake: %d packets, want %d", got, before)
+	}
+}
+
+// The deletable key is named at the placeholder's own list element: element 0's
+// key would leave the placeholder under element 1 in place.
+func TestOptionalAdviceNamesTheActualElement(t *testing.T) {
+	root, _ := cliFixture(t)
+	input := []byte(`[{"type":"proof.admit","data":{"evidence":[{}, {"code_change":{"changed_paths":["<text>"]}}]}}]`)
+	_, errs, code := cliRun(t, root, input, "agent", "capture")
+	if code != 1 || !strings.Contains(errs, "event.data.evidence[1].code_change.changed_paths[0]  (inside optional evidence[1].code_change: delete it") {
+		t.Fatalf("the advice must name evidence[1].code_change: %d %s", code, errs)
 	}
 }
 
@@ -102,6 +117,16 @@ func TestTemplateCaptureJSONListsTheIDsItCreates(t *testing.T) {
 		"--set", "spec.scope.limitations=none", "--set", `spec.non_goals=["production writes"]`, "--set", "spec.context_refs=[]",
 		"--set", "spec.constraint_refs=[]", "--set", "spec.prerequisites=[]", "--set", "spec.next_actor.id=agent",
 		"--set", "spec.acceptance_criteria[0].criterion=first property"}
+	// Without --json the minted ids are named on stderr, an appended criterion's too.
+	if _, errs, code := cliRun(t, f.root, nil, "agent", append(args, "--set", "spec.acceptance_criteria[1].criterion=second property", "--capture")...); code != 0 ||
+		!strings.Contains(errs, "minted   id = ") || !strings.Contains(errs, "minted   spec.acceptance_criteria[1].id = ") {
+		t.Fatalf("template --capture must name every id it created: %d %s", code, errs)
+	}
+	// An id the author supplied was not minted, so it is not named as minted.
+	if _, errs, code := cliRun(t, f.root, nil, "agent", append(args, "--set", "id="+string(cliID(98)), "--capture")...); code != 0 ||
+		strings.Contains(errs, "minted   id = ") || !strings.Contains(errs, "minted   spec.acceptance_criteria[0].id = ") {
+		t.Fatalf("a supplied id is not minted; the criterion's still is: %d %s", code, errs)
+	}
 	if _, errs, code := cliRun(t, f.root, nil, "agent", append(args, "--json")...); code != 2 || !strings.Contains(errs, "--json needs --capture") {
 		t.Fatalf("--json without --capture must be refused: %d %s", code, errs)
 	}
@@ -139,5 +164,9 @@ func TestSetNullOnARequiredKeySaysWhatToDoInstead(t *testing.T) {
 		if code != 2 || !strings.Contains(errs, "omits only an optional key") || !strings.Contains(errs, want) {
 			t.Errorf("--set %s=null must be refused saying %q: %d %s", path, want, code, errs)
 		}
+	}
+	// A misspelled path is no field at all, not a required one.
+	if _, errs, code := cliRun(t, f.root, nil, "agent", "template", "task.create", "--set", "spec.context_ref=null"); code != 2 || !strings.Contains(errs, "task.create has no field spec.context_ref") {
+		t.Errorf("--set on an unknown path must say it is no field: %d %s", code, errs)
 	}
 }
