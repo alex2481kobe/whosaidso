@@ -205,6 +205,9 @@ func TestJSONFailuresPrintAnErrorObject(t *testing.T) {
 		// a flag error stops parsing before or after --json; the request stands
 		"capture --json --typo":              {2, "usage"},
 		"template task.create --typo --json": {2, "usage"},
+		"capture --typo --json=true":         {2, "usage"},
+		"capture --typo -json=true":          {2, "usage"},
+		"capture ---x --json":                {2, "usage"},
 	} {
 		out, _, code := cliRun(t, root, nil, "", strings.Fields(args)...)
 		var e struct {
@@ -214,9 +217,12 @@ func TestJSONFailuresPrintAnErrorObject(t *testing.T) {
 			t.Fatalf("%s: want exit %d and error code %q, got %d %q", args, want.code, want.name, code, out)
 		}
 	}
-	for _, args := range [][]string{{"show", "bad-id"}, {"run", "--typo", "--", "tool", "--json"}} {
-		if out, _, code := cliRun(t, root, nil, "", args...); code != 2 || out != "" {
-			t.Fatalf("%v: without --json a failure prints nothing on stdout (a --json after -- is the tool's), got %d %q", args, code, out)
+	// --json read as parsing reads it: after -- it is the tool's, as a flag's
+	// value it is that value, and a later --json=false turns it off.
+	for _, args := range []string{"show bad-id", "run --typo -- tool --json", "capture --reason --json --typo",
+		"capture --typo --reason --json", "capture --json --json=false --typo"} {
+		if out, _, code := cliRun(t, root, nil, "", strings.Fields(args)...); code != 2 || out != "" {
+			t.Fatalf("%s: without --json a failure prints nothing on stdout, got %d %q", args, code, out)
 		}
 	}
 }

@@ -154,10 +154,20 @@ func dispatch(c *call, args []string) error {
 	fs.Usage = func() {}
 	run := v.define(fs)
 	err := parseArgs(fs, rest, c)
+	if err != nil && !errors.Is(err, flag.ErrHelp) {
+		// A bad flag stops parsing, perhaps before --json: parse on past it,
+		// so a script that asked for JSON gets its error as JSON. The command
+		// does not run.
+		for args := fs.Args(); len(args) > 0; {
+			n := len(args)
+			perr := fs.Parse(args)
+			if args = fs.Args(); perr == nil && len(args) > 0 || len(args) == n {
+				args = args[1:] // a positional, or a bad flag Parse did not consume
+			}
+		}
+	}
 	if f := fs.Lookup("json"); f != nil {
-		// A flag error stops parsing, perhaps before --json: a script that
-		// asked for JSON still gets its error as JSON.
-		c.json = f.Value.String() == "true" || err != nil && asksJSON(rest)
+		c.json = f.Value.String() == "true"
 	}
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -167,20 +177,6 @@ func dispatch(c *call, args []string) error {
 		return usageError("whosaidso %s: %v; run whosaidso help %s", v.name, err, v.name)
 	}
 	return run(c)
-}
-
-// asksJSON reports whether args give --json before any -- (run's command
-// line, which is not whosaidso's).
-func asksJSON(args []string) bool {
-	for _, a := range args {
-		if a == "--" {
-			return false
-		}
-		if a == "--json" || a == "-json" {
-			return true
-		}
-	}
-	return false
 }
 
 // parseArgs accepts flags before or after positional arguments. Everything
