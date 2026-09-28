@@ -71,8 +71,9 @@ machine's home binds, an unavailable home with its reason.
 source.intake is captured with its original bytes, from its reference or
 from --blob; capture refuses a source whose bytes it cannot save. Prints
 "captured PACKET (N events) command ID", and (without --json) on stderr
-each id its events create ("new      claim.assert id = ID"); with --json those ids are in
-the answer's created list instead (event, type, path, id), for scripts. A packet that still
+each id identified as new ("new      claim.assert id = ID"); with --json those ids are in
+the answer's created list instead (event, type, path, id), for scripts; a raw task.amend
+lists none, since its event cannot tell new criteria from carried ones. A packet that still
 holds template placeholders is refused with every one named at once. With --admit the packet
 is then admitted as a second act; if that is refused the capture stands, the packet stays
 pending, the retry command is printed and the exit status is 4.

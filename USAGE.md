@@ -34,7 +34,7 @@ Writing is two acts: **capture** proposes a packet, **admit** reviews it and
 is the only act that writes to the ledger.
 
 ```sh
-whosaidso template task.create > task.json   # fill every "<...>" placeholder
+whosaidso template task.create > task.json   # fill chosen values; delete unused keys
 whosaidso capture --events task.json --admit --reason "the work we agreed"
 whosaidso todo                               # the new task is READY
 
@@ -46,9 +46,9 @@ whosaidso continue TASK_ID                   # awaiting acceptance, with its rec
 ```
 
 Each command prints the ids the next one needs. In a script, add `--json` to
-`capture` or `template --capture`: the answer's `created` list holds every new
-id (a `task.amend`'s new criteria only from `template --capture`, which minted
-them; raw, its event cannot tell them from the ones it carries). A success
+`capture` or `template --capture`: `created` holds the ids identified as new.
+For `task.amend`, only criteria `template --capture` minted are listed; ids you
+supply are not classified, and a raw capture lists none. A success
 handback ends the attempt, not the task: a `task.close` with its witnesses does
 that (`whosaidso help accept`).
 

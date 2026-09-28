@@ -33,7 +33,7 @@ recorded unknown, never guessed. Ids: whosaidso id prints one, whosaidso id 5 fi
 Never hand-write an id.
 
 Writing is two acts: capture, then admit the packet id it prints.
-  whosaidso template task.create > task.json      # fill every placeholder
+  whosaidso template task.create > task.json      # fill chosen values; delete unused keys
   whosaidso capture --events task.json            # captured PACKET ...
   whosaidso admit --outcome accepted --reason "why this is right" PACKET
 or both at once: whosaidso capture --events task.json --admit --reason "...".
