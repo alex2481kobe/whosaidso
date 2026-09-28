@@ -135,6 +135,9 @@ func dispatch(c *call, args []string) error {
 	if args[0] == "--help" || args[0] == "-h" {
 		args = append([]string{"help"}, args[1:]...)
 	}
+	if args[0] == "--version" {
+		args = append([]string{"version"}, args[1:]...)
+	}
 	v, rest := lookup(args)
 	if v == nil {
 		if modes := groupModes(args[0]); len(modes) > 0 {

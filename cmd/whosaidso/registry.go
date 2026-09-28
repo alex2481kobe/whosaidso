@@ -175,6 +175,10 @@ and says so (continuity: unreadable-binding-replaced).
 		{name: "id", args: "[N]", summary: "print N fresh record ids (default one)", detail: `Use it rather than inventing an id: hand-typed Crockford base32 parses and
 means nothing.
 `, define: idVerb},
+		{name: "version", summary: "which build this is, for a report", detail: `Prints one line: the release tag of a go install build, else the version Go
+recorded from the checkout, else dev and the commit it was built from, marked
+modified when the checkout had uncommitted changes.
+`, define: versionVerb},
 	}
 }
 

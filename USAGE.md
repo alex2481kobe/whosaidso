@@ -55,6 +55,7 @@ whosaidso help             # every topic and verb
 whosaidso help loop        # capture, admit, run, handback, accept
 whosaidso help proof       # criterion first, the whole family, a verdict
 whosaidso VERB --help      # one verb's usage
+whosaidso version          # which build you are running; include it in a report
 ```
 
 `skill/whosaidso/SKILL.md` is a short pointer for agent harnesses that load
