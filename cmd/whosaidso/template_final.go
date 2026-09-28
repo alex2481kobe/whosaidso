@@ -26,12 +26,11 @@ func (t *boundTemplate) liveNotes() []templateNote {
 // where it could be added is marked absent, to be noted as addable.
 func (t *boundTemplate) noteLive(n *templateNote) bool {
 	at := templatePath(n.Path)
+	steps, err := parseTemplatePath(at)
 	if n.Kind == "minted" { // not where a bind flag, --set or --from's copy replaced it
-		steps, _ := parseTemplatePath(at)
 		id, ok := templateGet(t.body, steps)
 		return ok && id == n.ID
 	}
-	steps, err := parseTemplatePath(at)
 	if at == "" {
 		steps, err = nil, nil
 	}
