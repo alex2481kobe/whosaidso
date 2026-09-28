@@ -59,8 +59,10 @@ converter.
 ## What could come next
 
 - **SQLite for large ledgers**, behind the same commands, if a project outgrows plain files.
-- **Sub-projects**: tag records by sub-project in one ledger, so folders can move without losing their records.
-- **Moving records between ledgers**, when a sub-project leaves for its own repo.
+- **Sub-projects**: tag records by sub-project inside one ledger, so a project's folders can move around without
+  losing their records.
+- **Moving records between ledgers**: a sub-project splits off from the top-level ledger into its own, in its own
+  folder or its own repo, and can merge back.
 - **Adding records from the viewer**, through the same capture and admit.
 
 Apache-2.0.
