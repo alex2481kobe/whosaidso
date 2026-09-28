@@ -99,11 +99,14 @@ func templateVerb(fs *flag.FlagSet) func(*call) error {
 	capture := fs.Bool("capture", false, "capture the filled event; refused while any placeholder remains")
 	admitAfter := fs.Bool("admit", false, "--capture: then admit the packet as accepted under the same actor")
 	reason := fs.String("reason", "", "--admit: the review reason `TEXT` (required with --admit)")
+	jsonOutput := fs.Bool("json", false, "--capture: print the answer as one JSON object, with the ids the event created")
 	return func(c *call) error {
 		if len(c.args) != 1 || c.argv != nil {
 			return usageError("whosaidso template takes exactly one EVENT-TYPE:\n%s", templateEventList())
 		}
 		switch {
+		case *jsonOutput && !*capture:
+			return usageError("whosaidso template: --json needs --capture; a printed template is already JSON")
 		case *admitAfter && !*capture:
 			return usageError("whosaidso template: --admit needs --capture")
 		case *admitAfter && model.Blank(*reason):
@@ -131,7 +134,7 @@ func templateVerb(fs *flag.FlagSet) func(*call) error {
 		if !*capture {
 			return t.print()
 		}
-		return t.capture(*admitAfter, *reason)
+		return t.capture(*admitAfter, *reason, *jsonOutput)
 	}
 }
 
@@ -274,12 +277,19 @@ func (t *boundTemplate) fillUnflagged() error {
 // omit is --set PATH=null: an optional key is removed; any other is refused,
 // since null is never a value.
 func (t *boundTemplate) omit(path string) error {
-	if !t.optionalPath(path) {
-		return usageError("whosaidso template %s: --set %s=null omits only an optional key, and %s is required; null is never a value", t.event, path, path)
-	}
 	steps, err := parseTemplatePath(path)
 	if err != nil {
 		return usageError("whosaidso template: %v", err)
+	}
+	if !t.optionalPath(path) {
+		how := "fill it"
+		switch node, _ := templateGet(t.body, steps); node.(type) {
+		case []any:
+			how = fmt.Sprintf("to leave the list empty, --set '%s=[]' where the rules allow none (quoted, since zsh reads [] as a filename pattern)", path)
+		case templateObject:
+			how = "fill its fields"
+		}
+		return usageError("whosaidso template %s: --set %s=null omits only an optional key, and %s is required: %s", t.event, path, path, how)
 	}
 	if t.body, err = templateDelete(t.body, steps, ""); err != nil {
 		return usageError("whosaidso template %s: %v", t.event, err)

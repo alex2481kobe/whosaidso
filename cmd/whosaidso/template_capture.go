@@ -45,14 +45,15 @@ func (t *boundTemplate) print() error {
 
 // capture drops optional keys the author left unfilled, refuses while a placeholder
 // remains, then captures (and with --admit admits) through capture's path.
-func (t *boundTemplate) capture(admit bool, reason string) error {
+func (t *boundTemplate) capture(admit bool, reason string, jsonOutput bool) error {
 	for _, n := range t.notes {
 		if n.Kind == "optional" {
 			t.body = templateDropUnfilled(t.body, n.Path, "", t.unfilled)
 		}
 	}
 	if left := templatePlaceholders(t.body, ""); len(left) > 0 {
-		return fmt.Errorf("template %s: capture refused: %d placeholder(s) unfilled: %s; fill them with --set PATH=VALUE, or print the template and edit it",
+		return fmt.Errorf("template %s: capture refused: %d placeholder(s) unfilled: %s; fill them with --set PATH=VALUE "+
+			"(a list you need none of is --set 'PATH=[]' where the rules allow it, quoted since zsh reads [] as a pattern), or print the template and edit it",
 			t.event, len(left), strings.Join(left, ", "))
 	}
 	data, err := renderTemplate(t.event, t.body)
@@ -72,8 +73,13 @@ func (t *boundTemplate) capture(admit bool, reason string) error {
 		return err
 	}
 	count := len(events)
-	// The ids this event created, so the next command can name them.
+	created := createdRecords(events)
+	// The ids this event created, so the next command can name them; with
+	// --json they are in the answer instead.
 	for _, n := range t.notes {
+		if jsonOutput {
+			break
+		}
 		if n.Kind != "minted" || t.putPaths[templatePath(n.Path)] {
 			continue // a bind flag or --set replaced the minted id
 		}
@@ -89,7 +95,7 @@ func (t *boundTemplate) capture(admit bool, reason string) error {
 		}
 	}
 	if admit {
-		return captureAndAdmit(t.c.ctx, project, t.c.stdout, false, ref, count, "", t.author, reason)
+		return captureAndAdmit(t.c.ctx, project, t.c.stdout, jsonOutput, ref, count, created, "", t.author, reason)
 	}
-	return printResult(t.c.stdout, false, ref, captureAck(ref, count))
+	return printResult(t.c.stdout, jsonOutput, captureAnswer{ref.CommandID, ref.Digest, created}, captureAck(ref, count))
 }

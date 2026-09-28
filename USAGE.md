@@ -45,9 +45,13 @@ whosaidso admit --outcome accepted --reason "receipt checked" PACKET_ID
 whosaidso continue TASK_ID                   # awaiting acceptance, with its receipt
 ```
 
-Each command prints the ids the next one needs. A success handback ends the
-attempt, not the task: a `task.close` with its witnesses does that
-(`whosaidso help accept`).
+Each command prints the ids the next one needs. In a script, add `--json` to
+`capture` or `template --capture`: the answer's `created` list holds every new
+id. A success handback ends the attempt, not the task: a `task.close` with its
+witnesses does that (`whosaidso help accept`).
+
+In zsh (the macOS default), quote empty lists: `--set 'spec.prerequisites=[]'`,
+since zsh reads `[]` as a filename pattern.
 
 Commit the `.whosaidso/` folder with your code. It is the record.
 

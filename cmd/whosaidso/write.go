@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/alex2481kobe/whosaidso/internal/evidence"
@@ -71,10 +70,11 @@ func captureVerb(fs *flag.FlagSet) func(*call) error {
 				fmt.Fprintln(c.stderr, line)
 			}
 		}
+		created := createdRecords(events)
 		if *admitAfter {
-			return captureAndAdmit(c.ctx, project, c.stdout, *jsonOutput, ref, count, model.ID(*admitID), author, *reason)
+			return captureAndAdmit(c.ctx, project, c.stdout, *jsonOutput, ref, count, created, model.ID(*admitID), author, *reason)
 		}
-		return printResult(c.stdout, *jsonOutput, ref, captureAck(ref, count))
+		return printResult(c.stdout, *jsonOutput, captureAnswer{ref.CommandID, ref.Digest, created}, captureAck(ref, count))
 	}
 }
 
@@ -177,25 +177,34 @@ func printResult(stdout io.Writer, jsonOutput bool, result any, ack string) erro
 	return err
 }
 
+// captureAnswer is capture's --json answer: the packet and the ids its events
+// create, so a script reads a new record's id from here.
+type captureAnswer struct {
+	CommandID model.ID        `json:"command_id"`
+	Digest    model.Digest    `json:"digest"`
+	Created   []createdRecord `json:"created"`
+}
+
 func captureAck(ref model.PacketRef, events int) string {
 	return fmt.Sprintf("captured %s (%d events) command %s\n", ref.CommandID, events, ref.CommandID)
 }
 
 // captureAndAdmit is capture --admit's second step and its report: the
 // spec's partial-success JSON with --json, else one line per act.
-func captureAndAdmit(ctx context.Context, project store.Project, stdout io.Writer, jsonOutput bool, ref model.PacketRef, count int, admitID model.ID, actor model.Actor, reason string) error {
+func captureAndAdmit(ctx context.Context, project store.Project, stdout io.Writer, jsonOutput bool, ref model.PacketRef, count int, created []createdRecord, admitID model.ID, actor model.Actor, reason string) error {
 	packets := []model.ID{ref.CommandID}
 	a, bundle, err := admitCaptured(ctx, project, admitID, actor, reason, packets)
 	if jsonOutput {
 		type captured struct {
-			Status    string   `json:"status"`
-			CommandID model.ID `json:"command_id"`
-			PacketID  model.ID `json:"packet_id"`
+			Status    string          `json:"status"`
+			CommandID model.ID        `json:"command_id"`
+			PacketID  model.ID        `json:"packet_id"`
+			Created   []createdRecord `json:"created"`
 		}
 		out := struct {
 			Capture captured `json:"capture"`
 			admission
-		}{captured{"captured", ref.CommandID, ref.CommandID}, a}
+		}{captured{"captured", ref.CommandID, ref.CommandID, created}, a}
 		if perr := printResult(stdout, true, out, ""); perr != nil {
 			return perr
 		}
@@ -250,6 +259,9 @@ func captureCLI(ctx context.Context, project store.Project, id model.ID, author 
 	if err != nil {
 		return model.PacketRef{}, nil, err
 	}
+	if err := refuseUnfilled(events); err != nil { // capture_report.go
+		return model.PacketRef{}, nil, err
+	}
 	for _, event := range events {
 		if _, err := model.DecodeEvent(event); err != nil {
 			return model.PacketRef{}, nil, err
@@ -299,36 +311,4 @@ func sourceBlobs(ctx context.Context, project store.Project, events []model.Even
 		}
 	}
 	return readers, nil
-}
-
-// createdIDs names the ids the captured events create (template's minted
-// paths), so the next command can name them: "new      claim.assert id = ID".
-// A criterion.fix past revision 1 reuses its criterion's id, so it is not new.
-func createdIDs(events []model.Event) []string {
-	var out []string
-	for i, event := range events {
-		tree, err := templateValue(event.Data)
-		if err != nil {
-			continue
-		}
-		if event.Type == "criterion.fix" {
-			if rev, _ := templateGet(tree, []templateStep{{key: "revision", index: -1}}); rev != json.Number("1") {
-				continue
-			}
-		}
-		for _, path := range templateMints[event.Type] {
-			steps, err := parseTemplatePath(path)
-			if err != nil {
-				continue
-			}
-			label := string(event.Type)
-			if len(events) > 1 {
-				label = fmt.Sprintf("event %d %s", i, event.Type)
-			}
-			for _, found := range templateGetAll(tree, steps, "") {
-				out = append(out, fmt.Sprintf("new      %s %s = %v", label, found[0], found[1]))
-			}
-		}
-	}
-	return out
 }

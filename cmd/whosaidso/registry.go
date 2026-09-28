@@ -71,9 +71,11 @@ machine's home binds, an unavailable home with its reason.
 source.intake is captured with its original bytes, from its reference or
 from --blob; capture refuses a source whose bytes it cannot save. Prints
 "captured PACKET (N events) command ID", and (without --json) on stderr
-each id its events create ("new      claim.assert id = ID"). With --admit the packet is then
-admitted as a second act; if that is refused the capture stands, the packet
-stays pending, the retry command is printed and the exit status is 4.
+each id its events create ("new      claim.assert id = ID"); with --json those ids are in
+the answer's created list instead (event, type, path, id), for scripts. A packet that still
+holds template placeholders is refused with every one named at once. With --admit the packet
+is then admitted as a second act; if that is refused the capture stands, the packet stays
+pending, the retry command is printed and the exit status is 4.
 `, define: captureVerb},
 		{name: "admit", args: "PACKET_ID ...", summary: "review a packet set; the only publisher", detail: `Admission is the review, and the only command that writes a bundle. Any
 actor may admit; one who admits their own packet is recorded as
@@ -157,8 +159,8 @@ members' keys nobody filled go; a filled one stays for the gate.
 an element (acceptance_witness_refs[1].witness_ref); anything else is refused.
 --capture captures the result through capture's own path, refused while any
 placeholder remains; an optional key you put nothing into is omitted, and
-the ids it minted are named on stderr. --admit then admits it, as capture --admit
-does. Notes go to stderr. Event types:
+the ids it minted are named on stderr, or with --json listed in the answer's created list.
+--admit then admits it, as capture --admit does. Notes go to stderr. Event types:
 ` + templateEventList() + "\n", define: templateVerb},
 		{name: "home", args: "[PATH]", summary: "show or set where this project's live ledger is", detail: `Bare, shows this project's binding on this machine: its home, or unbound,
 and whether the home is available. With PATH, binds the project to the

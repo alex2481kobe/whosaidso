@@ -37,3 +37,20 @@ func TestDecodeEventRefusesPlaceholder(t *testing.T) {
 		t.Errorf("a non-placeholder must reach the shape check: %v", err)
 	}
 }
+
+// Placeholders lists every placeholder, values and map keys alike, in document
+// order and at the decoder's paths; authored text that merely holds angle
+// brackets is not one, and data that does not parse lists nothing.
+func TestPlaceholdersListsEveryOneInDocumentOrder(t *testing.T) {
+	data := []byte(`{"a":"<text>","b":[{"c":"authored"},{"d":"<id: look it up>"}],"<key: a name>":"x","e":"a < b > c"}`)
+	got := strings.Join(Placeholders(data), "|")
+	if want := "event.data.a|event.data.b[1].d|event.data.<key: a name>"; got != want {
+		t.Fatalf("Placeholders = %s, want %s", got, want)
+	}
+	if got := Placeholders([]byte(`{"a":"authored","b":["x"]}`)); len(got) != 0 {
+		t.Fatalf("an event with no placeholder lists none: %v", got)
+	}
+	if got := Placeholders([]byte(`{"a":`)); got != nil {
+		t.Fatalf("data that does not parse lists nothing, so the decoder names the parse error: %v", got)
+	}
+}

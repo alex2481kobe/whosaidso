@@ -6,8 +6,9 @@ package model
 // an authored value, so no event carrying one decodes. The check lives in
 // DecodeEvent because every capture passes through it (CLI capture, template
 // --capture, check admission --events, run, handback, reconcile via
-// EncodeEvent, and admission's own re-decode). Rendering templates does not
-// belong here; it lives in cmd/whosaidso.
+// EncodeEvent, and admission's own re-decode). Placeholders lists them all, so
+// a capture can refuse every one at once. Rendering templates does not belong
+// here; it lives in cmd/whosaidso.
 
 import (
 	"fmt"
@@ -32,30 +33,64 @@ func IsPlaceholder(s string) bool {
 	return placeholderKinds[kind]
 }
 
+// placeholderAt is one placeholder left in a tree: where, what, and whether it
+// sits as an object key rather than a value.
+type placeholderAt struct {
+	at, text string
+	key      bool
+}
+
+// Placeholders lists every placeholder left in an event's data, values and
+// object keys alike, at the paths the decoder names ("event.data.spec.intent").
+// Capture refuses them all at once with it, where the decoder alone stops at
+// the first. Data that does not parse lists nothing: the decoder names that.
+func Placeholders(data []byte) []string {
+	tree, err := parseOrdered(data)
+	if err != nil {
+		return nil
+	}
+	var found []placeholderAt
+	collectPlaceholders(tree, "event.data", &found)
+	out := make([]string, len(found))
+	for i, f := range found {
+		out[i] = f.at
+	}
+	return out
+}
+
 // refusePlaceholders refuses the first placeholder under an ordered tree,
 // as a value or as an object key (a map key is authored too).
 func refusePlaceholders(node any, at string) error {
+	var found []placeholderAt
+	collectPlaceholders(node, at, &found)
+	if len(found) == 0 {
+		return nil
+	}
+	f := found[0]
+	if f.key {
+		return invalid(f.at, "the template placeholder key "+f.text+" is still unfilled")
+	}
+	return invalid(f.at, "the template placeholder "+f.text+" is still unfilled; write the value, not the hint")
+}
+
+// collectPlaceholders appends every placeholder under node, in document order.
+func collectPlaceholders(node any, at string, found *[]placeholderAt) {
 	switch n := node.(type) {
 	case []member:
 		for _, m := range n {
 			here := at + "." + m.key
 			if IsPlaceholder(m.key) {
-				return invalid(here, "the template placeholder key "+m.key+" is still unfilled")
+				*found = append(*found, placeholderAt{at: here, text: m.key, key: true})
 			}
-			if err := refusePlaceholders(m.value, here); err != nil {
-				return err
-			}
+			collectPlaceholders(m.value, here, found)
 		}
 	case []any:
 		for i, v := range n {
-			if err := refusePlaceholders(v, fmt.Sprintf("%s[%d]", at, i)); err != nil {
-				return err
-			}
+			collectPlaceholders(v, fmt.Sprintf("%s[%d]", at, i), found)
 		}
 	case string:
 		if IsPlaceholder(n) {
-			return invalid(at, "the template placeholder "+n+" is still unfilled; write the value, not the hint")
+			*found = append(*found, placeholderAt{at: at, text: n})
 		}
 	}
-	return nil
 }

@@ -177,15 +177,15 @@ Each capture prints "minted id = ID": that ID is I, or C. TOOL is the
 instrument's implementation file, VALIDATION the file that validated it:
   whosaidso template instrument.declare --set 'spec.question_answered=...' \
       --set 'spec.blind_to=...' --set 'spec.not_answered=...' \
-      --set 'spec.valid_range=...' --set spec.config_surface=[] \
-      --set spec.dangerous_defaults=[] --set provenance.source_refs=[] \
+      --set 'spec.valid_range=...' --set 'spec.config_surface=[]' \
+      --set 'spec.dangerous_defaults=[]' --set 'provenance.source_refs=[]' \
       --pin spec.implementation_ref=TOOL --pin spec.validation.value.ref=VALIDATION \
       --set spec.validation.value.version=... --capture --admit --reason "..."
   whosaidso template claim.assert --set 'spec.assertion=...' \
       --set 'spec.falsifier=...' --set 'spec.scope.applies_when=...' \
-      --set 'spec.scope.limitations=...' --set spec.scope.source_paths=[] \
-      --set spec.scope.context_refs=[] --set spec.external_refs=[] \
-      --set provenance.source_refs=[] --capture --admit --reason "..."
+      --set 'spec.scope.limitations=...' --set 'spec.scope.source_paths=[]' \
+      --set 'spec.scope.context_refs=[]' --set 'spec.external_refs=[]' \
+      --set 'provenance.source_refs=[]' --capture --admit --reason "..."
 Or print either to a file (whosaidso template claim.assert > claim.json),
 fill it, then capture and admit it as whosaidso help loop shows.
 1. Fix the criterion (criterion.fix) and admit it in an EARLIER bundle than
