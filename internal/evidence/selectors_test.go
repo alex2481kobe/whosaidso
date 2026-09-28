@@ -291,7 +291,7 @@ func TestMetadataRolesDoNotDependOnValueShape(t *testing.T) {
 }
 
 // A FALSE reason names the failing member by its own identifying field when it
-// states one (archtree readings carry "path"), and by index when it does not.
+// states one (for example "path"), and by index when it does not.
 func TestFalseReasonNamesTheFailingMember(t *testing.T) {
 	c := testCriterion(t)
 	read := func(members string) Reading {

@@ -11,8 +11,6 @@ only there.
   which Go version you actually ran.
 - Before calling work done: `gofmt -l .` (must print nothing), `go vet ./...`,
   `go test ./... -count=1`, and `go test -race` on the packages you touched.
-  If you changed the package structure, run `go run ./tools/archtree -readme`
-  and commit the README it regenerates.
 - Files stay around 200-300 lines. A new file opens with a comment saying what
   belongs in it and what does not.
 

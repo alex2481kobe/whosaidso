@@ -53,14 +53,6 @@ jobs:
         if: always()
         run: go test ./... -race -count=1
 
-      - name: The architecture tree in the README is current
-        # The tree is generated, so it can be wrong in exactly one way: nobody
-        # regenerated it. Watched failing on a deliberately stale tree and
-        # passing on a current one before being put here, because a check
-        # nobody has seen fail is not evidence of anything.
-        if: always()
-        run: go run ./tools/archtree -check
-
       - name: macOS release builds compile
         # Releases ship darwin arm64 and amd64 binaries. Cross-compiling here
         # proves both targets build; nothing is uploaded.

@@ -5,157 +5,54 @@
 <h1 align="center">WhoSaidSo</h1>
 
 <p align="center">
-  <strong>A project record you can check, not just believe.</strong><br />
-  Work is written down as it happens, and every answer points back to who said so.
+  <strong>Keep your agents accountable and your claims proven.</strong><br />
+  Every task, idea and decision is written down as it happens, and every answer points back to who said so.
 </p>
 
 <p align="center">
-  <a href="#install">Install</a> ·
-  <a href="#the-60-second-loop">The 60-second loop</a> ·
-  <a href="#learn-more">Learn more</a>
+  <a href="#get-started">Get started</a> ·
+  <a href="#what-it-is-built-on">What it is built on</a> ·
+  <a href="USAGE.md">Usage and setup</a>
 </p>
 
 <img src="assets/ui-light.png" alt="The WhoSaidSo viewer's Home screen, with sample data" width="912" />
 
-WhoSaidSo keeps a project accountable. Work is recorded as it happens in an
-append-only ledger inside the repository, and every answer, from what is owed
-to what a measurement cannot see, is a query over that ledger. A task cannot
-close on prose alone: it closes on a receipt and on witnesses someone can
-check.
+WhoSaidSo is one small program: a single Go binary with no dependencies. A project's record is plain JSON files in
+an append-only ledger inside the repository, committed with your code. It is bare-bones on purpose, just what one
+project needs. It doesn't need a database; if a project ever outgrows plain files, SQLite could sit behind the same
+commands. Run `whosaidso ui` to browse the record in your browser.
 
-It is a single command line tool, written in Go with the standard library
-only. It works the same for a person or an agent, in any project.
+## What it is built on
 
-## Two ideas it is built on
+**Testing and proving.** Nothing is done because someone says it is. A claim is proven against a criterion fixed
+before the run, with every result counted, failures included.
 
-**A measurement can be correct and still answer the wrong question.** So an
-instrument declares its blind spots, a run records the conditions it observed,
-and two runs compare only when those match.
+**Accountable agents.** Tasks, ideas and decisions are written down as they happen, so nothing is forgotten between
+sessions, and every claim points back to who made it and what proved it.
 
-**Proof is earned, not asserted.** Proof needs a criterion fixed before the
-run, every observation in the family including the failures, and a named
-responsible judgment.
+**Accountable tools.** Instruments and measurements are held to the same standard: each one declares what it cannot
+see, so a correct number can't quietly answer the wrong question. When something can't be checked, the answer is
+UNKNOWN, never a guess.
 
-UNKNOWN is a real answer throughout. FALSE means "compared and disagreed";
-anything that could not be compared is UNKNOWN, never a guessed default.
+**Knowing where you are.** One command shows what is done, what is owed, what is blocked, and why.
 
-## Install
+**Agent first.** Built for AI agents doing the work every day. People read the same record, in the terminal or the
+viewer.
 
-You need Go 1.22 or later:
+## Get started
 
-```sh
-go install github.com/alex2481kobe/whosaidso/cmd/whosaidso@latest
-```
+Tell your coding agent:
 
-That puts `whosaidso` in Go's bin folder (`$(go env GOPATH)/bin`); make sure it is on your `PATH`. From a
-checkout, `go build -o whosaidso ./cmd/whosaidso` does the same. There are no other dependencies.
-
-Then, in any project, `whosaidso help` is the whole manual and `whosaidso ui` opens a local, read-only viewer
-of the record.
-
-## The 60-second loop
-
-Declare the project and bind this checkout as the home of its ledger:
-
-```sh
-cd your-project
-printf "id = 'you/your-project'\nledger = '.whosaidso/events'\n" > whosaidso.toml
-whosaidso home .
-export WHOSAIDSO_ACTOR=alice          # who is acting; never guessed
-```
-
-Writing is two acts: **capture** proposes a packet, **admit** reviews it and
-is the only act that writes to the ledger.
-
-```sh
-whosaidso template task.create > task.json   # fill every "<...>" placeholder
-whosaidso capture --events task.json --admit --reason "the work we agreed"
-whosaidso todo                               # the new task is READY
-
-whosaidso template task.start --task TASK_ID --capture --admit --reason "starting"
-whosaidso handback --attempt-id ATTEMPT_ID --outcome success \
-    --reason "every sample config loads" --next-action "accept it"
-whosaidso admit --outcome accepted --reason "receipt checked" PACKET_ID
-whosaidso continue TASK_ID                   # awaiting acceptance, with its receipt
-```
-
-Each command prints the ids the next one needs. A success handback ends the
-attempt, not the task: a `task.close` with its witnesses does that
-(`whosaidso help accept`).
-
-Commit the `.whosaidso/` folder with your code. It is the record.
-
-## Learn more
-
-The guide ships with the binary, so it cannot drift from the CLI:
-
-```sh
-whosaidso help             # every topic and verb
-whosaidso help loop        # capture, admit, run, handback, accept
-whosaidso help proof       # criterion first, the whole family, a verdict
-whosaidso VERB --help      # one verb's usage
-```
-
-`skill/whosaidso/SKILL.md` is a short pointer for agent harnesses that load
-skills.
-
-## Performance
-
-TODO: the numbers for a 10,000-record ledger go here on release day, with a
-link to the ledger records (criteria, benchmark runs and proofs) they come
-from. The benchmarks are in `internal/benchmarks`, and `tools/benchreport`
-turns `go test -bench` output into readings a criterion can select.
-
-## How it fits together
-
-Generated by `go run ./tools/archtree -readme`; `-check` fails when it is
-stale. It reads imports rather than use, so it is blind to coupling through an
-interface or a callback.
-
-<!-- archtree:begin -->
 ```text
-github.com/alex2481kobe/whosaidso
-|-- cmd/
-|   `-- whosaidso      whole command surface: the write side that captures and admits, and the read side that answers from what was admitted
-|          25 files, tested -- uses evidence, model, query, reduce, store, ui, write
-|-- internal/
-|   |-- acceptance     (tests only, no production code)
-|   |      tests only
-|   |-- benchmarks     (tests only, no production code)
-|   |      tests only
-|   |-- evidence       turns a reference into the exact bytes it names, and a frozen criterion into a verdict over what those bytes actually say
-|   |      10 files, tested -- uses model
-|   |-- model          wire vocabulary every other package shares: identities, references, packets and bundles, plus the strict encode/decode boundary
-|   |      16 files, tested -- leaf
-|   |-- query          selects admitted facts before either output format renders them
-|   |      18 files, tested -- uses model, reduce, store
-|   |-- reduce         folds admitted bundles into the state every WhoSaidSo answer is read from
-|   |      27 files, tested -- uses model
-|   |-- store          owns runtime paths and durable storage, so recorded identities never depend on a checkout's location or Git's common directory
-|   |      19 files, tested -- uses model, reduce
-|   |-- ui             serves `whosaidso ui`: a local, short-lived, read-only viewer
-|   |      2 files, tested -- uses model, query, store
-|   `-- write          joins immutable capture to canonical state through one admission gate
-|          19 files, tested -- uses evidence, model, reduce, store
-`-- tools/
-    |-- archtree       instrument that reports how this module's packages fit together
-    |      5 files, tested -- leaf
-    `-- benchreport    instrument that restates go test -bench output as readings a WhoSaidSo criterion can select
-           3 files, tested -- leaf
+Install WhoSaidSo from https://github.com/alex2481kobe/whosaidso and set it up in this project.
 ```
-<!-- archtree:end -->
 
-## Contributing and security
+Or do it yourself: `go install github.com/alex2481kobe/whosaidso/cmd/whosaidso@latest`, then run `whosaidso help`.
+Full steps and the first loop are in [Usage and setup](USAGE.md).
 
-See [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md) for agents
-working on the code, and [SECURITY.md](SECURITY.md) to report a
-vulnerability.
+## Works with
 
-## Status
+Any project and any agent that can run a command. Tested on macOS and, in CI, on Linux; Windows is untested. Early:
+the design is still settling.
 
-Early: the design is still settling and nothing is stable yet. Tested on
-macOS and, in CI, on Linux; Windows is untested.
-
-## Licence
-
-Apache-2.0. See [LICENSE](LICENSE).
+Apache-2.0.

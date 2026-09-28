@@ -62,8 +62,8 @@ func TestCLITemplateRetryAndHoldCapture(t *testing.T) {
 	}
 	t.Run("criterion-original-benchmark-and-reversed-flag-order", func(t *testing.T) {
 		f := cliHoldNew(t)
-		// good.json is benchmark readings in the shape tools/benchreport
-		// writes; bad.txt is not JSON at all.
+		// good.json is benchmark readings a criterion can select; bad.txt is
+		// not JSON at all.
 		good := `{"instrument":"benchreport","readings":{"by_benchmark":{"BenchmarkCommands/N1000/Now":{` +
 			`"ns_per_op":{"unit":"ns/op","population":"median of BenchmarkCommands/N1000/Now runs in example/bench",` +
 			`"denominator":"benchmark runs","statistic":"median","rule":"middle value of 5 runs sorted by value",` +

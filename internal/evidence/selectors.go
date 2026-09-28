@@ -61,7 +61,7 @@ type Reading struct {
 }
 
 // memberNameKeys are the fields that identify a set member, in preference
-// order: archtree readings carry "path".
+// order: readings commonly carry "path".
 var memberNameKeys = []string{"path", "id", "name"}
 
 // Scalars returns a complete readable selection, never unreadable placeholders.
