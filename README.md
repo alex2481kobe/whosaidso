@@ -17,10 +17,15 @@
 
 <img src="assets/ui-light.png" alt="The WhoSaidSo viewer's Home screen, with sample data" width="912" />
 
-WhoSaidSo is one small program: a single Go binary with no dependencies. A project's record is plain JSON files in
-an append-only ledger inside the repository, committed with your code. It is bare-bones on purpose, just what one
+WhoSaidSo is for your agents, not for you to operate. Keep working with your agents the way you already do: they
+use WhoSaidSo to write down what they are doing and to prove what they claim, and a new session runs
+`whosaidso todo` and knows where things stand without being told again. You read along when you want to, in the
+terminal or with `whosaidso ui` for a quick look at progress and the decisions waiting on you.
+
+It is one small program: a single Go binary with no dependencies. A project's record is plain JSON files in an
+append-only ledger inside the repository, committed with your code. It is bare-bones on purpose, just what one
 project needs. It doesn't need a database; if a project ever outgrows plain files, SQLite could sit behind the same
-commands. Run `whosaidso ui` to browse the record in your browser.
+commands.
 
 ## What it is built on
 
@@ -36,8 +41,8 @@ UNKNOWN, never a guess.
 
 **Knowing where you are.** One command shows what is done, what is owed, what is blocked, and why.
 
-**Agent first.** Built for AI agents doing the work every day. People read the same record, in the terminal or the
-viewer.
+**Agent first.** Built for AI agents doing the work every day, not for you to drive by hand. Every screen in the
+viewer is a command's `--json` answer, so you can build your own view on the same record.
 
 ## Get started
 
@@ -47,8 +52,10 @@ Tell your coding agent:
 Install WhoSaidSo from https://github.com/alex2481kobe/whosaidso and set it up in this project.
 ```
 
-Or do it yourself: `go install github.com/alex2481kobe/whosaidso/cmd/whosaidso@latest`, then run `whosaidso help`.
-Full steps and the first loop are in [Usage and setup](USAGE.md).
+Or do it yourself: download the file for your system from the
+[latest release](https://github.com/alex2481kobe/whosaidso/releases/latest), or
+`go install github.com/alex2481kobe/whosaidso/cmd/whosaidso@latest`, then run `whosaidso help`. Full steps and the
+first loop are in [Usage and setup](USAGE.md).
 
 ## Works with
 

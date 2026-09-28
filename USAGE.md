@@ -2,7 +2,12 @@
 
 ## Install
 
-You need Go 1.22 or later:
+Download the archive for your computer from the
+[latest release](https://github.com/alex2481kobe/whosaidso/releases/latest), check it against `SHA256SUMS`, and
+put `whosaidso` on your `PATH` (for example `~/.local/bin`). The macOS builds are signed and notarized, so they run
+straight from a browser download.
+
+Or, with Go 1.22 or later:
 
 ```sh
 go install github.com/alex2481kobe/whosaidso/cmd/whosaidso@latest
