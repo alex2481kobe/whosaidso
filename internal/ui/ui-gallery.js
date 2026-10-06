@@ -75,7 +75,10 @@ function card(entry, said, removed) {
   return node;
 }
 
-// renderGallery draws the newest entry first.
+// renderGallery draws the newest entry first, then reads the gallery again
+// every few seconds while this screen is shown (the ledger poll does not see
+// gallery changes) and redraws only the entries that changed, so a playing
+// video or a scrolled text keeps its place.
 export async function renderGallery() {
   const answer = await api("/api/gallery", { project: project() });
   const said = el("p", "gallery-said tone-text red");
@@ -92,15 +95,38 @@ export async function renderGallery() {
     count.textContent = String(shown);
     empty.hidden = shown > 0;
   };
-  for (const entry of answer.entries.slice().reverse()) {
-    const node = card(entry, said, () => { node.remove(); filter(); });
-    cards.append(node);
-  }
+  const drawn = new Map(); // entry id -> { id, sig, node }
+  const draw = (entries) => {
+    const want = entries.slice().reverse().map((entry) => {
+      const sig = JSON.stringify(entry);
+      const had = drawn.get(entry.id);
+      if (had && had.sig === sig) return had;
+      const node = card(entry, said, () => { node.remove(); drawn.delete(entry.id); filter(); });
+      return { id: entry.id, sig, node };
+    });
+    const keep = new Set(want.map((w) => w.node));
+    for (const [id, had] of drawn) if (!keep.has(had.node)) { had.node.remove(); drawn.delete(id); }
+    // Insert new cards in place; a kept card is never detached, since
+    // detaching a media element stops it.
+    let at = cards.firstChild;
+    for (const w of want) {
+      drawn.set(w.id, w);
+      if (w.node === at) at = at.nextSibling;
+      else cards.insertBefore(w.node, at);
+    }
+    filter();
+  };
+  draw(answer.entries);
+  const shown = project();
+  const timer = setInterval(() => {
+    if (!cards.isConnected || project() !== shown) { clearInterval(timer); return; }
+    if (document.visibilityState === "hidden") return;
+    api("/api/gallery", { project: shown }).then((next) => { if (cards.isConnected) draw(next.entries); }).catch(() => {});
+  }, 3000);
   const search = el("input", "search-input");
   Object.assign(search, { type: "search", placeholder: "Search the gallery...", value: state.search, spellcheck: false });
   search.setAttribute("aria-label", "Search the gallery");
   search.addEventListener("input", () => { state.search = search.value; filter(); });
-  filter();
   return el("div", "screen",
     hero("gallery", "Gallery", icon("file", "hero-icon"), ["What an agent was asked to show you in ", project(), "."],
       "Removing an entry drops it from this list; the file stays where it is."),
