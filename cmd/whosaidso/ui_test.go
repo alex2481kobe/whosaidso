@@ -17,14 +17,42 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/ui"
 )
 
-func uiGet(t *testing.T, address, token, path string) (int, string) {
+// uiSess is what the browser holds after opening the launch URL: the session
+// cookie and the page's key from the redirect's URL fragment.
+type uiSess struct{ cookie, key string }
+
+// uiSession opens the launch URL once, as the browser does, and returns the
+// session it was traded for.
+func uiSession(t *testing.T, address string) uiSess {
 	t.Helper()
-	u, _ := url.Parse(address)
-	req, err := http.NewRequest(http.MethodGet, "http://"+u.Host+path, nil)
+	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.Get(address)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("X-WhoSaidSo-Token", token)
+	resp.Body.Close()
+	if len(resp.Cookies()) != 1 {
+		t.Fatalf("the launch URL gave no session: %d", resp.StatusCode)
+	}
+	return uiSess{resp.Cookies()[0].String(), strings.TrimPrefix(resp.Header.Get("Location"), "/#key=")}
+}
+
+func uiGet(t *testing.T, address string, session uiSess, path string) (int, string) {
+	t.Helper()
+	return uiRequest(t, address, session, http.MethodGet, path)
+}
+
+// uiRequest sends what the page sends: the cookie, the key and its Origin.
+func uiRequest(t *testing.T, address string, session uiSess, method, path string) (int, string) {
+	t.Helper()
+	u, _ := url.Parse(address)
+	req, err := http.NewRequest(method, "http://"+u.Host+path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Cookie", session.cookie)
+	req.Header.Set("X-WhoSaidSo-Key", session.key)
+	req.Header.Set("Origin", "http://"+u.Host)
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -58,8 +86,7 @@ func TestViewerServesExactlyTheCLIJSON(t *testing.T) {
 	}
 	go server.Serve(ln)
 	t.Cleanup(func() { _ = server.Shutdown(context.Background()) })
-	u, _ := url.Parse(address)
-	token := u.Query().Get("token")
+	token := uiSession(t, address)
 	project := url.QueryEscape("test/cli")
 	id := string(cliID(1))
 

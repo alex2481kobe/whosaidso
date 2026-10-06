@@ -6,6 +6,7 @@ package store
 // staging and the machine id only ask Home where they belong.
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -46,6 +47,32 @@ func bindingPath(id model.ProjectID) (string, error) {
 		return "", err
 	}
 	return filepath.Join(home, "projects", encoded), nil
+}
+
+// GalleryFile is the project's gallery on this machine (internal/gallery):
+// in the home beside its registry binding, so it is never in a ledger and
+// never inside a repository, whatever that repository ignores.
+func GalleryFile(id model.ProjectID) (string, error) {
+	encoded, err := encodeProjectID(id)
+	if err != nil {
+		return "", err
+	}
+	home, err := Home()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "gallery", encoded+".json"), nil
+}
+
+// HoldDirLock waits for the exclusive lock of dir, the same lock admission
+// and binding take on theirs (holdAdmissionLock), across processes, and
+// returns its release. The gallery serializes its read-modify-rename with it.
+func HoldDirLock(ctx context.Context, dir string) (release func() error, err error) {
+	f, err := holdAdmissionLock(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+	return func() error { return lockRelease(f) }, nil
 }
 
 // codeBindingCorrupt is a registry entry that names no home. Bind replaces

@@ -62,8 +62,12 @@ an unknown author stays UNKNOWN.
 `, define: viewVerb("history")},
 		{name: "ui", summary: "a local, read-only viewer of the views in a browser", detail: `Serves todo, show, continue and history as a web page on a random
 127.0.0.1 port, for as long as the command runs (Ctrl-C stops it). The URL
-it prints carries a one-time token; the page reads with GET only and writes
-nothing. Every screen is the --json answer of the same view. Run inside a
+it prints carries a one-time token: the first visit trades it for a session
+cookie, and the URL opens nothing after that (run ui again for a new one).
+The page reads with GET only; it writes no ledger and no intake. Its only
+changes are the Gallery's Remove, which drops an entry (never the file), and
+Reveal in Finder (macOS). Every screen is the --json answer of the same
+view; the Gallery is whosaidso gallery list's. Run inside a
 bound project it opens that project; elsewhere it lists every project this
 machine's home binds, an unavailable home with its reason.
 `, define: uiVerb},
@@ -163,6 +167,18 @@ placeholder remains; an optional key you put nothing into is omitted, and
 the ids it minted are named on stderr, or with --json listed in the answer's created list.
 --admit then admits it, as capture --admit does. Notes go to stderr. Event types:
 ` + templateEventList() + "\n", define: templateVerb},
+		{name: "gallery add", args: "PATH", summary: "show a file to the owner in the viewer's Gallery", detail: `Adds PATH (an existing file) to this project's gallery with a short
+one-line title and an optional note, attributed to WHOSAIDSO_ACTOR when set.
+Prints the entry id. The gallery is a per-machine list, not a record: it
+lives in this machine's WhoSaidSo home, never in the ledger or the
+repository. whosaidso ui previews images, videos and text; anything else is
+listed with no preview.
+`, define: galleryVerb("add")},
+		{name: "gallery list", summary: "every gallery entry, present or missing", detail: `Lists each entry with its id, date, whether its file is present or
+missing now, who added it, its title, path and note.
+`, define: galleryVerb("list")},
+		{name: "gallery rm", args: "ID", summary: "remove an entry from the gallery, never its file", detail: `Removes the entry from the gallery. The file it names is not touched.
+`, define: galleryVerb("rm")},
 		{name: "home", args: "[PATH]", summary: "show or set where this project's live ledger is", detail: `Bare, shows this project's binding on this machine: its home, or unbound,
 and whether the home is available. With PATH, binds the project to the
 checkout at PATH, which must hold whosaidso.toml declaring the same project id,

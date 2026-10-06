@@ -1,0 +1,20 @@
+/* The Gallery screen: a grid of cards, each a preview over its title, note,
+   path, author and date, and its two buttons. Tokens and shared parts are
+   in ui.css; this file holds only what the gallery draws. */
+.gallery .search { flex: 1 1 260px; max-width: 420px; height: 38px; }
+.gallery-said:empty { display: none; }
+.gallery-said { padding: 0 18px 10px; font-size: 13px; }
+.gallery-scroll { padding: 14px 16px 16px; border-top: 1px solid var(--line-2); }
+.gallery-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 12px; }
+.gallery-card { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
+.gallery-card[hidden] { display: none; }
+.gallery-media, .gallery-none, .gallery-text { height: 200px; border-bottom: 1px solid var(--line-2); background: var(--surface-2); }
+.gallery-media { display: flex; align-items: center; justify-content: center; }
+.gallery-media img, .gallery-media video { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+.gallery-none { display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+.gallery-text { margin: 0; padding: 10px 12px; overflow: auto; font-family: var(--mono); font-size: 12px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.gallery-card-body { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px 14px; min-width: 0; }
+.gallery-title { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.gallery-note { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.gallery-path { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gallery-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
