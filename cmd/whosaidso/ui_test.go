@@ -17,9 +17,13 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/ui"
 )
 
+// uiSess is what the browser holds after opening the launch URL: the session
+// cookie and the page's key from the redirect's URL fragment.
+type uiSess struct{ cookie, key string }
+
 // uiSession opens the launch URL once, as the browser does, and returns the
-// session cookie it was traded for.
-func uiSession(t *testing.T, address string) string {
+// session it was traded for.
+func uiSession(t *testing.T, address string) uiSess {
 	t.Helper()
 	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := client.Get(address)
@@ -30,17 +34,25 @@ func uiSession(t *testing.T, address string) string {
 	if len(resp.Cookies()) != 1 {
 		t.Fatalf("the launch URL gave no session: %d", resp.StatusCode)
 	}
-	return resp.Cookies()[0].String()
+	return uiSess{resp.Cookies()[0].String(), strings.TrimPrefix(resp.Header.Get("Location"), "/#key=")}
 }
 
-func uiGet(t *testing.T, address, session, path string) (int, string) {
+func uiGet(t *testing.T, address string, session uiSess, path string) (int, string) {
+	t.Helper()
+	return uiRequest(t, address, session, http.MethodGet, path)
+}
+
+// uiRequest sends what the page sends: the cookie, the key and its Origin.
+func uiRequest(t *testing.T, address string, session uiSess, method, path string) (int, string) {
 	t.Helper()
 	u, _ := url.Parse(address)
-	req, err := http.NewRequest(http.MethodGet, "http://"+u.Host+path, nil)
+	req, err := http.NewRequest(method, "http://"+u.Host+path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("Cookie", session)
+	req.Header.Set("Cookie", session.cookie)
+	req.Header.Set("X-WhoSaidSo-Key", session.key)
+	req.Header.Set("Origin", "http://"+u.Host)
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
 		t.Fatal(err)

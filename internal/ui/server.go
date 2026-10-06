@@ -10,7 +10,9 @@ package ui
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"embed"
 	"encoding/hex"
@@ -71,6 +73,7 @@ type handler struct {
 	origin  string
 	token   string // the launch token, good for one exchange
 	session string // the session cookie's value, issued by that exchange
+	key     string // the page's own secret, issued by that exchange, never in a cookie
 	cookie  string // the cookie's name, one per port: cookies ignore ports
 	mu      sync.Mutex
 	spent   bool
@@ -84,7 +87,7 @@ func Listen(cfg Config) (net.Listener, *http.Server, string, error) {
 	if err != nil {
 		return nil, nil, "", err
 	}
-	var secret [64]byte
+	var secret [96]byte
 	if _, err := rand.Read(secret[:]); err != nil {
 		ln.Close()
 		return nil, nil, "", err
@@ -92,7 +95,7 @@ func Listen(cfg Config) (net.Listener, *http.Server, string, error) {
 	host := ln.Addr().String()
 	_, port, _ := net.SplitHostPort(host)
 	h := &handler{cfg: cfg, host: host, origin: "http://" + host, token: hex.EncodeToString(secret[:32]),
-		session: hex.EncodeToString(secret[32:]), cookie: "whosaidso-" + port}
+		session: hex.EncodeToString(secret[32:64]), key: hex.EncodeToString(secret[64:]), cookie: "whosaidso-" + port}
 	srv := &http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second}
 	return ln, srv, h.origin + "/?token=" + h.token, nil
 }
@@ -133,7 +136,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		h.serveFile(w, "index.html", "text/html; charset=utf-8")
 	case path == "/api/projects" || path == "/api/view" || path == "/api/gallery" || path == "/api/gallery/file" || posts[path]:
-		if !h.inSession(r) {
+		if !h.inSession(r) || !h.keyed(r) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -146,10 +149,13 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // exchange spends the launch token once: the first request carrying it gets
-// the session cookie and is sent on to the page without the token in its
-// URL; every later one, the same token included, is refused. The cookie is
-// HttpOnly, so no script reads it, and SameSite=Strict, so no other site's
-// request carries it.
+// the session cookie and is sent on to the page with the page's key in the
+// URL fragment, which no request carries; every later one, the same token
+// included, is refused. The cookie is HttpOnly, so no script reads it, and
+// SameSite=Strict, so no other site's request carries it. A cookie is not
+// scoped to a port, though: any server on another 127.0.0.1 port can be
+// sent it and replay it. So every API call also needs the key, which only
+// this origin's page holds (keyed).
 func (h *handler) exchange(w http.ResponseWriter, r *http.Request) {
 	h.mu.Lock()
 	ok := !h.spent && same(r.URL.Query().Get("token"), h.token)
@@ -160,7 +166,26 @@ func (h *handler) exchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: h.cookie, Value: h.session, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, "/#key="+h.key, http.StatusSeeOther)
+}
+
+// keyed reports whether r proves it comes from this origin's page: the key
+// in its X-WhoSaidSo-Key header, or, for a gallery file, which media tags
+// fetch and cannot add a header to, that entry's capability in the query.
+func (h *handler) keyed(r *http.Request) bool {
+	if r.URL.Path == "/api/gallery/file" {
+		q := r.URL.Query()
+		return same(q.Get("cap"), h.capability(q.Get("project"), q.Get("id")))
+	}
+	return same(r.Header.Get("X-WhoSaidSo-Key"), h.key)
+}
+
+// capability is the key's HMAC of one project's entry id: a file URL that
+// opens that one entry and nothing else, and only with the session cookie.
+func (h *handler) capability(project, id string) string {
+	mac := hmac.New(sha256.New, []byte(h.key))
+	mac.Write([]byte(project + "\x00" + id))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // inSession reports whether r carries the session the exchange issued.

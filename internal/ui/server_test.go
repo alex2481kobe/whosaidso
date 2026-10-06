@@ -58,8 +58,15 @@ func testUI(t *testing.T, w *stubWorld) (host, token string) {
 	return u.Host, u.Query().Get("token")
 }
 
-// probe is one request; cookie is sent as the Cookie header.
-type probe struct{ method, path, host, origin, cookie string }
+// sess is what a browser holds after the exchange: the session cookie (as a
+// Cookie header value) and the page's key, sent as X-WhoSaidSo-Key.
+type sess struct{ cookie, key string }
+
+// probe is one request, carrying whatever of a session it is given.
+type probe struct {
+	method, path, host, origin string
+	s                          sess
+}
 
 func do(t *testing.T, listener string, p probe) (int, http.Header, string) {
 	t.Helper()
@@ -71,8 +78,11 @@ func do(t *testing.T, listener string, p probe) (int, http.Header, string) {
 	if p.origin != "" {
 		req.Header.Set("Origin", p.origin)
 	}
-	if p.cookie != "" {
-		req.Header.Set("Cookie", p.cookie)
+	if p.s.cookie != "" {
+		req.Header.Set("Cookie", p.s.cookie)
+	}
+	if p.s.key != "" {
+		req.Header.Set("X-WhoSaidSo-Key", p.s.key)
 	}
 	client := &http.Client{Timeout: 3 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := client.Do(req)
@@ -84,20 +94,24 @@ func do(t *testing.T, listener string, p probe) (int, http.Header, string) {
 	return resp.StatusCode, resp.Header, string(body)
 }
 
-// enter trades the launch token for the session cookie, as the browser's
-// first visit does, and returns it as a Cookie header value.
-func enter(t *testing.T, host, token string) string {
+// enter trades the launch token for the session cookie and the page's key,
+// as the browser's first visit does.
+func enter(t *testing.T, host, token string) sess {
 	t.Helper()
-	got, header, body := do(t, host, probe{"GET", "/?token=" + token, host, "", ""})
+	got, header, body := do(t, host, probe{"GET", "/?token=" + token, host, "", sess{}})
 	cookies := (&http.Response{Header: header}).Cookies()
-	if got != http.StatusSeeOther || header.Get("Location") != "/" || len(cookies) != 1 {
+	if got != http.StatusSeeOther || !strings.HasPrefix(header.Get("Location"), "/#key=") || len(cookies) != 1 {
 		t.Fatalf("the launch token was not exchanged: %d %v %s", got, header, body)
 	}
 	c := cookies[0]
 	if !c.HttpOnly || c.SameSite != http.SameSiteStrictMode || c.Path != "/" || c.Name != "whosaidso-"+host[strings.Index(host, ":")+1:] {
 		t.Fatalf("the session cookie must be HttpOnly, SameSite=Strict, named for its port: %+v", c)
 	}
-	return c.Name + "=" + c.Value
+	key := strings.TrimPrefix(header.Get("Location"), "/#key=")
+	if len(key) != 64 || key == c.Value || key == token {
+		t.Fatalf("the page's key must be its own 32 random bytes: %q", key)
+	}
+	return sess{c.Name + "=" + c.Value, key}
 }
 
 func available() []store.Registration {
@@ -123,25 +137,28 @@ func TestViewerRequiresTheSessionAndItsOwnHostAndOrigin(t *testing.T) {
 	}
 	// Before the exchange: nothing opens, and no refused attempt spends the token.
 	check([]row{
-		{"page without a token", probe{"GET", "/", host, "", ""}, 403},
-		{"page with a wrong token of the same length", probe{"GET", "/?token=" + wrong, host, "", ""}, 403},
-		{"page with a token prefix", probe{"GET", "/?token=" + token[:len(token)-1], host, "", ""}, 403},
-		{"page with a foreign Host", probe{"GET", "/?token=" + token, "localhost" + host[strings.Index(host, ":"):], "", ""}, 403},
-		{"page with the token from a foreign Origin", probe{"GET", "/?token=" + token, host, "https://evil.example", ""}, 403},
-		{"API with the token only in the URL", probe{"GET", view + "&token=" + token, host, "", ""}, 403},
-		{"API without a session", probe{"GET", view, host, "", ""}, 403},
+		{"page without a token", probe{"GET", "/", host, "", sess{}}, 403},
+		{"page with a wrong token of the same length", probe{"GET", "/?token=" + wrong, host, "", sess{}}, 403},
+		{"page with a token prefix", probe{"GET", "/?token=" + token[:len(token)-1], host, "", sess{}}, 403},
+		{"page with a foreign Host", probe{"GET", "/?token=" + token, "localhost" + host[strings.Index(host, ":"):], "", sess{}}, 403},
+		{"page with the token from a foreign Origin", probe{"GET", "/?token=" + token, host, "https://evil.example", sess{}}, 403},
+		{"API with the token only in the URL", probe{"GET", view + "&token=" + token, host, "", sess{}}, 403},
+		{"API without a session", probe{"GET", view, host, "", sess{}}, 403},
 	})
 	session := enter(t, host, token)
-	name := session[:strings.Index(session, "=")]
+	name := session.cookie[:strings.Index(session.cookie, "=")]
 	check([]row{
 		{"page in session (control)", probe{"GET", "/", host, "", session}, 200},
 		{"API in session (control)", probe{"GET", view, host, "", session}, 200},
 		{"API from this page's origin (control)", probe{"GET", view, host, "http://" + host, session}, 200},
-		{"the launch token replayed", probe{"GET", "/?token=" + token, host, "", ""}, 403},
+		{"the launch token replayed", probe{"GET", "/?token=" + token, host, "", sess{}}, 403},
 		{"the launch token replayed in session", probe{"GET", "/?token=" + token, host, "", session}, 403},
-		{"API with a forged session of the same length", probe{"GET", view, host, "", name + "=" + strings.Repeat("0", len(session)-len(name)-1)}, 403},
-		{"API with the launch token as the session", probe{"GET", view, host, "", name + "=" + token}, 403},
-		{"projects without a session", probe{"GET", "/api/projects", host, "", ""}, 403},
+		{"API with a forged session of the same length", probe{"GET", view, host, "", sess{name + "=" + strings.Repeat("0", len(session.cookie)-len(name)-1), session.key}}, 403},
+		{"API with the launch token as the session", probe{"GET", view, host, "", sess{name + "=" + token, session.key}}, 403},
+		{"API with the cookie but not the key", probe{"GET", view, host, "", sess{cookie: session.cookie}}, 403},
+		{"API with the cookie and a wrong key", probe{"GET", view, host, "", sess{session.cookie, strings.Repeat("0", 64)}}, 403},
+		{"API with the key but not the cookie", probe{"GET", view, host, "", sess{key: session.key}}, 403},
+		{"projects without a session", probe{"GET", "/api/projects", host, "", sess{}}, 403},
 		{"API with a foreign Host", probe{"GET", view, "evil.example:80", "", session}, 403},
 		{"API with a foreign Origin", probe{"GET", view, host, "https://evil.example", session}, 403},
 		{"API with a null Origin", probe{"GET", view, host, "null", session}, 403},
@@ -156,7 +173,7 @@ func TestViewerRequiresTheSessionAndItsOwnHostAndOrigin(t *testing.T) {
 func TestLaunchTokenIsSpentByItsFirstExchange(t *testing.T) {
 	host, token := testUI(t, &stubWorld{projects: available()})
 	enter(t, host, token)
-	got, header, _ := do(t, host, probe{"GET", "/?token=" + token, host, "", ""})
+	got, header, _ := do(t, host, probe{"GET", "/?token=" + token, host, "", sess{}})
 	if got != http.StatusForbidden || header.Get("Set-Cookie") != "" {
 		t.Fatalf("a replayed launch token: %d, Set-Cookie %q; want 403 and no cookie", got, header.Get("Set-Cookie"))
 	}
@@ -167,14 +184,14 @@ func TestViewerRefusesEveryMethodButGetOrTheGalleryPosts(t *testing.T) {
 	host, token := testUI(t, w)
 	for _, method := range []string{"POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"} {
 		for _, path := range []string{"/?token=" + token, "/api/view?project=team%2Fok&view=todo", "/api/projects", "/ui.js"} {
-			if got, header, _ := do(t, host, probe{method, path, host, "", token}); got != http.StatusMethodNotAllowed || header.Get("Allow") != "GET" {
+			if got, header, _ := do(t, host, probe{method, path, host, "", sess{cookie: token}}); got != http.StatusMethodNotAllowed || header.Get("Allow") != "GET" {
 				t.Errorf("%s %s: status %d allow %q, want 405 GET", method, path, got, header.Get("Allow"))
 			}
 		}
 	}
 	for _, method := range []string{"GET", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"} {
 		for path := range posts {
-			if got, header, _ := do(t, host, probe{method, path + "?project=team%2Fok&id=x", host, "", token}); got != http.StatusMethodNotAllowed || header.Get("Allow") != "POST" {
+			if got, header, _ := do(t, host, probe{method, path + "?project=team%2Fok&id=x", host, "", sess{cookie: token}}); got != http.StatusMethodNotAllowed || header.Get("Allow") != "POST" {
 				t.Errorf("%s %s: status %d allow %q, want 405 POST", method, path, got, header.Get("Allow"))
 			}
 		}
@@ -194,7 +211,7 @@ func TestStaticFilesAreServedWithTheirTypes(t *testing.T) {
 			t.Fatal(err)
 		}
 		kind := types[path[strings.LastIndex(path, "."):]]
-		got, header, body := do(t, host, probe{"GET", path, host, "", ""})
+		got, header, body := do(t, host, probe{"GET", path, host, "", sess{}})
 		if got != 200 || kind == "" || header.Get("Content-Type") != kind || body != string(want) || header.Get("X-Content-Type-Options") != "nosniff" {
 			t.Errorf("%s: %d %q, want 200 %q with its embedded bytes", path, got, header.Get("Content-Type"), kind)
 		}
@@ -208,7 +225,7 @@ func TestStaticFilesAreServedWithTheirTypes(t *testing.T) {
 		t.Fatalf("the page: %d %q", got, header.Get("Content-Type"))
 	}
 	for _, path := range []string{"/index.html", "/server.go", "/api/", "/ui.css/", "/../ui.css"} {
-		if got, _, _ := do(t, host, probe{"GET", path, host, "", token}); got != http.StatusNotFound {
+		if got, _, _ := do(t, host, probe{"GET", path, host, "", sess{cookie: token}}); got != http.StatusNotFound {
 			t.Errorf("%s: status %d, want 404", path, got)
 		}
 	}

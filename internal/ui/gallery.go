@@ -38,8 +38,8 @@ func RevealInFinder(path string) error {
 func (h *handler) gallery(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	for key, values := range q {
-		if (key != "project" && key != "id") || len(values) != 1 {
-			h.fail(w, http.StatusBadRequest, errText("the gallery takes only project and id; files are reached by entry id, never by path"))
+		if (key != "project" && key != "id" && key != "cap") || len(values) != 1 {
+			h.fail(w, http.StatusBadRequest, errText("the gallery takes only project, id and a file's cap; files are reached by entry id, never by path"))
 			return
 		}
 	}
@@ -65,7 +65,17 @@ func (h *handler) galleryAnswer(w http.ResponseWriter, r *http.Request, file, id
 			h.fail(w, http.StatusInternalServerError, err)
 			return
 		}
-		h.json(w, map[string]any{"entries": shown})
+		// Each entry carries its file capability, which the page puts in the
+		// file's URL (keyed); the CLI's list has none.
+		type withCap struct {
+			gallery.Shown
+			Cap string `json:"cap"`
+		}
+		entries := make([]withCap, len(shown))
+		for i, e := range shown {
+			entries[i] = withCap{e, h.capability(r.URL.Query().Get("project"), e.ID)}
+		}
+		h.json(w, map[string]any{"entries": entries})
 		return
 	}
 	entry, err := gallery.Find(file, id)

@@ -9,15 +9,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"io"
 	"io/fs"
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/alex2481kobe/whosaidso/internal/store"
 	"github.com/alex2481kobe/whosaidso/internal/ui"
@@ -112,32 +108,20 @@ func TestGalleryLeavesTheLedgerAndTheFileUntouched(t *testing.T) {
 	}
 	go server.Serve(ln)
 	t.Cleanup(func() { _ = server.Shutdown(context.Background()) })
-	u, _ := url.Parse(address)
-	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	resp, err := client.Get(address)
-	if err != nil || len(resp.Cookies()) != 1 {
-		t.Fatalf("exchange: %v", err)
+	session := uiSession(t, address)
+	status, listed := uiGet(t, address, session, "/api/gallery?project=test%2Fcli")
+	var viewed struct{ Entries []struct{ ID, Cap string } }
+	if err := json.Unmarshal([]byte(listed), &viewed); status != 200 || err != nil || len(viewed.Entries) != 1 || viewed.Entries[0].Cap == "" {
+		t.Fatalf("viewer list: %d %v %s", status, err, listed)
 	}
-	resp.Body.Close()
-	cookie := resp.Cookies()[0]
 	query := "?project=test%2Fcli&id=" + id
 	for _, c := range []struct{ method, path, want string }{
-		{"GET", "/api/gallery?project=test%2Fcli", `"title":"the shot"`},
-		{"GET", "/api/gallery/file" + query, "png bytes"},
+		{"GET", "/api/gallery/file" + query + "&cap=" + viewed.Entries[0].Cap, "png bytes"},
 		{"POST", "/api/gallery/reveal" + query, `"revealed"`},
 		{"POST", "/api/gallery/remove" + query, `"removed"`},
 	} {
-		req, _ := http.NewRequest(c.method, "http://"+u.Host+c.path, nil)
-		req.AddCookie(cookie)
-		req.Header.Set("Origin", "http://"+u.Host)
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if resp.StatusCode != 200 || !strings.Contains(string(body), c.want) {
-			t.Fatalf("%s %s: %d %s", c.method, c.path, resp.StatusCode, body)
+		if status, body := uiRequest(t, address, session, c.method, c.path); status != 200 || !strings.Contains(body, c.want) {
+			t.Fatalf("%s %s: %d %s", c.method, c.path, status, body)
 		}
 	}
 	if len(revealed) != 1 || revealed[0] != filepath.Join(root, "shot.png") {

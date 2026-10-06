@@ -22,14 +22,24 @@ const state = { projects: [], project: "", mark: "", cache: new Map(), switches:
 // project is the id of the project on screen.
 export const project = () => state.project;
 
-// ---- data: the session cookie the launch URL was traded for goes with every request
+// ---- data: the session cookie the launch URL was traded for goes with every
+// request, and the key that came with it in the URL fragment goes in a header
+// (a gallery file's URL carries its own capability instead). The key is kept
+// in this tab's sessionStorage, which no other origin, port included, reads.
+const key = (() => {
+  const given = /^#key=([0-9a-f]+)$/.exec(location.hash);
+  let k = given ? given[1] : "";
+  try { if (k) sessionStorage.setItem("whosaidso-key", k); else k = sessionStorage.getItem("whosaidso-key") || ""; } catch {}
+  if (given) history.replaceState(null, "", "/#/");
+  return k;
+})();
 export const apiURL = (path, params = {}) => {
   const query = new URLSearchParams(params).toString();
   return path + (query ? "?" + query : "");
 };
-export const api = (path, params = {}) => answer(fetch(apiURL(path, params)));
+export const api = (path, params = {}) => answer(fetch(apiURL(path, params), { headers: { "X-WhoSaidSo-Key": key } }));
 // send is a gallery POST: Reveal in Finder or Remove from gallery.
-export const send = (path, params = {}) => answer(fetch(apiURL(path, params), { method: "POST" }));
+export const send = (path, params = {}) => answer(fetch(apiURL(path, params), { method: "POST", headers: { "X-WhoSaidSo-Key": key } }));
 async function answer(request) {
   const response = await request;
   const body = await response.json().catch(() => ({}));

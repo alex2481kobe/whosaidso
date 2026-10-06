@@ -64,7 +64,7 @@ function card(entry, said, removed) {
     }
     send("/api/gallery/remove", params).then(removed).catch(fail);
   });
-  const node = el("article", "gallery-card", preview(entry, apiURL("/api/gallery/file", params)),
+  const node = el("article", "gallery-card", preview(entry, apiURL("/api/gallery/file", { ...params, cap: entry.cap })),
     el("div", "gallery-card-body",
       el("p", "gallery-title", entry.title),
       entry.note ? el("p", "gallery-note", entry.note) : null,

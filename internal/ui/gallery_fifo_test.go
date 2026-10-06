@@ -31,7 +31,7 @@ func TestGalleryRefusesAFIFOWithoutWaiting(t *testing.T) {
 		}
 	})
 	start := time.Now()
-	got, _, _ := ask(t, host, "GET", fileURL(id), "", session)
+	got, _, _ := ask(t, host, "GET", fileURL(t, host, session, id), "", session)
 	if got != http.StatusNotFound || time.Since(start) > time.Second {
 		t.Fatalf("a FIFO: status %d after %v; want 404 at once", got, time.Since(start))
 	}

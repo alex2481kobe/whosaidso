@@ -9,6 +9,7 @@ package ui
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
@@ -22,8 +23,8 @@ import (
 )
 
 // galleryUI starts a viewer over a temp home holding team/ok's gallery and
-// returns the listener, the session cookie and that gallery's file.
-func galleryUI(t *testing.T, w *stubWorld) (host, session, file string) {
+// returns the listener, the session and that gallery's file.
+func galleryUI(t *testing.T, w *stubWorld) (host string, session sess, file string) {
 	t.Helper()
 	t.Setenv(store.HomeEnv, t.TempDir())
 	w.projects = available()
@@ -51,7 +52,7 @@ func shown(t *testing.T, file, name string, content []byte) (string, string) {
 
 // ask sends one request with any extra headers and returns status, headers
 // and body.
-func ask(t *testing.T, host, method, path, origin, cookie string, extra ...string) (int, http.Header, []byte) {
+func ask(t *testing.T, host, method, path, origin string, s sess, extra ...string) (int, http.Header, []byte) {
 	t.Helper()
 	req, err := http.NewRequest(method, "http://"+host+path, nil)
 	if err != nil {
@@ -60,8 +61,11 @@ func ask(t *testing.T, host, method, path, origin, cookie string, extra ...strin
 	if origin != "" {
 		req.Header.Set("Origin", origin)
 	}
-	if cookie != "" {
-		req.Header.Set("Cookie", cookie)
+	if s.cookie != "" {
+		req.Header.Set("Cookie", s.cookie)
+	}
+	if s.key != "" {
+		req.Header.Set("X-WhoSaidSo-Key", s.key)
 	}
 	for i := 0; i+1 < len(extra); i += 2 {
 		req.Header.Set(extra[i], extra[i+1])
@@ -75,7 +79,28 @@ func ask(t *testing.T, host, method, path, origin, cookie string, extra ...strin
 	return resp.StatusCode, resp.Header, body
 }
 
-func fileURL(id string) string { return "/api/gallery/file?project=team%2Fok&id=" + id }
+// capOf is entry id's file capability, read from the list as the page reads it.
+func capOf(t *testing.T, host string, s sess, id string) string {
+	t.Helper()
+	got, _, body := ask(t, host, "GET", "/api/gallery?project=team%2Fok", "", s)
+	var list struct{ Entries []struct{ ID, Cap string } }
+	if err := json.Unmarshal(body, &list); got != 200 || err != nil {
+		t.Fatalf("list: %d %v %s", got, err, body)
+	}
+	for _, e := range list.Entries {
+		if e.ID == id {
+			return e.Cap
+		}
+	}
+	t.Fatalf("no entry %s listed", id)
+	return ""
+}
+
+// fileURL is entry id's file URL as the page builds it, capability included.
+func fileURL(t *testing.T, host string, s sess, id string) string {
+	t.Helper()
+	return "/api/gallery/file?project=team%2Fok&id=" + id + "&cap=" + capOf(t, host, s, id)
+}
 
 func TestGalleryServesEachPreviewKindWithItsTypeAndNothingElse(t *testing.T) {
 	host, session, file := galleryUI(t, &stubWorld{})
@@ -89,7 +114,7 @@ func TestGalleryServesEachPreviewKindWithItsTypeAndNothingElse(t *testing.T) {
 	} {
 		content := []byte("bytes of " + name)
 		id, _ := shown(t, file, name, content)
-		got, header, body := ask(t, host, "GET", fileURL(id), "", session)
+		got, header, body := ask(t, host, "GET", fileURL(t, host, session, id), "", session)
 		if want == "" {
 			if got != http.StatusUnsupportedMediaType || bytes.Contains(body, content) {
 				t.Errorf("%s: status %d; a file with no preview must not be served", name, got)
@@ -121,7 +146,7 @@ func TestGalleryShowsAGoneFileAsMissing(t *testing.T) {
 			t.Errorf("entry %s: want status %s in %s", entry.id, entry.status, body)
 		}
 	}
-	if got, _, _ := ask(t, host, "GET", fileURL(id), "", session); got != http.StatusNotFound {
+	if got, _, _ := ask(t, host, "GET", fileURL(t, host, session, id), "", session); got != http.StatusNotFound {
 		t.Errorf("a missing file is served: %d", got)
 	}
 	if got, _, _ := ask(t, host, "POST", "/api/gallery/reveal?project=team%2Fok&id="+id, "http://"+host, session); got != http.StatusNotFound || revealed != 0 {
@@ -136,15 +161,17 @@ func TestGalleryReachesAFileByEntryIDOnly(t *testing.T) {
 	if err := os.WriteFile(secret, []byte("never served"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got, _, body := ask(t, host, "GET", fileURL(id), "", session); got != 200 || string(body) != "shown" {
+	good := fileURL(t, host, session, id)
+	cap := good[strings.Index(good, "&cap="):]
+	if got, _, body := ask(t, host, "GET", good, "", session); got != 200 || string(body) != "shown" {
 		t.Fatalf("control: %d %s", got, body)
 	}
 	for _, path := range []string{
-		fileURL(id) + "&path=" + secret,
-		fileURL(id) + "&file=" + secret,
-		fileURL(secret),
-		fileURL("..%2F" + id),
-		fileURL(id) + "&id=" + id,
+		good + "&path=" + secret,
+		good + "&file=" + secret,
+		"/api/gallery/file?project=team%2Fok&id=" + secret + cap,
+		"/api/gallery/file?project=team%2Fok&id=..%2F" + id + cap,
+		good + "&id=" + id,
 		"/api/gallery/file?project=team%2Fok&path=" + secret,
 		"/api/gallery/file" + secret,
 		"/api/gallery/file?project=team%2Fnever&id=" + id,
@@ -154,7 +181,7 @@ func TestGalleryReachesAFileByEntryIDOnly(t *testing.T) {
 			t.Errorf("%s: status %d serves a file not named by one entry id", path, got)
 		}
 	}
-	if got, _, _ := ask(t, host, "GET", fileURL(id), "", ""); got != http.StatusForbidden {
+	if got, _, _ := ask(t, host, "GET", good, "", sess{}); got != http.StatusForbidden {
 		t.Errorf("a file without the session: %d", got)
 	}
 }
@@ -163,12 +190,12 @@ func TestGalleryVideoAnswersByteRanges(t *testing.T) {
 	host, session, file := galleryUI(t, &stubWorld{})
 	content := bytes.Repeat([]byte("0123456789"), 100)
 	id, _ := shown(t, file, "clip.mp4", content)
-	got, header, body := ask(t, host, "GET", fileURL(id), "", session, "Range", "bytes=10-19")
+	got, header, body := ask(t, host, "GET", fileURL(t, host, session, id), "", session, "Range", "bytes=10-19")
 	if got != http.StatusPartialContent || header.Get("Content-Range") != "bytes 10-19/1000" || !bytes.Equal(body, content[10:20]) ||
 		header.Get("Content-Type") != "video/mp4" {
 		t.Fatalf("range: %d %q %q %q", got, header.Get("Content-Range"), header.Get("Content-Type"), body)
 	}
-	if got, header, _ := ask(t, host, "GET", fileURL(id), "", session); got != 200 || header.Get("Accept-Ranges") != "bytes" {
+	if got, header, _ := ask(t, host, "GET", fileURL(t, host, session, id), "", session); got != 200 || header.Get("Accept-Ranges") != "bytes" {
 		t.Fatalf("a whole video says it takes ranges: %d %q", got, header.Get("Accept-Ranges"))
 	}
 }
@@ -177,14 +204,14 @@ func TestGalleryTextIsBoundedAndNeverMarkup(t *testing.T) {
 	host, session, file := galleryUI(t, &stubWorld{})
 	hostile := "<script>alert(1)</script><img src=x onerror=alert(2)>"
 	id, _ := shown(t, file, "hostile.md", []byte(hostile))
-	got, header, body := ask(t, host, "GET", fileURL(id), "", session)
+	got, header, body := ask(t, host, "GET", fileURL(t, host, session, id), "", session)
 	if got != 200 || header.Get("Content-Type") != "text/markdown; charset=utf-8" || header.Get("X-Content-Type-Options") != "nosniff" ||
 		!strings.Contains(header.Get("Content-Security-Policy"), "default-src 'none'") || string(body) != hostile {
 		t.Fatalf("hostile text: %d %q %q", got, header.Get("Content-Type"), header.Get("X-Content-Type-Options"))
 	}
 	big := bytes.Repeat([]byte("x"), maxText+5000)
 	id, _ = shown(t, file, "big.log", big)
-	got, header, body = ask(t, host, "GET", fileURL(id), "", session)
+	got, header, body = ask(t, host, "GET", fileURL(t, host, session, id), "", session)
 	if got != 200 || len(body) != maxText || header.Get("X-WhoSaidSo-Truncated") == "" {
 		t.Fatalf("a long text: %d, %d bytes, truncated %q; want %d bytes and the mark", got, len(body), header.Get("X-WhoSaidSo-Truncated"), maxText)
 	}
@@ -209,11 +236,15 @@ func TestGalleryPostsNeedThisOriginAndTheSession(t *testing.T) {
 	own := "http://" + host
 	for _, action := range []string{"reveal", "remove"} {
 		url := "/api/gallery/" + action + "?project=team%2Fok&id=" + id
-		for _, c := range []struct{ name, origin, cookie string }{
+		for _, c := range []struct {
+			name, origin string
+			s            sess
+		}{
 			{"no Origin", "", session}, {"a foreign Origin", "https://evil.example", session}, {"a null Origin", "null", session},
-			{"a sibling port", "http://127.0.0.1:1", session}, {"no session", own, ""},
+			{"a sibling port", "http://127.0.0.1:1", session}, {"no session", own, sess{}},
+			{"the cookie but not the key", own, sess{cookie: session.cookie}}, {"the key but not the cookie", own, sess{key: session.key}},
 		} {
-			if got, _, _ := ask(t, host, "POST", url, c.origin, c.cookie); got != http.StatusForbidden {
+			if got, _, _ := ask(t, host, "POST", url, c.origin, c.s); got != http.StatusForbidden {
 				t.Errorf("%s with %s: status %d, want 403", action, c.name, got)
 			}
 		}
@@ -244,5 +275,37 @@ func TestRevealSaysWhenItCannot(t *testing.T) {
 	got, _, body := ask(t, host, "POST", "/api/gallery/reveal?project=team%2Fok&id="+id, "http://"+host, session)
 	if got != http.StatusNotImplemented || !strings.Contains(string(body), "cannot reveal") {
 		t.Fatalf("no reveal: %d %s", got, body)
+	}
+}
+
+// The session cookie is not scoped to a port, so a server on another
+// 127.0.0.1 port can be sent it. With the cookie alone nothing opens: the
+// API needs the page's key, and a file its own entry's capability.
+func TestCookieAloneOpensNoGalleryEntry(t *testing.T) {
+	host, session, file := galleryUI(t, &stubWorld{})
+	a, _ := shown(t, file, "a.png", []byte("png a"))
+	b, _ := shown(t, file, "b.png", []byte("png b"))
+	capA := capOf(t, host, session, a)
+	cookieOnly := sess{cookie: session.cookie}
+	for _, path := range []string{
+		"/api/gallery?project=team%2Fok",
+		"/api/gallery/file?project=team%2Fok&id=" + a,
+		"/api/gallery/file?project=team%2Fok&id=" + a + "&cap=" + strings.Repeat("0", len(capA)),
+		"/api/gallery/file?project=team%2Fok&id=" + b + "&cap=" + capA,
+	} {
+		for _, s := range []sess{cookieOnly, session} {
+			if path == "/api/gallery?project=team%2Fok" && s == session {
+				continue // the control below
+			}
+			if got, _, body := ask(t, host, "GET", path, "", s); got != http.StatusForbidden {
+				t.Errorf("%s with %v: status %d, want 403 (%s)", path, s == session, got, body)
+			}
+		}
+	}
+	if got, _, body := ask(t, host, "GET", "/api/gallery/file?project=team%2Fok&id="+a+"&cap="+capA, "", cookieOnly); got != 200 || string(body) != "png a" {
+		t.Fatalf("control, the cookie and the entry's capability: %d %s", got, body)
+	}
+	if got, _, _ := ask(t, host, "GET", "/api/gallery/file?project=team%2Fok&id="+a+"&cap="+capA, "", sess{key: session.key}); got != http.StatusForbidden {
+		t.Fatalf("a capability without the cookie: %d", got)
 	}
 }
