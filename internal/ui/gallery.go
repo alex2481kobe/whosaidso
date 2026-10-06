@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strconv"
+	"syscall"
 
 	"github.com/alex2481kobe/whosaidso/internal/gallery"
 	"github.com/alex2481kobe/whosaidso/internal/model"
@@ -112,7 +113,11 @@ func (h *handler) serveEntry(w http.ResponseWriter, r *http.Request, entry galle
 		h.fail(w, http.StatusUnsupportedMediaType, errText("no preview for this file type"))
 		return
 	}
-	f, err := os.Open(entry.Path)
+	// Non-blocking, so a path swapped for a FIFO or device answers at once
+	// instead of holding the handler until something writes to it; the
+	// fstat below then refuses anything but a regular file, whose reads the
+	// flag does not change.
+	f, err := os.OpenFile(entry.Path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		h.fail(w, http.StatusNotFound, errText("missing: "+entry.Path))
 		return
