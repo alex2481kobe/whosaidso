@@ -1,6 +1,6 @@
 package ui
 
-// The viewer's two JSON endpoints live here. /api/view is exactly the CLI's
+// The viewer's ledger endpoints live here (the gallery's are gallery.go's). /api/view is exactly the CLI's
 // --json answer for one view, rendered by the same function; /api/projects
 // is the registry with each available project's watermark and owed counts
 // read through the same todo view. No view logic is repeated here: labels,
@@ -26,6 +26,18 @@ type projectRow struct {
 	Reason    string            `json:"reason,omitempty"`
 	Watermark *query.Watermark  `json:"watermark,omitempty"`
 	Totals    *query.TodoTotals `json:"totals,omitempty"`
+}
+
+// api answers an API path for a request already in session.
+func (h *handler) api(w http.ResponseWriter, r *http.Request) {
+	switch r.URL.Path {
+	case "/api/projects":
+		h.projects(w, r)
+	case "/api/view":
+		h.view(w, r)
+	default:
+		h.gallery(w, r)
+	}
 }
 
 func (h *handler) projects(w http.ResponseWriter, r *http.Request) {

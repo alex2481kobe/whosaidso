@@ -48,7 +48,7 @@ func uiVerb(fs *flag.FlagSet) func(*call) error {
 // this machine's registry and, inside a bound project, that project opened
 // through the same home and checkout as every read verb run in cwd.
 func uiConfig(cwd string) ui.Config {
-	cfg := ui.Config{View: answerView, Projects: store.Registered}
+	cfg := ui.Config{View: answerView, Projects: store.Registered, Reveal: ui.RevealInFinder}
 	if project, err := store.Open(cwd); err == nil {
 		cfg.Invoked = &project
 	}

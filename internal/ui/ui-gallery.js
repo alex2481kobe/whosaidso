@@ -1,0 +1,111 @@
+// Gallery: the files an agent was asked to show, from whosaidso gallery list's
+// own answer. Each card previews its file by the kind the server named
+// (image, video, or text shown as text, never as markup), says Missing when
+// the file is gone, and offers Reveal in Finder and Remove from gallery;
+// Remove drops the entry, never the file. The search filters the cards here
+// in the browser over title, note, path, author and date. Files are fetched
+// by entry id only.
+import { el, api, apiURL, send, project, when, stamp, icon } from "./ui.js";
+import { head, hero } from "./ui-parts.js";
+
+// state keeps the search across re-renders from the live poll.
+const state = { search: "" };
+
+// preview draws the file by its kind; a missing file or an unknown kind
+// says so instead.
+function preview(entry, src) {
+  if (entry.status !== "present") return el("div", "gallery-none tone-text red", "Missing");
+  if (entry.kind === "image") {
+    const img = el("img");
+    Object.assign(img, { src, alt: entry.title, loading: "lazy" });
+    return el("div", "gallery-media", img);
+  }
+  if (entry.kind === "video") {
+    const video = el("video");
+    Object.assign(video, { src, controls: true, preload: "metadata" });
+    return el("div", "gallery-media", video);
+  }
+  if (entry.kind === "text") {
+    const pre = el("pre", "gallery-text", "Loading...");
+    fetch(src).then(async (r) => {
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      const cut = r.headers.get("X-WhoSaidSo-Truncated");
+      pre.textContent = (await r.text()) + (cut ? `\n\n[first ${Math.round(cut / 1024)} KiB shown]` : "");
+    }).catch((e) => { pre.textContent = "Could not read the file: " + e.message; });
+    return pre;
+  }
+  return el("div", "gallery-none muted", "No preview");
+}
+
+// action is a card button that hands its label to onPick.
+function action(glyph, label, onPick) {
+  const words = el("span", "", label);
+  const button = el("button", "button", icon(glyph), words);
+  button.type = "button";
+  button.addEventListener("click", () => onPick(words));
+  return button;
+}
+
+// card is one entry. Remove asks for a second click within three seconds,
+// so a stray click cannot drop an entry; a failure is said above the cards.
+function card(entry, said, removed) {
+  const params = { project: project(), id: entry.id };
+  const added = new Date(entry.added_at);
+  const path = el("span", "mono gallery-path", entry.path);
+  path.title = entry.path;
+  const fail = (e) => { said.textContent = `${entry.title}: ${e.message}`; };
+  const reveal = action("open", "Reveal in Finder", () => send("/api/gallery/reveal", params).catch(fail));
+  let armed = null;
+  const remove = action("dots", "Remove from gallery", (words) => {
+    if (!armed) {
+      words.textContent = "Click again to remove";
+      armed = setTimeout(() => { armed = null; words.textContent = "Remove from gallery"; }, 3000);
+      return;
+    }
+    send("/api/gallery/remove", params).then(removed).catch(fail);
+  });
+  const node = el("article", "gallery-card", preview(entry, apiURL("/api/gallery/file", params)),
+    el("div", "gallery-card-body",
+      el("p", "gallery-title", entry.title),
+      entry.note ? el("p", "gallery-note", entry.note) : null,
+      path,
+      el("div", "record-card-foot", el("span", "", entry.added_by || "UNKNOWN"), el("span", "", when(added))),
+      el("div", "gallery-actions", reveal, remove)));
+  node.dataset.search = [entry.title, entry.note, entry.path, entry.added_by, entry.added_at, stamp(added), when(added)].join("\n").toLowerCase();
+  return node;
+}
+
+// renderGallery draws the newest entry first.
+export async function renderGallery() {
+  const answer = await api("/api/gallery", { project: project() });
+  const said = el("p", "gallery-said tone-text red");
+  const count = el("span", "count");
+  const empty = el("p", "empty", "empty...");
+  const cards = el("div", "gallery-cards");
+  const filter = () => {
+    const q = state.search.trim().toLowerCase();
+    let shown = 0;
+    for (const c of cards.children) {
+      c.hidden = q !== "" && !c.dataset.search.includes(q);
+      shown += c.hidden ? 0 : 1;
+    }
+    count.textContent = String(shown);
+    empty.hidden = shown > 0;
+  };
+  for (const entry of answer.entries.slice().reverse()) {
+    const node = card(entry, said, () => { node.remove(); filter(); });
+    cards.append(node);
+  }
+  const search = el("input", "search-input");
+  Object.assign(search, { type: "search", placeholder: "Search the gallery...", value: state.search, spellcheck: false });
+  search.setAttribute("aria-label", "Search the gallery");
+  search.addEventListener("input", () => { state.search = search.value; filter(); });
+  filter();
+  return el("div", "screen",
+    hero("gallery", "Gallery", icon("file", "hero-icon"), ["What an agent was asked to show you in ", project(), "."],
+      "Removing an entry drops it from this list; the file stays where it is."),
+    el("section", "panel gallery",
+      head("file", "sky", "Files", "Newest first", el("label", "search", icon("search"), search), count),
+      said,
+      el("div", "gallery-scroll", cards, empty)));
+}

@@ -56,6 +56,9 @@ Look records up with whosaidso show --json ID.
   whosaidso history [RECORD_ID]    admitted events in order, and reviews
 A source's source_id reads with show and history too; bare show lists sources.
 whosaidso ui shows the same four answers in a browser, read-only.
+Asked to show the owner a file (an image, video, log), run
+whosaidso gallery add PATH --title "short title" --note "what to look at";
+it appears in the viewer's Gallery. The gallery is not a record.
 
 Every answer opens with its watermark (ledger sequence, bundles, events and
 head bundle): quote it with any status you report. result is KNOWN, or

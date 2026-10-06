@@ -2,17 +2,18 @@
 // hash routing, the live poll of the todo answer, and the small helpers every screen
 // shares. Each screen lives in its own ui-*.js module; icons are in
 // ui-icons.js, shared screen parts in ui-parts.js. Everything shown is
-// read from the views' own JSON; nothing here writes anywhere.
+// read from the views' own JSON; the only writes are the Gallery's two
+// POSTs (send), which never reach a ledger.
 import { renderHome } from "./ui-home.js";
 import { renderRecords } from "./ui-records.js";
 import { renderDetail } from "./ui-detail.js";
 import { renderHistory } from "./ui-history.js";
+import { renderGallery } from "./ui-gallery.js";
 import { icon } from "./ui-icons.js";
 import { place } from "./ui-parts.js";
 
 export { icon };
 
-const token = new URLSearchParams(location.search).get("token") || "";
 const main = document.getElementById("main");
 // switches counts project changes and renders counts navigations: an answer
 // or a screen started before a newer one is dropped, never drawn over it.
@@ -21,10 +22,16 @@ const state = { projects: [], project: "", mark: "", cache: new Map(), switches:
 // project is the id of the project on screen.
 export const project = () => state.project;
 
-// ---- data
-export async function api(path, params = {}) {
+// ---- data: the session cookie the launch URL was traded for goes with every request
+export const apiURL = (path, params = {}) => {
   const query = new URLSearchParams(params).toString();
-  const response = await fetch(path + (query ? "?" + query : ""), { headers: { "X-WhoSaidSo-Token": token } });
+  return path + (query ? "?" + query : "");
+};
+export const api = (path, params = {}) => answer(fetch(apiURL(path, params)));
+// send is a gallery POST: Reveal in Finder or Remove from gallery.
+export const send = (path, params = {}) => answer(fetch(apiURL(path, params), { method: "POST" }));
+async function answer(request) {
+  const response = await request;
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error?.message || `${response.status} ${response.statusText}`);
   return body;
@@ -295,6 +302,7 @@ async function route() {
     if (screen === "records") node = await renderRecords(new URLSearchParams(rest));
     else if (screen === "record") node = await renderDetail(parts[1]);
     else if (screen === "history") node = await renderHistory();
+    else if (screen === "gallery") node = await renderGallery();
     else node = await renderHome(await view("todo"));
     show(node);
   } catch (error) {

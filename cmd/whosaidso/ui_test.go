@@ -17,14 +17,30 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/ui"
 )
 
-func uiGet(t *testing.T, address, token, path string) (int, string) {
+// uiSession opens the launch URL once, as the browser does, and returns the
+// session cookie it was traded for.
+func uiSession(t *testing.T, address string) string {
+	t.Helper()
+	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.Get(address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if len(resp.Cookies()) != 1 {
+		t.Fatalf("the launch URL gave no session: %d", resp.StatusCode)
+	}
+	return resp.Cookies()[0].String()
+}
+
+func uiGet(t *testing.T, address, session, path string) (int, string) {
 	t.Helper()
 	u, _ := url.Parse(address)
 	req, err := http.NewRequest(http.MethodGet, "http://"+u.Host+path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("X-WhoSaidSo-Token", token)
+	req.Header.Set("Cookie", session)
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -58,8 +74,7 @@ func TestViewerServesExactlyTheCLIJSON(t *testing.T) {
 	}
 	go server.Serve(ln)
 	t.Cleanup(func() { _ = server.Shutdown(context.Background()) })
-	u, _ := url.Parse(address)
-	token := u.Query().Get("token")
+	token := uiSession(t, address)
 	project := url.QueryEscape("test/cli")
 	id := string(cliID(1))
 
