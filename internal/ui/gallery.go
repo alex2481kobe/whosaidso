@@ -80,7 +80,7 @@ func (h *handler) galleryAnswer(w http.ResponseWriter, r *http.Request, file, id
 	case "/api/gallery/file":
 		h.serveEntry(w, r, entry)
 	case "/api/gallery/remove":
-		if _, err := gallery.Remove(file, id); err != nil {
+		if _, err := gallery.Remove(r.Context(), file, id); err != nil {
 			h.fail(w, http.StatusInternalServerError, err)
 			return
 		}

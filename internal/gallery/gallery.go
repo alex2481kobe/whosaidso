@@ -9,6 +9,7 @@
 package gallery
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -19,6 +20,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 // Entry is one shown file. Path is absolute; AddedBy is "" when no actor
@@ -76,7 +79,7 @@ func Find(file, id string) (Entry, error) {
 // Add records path (absolute, or relative to dir) with a title and note.
 // It refuses a path that is not an existing regular file, a blank or
 // multi-line title, and words past their limits.
-func Add(file, dir, path, title, note, by string, now time.Time) (Entry, error) {
+func Add(ctx context.Context, file, dir, path, title, note, by string, now time.Time) (Entry, error) {
 	title, note = strings.TrimSpace(title), strings.TrimSpace(note)
 	switch {
 	case title == "" || strings.ContainsAny(title, "\r\n"):
@@ -97,31 +100,52 @@ func Add(file, dir, path, title, note, by string, now time.Time) (Entry, error) 
 	if !info.Mode().IsRegular() {
 		return Entry{}, fmt.Errorf("cannot add %s: not a regular file", path)
 	}
-	entries, err := Load(file)
-	if err != nil {
-		return Entry{}, err
-	}
-	id, err := freshID(entries)
-	if err != nil {
-		return Entry{}, err
-	}
-	entry := Entry{ID: id, Path: path, Title: title, Note: note, AddedAt: now.UTC().Truncate(time.Second), AddedBy: strings.TrimSpace(by)}
-	return entry, save(file, append(entries, entry))
+	entry := Entry{Path: path, Title: title, Note: note, AddedAt: now.UTC().Truncate(time.Second), AddedBy: strings.TrimSpace(by)}
+	err = mutate(ctx, file, func(entries []Entry) ([]Entry, error) {
+		id, err := freshID(entries)
+		entry.ID = id
+		return append(entries, entry), err
+	})
+	return entry, err
 }
 
 // Remove drops the entry with id from the gallery and returns it. The file
 // it names is left exactly where it is.
-func Remove(file, id string) (Entry, error) {
+func Remove(ctx context.Context, file, id string) (Entry, error) {
+	var removed Entry
+	err := mutate(ctx, file, func(entries []Entry) ([]Entry, error) {
+		for i, e := range entries {
+			if e.ID == id {
+				removed = e
+				return append(entries[:i:i], entries[i+1:]...), nil
+			}
+		}
+		return nil, ErrNoEntry
+	})
+	return removed, err
+}
+
+// mutate applies change to the current entries and saves the result, holding
+// the gallery directory's lock from the read to the rename, so two writers,
+// in one process or two, never both start from the same list and lose one
+// change.
+func mutate(ctx context.Context, file string, change func([]Entry) ([]Entry, error)) error {
+	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
+		return err
+	}
+	release, err := store.HoldDirLock(ctx, filepath.Dir(file))
+	if err != nil {
+		return err
+	}
+	defer release()
 	entries, err := Load(file)
 	if err != nil {
-		return Entry{}, err
+		return err
 	}
-	for i, e := range entries {
-		if e.ID == id {
-			return e, save(file, append(entries[:i:i], entries[i+1:]...))
-		}
+	if entries, err = change(entries); err != nil {
+		return err
 	}
-	return Entry{}, ErrNoEntry
+	return save(file, entries)
 }
 
 // freshID is eight random hex digits no current entry holds: short enough
@@ -144,12 +168,9 @@ func freshID(entries []Entry) (string, error) {
 }
 
 // save replaces the gallery file whole through a rename, so a reader sees
-// the old list or the new one, never half of either. Two writers at the
-// same instant can still lose one change: the gallery is not a record.
+// the old list or the new one, never half of either. Callers hold the lock
+// (mutate).
 func save(file string, entries []Entry) error {
-	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
-		return err
-	}
 	raw, err := json.MarshalIndent(entries, "", "  ")
 	if err != nil {
 		return err

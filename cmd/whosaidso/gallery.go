@@ -48,13 +48,13 @@ func galleryVerb(mode string) func(*flag.FlagSet) func(*call) error {
 			}
 			switch mode {
 			case "add":
-				e, err := gallery.Add(file, c.cwd, c.args[0], *title, *note, c.getenv("WHOSAIDSO_ACTOR"), time.Now())
+				e, err := gallery.Add(c.ctx, file, c.cwd, c.args[0], *title, *note, c.getenv("WHOSAIDSO_ACTOR"), time.Now())
 				if err != nil {
 					return err
 				}
 				fmt.Fprintf(c.stdout, "added %s %s\n", e.ID, e.Path)
 			case "rm":
-				e, err := gallery.Remove(file, c.args[0])
+				e, err := gallery.Remove(c.ctx, file, c.args[0])
 				if errors.Is(err, gallery.ErrNoEntry) {
 					return fmt.Errorf("whosaidso gallery rm: no entry %s; whosaidso gallery list shows the ids", c.args[0])
 				}

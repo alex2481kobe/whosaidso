@@ -8,6 +8,7 @@ package ui
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"os"
@@ -41,7 +42,7 @@ func shown(t *testing.T, file, name string, content []byte) (string, string) {
 	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	e, err := gallery.Add(file, "/", path, "the "+name, "", "agent", time.Now())
+	e, err := gallery.Add(context.Background(), file, "/", path, "the "+name, "", "agent", time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +193,7 @@ func TestGalleryTextIsBoundedAndNeverMarkup(t *testing.T) {
 	if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := gallery.Add(file, "/", path, hostile, hostile, "", time.Now()); err != nil {
+	if _, err := gallery.Add(context.Background(), file, "/", path, hostile, hostile, "", time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	got, header, body = ask(t, host, "GET", "/api/gallery?project=team%2Fok", "", session)
