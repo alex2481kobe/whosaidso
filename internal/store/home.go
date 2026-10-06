@@ -48,6 +48,21 @@ func bindingPath(id model.ProjectID) (string, error) {
 	return filepath.Join(home, "projects", encoded), nil
 }
 
+// GalleryFile is the project's gallery on this machine (internal/gallery):
+// in the home beside its registry binding, so it is never in a ledger and
+// never inside a repository, whatever that repository ignores.
+func GalleryFile(id model.ProjectID) (string, error) {
+	encoded, err := encodeProjectID(id)
+	if err != nil {
+		return "", err
+	}
+	home, err := Home()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "gallery", encoded+".json"), nil
+}
+
 // codeBindingCorrupt is a registry entry that names no home. Bind replaces
 // it: only an explicit binding can say where the home is.
 const codeBindingCorrupt = "binding-corrupt"
