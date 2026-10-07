@@ -37,7 +37,7 @@ export const apiURL = (path, params = {}) => {
   const query = new URLSearchParams(params).toString();
   return path + (query ? "?" + query : "");
 };
-export const api = (path, params = {}) => answer(fetch(apiURL(path, params), { headers: { "X-WhoSaidSo-Key": key } }));
+export const api = (path, params = {}, signal) => answer(fetch(apiURL(path, params), { headers: { "X-WhoSaidSo-Key": key }, signal }));
 // send is a gallery POST: Reveal in Finder or Remove from gallery.
 export const send = (path, params = {}) => answer(fetch(apiURL(path, params), { method: "POST", headers: { "X-WhoSaidSo-Key": key } }));
 async function answer(request) {

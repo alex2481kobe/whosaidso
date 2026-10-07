@@ -101,7 +101,7 @@ export async function renderGallery() {
       const sig = JSON.stringify(entry);
       const had = drawn.get(entry.id);
       if (had && had.sig === sig) return had;
-      const node = card(entry, said, () => { node.remove(); drawn.delete(entry.id); filter(); });
+      const node = card(entry, said, () => { node.remove(); drawn.delete(entry.id); applied = asked; filter(); });
       return { id: entry.id, sig, node };
     });
     const keep = new Set(want.map((w) => w.node));
@@ -117,11 +117,23 @@ export async function renderGallery() {
     filter();
   };
   draw(answer.entries);
+  // One read in flight at a time, given up after ten seconds; a tick while
+  // one is out is skipped. A list read before the newest one applied, or
+  // before a Remove on this screen, is older than what is drawn and is
+  // dropped, so a removed card cannot come back from a late answer.
   const shown = project();
+  let asked = 0, applied = 0, busy = false;
   const timer = setInterval(() => {
     if (!cards.isConnected || project() !== shown) { clearInterval(timer); return; }
-    if (document.visibilityState === "hidden") return;
-    api("/api/gallery", { project: shown }).then((next) => { if (cards.isConnected) draw(next.entries); }).catch(() => {});
+    if (busy || document.visibilityState === "hidden") return;
+    busy = true;
+    const mine = ++asked;
+    const stop = new AbortController();
+    const limit = setTimeout(() => stop.abort(), 10000);
+    api("/api/gallery", { project: shown }, stop.signal)
+      .then((next) => { if (cards.isConnected && mine > applied) { applied = mine; draw(next.entries); } })
+      .catch(() => {})
+      .finally(() => { clearTimeout(limit); busy = false; });
   }, 3000);
   const search = el("input", "search-input");
   Object.assign(search, { type: "search", placeholder: "Search the gallery...", value: state.search, spellcheck: false });
