@@ -22,7 +22,7 @@ function preview(entry, src) {
   }
   if (entry.kind === "video") {
     const video = el("video");
-    Object.assign(video, { src, controls: true, preload: "metadata" });
+    Object.assign(video, { src, controls: true, preload: "metadata", playsInline: true });
     return el("div", "gallery-media", video);
   }
   if (entry.kind === "text") {
@@ -46,6 +46,40 @@ function action(glyph, label, onPick) {
   return button;
 }
 
+// Fullscreen is a modal viewport on every device, with browser fullscreen when
+// available. Card playback pauses while the enlarged copy is open.
+function fullscreen(entry, src, original, trigger) {
+  const video = original.querySelector("video");
+  const time = video?.currentTime || 0;
+  video?.pause();
+  const content = preview(entry, src);
+  const enlarged = content.querySelector?.("video");
+  if (enlarged) enlarged.addEventListener("loadedmetadata", () => { enlarged.currentTime = time; }, { once: true });
+  const close = action("close", "Close", () => dialog.close());
+  const dialog = el("dialog", "gallery-fullscreen",
+    el("div", "gallery-fullscreen-head", el("p", "gallery-title", entry.title), close), content);
+  dialog.setAttribute("aria-label", entry.title);
+  // Dialog elements cannot enter native fullscreen; their container can.
+  const surface = el("div", "", dialog);
+  const changed = () => {
+    if (document.fullscreenElement !== surface && dialog.open) dialog.close();
+  };
+  surface.addEventListener("fullscreenchange", changed);
+  dialog.addEventListener("close", () => {
+    enlarged?.pause();
+    if (video && enlarged?.readyState >= 1) video.currentTime = enlarged.currentTime;
+    surface.removeEventListener("fullscreenchange", changed);
+    if (document.fullscreenElement === surface) document.exitFullscreen().catch(() => {});
+    surface.remove();
+    if (trigger.isConnected) trigger.focus();
+  }, { once: true });
+  document.body.append(surface);
+  dialog.showModal();
+  close.focus();
+  // A refused/unsupported browser API leaves the full-viewport modal usable.
+  if (surface.requestFullscreen) surface.requestFullscreen().catch(() => {});
+}
+
 // card is one entry. Remove asks for a second click within three seconds,
 // so a stray click cannot drop an entry; a failure is said above the cards.
 function card(entry, said, removed) {
@@ -64,13 +98,17 @@ function card(entry, said, removed) {
     }
     send("/api/gallery/remove", params).then(removed).catch(fail);
   });
-  const node = el("article", "gallery-card", preview(entry, apiURL("/api/gallery/file", { ...params, cap: entry.cap })),
+  const src = apiURL("/api/gallery/file", { ...params, cap: entry.cap });
+  const media = preview(entry, src);
+  const expand = entry.status === "present" && ["image", "video", "text"].includes(entry.kind)
+    ? action("open", "Full screen", () => fullscreen(entry, src, media, expand)) : null;
+  const node = el("article", "gallery-card", media,
     el("div", "gallery-card-body",
       el("p", "gallery-title", entry.title),
       entry.note ? el("p", "gallery-note", entry.note) : null,
       path,
       el("div", "record-card-foot", el("span", "", entry.added_by || "UNKNOWN"), el("span", "", when(added))),
-      el("div", "gallery-actions", reveal, remove)));
+      el("div", "gallery-actions", expand, reveal, remove)));
   node.dataset.search = [entry.title, entry.note, entry.path, entry.added_by, entry.added_at, stamp(added), when(added)].join("\n").toLowerCase();
   return node;
 }

@@ -18,3 +18,11 @@
 .gallery-note { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .gallery-path { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gallery-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+
+.gallery-fullscreen { box-sizing: border-box; position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 12px; border: 0; color: var(--text); background: var(--surface); }
+.gallery-fullscreen[open] { display: flex; flex-direction: column; gap: 12px; }
+.gallery-fullscreen::backdrop { background: var(--surface); }
+.gallery-fullscreen-head { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 12px; }
+.gallery-fullscreen-head .button { flex: none; min-height: 44px; }
+.gallery-fullscreen > .gallery-media, .gallery-fullscreen > .gallery-text { flex: 1; min-height: 0; height: auto; border: 0; }
+.gallery-fullscreen .gallery-media img, .gallery-fullscreen .gallery-media video { width: 100%; height: 100%; }
