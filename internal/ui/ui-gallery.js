@@ -9,8 +9,9 @@
 import { el, api, apiURL, send, project, when, stamp, icon } from "./ui.js";
 import { head, hero, chip, dropdown } from "./ui-parts.js";
 
-// state keeps the filters across re-renders from the live poll; they belong
-// to one project, so a switch to another clears them. The sort stays.
+// state keeps the filters across re-renders from the live poll. They belong
+// to the project they were set in: drawing the gallery of another project
+// clears them. The sort stays.
 const state = { project: "", search: "", kind: "", sort: "recent" };
 // The kinds are the server's preview kinds; "other" is a file with none.
 const kinds = [["image", "Images"], ["video", "Videos"], ["text", "Text"], ["other", "Other"]];
@@ -74,7 +75,8 @@ function removeButton(onRemove) {
   };
   show(false);
   button.addEventListener("click", () => {
-    if (armed) { onRemove(); return; }
+    // The confirming click disarms, so a failed removal needs a fresh confirmation.
+    if (armed) { clearTimeout(armed); armed = null; show(false); onRemove(); return; }
     show(true);
     armed = setTimeout(() => { armed = null; show(false); }, 3000);
   });
@@ -96,8 +98,11 @@ function fullscreen(entry, src, original, trigger) {
   dialog.setAttribute("aria-label", entry.title);
   // Dialog elements cannot enter native fullscreen; their container can.
   const surface = el("div", "", dialog);
+  // Only leaving fullscreen altogether closes the viewer: the enlarged
+  // video's own fullscreen control stacks the video above the surface, and
+  // that change bubbles here too.
   const changed = () => {
-    if (document.fullscreenElement !== surface && dialog.open) dialog.close();
+    if (!document.fullscreenElement && dialog.open) dialog.close();
   };
   surface.addEventListener("fullscreenchange", changed);
   dialog.addEventListener("close", () => {
@@ -176,7 +181,9 @@ export async function renderGallery() {
       const had = drawn.get(entry.id);
       if (had && had.sig === sig) return had;
       const node = card(entry, said, () => {
-        node.remove(); drawn.delete(entry.id); latest = latest.filter((e) => e.id !== entry.id); applied = asked; filter();
+        // A poll may have replaced this card meanwhile; its replacement stays
+        // drawn until the next poll, which no longer lists the entry, removes it.
+        node.remove(); if (drawn.get(entry.id)?.node === node) drawn.delete(entry.id); latest = latest.filter((e) => e.id !== entry.id); applied = asked; filter();
       });
       return { id: entry.id, sig, node };
     });
