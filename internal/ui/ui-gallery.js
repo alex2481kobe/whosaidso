@@ -37,12 +37,34 @@ function preview(entry, src) {
   return el("div", "gallery-none muted", "No preview");
 }
 
-// action is a card button that hands its label to onPick.
+// action is a labelled button.
 function action(glyph, label, onPick) {
-  const words = el("span", "", label);
-  const button = el("button", "button", icon(glyph), words);
+  const button = el("button", "button", icon(glyph), el("span", "", label));
   button.type = "button";
-  button.addEventListener("click", () => onPick(words));
+  button.addEventListener("click", onPick);
+  return button;
+}
+
+// removeButton is the card's corner X. It asks for a second click within
+// three seconds, saying so beside the X, so a stray click cannot drop an
+// entry.
+function removeButton(onRemove) {
+  const word = el("span", "gallery-remove-word");
+  const button = el("button", "gallery-remove", icon("close"), word);
+  button.type = "button";
+  let armed = null;
+  const show = (asking) => {
+    word.textContent = asking ? "Click again to remove" : "";
+    button.classList.toggle("armed", asking);
+    button.title = asking ? "Click again to remove from gallery" : "Remove from gallery";
+    button.setAttribute("aria-label", button.title);
+  };
+  show(false);
+  button.addEventListener("click", () => {
+    if (armed) { onRemove(); return; }
+    show(true);
+    armed = setTimeout(() => { armed = null; show(false); }, 3000);
+  });
   return button;
 }
 
@@ -83,8 +105,9 @@ function fullscreen(entry, src, original, trigger) {
   else open();
 }
 
-// card is one entry. Remove asks for a second click within three seconds,
-// so a stray click cannot drop an entry; a failure is said above the cards.
+// card is one entry: its preview with the remove X in the corner, then its
+// words and one row of buttons. Double-clicking an image opens it full
+// screen. A failure is said above the cards.
 function card(entry, said, removed) {
   const params = { project: project(), id: entry.id };
   const added = new Date(entry.added_at);
@@ -92,26 +115,19 @@ function card(entry, said, removed) {
   path.title = entry.path;
   const fail = (e) => { said.textContent = `${entry.title}: ${e.message}`; };
   const reveal = action("open", "Reveal in Finder", () => send("/api/gallery/reveal", params).catch(fail));
-  let armed = null;
-  const remove = action("dots", "Remove from gallery", (words) => {
-    if (!armed) {
-      words.textContent = "Click again to remove";
-      armed = setTimeout(() => { armed = null; words.textContent = "Remove from gallery"; }, 3000);
-      return;
-    }
-    send("/api/gallery/remove", params).then(removed).catch(fail);
-  });
+  const remove = removeButton(() => send("/api/gallery/remove", params).then(removed).catch(fail));
   const src = apiURL("/api/gallery/file", { ...params, cap: entry.cap });
   const media = preview(entry, src);
   const expand = entry.status === "present" && ["image", "video", "text"].includes(entry.kind)
-    ? action("open", "Full screen", () => fullscreen(entry, src, media, expand)) : null;
-  const node = el("article", "gallery-card", media,
+    ? action("expand", "Full screen", () => fullscreen(entry, src, media, expand)) : null;
+  media.querySelector?.("img")?.addEventListener("dblclick", () => fullscreen(entry, src, media, expand));
+  const node = el("article", "gallery-card", media, remove,
     el("div", "gallery-card-body",
       el("p", "gallery-title", entry.title),
       entry.note ? el("p", "gallery-note", entry.note) : null,
       path,
       el("div", "record-card-foot", el("span", "", entry.added_by || "UNKNOWN"), el("span", "", when(added))),
-      el("div", "gallery-actions", expand, reveal, remove)));
+      el("div", "gallery-actions", expand, reveal)));
   node.dataset.search = [entry.title, entry.note, entry.path, entry.added_by, entry.added_at, stamp(added), when(added)].join("\n").toLowerCase();
   return node;
 }

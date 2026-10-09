@@ -36,6 +36,7 @@ const paths = {
   play: "M8 5.5v13l10.5-6.5z",
   dots: "M5 12h.01M12 12h.01M19 12h.01",
   close: "M6 6l12 12M18 6L6 18",
+  expand: "M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5",
   file: "M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h4",
   up: "M12 19V5M6 11l6-6 6 6",
   arrow: "M5 12h14M13 6l6 6-6 6",
