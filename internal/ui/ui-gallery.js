@@ -2,14 +2,27 @@
 // own answer. Each card previews its file by the kind the server named
 // (image, video, or text shown as text, never as markup), says Missing when
 // the file is gone, and offers Reveal in Finder and Remove from gallery;
-// Remove drops the entry, never the file. The search filters the cards here
-// in the browser over title, note, path, author and date. Files are fetched
-// by entry id only.
+// Remove drops the entry, never the file. The search, the kind chips and the
+// sort menu work here in the browser, with the same parts as Records: the
+// search over title, note, path, author and date. Files are fetched by entry
+// id only.
 import { el, api, apiURL, send, project, when, stamp, icon } from "./ui.js";
-import { head, hero } from "./ui-parts.js";
+import { head, hero, chip, dropdown } from "./ui-parts.js";
 
-// state keeps the search across re-renders from the live poll.
-const state = { search: "" };
+// state keeps the filters across re-renders from the live poll; they belong
+// to one project, so a switch to another clears them. The sort stays.
+const state = { project: "", search: "", kind: "", sort: "recent" };
+// The kinds are the server's preview kinds; "other" is a file with none.
+const kinds = [["image", "Images"], ["video", "Videos"], ["text", "Text"], ["other", "Other"]];
+const kindOf = (entry) => entry.kind || "other";
+// The list arrives oldest first; a stable sort keeps newest first among ties.
+const sorts = [["recent", "Most recent"], ["oldest", "Oldest"], ["title", "Title A-Z"], ["kind", "Kind"]];
+const order = {
+  recent: (list) => list.slice().reverse(),
+  oldest: (list) => list.slice(),
+  title: (list) => order.recent(list).sort((a, b) => a.title.localeCompare(b.title)),
+  kind: (list) => order.recent(list).sort((a, b) => kindOf(a).localeCompare(kindOf(b))),
+};
 
 // preview draws the file by its kind; a missing file or an unknown kind
 // says so instead.
@@ -128,16 +141,18 @@ function card(entry, said, removed) {
       path,
       el("div", "record-card-foot", el("span", "", entry.added_by || "UNKNOWN"), el("span", "", when(added))),
       el("div", "gallery-actions", expand, reveal)));
+  node.dataset.kind = kindOf(entry);
   node.dataset.search = [entry.title, entry.note, entry.path, entry.added_by, entry.added_at, stamp(added), when(added)].join("\n").toLowerCase();
   return node;
 }
 
-// renderGallery draws the newest entry first, then reads the gallery again
-// every few seconds while this screen is shown (the ledger poll does not see
-// gallery changes) and redraws only the entries that changed, so a playing
-// video or a scrolled text keeps its place.
+// renderGallery draws the entries in the chosen order, then reads the gallery
+// again every few seconds while this screen is shown (the ledger poll does not
+// see gallery changes) and redraws only the entries that changed, so a
+// playing video or a scrolled text keeps its place.
 export async function renderGallery() {
   const answer = await api("/api/gallery", { project: project() });
+  if (state.project !== project()) Object.assign(state, { project: project(), search: "", kind: "" });
   const said = el("p", "gallery-said tone-text red");
   const count = el("span", "count");
   const empty = el("p", "empty", "empty...");
@@ -146,25 +161,29 @@ export async function renderGallery() {
     const q = state.search.trim().toLowerCase();
     let shown = 0;
     for (const c of cards.children) {
-      c.hidden = q !== "" && !c.dataset.search.includes(q);
+      c.hidden = (q !== "" && !c.dataset.search.includes(q)) || (state.kind !== "" && c.dataset.kind !== state.kind);
       shown += c.hidden ? 0 : 1;
     }
     count.textContent = String(shown);
     empty.hidden = shown > 0;
   };
   const drawn = new Map(); // entry id -> { id, sig, node }
+  let latest = []; // the entries last drawn, which a new sort redraws
   const draw = (entries) => {
-    const want = entries.slice().reverse().map((entry) => {
+    latest = entries;
+    const want = order[state.sort](entries).map((entry) => {
       const sig = JSON.stringify(entry);
       const had = drawn.get(entry.id);
       if (had && had.sig === sig) return had;
-      const node = card(entry, said, () => { node.remove(); drawn.delete(entry.id); applied = asked; filter(); });
+      const node = card(entry, said, () => {
+        node.remove(); drawn.delete(entry.id); latest = latest.filter((e) => e.id !== entry.id); applied = asked; filter();
+      });
       return { id: entry.id, sig, node };
     });
     const keep = new Set(want.map((w) => w.node));
     for (const [id, had] of drawn) if (!keep.has(had.node)) { had.node.remove(); drawn.delete(id); }
-    // Insert new cards in place; a kept card is never detached, since
-    // detaching a media element stops it.
+    // Insert new cards in place; a kept card is detached only when a new sort
+    // moves it, since detaching a media element stops it.
     let at = cards.firstChild;
     for (const w of want) {
       drawn.set(w.id, w);
@@ -196,11 +215,22 @@ export async function renderGallery() {
   Object.assign(search, { type: "search", placeholder: "Search the gallery...", value: state.search, spellcheck: false });
   search.setAttribute("aria-label", "Search the gallery");
   search.addEventListener("input", () => { state.search = search.value; filter(); });
+  const chips = el("nav", "chiprow gallery-kinds");
+  chips.setAttribute("aria-label", "Kind");
+  const sortMenu = el("div", "gallery-sort");
+  const paint = () => {
+    chips.replaceChildren(chip("All", state.kind === "", () => { state.kind = ""; paint(); filter(); }),
+      ...kinds.map(([key, label]) => chip(label, state.kind === key, () => { state.kind = key; paint(); filter(); })));
+    sortMenu.replaceChildren(dropdown({ glyph: "sort", prefix: "Sort: ", options: sorts, value: state.sort,
+      onPick: (v) => { state.sort = v; paint(); draw(latest); } }));
+  };
+  paint();
   return el("div", "screen",
     hero("gallery", "Gallery", icon("file", "hero-icon"), ["What an agent was asked to show you in ", project(), "."],
       "Removing an entry drops it from this list; the file stays where it is."),
     el("section", "panel gallery",
-      head("file", "sky", "Files", "Newest first", el("label", "search", icon("search"), search), count),
+      head("file", "sky", "Files", null, el("label", "search", icon("search"), search), sortMenu, count),
+      chips,
       said,
       el("div", "gallery-scroll", cards, empty)));
 }
