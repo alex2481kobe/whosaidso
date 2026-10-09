@@ -3,8 +3,7 @@
    every screen uses: panels, stat cards, chips, dropdown menus, buttons,
    tables and marks. Screen layouts are in ui-screens.css. Tags and chips
    are rounded rectangles, never pills; the one capsule is the theme switch.
-   The header tabs copy the Realm Shaper ui-kit's .rs-tabstrip, the theme
-   switch AskOther's. No web fonts. */
+   The theme switch follows AskOther's. No web fonts. */
 :root {
   --bg: #f5f7fa; --surface: #ffffff; --surface-2: #f6f8fb; --line: #e5e9f0; --line-2: #edf0f5; --line-strong: #cfd6e0;
   --text: #1b2433; --muted: #6a7589; --faint: #9aa3b2; --scroll: rgba(15, 23, 42, .18);
