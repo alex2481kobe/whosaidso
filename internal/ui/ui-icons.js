@@ -35,6 +35,7 @@ const paths = {
   history: "M4 12a8 8 0 1 0 2.3-5.7M4 4v5h5M12 8v4l3 2",
   play: "M8 5.5v13l10.5-6.5z",
   dots: "M5 12h.01M12 12h.01M19 12h.01",
+  close: "M6 6l12 12M18 6L6 18",
   file: "M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h4",
   up: "M12 19V5M6 11l6-6 6 6",
   arrow: "M5 12h14M13 6l6 6-6 6",

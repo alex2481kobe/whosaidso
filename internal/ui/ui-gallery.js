@@ -74,10 +74,13 @@ function fullscreen(entry, src, original, trigger) {
     if (trigger.isConnected) trigger.focus();
   }, { once: true });
   document.body.append(surface);
-  dialog.showModal();
-  close.focus();
-  // A refused/unsupported browser API leaves the full-viewport modal usable.
-  if (surface.requestFullscreen) surface.requestFullscreen().catch(() => {});
+  // The dialog opens only once the fullscreen request has settled: the top
+  // layer stacks in the order things enter it, so a surface that goes
+  // fullscreen after the dialog opened would cover it with its black
+  // backdrop. A refused or unsupported request leaves the full-viewport modal.
+  const open = () => { dialog.showModal(); close.focus(); };
+  if (surface.requestFullscreen) surface.requestFullscreen().then(open, open);
+  else open();
 }
 
 // card is one entry. Remove asks for a second click within three seconds,
