@@ -57,9 +57,10 @@ var reRecordWords = regexp.MustCompile(`(?i)re-?record`)
 func TestSetAsideBundlesAreCountedListedAndMarked(t *testing.T) {
 	p := testProject(t)
 	genesis := appendEvents(t, p, 100, testTask(1))
-	linear := jsonOf(t, p, ViewRequest{View: "todo"})
-	if bytes.Contains(linear, []byte("set_aside")) {
-		t.Fatalf("a ledger that never clashed must answer exactly as before: %s", linear)
+	for _, view := range []string{"todo", "history"} {
+		if linear := jsonOf(t, p, ViewRequest{View: view}); bytes.Contains(linear, []byte("set_aside")) {
+			t.Fatalf("a ledger that never clashed must answer %s exactly as before: %s", view, linear)
+		}
 	}
 	appendEvents(t, p, 101, amendIntent(1, 1, "amended on this branch"))
 	other := publishOtherBranch(t, p, genesis, testID(900), amendIntent(1, 1, "amended on the other branch"))
