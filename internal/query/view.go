@@ -168,10 +168,12 @@ type HistoryAnswer struct {
 
 func historyView(project store.Project, source Source, h ViewHeader, r ViewRequest) (ViewAnswer, error) {
 	a := &HistoryAnswer{ViewHeader: h, Events: []Event{}, Reviews: []Review{}}
-	if h.Result == "UNKNOWN" {
+	snapshot := source.Snapshot()
+	// A record no applied bundle holds may still be what set-aside bundles
+	// were about; nothing set aside is hidden, so their events still list.
+	if h.Result == "UNKNOWN" && len(snapshot.SetAside()) == 0 {
 		return a, nil
 	}
-	snapshot := source.Snapshot()
 	// Review packet refs do not identify records. Audit the complete prefix
 	// independently of intake, without assigning bundle siblings to a packet.
 	if r.ID == "" {
@@ -184,7 +186,10 @@ func historyView(project store.Project, source Source, h ViewHeader, r ViewReque
 	if r.SelfAdmitted != "" {
 		return a, nil
 	}
-	selected := historyOrigins(snapshot, reduce.Ident{Project: project.ID, ID: r.ID})
+	selected := map[reduce.Origin]bool{}
+	if h.Result != "UNKNOWN" {
+		selected = historyOrigins(snapshot, reduce.Ident{Project: project.ID, ID: r.ID})
+	}
 	amended := snapshot.Amended()
 	prefix, err := source.Bundles()
 	if err != nil {
@@ -199,7 +204,7 @@ func historyView(project store.Project, source Source, h ViewHeader, r ViewReque
 			// The prefix is in canonical order, so its index is the position
 			// every origin in the snapshot carries.
 			origin := reduce.Origin{Sequence: uint64(position) + 1, EventIndex: i}
-			if r.ID != "" && !selected[origin] {
+			if r.ID != "" && !selected[origin] && (aside == nil || !touches(event, project.ID, r.ID)) {
 				continue
 			}
 			row := Event{Origin: origin, CommandID: bundle.CommandID, Admitter: bundle.Admitter, Packets: bundle.Packets,

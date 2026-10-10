@@ -63,7 +63,7 @@ func TestSetAsideBundlesAreCountedListedAndMarked(t *testing.T) {
 		}
 	}
 	appendEvents(t, p, 101, amendIntent(1, 1, "amended on this branch"))
-	other := publishOtherBranch(t, p, genesis, testID(900), amendIntent(1, 1, "amended on the other branch"))
+	other := publishOtherBranch(t, p, genesis, testID(900), testTask(5), amendIntent(1, 1, "amended on the other branch"))
 
 	todo := todoOf(t, p)
 	if todo.Totals.SetAside != 1 || len(todo.SetAside) != 1 {
@@ -93,11 +93,29 @@ func TestSetAsideBundlesAreCountedListedAndMarked(t *testing.T) {
 			marked++
 		}
 	}
-	if marked != 1 {
-		t.Fatalf("history lists the set-aside event once, marked; got %d", marked)
+	if marked != 2 {
+		t.Fatalf("history lists both events of the set-aside bundle, marked; got %d", marked)
 	}
 	if text := briefOf(t, p, ViewRequest{View: "history"}); !strings.Contains(text, "SET ASIDE") {
 		t.Fatalf("history text must mark it:\n%s", text)
+	}
+	// Filtered history hides nothing set aside: the amended record lists the
+	// losing amendment, and a record only the set-aside bundle created lists
+	// that bundle's events though no admitted record answers for it.
+	for id, want := range map[model.ID][]int{testID(1): {1}, testID(5): {0}} {
+		h := historyOf(t, p, id)
+		var got []int
+		for _, e := range h.Events {
+			if e.SetAside != nil {
+				got = append(got, e.Origin.EventIndex)
+			}
+		}
+		if len(got) != len(want) || got[0] != want[0] {
+			t.Fatalf("history %s marks set-aside events %v, want %v", id, got, want)
+		}
+	}
+	if h := historyOf(t, p, testID(5)); h.Result != "UNKNOWN" || len(h.Events) != 1 {
+		t.Fatalf("a record only a set-aside bundle created stays UNKNOWN and lists its event: %s %d", h.Result, len(h.Events))
 	}
 	if show := showOf(t, p, testID(1)); show.Records[0].Ref.Revision != 2 || show.Records[0].Task == nil {
 		t.Fatalf("the applied branch's revision stands: %+v", show.Records[0].Ref)

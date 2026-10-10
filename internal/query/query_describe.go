@@ -86,3 +86,49 @@ func historyOrigins(s reduce.Snapshot, id reduce.Ident) map[reduce.Origin]bool {
 	}
 	return origins
 }
+
+// touches reports whether an event of a set-aside bundle is about the record
+// or source id: it would have created it, or it names it, a criterion of it
+// or a hold on it. A set-aside bundle applied nothing, so no origin in the
+// snapshot points at its events; this reads the event itself.
+func touches(raw model.Event, project model.ProjectID, id model.ID) bool {
+	event, err := model.DecodeEvent(raw)
+	if err != nil {
+		return false // replay decoded every event of the prefix; this cannot happen
+	}
+	switch e := event.(type) {
+	case *model.TaskCreate:
+		if e.ID == id {
+			return true
+		}
+	case *model.ClaimAssert:
+		if e.ID == id {
+			return true
+		}
+	case *model.DecisionOpen:
+		if e.ID == id {
+			return true
+		}
+	case *model.InstrumentDeclare:
+		if e.ID == id {
+			return true
+		}
+	case *model.SourceIntake:
+		if e.SourceID == id {
+			return true
+		}
+	}
+	refs, err := model.SameProjectReferences(event, project)
+	if err != nil {
+		return false
+	}
+	for _, r := range refs {
+		switch {
+		case r.Record != nil && r.Record.RecordID == id,
+			r.Criterion != nil && r.Criterion.Claim.RecordID == id,
+			r.Blocker != nil && r.Blocker.Task.RecordID == id:
+			return true
+		}
+	}
+	return false
+}
