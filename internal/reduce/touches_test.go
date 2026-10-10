@@ -1,6 +1,6 @@
 package reduce
 
-// Tests for Touches (setaside.go): which events a record's history lists from
+// Tests for Touches (about.go): which events a record's history lists from
 // a set-aside bundle, where no snapshot index can say.
 
 import (
@@ -28,12 +28,14 @@ func TestTouchesEveryWayAnEventIsAboutAnID(t *testing.T) {
 		{"starts a run under a criterion of it", &model.InvocationStart{Envelope: proofEnvelope(claim, newID("RNX"))}, "CMA1"},
 		{"clears a hold on it", clearAt(newID("TSKA"), 1, newID("HDX1")), "TSKA"},
 	}
+	s := mustReplay(t, goodLedger(t).out)
+	about := func(id string) Ident { return Ident{Project: testProject, ID: newID(id)} }
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if !Touches(testProject, tc.event, newID(tc.id)) {
+			if !s.Touches(tc.event, about(tc.id)) {
 				t.Fatalf("an event that %s must touch %s", tc.name, tc.id)
 			}
-			if Touches(testProject, tc.event, newID("ZZZZ")) {
+			if s.Touches(tc.event, about("ZZZZ")) {
 				t.Fatalf("an event that %s touches nothing else", tc.name)
 			}
 		})

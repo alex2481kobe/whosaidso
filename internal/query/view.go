@@ -186,9 +186,10 @@ func historyView(project store.Project, source Source, h ViewHeader, r ViewReque
 	if r.SelfAdmitted != "" {
 		return a, nil
 	}
+	about := reduce.Ident{Project: project.ID, ID: r.ID}
 	selected := map[reduce.Origin]bool{}
 	if h.Result != "UNKNOWN" {
-		selected = historyOrigins(snapshot, reduce.Ident{Project: project.ID, ID: r.ID})
+		selected = historyOrigins(snapshot, about)
 	}
 	amended := snapshot.Amended()
 	prefix, err := source.Bundles()
@@ -204,7 +205,7 @@ func historyView(project store.Project, source Source, h ViewHeader, r ViewReque
 			// The prefix is in canonical order, so its index is the position
 			// every origin in the snapshot carries.
 			origin := reduce.Origin{Sequence: uint64(position) + 1, EventIndex: i}
-			if r.ID != "" && !selected[origin] && (aside == nil || !touches(event, project.ID, r.ID)) {
+			if r.ID != "" && !selected[origin] && (aside == nil || !touches(snapshot, event, about)) {
 				continue
 			}
 			row := Event{Origin: origin, CommandID: bundle.CommandID, Admitter: bundle.Admitter, Packets: bundle.Packets,

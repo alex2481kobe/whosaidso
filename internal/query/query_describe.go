@@ -75,9 +75,7 @@ func historyOrigins(s reduce.Snapshot, id reduce.Ident) map[reduce.Origin]bool {
 		origins[src.Origin] = true
 	}
 	for _, invocation := range s.Invocations() {
-		criterion := invocation.Start.CriterionRef.Value
-		namesClaim := criterion != nil && criterion.Claim.Project == id.Project && criterion.Claim.RecordID == id.ID
-		if namesClaim || invocation.Attempt.Project == id.Project && invocation.Attempt.Task == id.ID {
+		if s.RunAbout(invocation.Start, id) {
 			origins[invocation.Started] = true
 			if invocation.Sealed != nil {
 				origins[*invocation.Sealed] = true
@@ -88,10 +86,10 @@ func historyOrigins(s reduce.Snapshot, id reduce.Ident) map[reduce.Origin]bool {
 }
 
 // touches reports whether a raw event of a set-aside bundle is about id.
-func touches(raw model.Event, project model.ProjectID, id model.ID) bool {
+func touches(s reduce.Snapshot, raw model.Event, id reduce.Ident) bool {
 	event, err := model.DecodeEvent(raw)
 	if err != nil {
 		return false // replay decoded every event of the prefix before this read
 	}
-	return reduce.Touches(project, event, id)
+	return s.Touches(event, id)
 }

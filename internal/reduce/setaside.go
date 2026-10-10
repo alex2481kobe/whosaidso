@@ -140,31 +140,3 @@ func (s Snapshot) SetAsideBundle(ref model.BundleRef) (SetAside, bool) {
 	v, ok := s.inner().setAside[ref]
 	return v, ok
 }
-
-// Touches reports whether event e is about record or source id: it creates or
-// revises it, names it, or names a criterion of it (a run's envelope names its
-// claim no other way). Every event naming a hold also names its task. A
-// set-aside bundle applied nothing, so no index of the snapshot reaches its
-// events; history asks this of each one.
-func Touches(project model.ProjectID, e model.TypedEvent, id model.ID) bool {
-	if src, ok := e.(*model.SourceIntake); ok && src.SourceID == id {
-		return true
-	}
-	for _, n := range eventOwners(project, e) {
-		if n.kind == "record" && n.record.ID == id {
-			return true
-		}
-	}
-	refs, err := model.SameProjectReferences(e, project)
-	if err != nil {
-		return false // only an empty project errs, and replay refuses that first
-	}
-	for _, r := range refs {
-		switch {
-		case r.Record != nil && r.Record.RecordID == id,
-			r.Criterion != nil && r.Criterion.Claim.RecordID == id:
-			return true
-		}
-	}
-	return false
-}
