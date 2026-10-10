@@ -133,6 +133,19 @@ func (l *Lineage) parentsOf(b model.Bundle, empty bool) ([]model.BundleRef, erro
 		}
 		parents = append(parents, h)
 	}
+	// A head is a bundle nothing else descends from. One the predecessor or
+	// another named head already descends from was never a head when this
+	// bundle was admitted, so naming it is not what admission writes.
+	for i, h := range b.OtherHeads {
+		hp := l.nodes[h].Position
+		for j, other := range parents {
+			if j != i+1 && l.reaches(l.nodes[other], hp) {
+				return nil, discontinuity(b, fmt.Sprintf("bundle.other_heads[%d]", i),
+					fmt.Sprintf("sequence %d command %s is not a head: sequence %d command %s descends from it",
+						h.Sequence, h.CommandID, other.Sequence, other.CommandID))
+			}
+		}
+	}
 	return parents, nil
 }
 
