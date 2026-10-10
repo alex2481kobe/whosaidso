@@ -35,6 +35,19 @@ func TestAnEventNamingAFactFromAnUnseenBranchIsSetAside(t *testing.T) {
 		}, &model.TaskStart{Task: ref(newID("TSKS"), 1), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID("ATTS")},
 			&model.AttemptTerminal{Task: ref(newID("TSKS"), 1), AttemptID: newID("ATTS"), Outcome: model.AttemptSuccess,
 				Reason: "done", NextAction: "accept it", DeliveryRefs: []model.ArtifactRef{}}},
+		{"an attempt taken over", func(t *testing.T) *ledgerBuilder {
+			l := goodLedger(t)
+			l.add(t, createTask("TSKS"))
+			return l
+		}, &model.TaskStart{Task: ref(newID("TSKS"), 1), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID("ATTS")},
+			&model.TaskTakeover{Task: ref(newID("TSKS"), 1), Actor: model.Actor{ID: "agent-b"}, AttemptID: newID("ATTT"),
+				PriorAttemptID: newID("ATTS"), StoppedConfirmationRef: blobRef("stopped")}},
+		{"an attempt a run starts under", func(t *testing.T) *ledgerBuilder {
+			l := proofBase(t)
+			l.add(t, fixProofCriterion(claim), createTask("TSKS"))
+			return l
+		}, &model.TaskStart{Task: ref(newID("TSKS"), 1), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID("ATTS")},
+			&model.InvocationStart{Envelope: underAttempt(proofEnvelope(claim, newID("RNC")), newID("ATTS"))}},
 		{"a hold", goodLedger, &model.BlockerHold{Task: ref(newID("TSKA"), 1), BlockerID: newID("HDX1"),
 			Reason: model.BlockerAwaitingAcceptance, Actor: model.Actor{ID: "owner"}, Criterion: "owner reads it"},
 			clearAt(newID("TSKA"), 1, newID("HDX1"))},
@@ -62,4 +75,10 @@ func TestAnEventNamingAFactFromAnUnseenBranchIsSetAside(t *testing.T) {
 			}
 		})
 	}
+}
+
+// underAttempt is a run envelope started under another attempt.
+func underAttempt(env model.InvocationEnvelope, attempt model.ID) model.InvocationEnvelope {
+	env.AttemptID = attempt
+	return env
 }
