@@ -17,6 +17,14 @@ import (
 // review only, a second run carrying the same criterion.
 func rejectedLedger(t *testing.T, outcome string, criterion model.CriterionRef) (*ledgerBuilder, model.RecordRef, model.InvocationRef) {
 	t.Helper()
+	l, claim := rejectedBase(t)
+	l.add(t, rejectedReview(claim, outcome, criterion))
+	return l, claim, model.InvocationRef{Project: testProject, InvocationID: newID("RNR0")}
+}
+
+// rejectedBase is the claim with its criterion and the passing sealed run.
+func rejectedBase(t *testing.T) (*ledgerBuilder, model.RecordRef) {
+	t.Helper()
 	l := goodLedger(t)
 	claim := ref(newID("CMA1"), 1)
 	l.add(t, &model.InstrumentDeclare{ID: newID("HNSS"), Provenance: provenance("agent-a"), Spec: proofInstrument()},
@@ -24,17 +32,21 @@ func rejectedLedger(t *testing.T, outcome string, criterion model.CriterionRef) 
 	passed := proofEnvelope(claim, newID("RNA1"))
 	l.add(t, &model.InvocationStart{Envelope: passed})
 	l.add(t, sealProof(passed, 0))
+	return l, claim
+}
+
+// rejectedReview records run RNR0 through a review of the given outcome.
+func rejectedReview(claim model.RecordRef, outcome string, criterion model.CriterionRef) *model.ReviewAdmit {
 	if criterion == (model.CriterionRef{}) {
 		criterion = proofCriterion(claim)
 	}
 	packet := model.PacketRef{CommandID: newID("PKR0"), Digest: model.HashBytes([]byte("rejected packet"))}
-	l.add(t, &model.ReviewAdmit{Packets: []model.PacketRef{packet}, Outcome: outcome, Actor: model.Actor{ID: "reviewer"}, Reason: "not canonical",
+	return &model.ReviewAdmit{Packets: []model.PacketRef{packet}, Outcome: outcome, Actor: model.Actor{ID: "reviewer"}, Reason: "not canonical",
 		Authors: map[model.ID]model.Actor{packet.CommandID: {ID: "agent-a"}}, CapturedAt: map[model.ID]model.Availability[time.Time]{packet.CommandID: knownAt(baseTime)}, EventPackets: []model.ID{},
 		Invocations: []model.ReviewedInvocation{
 			{Packet: packet.CommandID, Event: "invocation.start", InvocationID: newID("RNR0"), CriterionRef: proofKnown(criterion), EnvelopeDigest: model.HashBytes([]byte("start"))},
 			{Packet: packet.CommandID, Event: "invocation.seal", InvocationID: newID("RNR0"), CriterionRef: proofKnown(criterion), EnvelopeDigest: model.HashBytes([]byte("seal"))},
-		}})
-	return l, claim, model.InvocationRef{Project: testProject, InvocationID: newID("RNR0")}
+		}}
 }
 
 func withMember(p *model.ProofAdmit, member model.InvocationRef, disposition string) *model.ProofAdmit {

@@ -58,6 +58,11 @@ func TestAnEventNamingAFactFromAnUnseenBranchIsSetAside(t *testing.T) {
 			l.add(t, &model.InvocationStart{Envelope: run})
 			return l
 		}, sealProof(run, 0), admitProof(claim, run.InvocationID)},
+		{"a run only a rejected review recorded", func(t *testing.T) *ledgerBuilder {
+			l, _ := rejectedBase(t)
+			return l
+		}, rejectedReview(claim, "rejected", model.CriterionRef{}),
+			withMember(admitProof(claim, newID("RNA1")), model.InvocationRef{Project: testProject, InvocationID: newID("RNR0")}, "inapplicable")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
