@@ -39,11 +39,22 @@ func mwAsserted(t *testing.T, w *flowWorld, id model.ID) {
 // mwHistoryMarks fails unless history marks the events of the set-aside bundle
 // in --json (a set_aside object on its rows) and in the text (a SET ASIDE line
 // after its event line).
-func mwHistoryMarks(t *testing.T, w *flowWorld, id model.ID) {
+func mwHistoryMarks(t *testing.T, w *flowWorld, id model.ID) { mwRecordHistoryMarks(t, w, "", id) }
+
+// mwRecordHistoryMarks is mwHistoryMarks for the history of one record ("" is
+// the whole ledger's): it must list the set-aside bundle's events too.
+func mwRecordHistoryMarks(t *testing.T, w *flowWorld, record, id model.ID) {
 	t.Helper()
-	out, err := w.cli(nil, "history", "--json")
+	args := func(flags ...string) []string {
+		out := append([]string{"history"}, flags...)
+		if record != "" {
+			out = append(out, string(record))
+		}
+		return out
+	}
+	out, err := w.cli(nil, args("--json")...)
 	if err != nil {
-		t.Errorf("whosaidso history --json: %v", err)
+		t.Errorf("whosaidso %v: %v", args("--json"), err)
 		return
 	}
 	marked := false
@@ -53,11 +64,11 @@ func mwHistoryMarks(t *testing.T, w *flowWorld, id model.ID) {
 		}
 	}
 	if !marked {
-		t.Errorf("whosaidso history --json lists no event of the set-aside bundle %s with a set_aside mark", id)
+		t.Errorf("whosaidso %v lists no event of the set-aside bundle %s with a set_aside mark", args("--json"), id)
 	}
-	text, err := w.cli(nil, "history")
+	text, err := w.cli(nil, args()...)
 	if err != nil {
-		t.Errorf("whosaidso history: %v", err)
+		t.Errorf("whosaidso %v: %v", args(), err)
 		return
 	}
 	lines := strings.Split(string(text), "\n")
@@ -68,7 +79,7 @@ func mwHistoryMarks(t *testing.T, w *flowWorld, id model.ID) {
 		}
 	}
 	if !textMarked {
-		t.Errorf("whosaidso history marks no event line of the set-aside bundle %s with SET ASIDE:\n%s", id, text)
+		t.Errorf("whosaidso %v marks no event line of the set-aside bundle %s with SET ASIDE:\n%s", args(), id, text)
 	}
 }
 

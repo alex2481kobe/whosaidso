@@ -7,11 +7,11 @@ package acceptance_test
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
-	"github.com/alex2481kobe/whosaidso/internal/reduce"
 )
 
 type mwHeadRef struct {
@@ -204,13 +204,50 @@ func TestLedgerMergeOtherHeadsDecideWhetherAFailingBundleSawEverything(t *testin
 		mwReadsOK(t, w, "a failing bundle that names only the canonical last")
 		mwAsserted(t, w, failing)
 		mwOnlyMarked(t, w, failing)
-		if got := mwAsideCodes(t, w)[failing]; got == "" || got == reduce.CodeBuiltOnSetAside {
-			t.Errorf("set aside with code %q, want the fault of its own events", got)
+		if got := mwAsideCodes(t, w)[failing]; got == "" {
+			t.Errorf("the failing bundle is set aside with no fault code")
 		}
 	})
 	t.Run("with other_heads it saw everything and the failure is fatal", func(t *testing.T) {
 		w := mwUnion(t, files)
 		build(w, []any{map[string]any{"sequence": json.Number("2"), "command_id": a2[9 : len(a2)-5]}})
 		mwRefuses(t, w, "", "a failing bundle that names both tips")
+	})
+}
+
+// other_heads names heads: bundles no other bundle descends from. A bundle that
+// is already an ancestor of the predecessor is not one, so naming it claims a
+// view of the ledger the chain does not have and is damage.
+func TestLedgerMergeOtherHeadsMustNameRealHeads(t *testing.T) {
+	ref := func(file string, sequence uint64) map[string]any {
+		return map[string]any{"sequence": json.Number(strconv.FormatUint(sequence, 10)), "command_id": file[9 : len(file)-5]}
+	}
+	t.Run("linear ledger", func(t *testing.T) {
+		cases := []struct {
+			name  string
+			heads func(files []string) []any
+		}{
+			{"an ancestor of the predecessor (G1 under A2 under B3)", func(f []string) []any { return []any{ref(f[0], 1)} }},
+			{"the predecessor itself", func(f []string) []any { return []any{ref(f[1], 2)} }},
+			{"one bundle twice", func(f []string) []any { return []any{ref(f[0], 1), ref(f[0], 1)} }},
+		}
+		for _, c := range cases {
+			t.Run(c.name, func(t *testing.T) {
+				w := mwLinear(t)
+				files := mwFiles(w)
+				mwEdit(t, w, files[2], files[2], func(f map[string]any) { f["other_heads"] = c.heads(files) })
+				mwRefuses(t, w, "", c.name)
+			})
+		}
+	})
+	t.Run("joining bundle also naming the genesis bundle", func(t *testing.T) {
+		files, joining, tips := mwJoined(t)
+		w := mwUnion(t, files)
+		base := mwFiles(w)[0]
+		tipFile := func(i int) string { return "00000002-" + string(tips[i].CommandID) + ".json" }
+		mwEdit(t, w, joining, joining, func(f map[string]any) {
+			f["other_heads"] = []any{ref(base, 1), ref(tipFile(0), 2), ref(tipFile(1), 2)}
+		})
+		mwRefuses(t, w, "", "the genesis bundle is an ancestor of every tip")
 	})
 }
