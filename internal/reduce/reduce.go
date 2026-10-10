@@ -58,6 +58,9 @@ type state struct {
 	// proofRefusals is set only by ApplyCollectingProofRefusals (a dry run);
 	// clone never copies it, so no fold ever collects instead of refusing.
 	proofRefusals *[]error
+	// trial is set only while a bundle is tried (trial.go); clone never
+	// copies it.
+	trial *journal
 }
 
 func newState() *state {

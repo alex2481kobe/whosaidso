@@ -55,7 +55,7 @@ type persistedField struct {
 	ptr  any
 }
 
-var transientFields = map[string]bool{"bundle": true, "proofRefusals": true}
+var transientFields = map[string]bool{"bundle": true, "proofRefusals": true, "trial": true}
 
 // SnapshotVersion is what an image must match to be restored: the encoding,
 // and a fingerprint of every type the persisted state reaches, so adding,

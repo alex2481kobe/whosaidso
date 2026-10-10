@@ -38,7 +38,7 @@ type SetAside struct {
 // not hold, and a reference by revision number could otherwise land on the
 // other branch's revision of the same record), its command id is already
 // published on another branch, or one of its events fails a rule here. Its
-// events are tried on a fork, so a refusal leaves no partial write.
+// events are tried (trial.go), so a refusal leaves no partial write.
 func (s *state) fold(b model.Bundle, place placement) error {
 	if place.descendsAll {
 		return s.applyEvents(b)
@@ -53,13 +53,9 @@ func (s *state) fold(b model.Bundle, place placement) error {
 			fmt.Sprintf("the same admission is already published at sequence %d on another branch", place.duplicate.Sequence)))
 		return nil
 	}
-	trial := s.clone()
-	trial.proofRefusals = s.proofRefusals
-	if err := trial.applyEvents(b); err != nil {
+	if err := s.try(b); err != nil {
 		s.setAsideBundle(b, err)
-		return nil
 	}
-	*s = *trial
 	return nil
 }
 

@@ -128,6 +128,42 @@ func TestASetAsideBundleLeavesNoPartOfItself(t *testing.T) {
 	}
 }
 
+// The whole state, not one record: a set-aside bundle whose events write every
+// kind of fact before its clash leaves the state exactly as a bundle carrying
+// only the clash does.
+func TestASetAsideBundleUndoesEveryKindOfWrite(t *testing.T) {
+	claim := ref(newID("CMW1"), 1)
+	busy := []model.TypedEvent{
+		createTask("TSKW"),
+		&model.ClaimAssert{ID: claim.RecordID, Provenance: provenance("agent-a"), Spec: claimSpec()},
+		fixProofCriterion(claim),
+		&model.TaskStart{Task: ref(newID("TSKW"), 1), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID("ATTW")},
+		&model.BlockerHold{Task: ref(newID("TSKW"), 1), BlockerID: newID("HDW1"),
+			Reason: model.BlockerAwaitingAcceptance, Actor: model.Actor{ID: "owner"}, Criterion: "owner reads it"},
+		&model.SourceIntake{SourceID: newID("SRCW"), OriginalDigest: newDigest("said"), Length: 4, Speaker: model.Actor{ID: "owner"}, SourceRef: blobRef("said"), Referents: []model.RecordRef{claim}},
+	}
+	clash := amendTask("TSKA", 1, "amended on b")
+	fold := func(events ...model.TypedEvent) *state {
+		base := goodLedger(t)
+		a, b := base.branch(100), base.branch(200)
+		a.add(t, amendTask("TSKA", 1, "amended on a"))
+		b.add(t, events...)
+		alone := mustReplay(t, b.out) // control: on its own branch every event applies
+		if len(alone.SetAside()) != 0 {
+			t.Fatal("control: the bundle must apply on its own branch")
+		}
+		st := mustReplay(t, merged(a, b)).inner()
+		if len(st.setAside) != 1 {
+			t.Fatalf("the bundle must be set aside, got %v", st.setAside)
+		}
+		st.setAside, st.watermark = nil, Watermark{} // the reason names the event index; the watermark counts events
+		return st
+	}
+	if got, want := fold(append(busy, clash)...), fold(clash); !reflect.DeepEqual(got, want) {
+		t.Fatal("a set-aside bundle left a write behind")
+	}
+}
+
 func TestDuplicateCommandOnTwoBranchesIsSetAside(t *testing.T) {
 	base := goodLedger(t)
 	a, b := base.branch(100), base.branch(200)
