@@ -66,11 +66,6 @@ func (l *Lineage) add(b model.Bundle) (placement, error) {
 	case !empty && !l.last.Before(ref):
 		return placement{}, discontinuity(b, "bundle.sequence",
 			fmt.Sprintf("out of canonical order: follows sequence %d command %s", l.last.Sequence, l.last.CommandID))
-	case !empty && b.Sequence > l.last.Sequence+1:
-		// Contiguity, not merely monotonicity. A gap means a bundle we never
-		// read, and a fold over an incomplete prefix is wrong in a way no later
-		// event repairs.
-		return placement{}, discontinuity(b, "bundle.sequence", fmt.Sprintf("sequence %d is missing", l.last.Sequence+1))
 	}
 	parents, err := l.parentsOf(b, empty)
 	if err != nil {
@@ -117,7 +112,13 @@ func (l *Lineage) parentsOf(b model.Bundle, empty bool) ([]model.BundleRef, erro
 	predecessor := model.BundleRef{Sequence: b.Sequence - 1, CommandID: b.Predecessor}
 	if _, ok := l.parents[predecessor]; !ok {
 		// Sequence alone only counts files. The predecessor is what makes the
-		// chain say which bundle each one was actually appended to.
+		// chain say which bundle each one was actually appended to. This is also
+		// the contiguity rule: after a hole, no bundle one sequence lower exists,
+		// and a fold over an incomplete prefix is wrong in a way no later event
+		// repairs.
+		if b.Sequence-1 > l.last.Sequence {
+			return nil, discontinuity(b, "bundle.sequence", fmt.Sprintf("sequence %d is missing", l.last.Sequence+1))
+		}
 		return nil, discontinuity(b, "bundle.predecessor",
 			fmt.Sprintf("predecessor %s names no bundle at sequence %d", b.Predecessor, b.Sequence-1))
 	}

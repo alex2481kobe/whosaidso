@@ -5,6 +5,7 @@ package reduce
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
@@ -90,20 +91,24 @@ func TestLineageRefusesBrokenStructure(t *testing.T) {
 		name    string
 		code    string
 		bundles []model.Bundle
+		says    string // what the refusal names, so a reader can find the damage
 	}{
-		{"a hole in sequences", CodeLedgerDiscontinuity, []model.Bundle{g, link(2, "A2", "G"), link(2, "B2", "G"), link(4, "A4", "A2")}},
-		{"predecessor names a missing bundle", CodeLedgerDiscontinuity, []model.Bundle{g, link(2, "A2", "G"), link(2, "B2", "X1")}},
-		{"predecessor names a bundle of the wrong sequence", CodeLedgerDiscontinuity, []model.Bundle{g, link(2, "A2", "G"), link(3, "B3", "G")}},
-		{"an other head names a missing bundle", CodeLedgerDiscontinuity, []model.Bundle{g, link(2, "A2", "G"), link(3, "M3", "A2", at(2, "X2"))}},
-		{"a second genesis", CodeLedgerFork, []model.Bundle{g, link(1, "H", "")}},
-		{"the same command twice in one line", CodeDuplicateCommand, []model.Bundle{g, link(2, "A2", "G"), link(3, "A2", "A2")}},
+		{"a hole in sequences", CodeLedgerDiscontinuity, []model.Bundle{g, link(2, "A2", "G"), link(2, "B2", "G"), link(4, "A4", "A2")}, "sequence 3 is missing"},
+		{"predecessor names a missing bundle", CodeLedgerDiscontinuity, []model.Bundle{g, link(2, "A2", "G"), link(2, "B2", "X1")}, "names no bundle at sequence 1"},
+		{"predecessor names a bundle of the wrong sequence", CodeLedgerDiscontinuity, []model.Bundle{g, link(2, "A2", "G"), link(3, "B3", "G")}, "names no bundle at sequence 2"},
+		{"an other head names a missing bundle", CodeLedgerDiscontinuity, []model.Bundle{g, link(2, "A2", "G"), link(3, "M3", "A2", at(2, "X2"))}, "names no earlier bundle"},
+		{"a second genesis", CodeLedgerFork, []model.Bundle{g, link(1, "H", "")}, "one ledger has one genesis"},
+		{"the same command twice in one line", CodeDuplicateCommand, []model.Bundle{g, link(2, "A2", "G"), link(3, "A2", "A2")}, "published at sequences 2 and 3"},
 		{"the same command twice through a merge", CodeDuplicateCommand,
-			[]model.Bundle{g, link(2, "A2", "G"), link(2, "B2", "G"), link(3, "M3", "B2", at(2, "A2")), link(4, "A2", "M3")}},
+			[]model.Bundle{g, link(2, "A2", "G"), link(2, "B2", "G"), link(3, "M3", "B2", at(2, "A2")), link(4, "A2", "M3")}, "published at sequences 2 and 4"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := (&Lineage{}).addAll(tc.bundles...)
 			wantFault(t, err, tc.code)
+			if !strings.Contains(err.Error(), tc.says) {
+				t.Fatalf("the refusal must say %q: %v", tc.says, err)
+			}
 		})
 	}
 }
