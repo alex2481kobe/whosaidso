@@ -206,7 +206,7 @@ func (s *state) apply(b model.Bundle) error {
 	if err := s.lineage.add(b); err != nil {
 		return err
 	}
-	facts, err := indexBundle(b)
+	facts, err := indexBundle(b, uint64(s.watermark.Bundles)+1)
 	if err != nil {
 		return err
 	}
@@ -227,7 +227,7 @@ func (s *state) apply(b model.Bundle) error {
 		if err := s.route(b, i, typed); err != nil {
 			return err
 		}
-		origin := Origin{Sequence: b.Sequence, EventIndex: i}
+		origin := facts.origin(i)
 		s.events[origin] = typed
 		s.log.add(origin, typed)
 		s.recordReferrers(b, i, typed, refs)

@@ -97,6 +97,12 @@ func blockerKey(r model.BlockerRef) BlockerKey {
 
 // Origin locates a fact in the ledger. Every derived answer can name the bundle
 // and event it came from, which is what makes a wrong answer findable.
+//
+// Sequence is the bundle's place in the ledger's canonical order, counted from
+// 1 (model.BundleRef.Before), not the sequence number its filename carries. The
+// two are equal on a ledger whose chain never split; where it did, several
+// bundles share a sequence number and only the position tells their events
+// apart and orders them.
 type Origin struct {
 	Sequence   uint64 `json:"sequence"`
 	EventIndex int    `json:"event_index"`

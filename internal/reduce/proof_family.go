@@ -104,7 +104,7 @@ func (s *state) memberClass(criterion model.CriterionRef, key InvocationKey) (In
 func (s *state) rejectedFacts() []RejectedFact {
 	var reviews []Review // usually none are rejected; never size for all reviews
 	for _, r := range s.reviews {
-		if r.Outcome != "accepted" && (s.bundle == nil || r.Origin.Sequence <= s.watermark.Sequence) {
+		if r.Outcome != "accepted" && (s.bundle == nil || r.Origin.Sequence < s.bundle.position) {
 			reviews = append(reviews, r)
 		}
 	}

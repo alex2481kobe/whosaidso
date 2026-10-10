@@ -190,9 +190,11 @@ func historyView(project store.Project, source Source, h ViewHeader, r ViewReque
 	if err != nil {
 		return nil, err
 	}
-	for _, bundle := range prefix {
+	for position, bundle := range prefix {
 		for i, event := range bundle.Events {
-			origin := reduce.Origin{Sequence: bundle.Sequence, EventIndex: i}
+			// The prefix is in canonical order, so its index is the position
+			// every origin in the snapshot carries.
+			origin := reduce.Origin{Sequence: uint64(position) + 1, EventIndex: i}
 			if r.ID != "" && !selected[origin] {
 				continue
 			}

@@ -19,6 +19,7 @@ import (
 // bundleFacts is the inventory of one candidate bundle. It exists only while
 // that bundle is applied; a snapshot never carries it.
 type bundleFacts struct {
+	position uint64 // the bundle's place in the ledger's canonical order, from 1
 	events   []model.TypedEvent
 	packetOf map[int]model.ID         // event index -> the packet that carried it
 	captured map[model.ID]time.Time   // packet -> the time intake captured it
@@ -39,8 +40,9 @@ type RejectedFact struct {
 
 // indexBundle decodes every event once and indexes what the whole bundle says.
 // Its refusals are ones a sequential fold also makes, found here first.
-func indexBundle(b model.Bundle) (*bundleFacts, error) {
+func indexBundle(b model.Bundle, position uint64) (*bundleFacts, error) {
 	f := &bundleFacts{
+		position: position,
 		events:   make([]model.TypedEvent, 0, len(b.Events)),
 		packetOf: map[int]model.ID{},
 		captured: map[model.ID]time.Time{},
@@ -107,9 +109,14 @@ func (f *bundleFacts) indexReview(b model.Bundle, idx int, e *model.ReviewAdmit)
 	}
 	for _, fact := range e.Invocations {
 		f.rejected = append(f.rejected, RejectedFact{Review: ReviewKey{Project: b.Project, CommandID: fact.Packet}, Outcome: e.Outcome,
-			Origin: Origin{Sequence: b.Sequence, EventIndex: idx}, Fact: fact})
+			Origin: f.origin(idx), Fact: fact})
 	}
 	return nil
+}
+
+// origin locates one event of this bundle.
+func (f *bundleFacts) origin(idx int) Origin {
+	return Origin{Sequence: f.position, EventIndex: idx}
 }
 
 // laterSeal is the candidate seal of k after event idx, if this bundle has one.

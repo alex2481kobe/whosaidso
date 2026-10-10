@@ -13,7 +13,7 @@ import (
 // ---- routing -------------------------------------------------------------
 
 func (s *state) route(b model.Bundle, idx int, e model.TypedEvent) error {
-	o := Origin{Sequence: b.Sequence, EventIndex: idx}
+	o := s.bundle.origin(idx)
 	switch t := e.(type) {
 	case *model.TaskCreate:
 		return s.create(b, idx, o, model.Task, t.ID, t.Provenance, func(r *Record) { r.Task = &t.Spec })

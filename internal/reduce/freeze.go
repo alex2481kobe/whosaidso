@@ -52,7 +52,7 @@ func (s *state) checkStartFrozen(b model.Bundle, idx int, env model.InvocationEn
 	if !ok || env.CriterionRef.Value.Claim.Project != b.Project {
 		return faultAt(CodeCriterionNotFrozen, b.Sequence, idx, "envelope.criterion_ref", "the criterion is not fixed in this ledger")
 	}
-	if criterion.Origin.Sequence >= b.Sequence {
+	if criterion.Origin.Sequence >= s.bundle.position {
 		return faultAt(CodeCriterionNotFrozen, b.Sequence, idx, "envelope.criterion_ref", "the criterion is fixed in this same bundle, not a prior one")
 	}
 	if !criterion.RecordedAt.Before(env.StartedAt) {

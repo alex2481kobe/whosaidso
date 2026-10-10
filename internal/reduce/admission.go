@@ -212,7 +212,7 @@ func (s *state) checkReferences(b model.Bundle, idx int, e model.TypedEvent) ([]
 // recordReferrers indexes the references checkReferences returned for this
 // same event; it never walks the event a second time.
 func (s *state) recordReferrers(b model.Bundle, idx int, e model.TypedEvent, refs []model.Reference) {
-	r := Referrer{Origin: Origin{Sequence: b.Sequence, EventIndex: idx}, Type: e.EventType()}
+	r := Referrer{Origin: s.bundle.origin(idx), Type: e.EventType()}
 	for _, ref := range refs {
 		r.Path = ref.Path
 		switch {

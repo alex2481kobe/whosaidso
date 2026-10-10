@@ -30,7 +30,7 @@ const unattributedAuthor = "the ledger does not attribute this event to a review
 // exactly those events.
 func (s *state) attributeEvents(b model.Bundle, e *model.ReviewAdmit) {
 	for i, packet := range e.EventPackets {
-		s.eventPackets[Origin{Sequence: b.Sequence, EventIndex: i}] = ReviewKey{Project: b.Project, CommandID: packet}
+		s.eventPackets[s.bundle.origin(i)] = ReviewKey{Project: b.Project, CommandID: packet}
 	}
 }
 
