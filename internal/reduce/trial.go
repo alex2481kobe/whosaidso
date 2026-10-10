@@ -12,6 +12,7 @@ import "github.com/alex2481kobe/whosaidso/internal/model"
 // entry, newest first. The event log only grows, so its slice headers taken
 // before the trial restore it; so does a dry run's refusal count.
 type journal struct {
+	viewer   model.BundleRef // the bundle on trial, for setaside.go's unseen
 	undo     []func()
 	log      eventLog
 	refusals int
@@ -35,7 +36,7 @@ func put[K comparable, V any](s *state, m map[K]V, k K, v V) {
 // try applies b's events, or undoes every write they made and returns the
 // refusal, leaving the state exactly as it was.
 func (s *state) try(b model.Bundle) error {
-	j := &journal{log: s.log}
+	j := &journal{viewer: b.Ref(), log: s.log}
 	if s.proofRefusals != nil {
 		j.refusals = len(*s.proofRefusals)
 	}

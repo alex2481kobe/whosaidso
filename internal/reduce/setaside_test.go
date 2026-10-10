@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -84,7 +85,7 @@ func TestMergedIndependentBranchesApplyEverything(t *testing.T) {
 	}
 }
 
-func TestMergedClashSetsAsideTheLaterBundleAndItsDependents(t *testing.T) {
+func TestMergedClashSetsAsideTheLaterBundleAndWhatNamesAFactItNeverSaw(t *testing.T) {
 	base := goodLedger(t)
 	a, b := base.branch(100), base.branch(200)
 	a.add(t, amendTask("TSKA", 1, "amended on a"))
@@ -92,24 +93,51 @@ func TestMergedClashSetsAsideTheLaterBundleAndItsDependents(t *testing.T) {
 	// b's next bundle amends the revision b made. Replay would accept it on
 	// a's revision 2 by number alone; it must not apply to facts b never saw.
 	b.add(t, amendTask("TSKA", 2, "built on b"))
+	// Recorded on top of both, but naming nothing either published: it stands.
 	b.add(t, createTask("TSKE"))
 	s := mustReplay(t, merged(a, b))
-	want := []model.BundleRef{b.out[2].Ref(), b.out[3].Ref(), b.out[4].Ref()}
+	want := []model.BundleRef{b.out[2].Ref(), b.out[3].Ref()}
 	if got := setAsideRefs(s); !reflect.DeepEqual(got, want) {
 		t.Fatalf("set aside %v, want %v", got, want)
 	}
-	codes := []string{CodeRevisionConflict, CodeBuiltOnSetAside, CodeBuiltOnSetAside}
+	codes := []string{CodeRevisionConflict, CodeUnseenFact}
 	for i, v := range s.SetAside() {
 		if v.Code != codes[i] || v.Reason == "" {
 			t.Errorf("set-aside %d is %q (%s), want %q with its fault", i, v.Code, v.Reason, codes[i])
 		}
 	}
+	if got := s.SetAside()[1].Reason; !strings.Contains(got, string(a.out[2].CommandID)) {
+		t.Errorf("an unseen fact must name the bundle that published it: %s", got)
+	}
 	task, _ := s.Current(Ident{Project: testProject, ID: newID("TSKA")})
 	if task.Key.Revision != 2 || task.Task.Intent != "amended on a" {
 		t.Fatalf("the earlier branch's amendment must stand alone: rev %d %q", task.Key.Revision, task.Task.Intent)
 	}
-	if _, ok := s.Current(Ident{Project: testProject, ID: newID("TSKE")}); ok {
-		t.Fatal("a set-aside bundle's record must not be in any answer")
+	if _, ok := s.Current(Ident{Project: testProject, ID: newID("TSKE")}); !ok {
+		t.Fatal("a bundle that names nothing it did not see must be applied")
+	}
+}
+
+// A joining admission saw the clash and the set-aside bundle. Another branch
+// merged later sorts before it and makes it miss one bundle, wherever that
+// branch's id falls; the join names nothing from it, so it stays applied.
+func TestAJoinStaysAppliedWhenAnotherBranchMergesLater(t *testing.T) {
+	for _, names := range []uint64{50, 150, 300} { // before a, between a and b, after b
+		base := goodLedger(t)
+		a, b, c := base.branch(100), base.branch(200), base.branch(names)
+		a.add(t, amendTask("TSKA", 1, "amended on a"))
+		b.add(t, amendTask("TSKA", 1, "amended on b"))
+		c.add(t, createTask("TSKC"))
+		join := mergingBundle(t, mustReplay(t, merged(a, b)), createTask("TSKJ"))
+		s := mustReplay(t, append(merged(a, b, c), join))
+		if got := setAsideRefs(s); !reflect.DeepEqual(got, []model.BundleRef{b.out[2].Ref()}) {
+			t.Fatalf("names %d: only the clash is set aside, got %v", names, got)
+		}
+		for _, id := range []string{"TSKC", "TSKJ"} {
+			if _, ok := s.Current(Ident{Project: testProject, ID: newID(id)}); !ok {
+				t.Fatalf("names %d: %s must be applied", names, id)
+			}
+		}
 	}
 }
 

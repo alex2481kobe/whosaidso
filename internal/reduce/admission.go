@@ -178,35 +178,54 @@ func (s *state) checkReferences(b model.Bundle, idx int, e model.TypedEvent) ([]
 		return nil, faultAt(CodeInvalidField, b.Sequence, idx, "event", err.Error())
 	}
 	for _, r := range refs {
-		switch {
-		case r.Record != nil:
-			if _, ok := s.records[recordKey(*r.Record)]; !ok {
-				return nil, faultAt(CodeUnknownReference, b.Sequence, idx, r.Path,
-					fmt.Sprintf("no admitted revision %d of %s", r.Record.Revision, r.Record.RecordID))
-			}
-		case r.Criterion != nil:
-			if _, ok := s.criteria[criterionKey(*r.Criterion)]; !ok {
-				return nil, faultAt(CodeUnknownReference, b.Sequence, idx, r.Path,
-					fmt.Sprintf("no admitted criterion %s revision %d", r.Criterion.CriterionID, r.Criterion.Revision))
-			}
-		case r.Invocation != nil:
-			if _, ok := s.invocations[invocationKey(*r.Invocation)]; !ok {
-				// A proof may name a run a non-accepted review recorded;
-				// the proof family checker decides whether and how it belongs.
-				if _, proof := e.(*model.ProofAdmit); proof && s.rejectedRecorded(invocationKey(*r.Invocation)) {
-					continue
-				}
-				return nil, faultAt(CodeUnknownReference, b.Sequence, idx, r.Path,
-					fmt.Sprintf("no admitted invocation %s", r.Invocation.InvocationID))
-			}
-		case r.Blocker != nil:
-			if _, ok := s.held(*r.Blocker); !ok {
-				return nil, faultAt(CodeUnknownReference, b.Sequence, idx, r.Path,
-					fmt.Sprintf("no admitted blocker %s", r.Blocker.BlockerID))
-			}
+		if err := s.resolve(b, idx, e, r); err != nil {
+			return nil, err
 		}
 	}
 	return refs, nil
+}
+
+// resolve finds the fact one reference names, refusing a reference to nothing
+// and, on trial, one to a fact the bundle's branch never saw (setaside.go).
+func (s *state) resolve(b model.Bundle, idx int, e model.TypedEvent, r model.Reference) error {
+	switch {
+	case r.Record != nil:
+		rec, ok := s.records[recordKey(*r.Record)]
+		if !ok {
+			return faultAt(CodeUnknownReference, b.Sequence, idx, r.Path,
+				fmt.Sprintf("no admitted revision %d of %s", r.Record.Revision, r.Record.RecordID))
+		}
+		return s.unseen(b, idx, r.Path, fmt.Sprintf("revision %d of %s", r.Record.Revision, r.Record.RecordID), rec.Origin)
+	case r.Criterion != nil:
+		c, ok := s.criteria[criterionKey(*r.Criterion)]
+		if !ok {
+			return faultAt(CodeUnknownReference, b.Sequence, idx, r.Path,
+				fmt.Sprintf("no admitted criterion %s revision %d", r.Criterion.CriterionID, r.Criterion.Revision))
+		}
+		return s.unseen(b, idx, r.Path, fmt.Sprintf("criterion %s revision %d", r.Criterion.CriterionID, r.Criterion.Revision), c.Origin)
+	case r.Invocation != nil:
+		what := fmt.Sprintf("invocation %s", r.Invocation.InvocationID)
+		inv, ok := s.invocations[invocationKey(*r.Invocation)]
+		if !ok {
+			// A proof may name a run a non-accepted review recorded;
+			// the proof family checker decides whether and how it belongs.
+			if _, proof := e.(*model.ProofAdmit); proof {
+				if seen := s.rejectedRecords(invocationKey(*r.Invocation)); len(seen) > 0 {
+					return s.unseenUnlessAny(b, idx, r.Path, what+" as a rejected review recorded it", seen)
+				}
+			}
+			return faultAt(CodeUnknownReference, b.Sequence, idx, r.Path, "no admitted "+what)
+		}
+		return s.unseen(b, idx, r.Path, what, append([]Origin{inv.Started}, optional(inv.Sealed)...)...)
+	case r.Blocker != nil:
+		held, ok := s.held(*r.Blocker)
+		if !ok {
+			return faultAt(CodeUnknownReference, b.Sequence, idx, r.Path,
+				fmt.Sprintf("no admitted blocker %s", r.Blocker.BlockerID))
+		}
+		return s.unseen(b, idx, r.Path, fmt.Sprintf("hold %s", r.Blocker.BlockerID), append([]Origin{held.Held}, optional(held.Cleared)...)...)
+	}
+	return nil
 }
 
 // recordReferrers indexes the references checkReferences returned for this

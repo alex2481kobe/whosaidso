@@ -13,9 +13,9 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
-// CodeBuiltOnSetAside is a bundle set aside because a bundle it was appended
-// to was set aside.
-const CodeBuiltOnSetAside = "built-on-set-aside"
+// CodeUnseenFact is a bundle set aside because one of its events names a fact
+// its branch never saw: published by a bundle it does not descend from.
+const CodeUnseenFact = "unseen-fact"
 
 // SetAside is a published bundle replay kept but did not apply, because it was
 // recorded on a branch that did not see a bundle before it and it fails a
@@ -33,20 +33,13 @@ type SetAside struct {
 // A bundle that descends from every bundle before it was admitted against
 // exactly this state, so any refusal is damage and stays fatal, as on a
 // ledger that never split. Only a bundle that did not see everything before
-// it can be set aside, and then for any of three reasons: a bundle it was
-// appended to is set aside (it was recorded on top of facts this ledger does
-// not hold, and a reference by revision number could otherwise land on the
-// other branch's revision of the same record), its command id is already
-// published on another branch, or one of its events fails a rule here. Its
+// it can be set aside, and then for one of three reasons: its command id is
+// already published on another branch, one of its events names a fact its
+// branch never saw (unseen), or one of its events fails a rule here. Its
 // events are tried (trial.go), so a refusal leaves no partial write.
 func (s *state) fold(b model.Bundle, place placement) error {
 	if place.descendsAll {
 		return s.applyEvents(b)
-	}
-	if parent, ok := s.setAsideParent(place.parents); ok {
-		s.setAsideBundle(b, faultAt(CodeBuiltOnSetAside, b.Sequence, -1, "bundle.predecessor",
-			fmt.Sprintf("it was recorded on top of sequence %d command %s, which is set aside", parent.Sequence, parent.CommandID)))
-		return nil
 	}
 	if place.duplicate != nil {
 		s.setAsideBundle(b, faultAt(CodeDuplicateCommand, b.Sequence, -1, "bundle.command_id",
@@ -59,13 +52,55 @@ func (s *state) fold(b model.Bundle, place placement) error {
 	return nil
 }
 
-func (s *state) setAsideParent(parents []model.BundleRef) (model.BundleRef, bool) {
-	for _, p := range parents {
-		if _, ok := s.setAside[p]; ok {
-			return p, true
+// unseen refuses, while a bundle is on trial, a fact one of its events names
+// by identity (a record revision, criterion, invocation, hold or attempt)
+// when any part of that fact was published by a bundle the tried one does not
+// descend from. Its admitter never saw that fact: a revision number or id
+// that matches one on its own branch can name different content here, and
+// applying the event would rewrite or rely on what it never read. A bundle
+// that names only what its own branch published is applied. Facts a rule
+// derives (whether a task is ready, a family closed) are not named, and are
+// judged against the state as merged.
+func (s *state) unseen(b model.Bundle, idx int, path, what string, origins ...Origin) error {
+	if s.trial == nil {
+		return nil
+	}
+	for _, o := range origins {
+		if !s.lineage.sees(s.trial.viewer, o.Sequence) {
+			by := s.lineage.at(o.Sequence)
+			return faultAt(CodeUnseenFact, b.Sequence, idx, path,
+				fmt.Sprintf("%s was published at sequence %d by command %s, on a branch this bundle did not see",
+					what, by.Sequence, by.CommandID))
 		}
 	}
-	return model.BundleRef{}, false
+	return nil
+}
+
+// unseenUnlessAny refuses, on trial, when none of the places a fact was
+// published is one the bundle's branch saw; the answer does not depend on
+// the order they are listed in.
+func (s *state) unseenUnlessAny(b model.Bundle, idx int, path, what string, origins []Origin) error {
+	if s.trial == nil {
+		return nil
+	}
+	first := origins[0]
+	for _, o := range origins {
+		if s.lineage.sees(s.trial.viewer, o.Sequence) {
+			return nil
+		}
+		if o.Sequence < first.Sequence {
+			first = o
+		}
+	}
+	return s.unseen(b, idx, path, what, first)
+}
+
+// optional is an origin that may not exist yet, as a list.
+func optional(o *Origin) []Origin {
+	if o == nil {
+		return nil
+	}
+	return []Origin{*o}
 }
 
 func (s *state) setAsideBundle(b model.Bundle, err error) {

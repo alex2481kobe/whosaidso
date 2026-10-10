@@ -101,6 +101,16 @@ func (l *Lineage) reaches(n lineageNode, pos uint64) bool {
 	return i < len(n.Clock) && n.Clock[i].Chain == mark.Chain && n.Clock[i].Index >= mark.Index
 }
 
+// sees reports whether the recorded bundle viewer is, or descends from, the
+// bundle at position pos: whether what that bundle published was in front of
+// whoever admitted viewer.
+func (l *Lineage) sees(viewer model.BundleRef, pos uint64) bool {
+	return l.reaches(l.nodes[viewer], pos)
+}
+
+// at is the bundle at a position of the prefix.
+func (l *Lineage) at(pos uint64) model.BundleRef { return l.order[pos-1].Ref }
+
 // markFor assigns the chain member a bundle at pos becomes: the next member of
 // its predecessor's chain when the predecessor is that chain's newest member,
 // otherwise the first member of a new chain.

@@ -142,6 +142,9 @@ func (s *state) invocationStart(b model.Bundle, idx int, o Origin, e *model.Invo
 		return faultAt(CodeUnknownReference, b.Sequence, idx, "envelope.attempt_id",
 			"no admitted attempt owns this invocation")
 	}
+	if err := s.unseenAttempt(b, idx, "envelope.attempt_id", s.attempts[owner]); err != nil {
+		return err
+	}
 	if err := s.checkInvocationConfig(b, idx, e.Envelope); err != nil {
 		return err
 	}

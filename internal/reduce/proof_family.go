@@ -129,17 +129,25 @@ func (s *state) rejectedFacts() []RejectedFact {
 // rejectedRecorded is sequential: only reviews already applied count, so a
 // review later in the same bundle never resolves a reference.
 func (s *state) rejectedRecorded(key InvocationKey) bool {
+	return len(s.rejectedRecords(key)) > 0
+}
+
+// rejectedRecords is where each non-accepted review that recorded the run was
+// published, in no particular order.
+func (s *state) rejectedRecords(key InvocationKey) []Origin {
+	var out []Origin
 	for _, review := range s.reviews {
 		if review.Outcome == "accepted" || review.Key.Project != key.Project {
 			continue
 		}
 		for _, inv := range review.Invocations {
 			if inv.InvocationID == key.InvocationID {
-				return true
+				out = append(out, review.Origin)
+				break
 			}
 		}
 	}
-	return false
+	return out
 }
 
 // checkFamilyClosure: the family is every admitted invocation carrying this

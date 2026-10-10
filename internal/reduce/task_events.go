@@ -92,9 +92,13 @@ func (s *state) takeover(b model.Bundle, idx int, o Origin, e *model.TaskTakeove
 		return err
 	}
 	prior := AttemptKey{Project: b.Project, Task: e.Task.RecordID, Attempt: e.PriorAttemptID}
-	if _, ok := s.attempts[prior]; !ok {
+	before, ok := s.attempts[prior]
+	if !ok {
 		return faultAt(CodeUnknownReference, b.Sequence, idx, "prior_attempt_id",
 			"no admitted prior attempt under this task")
+	}
+	if err := s.unseenAttempt(b, idx, "prior_attempt_id", before); err != nil {
+		return err
 	}
 	key := AttemptKey{Project: b.Project, Task: e.Task.RecordID, Attempt: e.AttemptID}
 	if _, ok := s.attemptOwner[Ident{Project: b.Project, ID: e.AttemptID}]; ok {
@@ -147,6 +151,9 @@ func (s *state) terminal(b model.Bundle, idx int, o Origin, e *model.AttemptTerm
 	if !ok {
 		return faultAt(CodeUnknownReference, b.Sequence, idx, "attempt_id",
 			"no admitted attempt under this task")
+	}
+	if err := s.unseenAttempt(b, idx, "attempt_id", a); err != nil {
+		return err
 	}
 	if a.Terminal != nil {
 		return faultAt(CodeInvalidTransition, b.Sequence, idx, "attempt_id",
@@ -274,6 +281,16 @@ func (s *state) hold(b model.Bundle, idx int, o Origin, e *model.BlockerHold) er
 		Held:         o,
 	})
 	return nil
+}
+
+// unseenAttempt is setaside.go's unseen for an attempt an event names by id:
+// its start, and its terminal receipt once there is one.
+func (s *state) unseenAttempt(b model.Bundle, idx int, path string, a Attempt) error {
+	origins := []Origin{a.Started}
+	if a.Terminal != nil {
+		origins = append(origins, a.Terminal.Origin)
+	}
+	return s.unseen(b, idx, path, "attempt "+string(a.Key.Attempt), origins...)
 }
 
 func (s *state) clear(b model.Bundle, idx int, o Origin, e *model.BlockerClear) error {
