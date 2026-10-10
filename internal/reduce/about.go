@@ -17,13 +17,24 @@ func (s Snapshot) RunAbout(env model.InvocationEnvelope, id Ident) bool {
 }
 
 // Touches reports whether event e is about record or source id: it creates or
-// revises it, names it, or names a criterion of it (a run's envelope names its
-// claim no other way). Every event naming a hold also names its task. A
-// set-aside bundle applied nothing, so no index of the snapshot reaches its
-// events; history asks this of each one.
+// revises it, names it, or is a run RunAbout counts. Every event naming a hold
+// also names its task. A set-aside bundle applied nothing, so no index of the
+// snapshot reaches its events; history asks this of each one, and so judges
+// them as it judges applied ones.
 func (s Snapshot) Touches(e model.TypedEvent, id Ident) bool {
-	if src, ok := e.(*model.SourceIntake); ok && src.SourceID == id.ID {
-		return true
+	switch e := e.(type) {
+	case *model.SourceIntake:
+		if e.SourceID == id.ID {
+			return true
+		}
+	case *model.InvocationStart:
+		if s.RunAbout(e.Envelope, id) {
+			return true
+		}
+	case *model.InvocationSeal:
+		if s.RunAbout(e.Envelope, id) {
+			return true
+		}
 	}
 	for _, n := range eventOwners(id.Project, e) {
 		if n.kind == "record" && n.record.ID == id.ID {
@@ -35,9 +46,7 @@ func (s Snapshot) Touches(e model.TypedEvent, id Ident) bool {
 		return false // only an empty project errs, and replay refuses that first
 	}
 	for _, r := range refs {
-		switch {
-		case r.Record != nil && r.Record.RecordID == id.ID,
-			r.Criterion != nil && r.Criterion.Claim.RecordID == id.ID:
+		if r.Record != nil && r.Record.RecordID == id.ID {
 			return true
 		}
 	}

@@ -26,6 +26,7 @@ func TestTouchesEveryWayAnEventIsAboutAnID(t *testing.T) {
 		{"names it", &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID("ATTX")}, "TSKA"},
 		{"fixes a criterion of it", fixProofCriterion(claim), "CMA1"},
 		{"starts a run under a criterion of it", &model.InvocationStart{Envelope: proofEnvelope(claim, newID("RNX"))}, "CMA1"},
+		{"seals a run under an attempt on it", sealProof(noCriterion(proofEnvelope(claim, newID("RNX"))), 0), "TSKA"},
 		{"clears a hold on it", clearAt(newID("TSKA"), 1, newID("HDX1")), "TSKA"},
 	}
 	s := mustReplay(t, goodLedger(t).out)
@@ -40,4 +41,31 @@ func TestTouchesEveryWayAnEventIsAboutAnID(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Applied history lists a run under its claim and its attempt's task and
+// nowhere else; a set-aside event must be judged the same way.
+func TestTouchesJudgesARunAsAppliedHistoryDoes(t *testing.T) {
+	s := mustReplay(t, goodLedger(t).out) // TSKA with attempt ATTA
+	claim := ref(newID("CMA1"), 1)
+	run := noCriterion(proofEnvelope(claim, newID("RNX")))
+	task := Ident{Project: testProject, ID: newID("TSKA")}
+	if !s.RunAbout(run, task) || !s.Touches(sealProof(run, 0), task) {
+		t.Fatal("a run under an attempt on the task is about the task, applied or set aside")
+	}
+	run.AttemptID = newID("ATTZ")
+	if s.RunAbout(run, task) || s.Touches(sealProof(run, 0), task) {
+		t.Fatal("control: a run under an attempt nobody admitted is about no task")
+	}
+	fix := &model.Correction{Target: model.CorrectionTarget{Kind: "criterion", Criterion: ptrProof(proofCriterion(claim))},
+		AffectedRevisions: []model.RecordRef{}, Reason: "wrong unit", CorrectiveRef: blobRef("unit")}
+	if s.Touches(fix, Ident{Project: testProject, ID: claim.RecordID}) {
+		t.Fatal("a correction naming only a criterion is not in its claim's applied history, so not in a set-aside one")
+	}
+}
+
+// noCriterion is a run envelope that carries no criterion.
+func noCriterion(env model.InvocationEnvelope) model.InvocationEnvelope {
+	env.CriterionRef = proofUnknown[model.CriterionRef]()
+	return env
 }
