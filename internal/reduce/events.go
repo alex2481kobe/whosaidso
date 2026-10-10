@@ -242,6 +242,21 @@ func (s *state) criterionFix(b model.Bundle, idx int, o Origin, e *model.Criteri
 }
 
 func (s *state) reviewAdmit(b model.Bundle, idx int, o Origin, e *model.ReviewAdmit) error {
+	// A reviewed run may carry a criterion that was never fixed; one that was
+	// is matched into its proof family by identity, so it must be one the
+	// bundle's branch saw (setaside.go).
+	for i, inv := range e.Invocations {
+		if inv.CriterionRef.State != model.Known || inv.CriterionRef.Value == nil {
+			continue
+		}
+		ref := *inv.CriterionRef.Value
+		if c, ok := s.criteria[criterionKey(ref)]; ok {
+			if err := s.unseen(b, idx, fmt.Sprintf("invocations[%d].criterion_ref.value", i),
+				fmt.Sprintf("criterion %s revision %d", ref.CriterionID, ref.Revision), c.Origin); err != nil {
+				return err
+			}
+		}
+	}
 	for i, p := range e.Packets {
 		key := ReviewKey{Project: b.Project, CommandID: p.CommandID}
 		if prior, ok := s.reviews[key]; ok {

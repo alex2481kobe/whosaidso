@@ -58,6 +58,8 @@ func TestAnEventNamingAFactFromAnUnseenBranchIsSetAside(t *testing.T) {
 			l.add(t, &model.InvocationStart{Envelope: run})
 			return l
 		}, sealProof(run, 0), admitProof(claim, run.InvocationID)},
+		{"a criterion a rejected run carries", proofBase, fixProofCriterion(claim),
+			rejectedReview(claim, "rejected", model.CriterionRef{})},
 		{"a run only a rejected review recorded", func(t *testing.T) *ledgerBuilder {
 			l, _ := rejectedBase(t)
 			return l
@@ -79,6 +81,19 @@ func TestAnEventNamingAFactFromAnUnseenBranchIsSetAside(t *testing.T) {
 				t.Fatalf("the bundle naming the other branch's copy must be set aside as unseen: %+v", got)
 			}
 		})
+	}
+}
+
+// A rejected run may carry a criterion nobody fixed, on a branch or not: there
+// is no fact to have missed, so its review applies on trial.
+func TestARejectedRunMayCarryACriterionNobodyFixed(t *testing.T) {
+	base, claim := rejectedBase(t)
+	a, b := base.branch(100), base.branch(200)
+	a.add(t, createTask("TSKN"))
+	never := model.CriterionRef{Claim: claim, CriterionID: newID("CRTZ"), Revision: 1}
+	b.add(t, rejectedReview(claim, "rejected", never))
+	if got := mustReplay(t, merged(a, b)).SetAside(); len(got) != 0 {
+		t.Fatalf("a review naming an unfixed criterion must apply on trial: %+v", got)
 	}
 }
 
