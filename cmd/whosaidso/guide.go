@@ -316,7 +316,8 @@ it stays in the ledger and nothing in it applies. A later bundle on that
 branch is set aside too when it names something the other branch recorded
 in its place (unseen-fact: say, the revision it amends); one that names
 nothing of the kind still applies. todo lists each one with the reason;
-history marks its events, also under history RECORD. To keep that change, re-record it: capture it again
+history marks its events, also under history RECORD. To keep that
+change, re-record it: capture it again
 against the current records (an amendment from the current revision) and
 admit it. Nothing else is needed; the set-aside bundle remains as history.
 A ledger is still refused if a sequence number is missing, a bundle names
