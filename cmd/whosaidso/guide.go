@@ -302,6 +302,26 @@ staging (runs' outputs while they run) and the machine id:
 $WHOSAIDSO_HOME, else $HOME/.whosaidso. Set WHOSAIDSO_HOME to a scratch
 directory to rehearse without touching the real ones.
 `},
+	{"branches", "recording on git branches and merging them", `Record on any branch and merge it the normal way, merge commit or squash:
+there is no extra step. Two people who admit on separate branches each
+publish the next sequence number, so after the merge two bundles share it.
+That is expected. Every machine reads the files in one order (sequence,
+then command id), so everyone who pulls the merge gets the same answers.
+The next admission after a merge joins the branches: it follows the last
+bundle and names the other branch tips in its bundle, so the ledger shows
+it saw everything.
+When both branches changed the same thing (two amendments of one revision,
+one packet admitted on both), the later bundle in that order is SET ASIDE:
+it stays in the ledger, nothing in it applies, and so does anything recorded
+on top of it on its branch. todo lists each one with the reason; history
+marks its events. To keep that change, re-record it: capture it again
+against the current records (an amendment from the current revision) and
+admit it. Nothing else is needed; the set-aside bundle remains as history.
+A ledger is still refused if a sequence number is missing, a bundle names
+a predecessor that is not there, or two first bundles start two histories.
+Commit only .whosaidso/events and .whosaidso/artifacts; keep
+.whosaidso/cache out of git, or every merge conflicts on it.
+`},
 	{"pitfalls", "rules that prevent the known mistakes", `- Never invent a value: a missing actor, reading, unit or validation stays
   UNKNOWN with its reason. Two unknowns never match.
 - Check the real thing: a path, time or quote you write is a claim, not a
