@@ -169,6 +169,20 @@ func TestHelpForms(t *testing.T) {
 	}
 }
 
+// Someone who merged branches and sees a set-aside bundle in todo must find,
+// in help, that merging is normal, what set aside means and what to do.
+func TestHelpExplainsBranchesAndSetAsideBundles(t *testing.T) {
+	out, _, code := cliRun(t, t.TempDir(), nil, "", "help", "branches")
+	if code != 0 || !strings.HasPrefix(out, "BRANCHES: ") {
+		t.Fatalf("whosaidso help branches must print the topic, got %d %q", code, out)
+	}
+	for _, want := range []string{"merge commit or squash", "SET ASIDE", "todo lists", "re-record it", ".whosaidso/cache out of git"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("help branches must say %q", want)
+		}
+	}
+}
+
 // Flags are accepted after positional ids, and every view answers the same
 // either way.
 func TestFlagsAfterPositionalIDs(t *testing.T) {

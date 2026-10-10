@@ -113,6 +113,21 @@ func TestMergedClashSetsAsideTheLaterBundleAndItsDependents(t *testing.T) {
 	}
 }
 
+func TestASetAsideBundleLeavesNoPartOfItself(t *testing.T) {
+	base := goodLedger(t)
+	a, b := base.branch(100), base.branch(200)
+	a.add(t, amendTask("TSKA", 1, "amended on a"))
+	// Its first event is fine on its own; its second clashes. All or nothing.
+	b.add(t, createTask("TSKG"), amendTask("TSKA", 1, "amended on b"))
+	s := mustReplay(t, merged(a, b))
+	if got := setAsideRefs(s); !reflect.DeepEqual(got, []model.BundleRef{b.out[2].Ref()}) {
+		t.Fatalf("set aside %v", got)
+	}
+	if _, ok := s.Current(Ident{Project: testProject, ID: newID("TSKG")}); ok {
+		t.Fatal("an event before the clash in a set-aside bundle was applied")
+	}
+}
+
 func TestDuplicateCommandOnTwoBranchesIsSetAside(t *testing.T) {
 	base := goodLedger(t)
 	a, b := base.branch(100), base.branch(200)
