@@ -312,9 +312,11 @@ bundle and names the other branch tips in its bundle, so the ledger shows
 it saw everything.
 When both branches changed the same thing (two amendments of one revision,
 one packet admitted on both), the later bundle in that order is SET ASIDE:
-it stays in the ledger, nothing in it applies, and so does anything recorded
-on top of it on its branch. todo lists each one with the reason; history
-marks its events. To keep that change, re-record it: capture it again
+it stays in the ledger and nothing in it applies. A later bundle on that
+branch is set aside too when it names something the other branch recorded
+in its place (unseen-fact: say, the revision it amends); one that names
+nothing of the kind still applies. todo lists each one with the reason;
+history marks its events, also under history RECORD. To keep that change, re-record it: capture it again
 against the current records (an amendment from the current revision) and
 admit it. Nothing else is needed; the set-aside bundle remains as history.
 A ledger is still refused if a sequence number is missing, a bundle names
