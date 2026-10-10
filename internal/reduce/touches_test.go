@@ -25,6 +25,7 @@ func TestTouchesEveryWayAnEventIsAboutAnID(t *testing.T) {
 		{"revises it", amendTask("TSKA", 1, "changed"), "TSKA"},
 		{"names it", &model.TaskStart{Task: ref(newID("TSKA"), 1), Actor: model.Actor{ID: "agent-a"}, AttemptID: newID("ATTX")}, "TSKA"},
 		{"fixes a criterion of it", fixProofCriterion(claim), "CMA1"},
+		{"starts a run under a criterion of it", &model.InvocationStart{Envelope: proofEnvelope(claim, newID("RNX"))}, "CMA1"},
 		{"clears a hold on it", clearAt(newID("TSKA"), 1, newID("HDX1")), "TSKA"},
 	}
 	for _, tc := range cases {
