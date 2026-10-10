@@ -27,7 +27,9 @@ type Lineage struct {
 	nodes map[model.BundleRef]lineageNode
 	order []placed // by position: order[p-1] is the bundle at position p
 	tips  []uint64 // by chain: the position of its newest member (ancestry.go)
-	sites map[model.ID][]CommandSite
+	// clocks are the distinct clocks nodes name by index (ancestry.go).
+	clocks [][]chainMark
+	sites  map[model.ID][]CommandSite
 }
 
 // CommandSite is one bundle published under a command id: where, and with
@@ -80,10 +82,9 @@ func (l *Lineage) add(b model.Bundle) (placement, error) {
 			break
 		}
 	}
-	node := l.nodeFor(parents, uint64(len(l.order))+1, place.descendsAll)
 	for _, site := range l.sites[b.CommandID] {
 		earlier := l.nodes[model.BundleRef{Sequence: site.Sequence, CommandID: b.CommandID}]
-		if l.reaches(node, earlier.Position) {
+		if l.anyReaches(parents, earlier.Position) {
 			// One line of history admitted one command twice: no branch
 			// explains it, so admission identity is ambiguous.
 			return placement{}, duplicateCommand(b, site)
@@ -93,8 +94,19 @@ func (l *Lineage) add(b model.Bundle) (placement, error) {
 			place.duplicate = &site
 		}
 	}
-	l.record(b, node)
+	l.record(b, parents, place.descendsAll)
 	return place, nil
+}
+
+// anyReaches reports whether a bundle with these parents would descend from
+// the earlier bundle at position pos: whether one of them is or does.
+func (l *Lineage) anyReaches(parents []model.BundleRef, pos uint64) bool {
+	for _, p := range parents {
+		if l.reaches(l.nodes[p], pos) {
+			return true
+		}
+	}
+	return false
 }
 
 // parentsOf resolves the bundles b names as parents: none for the genesis
@@ -153,11 +165,14 @@ func (l *Lineage) parentsOf(b model.Bundle, empty bool) ([]model.BundleRef, erro
 // the prefix that b descends from is one of b's parents (any other path to it
 // would pass through a bundle that descends from it), so removing the parents
 // is the whole update.
-func (l *Lineage) record(b model.Bundle, node lineageNode) {
+func (l *Lineage) record(b model.Bundle, parents []model.BundleRef, descendsAll bool) {
 	if l.nodes == nil {
 		*l = newLineage()
 	}
 	ref := b.Ref()
+	pos := uint64(len(l.order)) + 1
+	mark := l.markFor(parents, pos)
+	node := l.nodeFor(parents, pos, descendsAll, mark)
 	heads := make([]model.BundleRef, 0, len(l.heads)+1)
 	for _, h := range l.heads {
 		if !containsRef(node.Parents, h) {
@@ -165,7 +180,7 @@ func (l *Lineage) record(b model.Bundle, node lineageNode) {
 		}
 	}
 	l.heads = append(heads, ref) // b is last in canonical order so far
-	l.order = append(l.order, placed{Ref: ref, Mark: l.markFor(node.Parents, node.Position)})
+	l.order = append(l.order, placed{Ref: ref, Mark: mark})
 	l.nodes[ref] = node
 	l.sites[b.CommandID] = append(append([]CommandSite(nil), l.sites[b.CommandID]...),
 		CommandSite{Sequence: b.Sequence, Digest: b.RequestDigest})
@@ -214,14 +229,15 @@ func duplicateCommand(b model.Bundle, prior CommandSite) error {
 func (l *Lineage) fields(prefix string) []persistedField {
 	return []persistedField{{prefix + ".last", &l.last}, {prefix + ".heads", &l.heads},
 		{prefix + ".nodes", &l.nodes}, {prefix + ".order", &l.order}, {prefix + ".tips", &l.tips},
-		{prefix + ".sites", &l.sites}}
+		{prefix + ".clocks", &l.clocks}, {prefix + ".sites", &l.sites}}
 }
 
 // clone forks the lineage. Heads and site lists are replaced, never appended
 // to in place, and a node never changes once recorded, so copying the maps is
-// a real fork. The position list is capped so the fork's first append
-// reallocates; chain tips are rewritten in place, so they are copied.
+// a real fork. The position and clock lists are capped so the fork's first
+// append reallocates (a clock is never changed once listed); chain tips are
+// rewritten in place, so they are copied.
 func (l Lineage) clone() Lineage {
 	return Lineage{last: l.last, heads: l.heads, nodes: copyMap(l.nodes), order: l.order[:len(l.order):len(l.order)],
-		tips: append([]uint64(nil), l.tips...), sites: copyMap(l.sites)}
+		tips: append([]uint64(nil), l.tips...), clocks: l.clocks[:len(l.clocks):len(l.clocks)], sites: copyMap(l.sites)}
 }

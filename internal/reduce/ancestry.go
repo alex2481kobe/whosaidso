@@ -13,7 +13,13 @@ package reduce
 // member descends from the one before it, so descending from member i means
 // descending from members 0..i, and a bundle needs only the highest member
 // it reaches in each chain above its frontier: its clock, one mark per branch
-// it has seen since the last point that saw everything.
+// it has seen since the last point that saw everything. Its own chain needs no
+// mark: it reaches every earlier member of it.
+//
+// A bundle that only continues its parent's chain reaches what the parent
+// reaches and itself, so it names the parent's clock. Clocks live once in a
+// table and nodes name them by index, so a long line growing beside a branch
+// that never rejoins adds no marks, in memory or in the persisted image.
 
 import (
 	"sort"
@@ -29,9 +35,10 @@ type lineageNode struct {
 	// every position below it: its own when it descends from everything
 	// before it.
 	Frontier uint64
-	// Clock holds, per chain, the highest member above Frontier this bundle
-	// descends from, sorted by chain. Empty when nothing above is reached.
-	Clock []chainMark
+	// Clock names the clock in Lineage.clocks, from 1; 0 is the empty clock.
+	// A clock holds, per chain other than this bundle's own, the highest
+	// member above Frontier this bundle descends from, sorted by chain.
+	Clock uint32
 }
 
 // chainMark is a member of a chain: which chain, and its index there.
@@ -46,9 +53,9 @@ type placed struct {
 	Mark chainMark
 }
 
-// nodeFor computes the place a bundle with these parents takes at position
-// pos, its chain mark aside (assigned when it is recorded).
-func (l *Lineage) nodeFor(parents []model.BundleRef, pos uint64, descendsAll bool) lineageNode {
+// nodeFor computes the place a bundle with these parents and chain mark takes
+// at position pos, adding its clock to the table when it is a new one.
+func (l *Lineage) nodeFor(parents []model.BundleRef, pos uint64, descendsAll bool, mark chainMark) lineageNode {
 	n := lineageNode{Parents: parents, Position: pos, Frontier: pos}
 	if descendsAll {
 		return n
@@ -59,17 +66,40 @@ func (l *Lineage) nodeFor(parents []model.BundleRef, pos uint64, descendsAll boo
 	for _, p := range parents {
 		n.Frontier = max(n.Frontier, l.nodes[p].Frontier)
 	}
+	if len(parents) == 1 {
+		if pn := l.nodes[parents[0]]; l.order[pn.Position-1].Mark.Chain == mark.Chain {
+			n.Clock = pn.Clock // the parent is the previous member of its own chain
+			return n
+		}
+	}
+	var clock []chainMark
 	for _, p := range parents {
 		pn := l.nodes[p]
 		if pn.Position <= n.Frontier {
 			continue // it and all it descends from lie at or below the frontier
 		}
-		n.Clock = raise(n.Clock, l.order[pn.Position-1].Mark)
-		for _, m := range pn.Clock {
-			n.Clock = raise(n.Clock, m)
+		clock = raise(clock, l.order[pn.Position-1].Mark)
+		for _, m := range l.clockOf(pn) {
+			clock = raise(clock, m)
 		}
 	}
+	// Every ancestor on its own chain is an earlier member of it.
+	if i := sort.Search(len(clock), func(i int) bool { return clock[i].Chain >= mark.Chain }); i < len(clock) && clock[i].Chain == mark.Chain {
+		clock = append(clock[:i], clock[i+1:]...)
+	}
+	if len(clock) > 0 {
+		l.clocks = append(l.clocks, clock)
+		n.Clock = uint32(len(l.clocks))
+	}
 	return n
+}
+
+// clockOf is the clock a recorded node names.
+func (l *Lineage) clockOf(n lineageNode) []chainMark {
+	if n.Clock == 0 {
+		return nil
+	}
+	return l.clocks[n.Clock-1]
 }
 
 // raise records that a clock reaches mark, keeping the highest index per chain.
@@ -87,8 +117,8 @@ func raise(clock []chainMark, mark chainMark) []chainMark {
 	return clock
 }
 
-// reaches reports whether the bundle n is, or descends from, the bundle at
-// position pos.
+// reaches reports whether the recorded bundle n is, or descends from, the
+// bundle at position pos.
 func (l *Lineage) reaches(n lineageNode, pos uint64) bool {
 	if pos == n.Position || pos <= n.Frontier {
 		return true
@@ -96,9 +126,13 @@ func (l *Lineage) reaches(n lineageNode, pos uint64) bool {
 	if pos > n.Position {
 		return false
 	}
-	mark := l.order[pos-1].Mark
-	i := sort.Search(len(n.Clock), func(i int) bool { return n.Clock[i].Chain >= mark.Chain })
-	return i < len(n.Clock) && n.Clock[i].Chain == mark.Chain && n.Clock[i].Index >= mark.Index
+	mark, own := l.order[pos-1].Mark, l.order[n.Position-1].Mark
+	if mark.Chain == own.Chain {
+		return mark.Index <= own.Index
+	}
+	clock := l.clockOf(n)
+	i := sort.Search(len(clock), func(i int) bool { return clock[i].Chain >= mark.Chain })
+	return i < len(clock) && clock[i].Chain == mark.Chain && clock[i].Index >= mark.Index
 }
 
 // sees reports whether the recorded bundle viewer is, or descends from, the
