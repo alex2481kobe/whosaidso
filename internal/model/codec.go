@@ -22,7 +22,7 @@ var envelopeKeys = map[string]map[string]bool{
 	"packet": {"version": true, "project": true, "command_id": true,
 		"request_digest": true, "author": true, "captured_at": true, "events": true},
 	"bundle": {"version": true, "project": true, "sequence": true, "command_id": true,
-		"predecessor": true, "request_digest": true, "admitter": true,
+		"predecessor": true, "other_heads": true, "request_digest": true, "admitter": true,
 		"recorded_at": true, "packets": true, "events": true},
 }
 
@@ -74,6 +74,14 @@ func strictDecodeParsed(b []byte, tree any, into any, what string) error {
 			if !allowed[m.key] {
 				return fault("invalid-field", what+"."+m.key,
 					"unknown field, or a case variant of a known one")
+			}
+			if m.key == "other_heads" {
+				// Exact names inside each head too, and no null: the field is
+				// absent or it lists heads.
+				if err := checkJSONShape(m.value, reflect.TypeOf([]BundleRef{}), what+".other_heads"); err != nil {
+					return err
+				}
+				continue
 			}
 			// The envelope check stopped at the top level, so a case alias
 			// INSIDE an event still overwrote its type.
@@ -242,6 +250,9 @@ func DecodeBundle(b []byte) (Bundle, error) {
 	} else if !ValidID(bd.Predecessor) {
 		return Bundle{}, fault("ledger-discontinuity", "bundle.predecessor", "missing or malformed predecessor")
 	}
+	if err := validOtherHeads(bd); err != nil {
+		return Bundle{}, err
+	}
 	if !ValidDigest(bd.RequestDigest) {
 		return Bundle{}, fault("invalid-field", "bundle.request_digest", "not lowercase sha-256 hex")
 	}
@@ -261,6 +272,34 @@ func DecodeBundle(b []byte) (Bundle, error) {
 		return Bundle{}, err
 	}
 	return bd, nil
+}
+
+// validOtherHeads is the field's own shape: written only when there is a head
+// to name, never by the genesis bundle, each head an earlier bundle that is not
+// the predecessor, in canonical order with no repeat, so one set of heads has
+// one spelling. Whether each head is present in the ledger is the chain's to
+// check (reduce.Lineage).
+func validOtherHeads(bd Bundle) error {
+	if bd.OtherHeads == nil {
+		return nil
+	}
+	if len(bd.OtherHeads) == 0 || bd.Sequence == 1 {
+		return fault("ledger-discontinuity", "bundle.other_heads", "written only when a bundle after genesis has another head to name")
+	}
+	predecessor := BundleRef{Sequence: bd.Sequence - 1, CommandID: bd.Predecessor}
+	for i, h := range bd.OtherHeads {
+		at := fmt.Sprintf("bundle.other_heads[%d]", i)
+		if _, err := BundleName(h.Sequence, h.CommandID); err != nil {
+			return fault("ledger-discontinuity", at, err.Error())
+		}
+		if h.Sequence >= bd.Sequence || h == predecessor {
+			return fault("ledger-discontinuity", at, "a head is an earlier bundle other than the predecessor")
+		}
+		if i > 0 && !bd.OtherHeads[i-1].Before(h) {
+			return fault("ledger-discontinuity", at, "heads are listed once each, in canonical order")
+		}
+	}
+	return nil
 }
 
 // eventKeys is the exact spelling an event object accepts. The envelope check

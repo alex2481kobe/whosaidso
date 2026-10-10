@@ -14,25 +14,20 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/reduce"
 )
 
-type selectedHead struct {
-	sequence uint64
-	command  model.ID
-}
-
-// head is the last selected bundle's sequence and command, zero when empty.
-func (s State) head() selectedHead {
-	if s.files != nil {
-		if len(s.files) == 0 {
-			return selectedHead{}
+// chain stamps b with where it appends to the selected prefix (reduce's
+// Lineage.Chain). A prefix that reads but does not fold has no snapshot, so
+// its chain is taken from the bundles readLedger already checked.
+func (s State) chain(b model.Bundle) (model.Bundle, error) {
+	if s.foldErr == nil {
+		return s.snapshot.Chain(b), nil
+	}
+	var line reduce.Lineage
+	for _, prior := range s.bundles {
+		if err := line.Add(prior); err != nil {
+			return model.Bundle{}, err
 		}
-		last := s.files[len(s.files)-1]
-		return selectedHead{last.sequence, last.command}
 	}
-	if len(s.bundles) == 0 {
-		return selectedHead{}
-	}
-	last := s.bundles[len(s.bundles)-1]
-	return selectedHead{last.Sequence, last.CommandID}
+	return line.Chain(b), nil
 }
 
 // published returns the bundle already admitted under a command id, if any,

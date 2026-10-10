@@ -273,23 +273,22 @@ func TestReadPrefixRefusesUnpaddedSequenceName(t *testing.T) {
 	requireFault(t, err, "ledger-corrupt")
 }
 
-func TestReadPrefixRefusesDuplicateSequence(t *testing.T) {
+func TestReadPrefixRefusesSecondGenesis(t *testing.T) {
 	p := ledgerProject(t)
 	admitSeries(t, p, 2)
 	readControl(t, p, 2)
-	// The fork the lock exists to prevent, planted directly: two writers that
-	// both read tail 1 and both published under their own transaction id.
-	forked, err := model.BundleName(2, admissionID(99))
+	// Two first admissions are two histories of one project, not two branches
+	// of one history: nothing they share says how they relate.
+	second, err := model.BundleName(1, admissionID(99))
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeLedgerFile(t, p, forked, rawBundle(t, p, 2, admissionID(99), admissionID(1)))
+	writeLedgerFile(t, p, second, rawBundle(t, p, 1, admissionID(99), ""))
 	_, err = ReadPrefix(p)
 	requireFault(t, err, "ledger-fork")
-	if !strings.Contains(err.Error(), forked) && !strings.Contains(err.Error(), string(admissionID(2))) {
-		t.Fatalf("fork diagnostic names neither competing file: %v", err)
+	if !strings.Contains(err.Error(), second) {
+		t.Fatalf("fork diagnostic does not name the second genesis: %v", err)
 	}
-	// And admission refuses too, rather than appending to a forked ledger.
 	_, err = Transact(context.Background(), p, admissionID(3), digestFor(3), proposeFor(3))
 	requireFault(t, err, "ledger-fork")
 }

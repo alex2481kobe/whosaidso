@@ -119,11 +119,17 @@ type PacketRef struct {
 // Bundle is one atomic admission. Its CommandID is the transaction id: the
 // ADMISSION command's id, not any packet's, since one admission may carry several.
 type Bundle struct {
-	Version       uint16      `json:"version"`
-	Project       ProjectID   `json:"project"`
-	Sequence      uint64      `json:"sequence"`
-	CommandID     ID          `json:"command_id"`
-	Predecessor   ID          `json:"predecessor,omitempty"`
+	Version     uint16    `json:"version"`
+	Project     ProjectID `json:"project"`
+	Sequence    uint64    `json:"sequence"`
+	CommandID   ID        `json:"command_id"`
+	Predecessor ID        `json:"predecessor,omitempty"`
+	// OtherHeads names every bundle, besides the predecessor, that no bundle
+	// descended from when this one was appended: the tips of chains that split
+	// on separate branches and were merged. With them the bundle descends from
+	// everything its admission read, which the ledger alone can then show. A
+	// ledger that never split has one head and never writes the field.
+	OtherHeads    []BundleRef `json:"other_heads,omitempty"`
 	RequestDigest Digest      `json:"request_digest"`
 	Admitter      Actor       `json:"admitter"`
 	RecordedAt    time.Time   `json:"recorded_at"`

@@ -203,7 +203,7 @@ func (s *state) apply(b model.Bundle) error {
 	if err := s.checkEnvelope(b); err != nil {
 		return err
 	}
-	if err := s.lineage.add(b); err != nil {
+	if _, err := s.lineage.add(b); err != nil {
 		return err
 	}
 	facts, err := indexBundle(b, uint64(s.watermark.Bundles)+1)

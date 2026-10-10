@@ -31,6 +31,10 @@ func (s Snapshot) Project() model.ProjectID { return s.inner().project }
 // Watermark is the selected ledger position this snapshot answers from.
 func (s Snapshot) Watermark() Watermark { return s.inner().watermark }
 
+// Chain stamps b with where the next admission appends to this prefix:
+// Lineage.Chain, the one rule admission's validation and its seal both use.
+func (s Snapshot) Chain(b model.Bundle) model.Bundle { return s.inner().lineage.Chain(b) }
+
 // Record returns one exact admitted revision.
 func (s Snapshot) Record(ref model.RecordRef) (Record, bool) {
 	r, ok := s.inner().record(ref)

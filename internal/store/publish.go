@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
@@ -237,7 +238,7 @@ func admitLocked(ctx context.Context, project Project, admission Admission, disk
 	if !model.ValidDigest(requestDigest) {
 		return zero, nil, storeFault("invalid-field", "admission.request_digest", "not lowercase sha-256 hex")
 	}
-	bundle, err := sealBundle(project, prefix.head(), admissionID, requestDigest, proposed)
+	bundle, err := sealBundle(project, prefix.chain, admissionID, requestDigest, proposed)
 	if err != nil {
 		return zero, nil, err
 	}
@@ -254,7 +255,7 @@ func admitLocked(ctx context.Context, project Project, admission Admission, disk
 // vouch for, which in practice means a tail read before the lock. Refusing is
 // what makes "the caller cannot supply a tail as authority" a property of the
 // code rather than a rule callers are asked to remember.
-func sealBundle(project Project, head selectedHead, admissionID model.ID, requestDigest model.Digest, proposed model.Bundle) (model.Bundle, error) {
+func sealBundle(project Project, chain func(model.Bundle) (model.Bundle, error), admissionID model.ID, requestDigest model.Digest, proposed model.Bundle) (model.Bundle, error) {
 	assigned := ""
 	switch {
 	case proposed.Version != 0:
@@ -267,6 +268,8 @@ func sealBundle(project Project, head selectedHead, admissionID model.ID, reques
 		assigned = "command_id"
 	case proposed.Predecessor != "":
 		assigned = "predecessor"
+	case proposed.OtherHeads != nil:
+		assigned = "other_heads"
 	case proposed.RequestDigest != "":
 		assigned = "request_digest"
 	case !proposed.RecordedAt.IsZero():
@@ -276,12 +279,13 @@ func sealBundle(project Project, head selectedHead, admissionID model.ID, reques
 		return model.Bundle{}, storeFault("invalid-field", "bundle."+assigned,
 			"the transaction assigns this field from the prefix it read under the lock, so a proposal cannot carry its own")
 	}
-	bundle := proposed
+	bundle, err := chain(proposed)
+	if err != nil {
+		return model.Bundle{}, err
+	}
 	bundle.Version = model.WireVersion
 	bundle.Project = project.ID
-	bundle.Sequence = head.sequence + 1
 	bundle.CommandID = admissionID
-	bundle.Predecessor = head.command
 	bundle.RequestDigest = requestDigest
 	bundle.RecordedAt = time.Now().UTC()
 	return bundle, nil
@@ -312,7 +316,8 @@ func publishBundle(ctx context.Context, dir string, bundle model.Bundle, disk pu
 	if err != nil {
 		return storeFault("invalid-field", "bundle", err.Error())
 	}
-	if decoded.Sequence != bundle.Sequence || decoded.CommandID != bundle.CommandID || decoded.Predecessor != bundle.Predecessor {
+	if decoded.Sequence != bundle.Sequence || decoded.CommandID != bundle.CommandID || decoded.Predecessor != bundle.Predecessor ||
+		!slices.Equal(decoded.OtherHeads, bundle.OtherHeads) {
 		return storeFault("invalid-field", "bundle", "the encoded bundle does not decode to the bundle being published")
 	}
 	// Last point where giving up costs nothing.

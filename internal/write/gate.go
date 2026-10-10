@@ -226,14 +226,13 @@ func gateReference(snapshot reduce.Snapshot, ref model.Reference) (gateKey, bool
 // (current revision, READY with BLOCKED winning, one owner per attempt id) are
 // the reducer's, so admission and replay share one implementation.
 func gateProposal(base reduce.Snapshot, project model.ProjectID, command model.ID, digest model.Digest, proposal model.Bundle, dry *dryRun) (reduce.Snapshot, error) {
-	// Validation only: Transact assigns the real envelope to the proposal.
-	validation := proposal
+	// Validation only: Transact assigns the real envelope to the proposal, with
+	// the same chain rule, so the bundle validated is the bundle sealed.
+	validation := base.Chain(proposal)
 	validation.Version = model.WireVersion
 	validation.Project = project
 	validation.CommandID = command
 	validation.RequestDigest = digest
-	validation.Sequence = base.Watermark().Sequence + 1
-	validation.Predecessor = base.Watermark().CommandID
 	validation.RecordedAt = time.Unix(0, 0).UTC()
 	if dry == nil {
 		after, err := reduce.Apply(base, validation)
