@@ -22,10 +22,12 @@ import (
 // Lineage is the chain structure of a ledger prefix read in canonical order.
 // The zero value is the empty ledger.
 type Lineage struct {
-	last    model.BundleRef
-	heads   []model.BundleRef // in canonical order; last is always the final one
-	parents map[model.BundleRef][]model.BundleRef
-	sites   map[model.ID][]CommandSite
+	last  model.BundleRef
+	heads []model.BundleRef // in canonical order; last is always the final one
+	nodes map[model.BundleRef]lineageNode
+	order []placed // by position: order[p-1] is the bundle at position p
+	tips  []uint64 // by chain: the position of its newest member (ancestry.go)
+	sites map[model.ID][]CommandSite
 }
 
 // CommandSite is one bundle published under a command id: where, and with
@@ -48,7 +50,7 @@ type placement struct {
 }
 
 func newLineage() Lineage {
-	return Lineage{parents: map[model.BundleRef][]model.BundleRef{}, sites: map[model.ID][]CommandSite{}}
+	return Lineage{nodes: map[model.BundleRef]lineageNode{}, sites: map[model.ID][]CommandSite{}}
 }
 
 // Add checks that b may follow everything added so far and records it.
@@ -78,9 +80,10 @@ func (l *Lineage) add(b model.Bundle) (placement, error) {
 			break
 		}
 	}
+	node := l.nodeFor(parents, uint64(len(l.order))+1, place.descendsAll)
 	for _, site := range l.sites[b.CommandID] {
-		earlier := model.BundleRef{Sequence: site.Sequence, CommandID: b.CommandID}
-		if l.descends(parents, earlier) {
+		earlier := l.nodes[model.BundleRef{Sequence: site.Sequence, CommandID: b.CommandID}]
+		if l.reaches(node, earlier.Position) {
 			// One line of history admitted one command twice: no branch
 			// explains it, so admission identity is ambiguous.
 			return placement{}, duplicateCommand(b, site)
@@ -90,7 +93,7 @@ func (l *Lineage) add(b model.Bundle) (placement, error) {
 			place.duplicate = &site
 		}
 	}
-	l.record(b, parents)
+	l.record(b, node)
 	return place, nil
 }
 
@@ -110,7 +113,7 @@ func (l *Lineage) parentsOf(b model.Bundle, empty bool) ([]model.BundleRef, erro
 		return nil, nil
 	}
 	predecessor := model.BundleRef{Sequence: b.Sequence - 1, CommandID: b.Predecessor}
-	if _, ok := l.parents[predecessor]; !ok {
+	if _, ok := l.nodes[predecessor]; !ok {
 		// Sequence alone only counts files. The predecessor is what makes the
 		// chain say which bundle each one was actually appended to. This is also
 		// the contiguity rule: after a hole, no bundle one sequence lower exists,
@@ -124,7 +127,7 @@ func (l *Lineage) parentsOf(b model.Bundle, empty bool) ([]model.BundleRef, erro
 	}
 	parents := append(make([]model.BundleRef, 0, 1+len(b.OtherHeads)), predecessor)
 	for i, h := range b.OtherHeads {
-		if _, ok := l.parents[h]; !ok || h.Sequence >= b.Sequence {
+		if _, ok := l.nodes[h]; !ok || h.Sequence >= b.Sequence {
 			return nil, discontinuity(b, fmt.Sprintf("bundle.other_heads[%d]", i),
 				fmt.Sprintf("names no earlier bundle at sequence %d command %s", h.Sequence, h.CommandID))
 		}
@@ -137,42 +140,23 @@ func (l *Lineage) parentsOf(b model.Bundle, empty bool) ([]model.BundleRef, erro
 // the prefix that b descends from is one of b's parents (any other path to it
 // would pass through a bundle that descends from it), so removing the parents
 // is the whole update.
-func (l *Lineage) record(b model.Bundle, parents []model.BundleRef) {
-	if l.parents == nil {
+func (l *Lineage) record(b model.Bundle, node lineageNode) {
+	if l.nodes == nil {
 		*l = newLineage()
 	}
 	ref := b.Ref()
 	heads := make([]model.BundleRef, 0, len(l.heads)+1)
 	for _, h := range l.heads {
-		if !containsRef(parents, h) {
+		if !containsRef(node.Parents, h) {
 			heads = append(heads, h)
 		}
 	}
 	l.heads = append(heads, ref) // b is last in canonical order so far
-	l.parents[ref] = parents
+	l.order = append(l.order, placed{Ref: ref, Mark: l.markFor(node.Parents, node.Position)})
+	l.nodes[ref] = node
 	l.sites[b.CommandID] = append(append([]CommandSite(nil), l.sites[b.CommandID]...),
 		CommandSite{Sequence: b.Sequence, Digest: b.RequestDigest})
 	l.last = ref
-}
-
-// descends reports whether target is reachable from parents through parent
-// links. Parents always have lower sequences, so the walk stops below target.
-func (l *Lineage) descends(parents []model.BundleRef, target model.BundleRef) bool {
-	seen := map[model.BundleRef]bool{}
-	stack := append([]model.BundleRef(nil), parents...)
-	for len(stack) > 0 {
-		at := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		if at == target {
-			return true
-		}
-		if seen[at] || at.Sequence <= target.Sequence {
-			continue
-		}
-		seen[at] = true
-		stack = append(stack, l.parents[at]...)
-	}
-	return false
 }
 
 // Chain stamps b with where an admission appends: after the canonical last
@@ -216,12 +200,15 @@ func duplicateCommand(b model.Bundle, prior CommandSite) error {
 // fields are the lineage's persisted parts, named for the image.
 func (l *Lineage) fields(prefix string) []persistedField {
 	return []persistedField{{prefix + ".last", &l.last}, {prefix + ".heads", &l.heads},
-		{prefix + ".parents", &l.parents}, {prefix + ".sites", &l.sites}}
+		{prefix + ".nodes", &l.nodes}, {prefix + ".order", &l.order}, {prefix + ".tips", &l.tips},
+		{prefix + ".sites", &l.sites}}
 }
 
 // clone forks the lineage. Heads and site lists are replaced, never appended
-// to in place, and a parent list never changes once recorded, so copying the
-// maps is a real fork.
+// to in place, and a node never changes once recorded, so copying the maps is
+// a real fork. The position list is capped so the fork's first append
+// reallocates; chain tips are rewritten in place, so they are copied.
 func (l Lineage) clone() Lineage {
-	return Lineage{last: l.last, heads: l.heads, parents: copyMap(l.parents), sites: copyMap(l.sites)}
+	return Lineage{last: l.last, heads: l.heads, nodes: copyMap(l.nodes), order: l.order[:len(l.order):len(l.order)],
+		tips: append([]uint64(nil), l.tips...), sites: copyMap(l.sites)}
 }
