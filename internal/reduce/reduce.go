@@ -138,8 +138,8 @@ func (s *state) clone() *state {
 // lists exclusively, and a fork's first append to a shared list reallocates.
 // Without the cap one fork would silently alter another - the exact class of
 // bug this package exists to prevent.
-func addReferrer[K comparable](m map[K][]Referrer, k K, r Referrer) {
-	m[k] = append(m[k], r)
+func addReferrer[K comparable](s *state, m map[K][]Referrer, k K, r Referrer) {
+	put(s, m, k, append(m[k], r))
 }
 
 // Replay folds a complete ledger prefix from empty. A corrupt or conflicting
@@ -251,7 +251,7 @@ func (s *state) applyEvents(b model.Bundle) error {
 			return err
 		}
 		origin := facts.origin(i)
-		s.events[origin] = typed
+		put(s, s.events, origin, typed)
 		s.log.add(origin, typed)
 		s.recordReferrers(b, i, typed, refs)
 	}

@@ -217,13 +217,13 @@ func (s *state) recordReferrers(b model.Bundle, idx int, e model.TypedEvent, ref
 		r.Path = ref.Path
 		switch {
 		case ref.Record != nil:
-			addReferrer(s.reverseRecord, recordKey(*ref.Record), r)
+			addReferrer(s, s.reverseRecord, recordKey(*ref.Record), r)
 		case ref.Criterion != nil:
-			addReferrer(s.reverseCriterion, criterionKey(*ref.Criterion), r)
+			addReferrer(s, s.reverseCriterion, criterionKey(*ref.Criterion), r)
 		case ref.Invocation != nil:
-			addReferrer(s.reverseInvocation, invocationKey(*ref.Invocation), r)
+			addReferrer(s, s.reverseInvocation, invocationKey(*ref.Invocation), r)
 		case ref.Blocker != nil:
-			addReferrer(s.reverseBlocker, blockerKey(*ref.Blocker), r)
+			addReferrer(s, s.reverseBlocker, blockerKey(*ref.Blocker), r)
 		}
 	}
 }

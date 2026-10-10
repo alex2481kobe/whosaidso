@@ -77,13 +77,13 @@ func (s *state) start(b model.Bundle, idx int, o Origin, e *model.TaskStart) err
 	if err := s.requireReady(b, idx, e.Task); err != nil {
 		return err
 	}
-	s.attempts[key] = Attempt{
+	put(s, s.attempts, key, Attempt{
 		Key:          key,
 		TaskRevision: e.Task.Revision,
 		Actor:        e.Actor,
 		Started:      o,
-	}
-	s.attemptOwner[Ident{Project: b.Project, ID: e.AttemptID}] = key
+	})
+	put(s, s.attemptOwner, Ident{Project: b.Project, ID: e.AttemptID}, key)
 	return nil
 }
 
@@ -117,15 +117,15 @@ func (s *state) takeover(b model.Bundle, idx int, o Origin, e *model.TaskTakeove
 	// The prior attempt is left exactly as it was. A takeover does not write a
 	// terminal receipt on someone else's behalf, so an abandoned attempt stays
 	// visibly live and the task stays IN FLIGHT until its own holder answers.
-	s.attempts[key] = Attempt{
+	put(s, s.attempts, key, Attempt{
 		Key:          key,
 		TaskRevision: e.Task.Revision,
 		Actor:        e.Actor,
 		Takeover:     true,
 		PriorAttempt: e.PriorAttemptID,
 		Started:      o,
-	}
-	s.attemptOwner[Ident{Project: b.Project, ID: e.AttemptID}] = key
+	})
+	put(s, s.attemptOwner, Ident{Project: b.Project, ID: e.AttemptID}, key)
 	return nil
 }
 
@@ -167,7 +167,7 @@ func (s *state) terminal(b model.Bundle, idx int, o Origin, e *model.AttemptTerm
 		ReconciliationOwed: e.ReconciliationOwed,
 		Origin:             o,
 	}
-	s.attempts[key] = a
+	put(s, s.attempts, key, a)
 	return nil
 }
 
@@ -196,14 +196,14 @@ func (s *state) close(b model.Bundle, idx int, o Origin, e *model.TaskClose) err
 	if err := s.requireHoldsCleared(b, idx, who, e.Outcome); err != nil {
 		return err
 	}
-	s.closed[who] = Closure{
+	put(s, s.closed, who, Closure{
 		Task:                e.Task,
 		Outcome:             e.Outcome,
 		Authority:           e.Authority,
 		AcceptanceWitnesses: e.AcceptanceWitnessRefs,
 		DeliveryWitnesses:   e.DeliveryWitnessRefs,
 		Origin:              o,
-	}
+	})
 	return nil
 }
 
@@ -265,14 +265,14 @@ func (s *state) hold(b model.Bundle, idx int, o Origin, e *model.BlockerHold) er
 	if _, ok := s.blockers[key]; ok {
 		return faultAt(CodeDuplicateRecord, b.Sequence, idx, "blocker_id", "blocker id already used on this task")
 	}
-	s.blockers[key] = Blocker{
+	put(s, s.blockers, key, Blocker{
 		Key:          key,
 		TaskRevision: e.Task.Revision,
 		Reason:       e.Reason,
 		Actor:        e.Actor,
 		Criterion:    e.Criterion,
 		Held:         o,
-	}
+	})
 	return nil
 }
 
@@ -287,6 +287,6 @@ func (s *state) clear(b model.Bundle, idx int, o Origin, e *model.BlockerClear) 
 	witness := e.ResolvingWitness
 	held.Cleared = &o
 	held.Witness = &witness
-	s.blockers[held.Key] = held
+	put(s, s.blockers, held.Key, held)
 	return nil
 }

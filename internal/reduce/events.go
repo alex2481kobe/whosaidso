@@ -51,7 +51,7 @@ func (s *state) route(b model.Bundle, idx int, e model.TypedEvent) error {
 		if _, ok := s.sources[key]; ok {
 			return faultAt(CodeDuplicateRecord, b.Sequence, idx, "source_id", "source already captured")
 		}
-		s.sources[key] = Source{Key: key, Intake: *t, Origin: o}
+		put(s, s.sources, key, Source{Key: key, Intake: *t, Origin: o})
 		return nil
 
 	case *model.InvocationStart:
@@ -89,8 +89,8 @@ func (s *state) create(b model.Bundle, idx int, o Origin, kind model.Kind, id mo
 	key := RecordKey{Project: b.Project, ID: id, Revision: 1}
 	r := Record{Key: key, Kind: kind, Provenance: p, Origin: o}
 	fill(&r)
-	s.records[key] = r
-	s.current[who] = 1
+	put(s, s.records, key, r)
+	put(s, s.current, who, 1)
 	if kind == model.Task {
 		return s.checkPrerequisites(b, idx, *r.Task)
 	}
@@ -124,8 +124,8 @@ func (s *state) amend(b model.Bundle, idx int, o Origin, kind model.Kind, target
 			return err
 		}
 	}
-	s.records[key] = r
-	s.current[who] = key.Revision
+	put(s, s.records, key, r)
+	put(s, s.current, who, key.Revision)
 	if kind == model.Task {
 		return s.checkPrerequisites(b, idx, *r.Task)
 	}
@@ -148,7 +148,7 @@ func (s *state) invocationStart(b model.Bundle, idx int, o Origin, e *model.Invo
 	if err := s.checkStartFrozen(b, idx, e.Envelope); err != nil {
 		return err
 	}
-	s.invocations[key] = Invocation{Key: key, Attempt: owner, Start: e.Envelope, Started: o}
+	put(s, s.invocations, key, Invocation{Key: key, Attempt: owner, Start: e.Envelope, Started: o})
 	return nil
 }
 
@@ -190,7 +190,7 @@ func (s *state) invocationSeal(b model.Bundle, idx int, o Origin, e *model.Invoc
 	seal := e.Envelope
 	inv.Seal = &seal
 	inv.Sealed = &o
-	s.invocations[key] = inv
+	put(s, s.invocations, key, inv)
 	return nil
 }
 
@@ -234,7 +234,7 @@ func (s *state) criterionFix(b model.Bundle, idx int, o Origin, e *model.Criteri
 	if err := s.checkPacketAuthor(b, idx, e.Author, "author"); err != nil {
 		return err
 	}
-	s.criteria[key] = Criterion{Key: key, Fix: *e, Origin: o, RecordedAt: b.RecordedAt.UTC()}
+	put(s, s.criteria, key, Criterion{Key: key, Fix: *e, Origin: o, RecordedAt: b.RecordedAt.UTC()})
 	return nil
 }
 
@@ -253,8 +253,8 @@ func (s *state) reviewAdmit(b model.Bundle, idx int, o Origin, e *model.ReviewAd
 		}
 		// Validation makes authors cover exactly the reviewed packets.
 		author := e.Authors[p.CommandID]
-		s.reviews[key] = Review{Key: key, Packet: p, Outcome: e.Outcome, Actor: e.Actor, Reason: e.Reason, Origin: o,
-			SelfAdmission: selfAdmission(author, e.Actor), Invocations: invocations, Author: author}
+		put(s, s.reviews, key, Review{Key: key, Packet: p, Outcome: e.Outcome, Actor: e.Actor, Reason: e.Reason, Origin: o,
+			SelfAdmission: selfAdmission(author, e.Actor), Invocations: invocations, Author: author})
 	}
 	s.attributeEvents(b, e)
 	return nil
