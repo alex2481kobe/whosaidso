@@ -172,9 +172,6 @@ func HomeHoldsKeptArtifacts(ctx context.Context, home store.Project, state store
 	citers := map[model.Digest][]string{}
 	var missing []model.Digest
 	for _, bundle := range bundles {
-		if _, aside := snapshot.SetAsideBundle(bundle.Ref()); aside {
-			continue // kept but never applied: it keeps no artifact
-		}
 		for i, raw := range bundle.Events {
 			event, err := model.DecodeEvent(raw)
 			if err != nil {
