@@ -144,10 +144,6 @@ func TestLedgerRefusesBrokenRelationshipsBeforeReturningOrAppendingAPrefix(t *te
 			b[1].Sequence = 3
 			ledgerWrite(t, ledgerPath(t, p, 2, b[1].CommandID), b[1])
 		}},
-		{"two commands claim one sequence", "ledger-fork", func(t *testing.T, p store.Project, b []model.Bundle) {
-			b[1].CommandID = ledgerID(99)
-			ledgerWrite(t, ledgerPath(t, p, 2, b[1].CommandID), b[1])
-		}},
 		{"a middle sequence is absent", "ledger-discontinuity", func(t *testing.T, p store.Project, b []model.Bundle) {
 			if err := os.Remove(ledgerPath(t, p, 2, b[1].CommandID)); err != nil {
 				t.Fatal(err)

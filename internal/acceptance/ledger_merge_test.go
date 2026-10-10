@@ -38,11 +38,22 @@ func TestLedgerMergeIndependentBranchesReadAndKeepEveryRecord(t *testing.T) {
 		mwWantRecords(t, m, baseClaim, claimA, claimA2, claimB)
 		// The canonical order is sequence, then command id; recorded time and
 		// the branch a bundle came from decide nothing.
+		fileSeq := map[model.ID]uint64{}
+		for name := range mwBundles(m) {
+			if mm := flowBundleName.FindStringSubmatch(name); mm != nil {
+				fileSeq[model.ID(mm[2])], _ = strconv.ParseUint(mm[1], 10, 64)
+			}
+		}
 		var seqs []uint64
 		var ids []model.ID
 		for _, ev := range flowList(flowDecode(t, got["history --json"]), "events") {
-			s, _ := strconv.ParseUint(flowStr(ev, "origin", "sequence"), 10, 64)
-			seqs, ids = append(seqs, s), append(ids, model.ID(flowStr(ev, "command_id")))
+			// origin.sequence is a position in the replayed order; the bundle's
+			// own sequence is in its file name.
+			id := model.ID(flowStr(ev, "command_id"))
+			seqs, ids = append(seqs, fileSeq[id]), append(ids, id)
+		}
+		if len(ids) < 8 {
+			t.Fatalf("history lists %d events, want those of all 4 bundles", len(ids))
 		}
 		for i := 1; i < len(ids); i++ {
 			if seqs[i] < seqs[i-1] || (seqs[i] == seqs[i-1] && ids[i] < ids[i-1]) {

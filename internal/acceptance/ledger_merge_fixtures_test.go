@@ -198,7 +198,12 @@ func (w *flowWorld) mwAdmit(events ...model.TypedEvent) model.ID {
 }
 
 func (w *flowWorld) mwReviseEvent(claim model.ID, assertion string) *model.ClaimRevise {
-	return &model.ClaimRevise{Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Target: w.ref(claim, 1),
+	return w.mwReviseAt(claim, 1, assertion)
+}
+
+// mwReviseAt revises the claim from the given revision.
+func (w *flowWorld) mwReviseAt(claim model.ID, revision model.Revision, assertion string) *model.ClaimRevise {
+	return &model.ClaimRevise{Provenance: model.Provenance{SourceRefs: []model.ArtifactRef{}}, Target: w.ref(claim, revision),
 		Replacement: w.mwClaimEvent(claim, assertion).Spec}
 }
 

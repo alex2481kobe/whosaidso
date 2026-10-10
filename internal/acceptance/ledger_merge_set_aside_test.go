@@ -7,6 +7,7 @@ package acceptance_test
 
 import (
 	"bytes"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -32,6 +33,107 @@ func mwAsserted(t *testing.T, w *flowWorld, id model.ID) {
 			}
 		}
 	}
+	mwHistoryMarks(t, w, id)
+}
+
+// mwHistoryMarks fails unless history marks the events of the set-aside bundle
+// in --json (a set_aside object on its rows) and in the text (a SET ASIDE line
+// after its event line).
+func mwHistoryMarks(t *testing.T, w *flowWorld, id model.ID) {
+	t.Helper()
+	out, err := w.cli(nil, "history", "--json")
+	if err != nil {
+		t.Errorf("whosaidso history --json: %v", err)
+		return
+	}
+	marked := false
+	for _, row := range flowList(flowDecode(t, out), "events") {
+		if flowStr(row, "command_id") == string(id) && flowGet(row, "set_aside") != nil {
+			marked = true
+		}
+	}
+	if !marked {
+		t.Errorf("whosaidso history --json lists no event of the set-aside bundle %s with a set_aside mark", id)
+	}
+	text, err := w.cli(nil, "history")
+	if err != nil {
+		t.Errorf("whosaidso history: %v", err)
+		return
+	}
+	lines := strings.Split(string(text), "\n")
+	textMarked := false
+	for i, line := range lines {
+		if strings.Contains(line, string(id)) && i+1 < len(lines) && strings.Contains(strings.ToUpper(lines[i+1]), "SET ASIDE") {
+			textMarked = true
+		}
+	}
+	if !textMarked {
+		t.Errorf("whosaidso history marks no event line of the set-aside bundle %s with SET ASIDE:\n%s", id, text)
+	}
+}
+
+// mwOnlyMarked fails unless history --json marks the events of exactly these
+// bundles as set aside: applied bundles are never marked.
+func mwOnlyMarked(t *testing.T, w *flowWorld, ids ...model.ID) {
+	t.Helper()
+	out, err := w.cli(nil, "history", "--json")
+	if err != nil {
+		t.Fatalf("whosaidso history --json: %v", err)
+	}
+	got := map[string]bool{}
+	for _, row := range flowList(flowDecode(t, out), "events") {
+		if flowGet(row, "set_aside") != nil {
+			got[flowStr(row, "command_id")] = true
+		}
+	}
+	want := map[string]bool{}
+	for _, id := range ids {
+		want[string(id)] = true
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("history marks the events of bundles %v as set aside, want exactly %v; an applied bundle must never be marked", got, want)
+	}
+}
+
+// A bundle that repeats another's events at the same sequence under a new
+// command id is a valid split whose later bundle, in canonical order, is set
+// aside: its events duplicate the other's. Which one is later is the command
+// id's order and nothing else.
+func TestLedgerMergeCopiedBundleAtTheSameSequenceSetsTheLaterOneAside(t *testing.T) {
+	for _, copySortsLater := range []bool{true, false} {
+		name := "copy_sorts_later"
+		if !copySortsLater {
+			name = "copy_sorts_earlier"
+		}
+		t.Run(name, func(t *testing.T) {
+			w := mwWorld(t, 100)
+			w.mwClaim("the shared base claim")
+			claim := w.mwClaim("admitted once, then copied")
+			files := mwFiles(w)
+			original := files[len(files)-1]
+			originalID := model.ID(original[9 : len(original)-5])
+			copyID := recID(990) // sorts after every id this fixture mints
+			if !copySortsLater {
+				copyID = recID(1)
+			}
+			name, err := model.BundleName(2, copyID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			mwEdit(t, w, original, name, func(f map[string]any) { f["command_id"] = string(copyID) })
+			mwReadsOK(t, w, "an admission and its copy at one sequence")
+			mwWantRecords(t, w, claim)
+			later := copyID
+			if !copySortsLater {
+				later = originalID
+			}
+			if got := mwRecords(t, w)[claim]; got[1] != "1" {
+				t.Errorf("the claim is at revision %s, want its single revision 1: exactly one copy applies", got[1])
+			}
+			mwAsserted(t, w, later)
+			mwOnlyMarked(t, w, later)
+		})
+	}
 }
 
 func TestLedgerMergeSameRecordRevisedOnBothBranchesSetsExactlyOneAside(t *testing.T) {
@@ -56,6 +158,7 @@ func TestLedgerMergeSameRecordRevisedOnBothBranchesSetsExactlyOneAside(t *testin
 			t.Errorf("claim reads %q at revision %s, want the earlier bundle's %q as revision 2; exactly one revision may apply", rec[0], rec[1], "revised on branch A")
 		}
 		mwAsserted(t, m, revB)
+		mwOnlyMarked(t, m, revB)
 	}
 }
 
@@ -109,6 +212,7 @@ func TestLedgerMergeBundleDependingOnSetAsideBundleIsSetAsideToo(t *testing.T) {
 	}
 	mwAsserted(t, m, revB)
 	mwAsserted(t, m, followB)
+	mwOnlyMarked(t, m, revB, followB)
 }
 
 // One machine's intake is shared by every branch it works on, so the same
