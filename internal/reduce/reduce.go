@@ -43,6 +43,7 @@ type state struct {
 	eventPackets map[Origin]ReviewKey // accepted event -> the packet that carried it
 	sources      map[SourceKey]Source
 	lineage      Lineage
+	setAside     map[model.BundleRef]SetAside
 	events       map[Origin]model.TypedEvent
 	log          eventLog // events' origins in ledger order, by type
 
@@ -73,6 +74,7 @@ func newState() *state {
 		eventPackets:      map[Origin]ReviewKey{},
 		sources:           map[SourceKey]Source{},
 		lineage:           newLineage(),
+		setAside:          map[model.BundleRef]SetAside{},
 		events:            map[Origin]model.TypedEvent{},
 		reverseRecord:     map[RecordKey][]Referrer{},
 		reverseCriterion:  map[CriterionKey][]Referrer{},
@@ -121,6 +123,7 @@ func (s *state) clone() *state {
 		eventPackets:      copyMap(s.eventPackets),
 		sources:           copyMap(s.sources),
 		lineage:           s.lineage.clone(),
+		setAside:          copyMap(s.setAside),
 		events:            copyMap(s.events),
 		log:               s.log.fork(),
 		reverseRecord:     copyReferrers(s.reverseRecord),
@@ -203,14 +206,34 @@ func (s *state) apply(b model.Bundle) error {
 	if err := s.checkEnvelope(b); err != nil {
 		return err
 	}
-	if _, err := s.lineage.add(b); err != nil {
-		return err
-	}
-	facts, err := indexBundle(b, uint64(s.watermark.Bundles)+1)
+	place, err := s.lineage.add(b)
 	if err != nil {
 		return err
 	}
 	s.project = b.Project
+	if err := s.fold(b, place); err != nil {
+		return err
+	}
+	// The watermark is the prefix read, set-aside bundles included: it names
+	// the canonical last bundle and counts every bundle and event read.
+	s.watermark = Watermark{
+		Sequence:   b.Sequence,
+		CommandID:  b.CommandID,
+		RecordedAt: b.RecordedAt.UTC(),
+		Bundles:    s.watermark.Bundles + 1,
+		Events:     s.watermark.Events + len(b.Events),
+	}
+	return nil
+}
+
+// applyEvents runs every semantic rule on b's events and applies them, or
+// returns the first refusal. On a refusal the state is partly written, so a
+// caller that keeps going must have run it on a fork.
+func (s *state) applyEvents(b model.Bundle) error {
+	facts, err := indexBundle(b, uint64(s.watermark.Bundles)+1)
+	if err != nil {
+		return err
+	}
 	s.bundle = facts
 	defer func() { s.bundle = nil }()
 	for i, typed := range facts.events {
@@ -231,13 +254,6 @@ func (s *state) apply(b model.Bundle) error {
 		s.events[origin] = typed
 		s.log.add(origin, typed)
 		s.recordReferrers(b, i, typed, refs)
-	}
-	s.watermark = Watermark{
-		Sequence:   b.Sequence,
-		CommandID:  b.CommandID,
-		RecordedAt: b.RecordedAt.UTC(),
-		Bundles:    s.watermark.Bundles + 1,
-		Events:     s.watermark.Events + len(b.Events),
 	}
 	return nil
 }

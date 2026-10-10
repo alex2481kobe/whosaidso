@@ -27,7 +27,7 @@ import (
 // format whose run outputs are named inside their run, so an image of a
 // pre-migration ledger is refused and rebuilt (and the old ledger refused)
 // rather than answering from old events. /4 carries the ledger's lineage (its
-// chain structure) in place of a bare command index.
+// chain structure) in place of a bare command index, and its set-aside bundles.
 const snapshotFormat = "whosaidso-snapshot/4"
 
 // persisted names every state field an image carries, in encoding order. The
@@ -39,7 +39,7 @@ func (s *state) persisted() []persistedField {
 		{"records", &s.records}, {"current", &s.current}, {"closed", &s.closed},
 		{"attempts", &s.attempts}, {"attemptOwner", &s.attemptOwner}, {"blockers", &s.blockers},
 		{"invocations", &s.invocations}, {"criteria", &s.criteria}, {"reviews", &s.reviews},
-		{"eventPackets", &s.eventPackets}, {"sources", &s.sources},
+		{"eventPackets", &s.eventPackets}, {"sources", &s.sources}, {"setAside", &s.setAside},
 		{"events", &s.events},
 		{"log.all", &s.log.all}, {"log.losses", &s.log.losses}, {"log.proofs", &s.log.proofs},
 		{"log.decisionDisposals", &s.log.decisionDisposals}, {"log.supersessions", &s.log.supersessions},

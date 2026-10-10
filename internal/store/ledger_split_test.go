@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
 )
@@ -154,4 +155,29 @@ func TestSplitChainRefusesBrokenStructure(t *testing.T) {
 			requireFault(t, err, tc.code)
 		})
 	}
+}
+
+// splitTask is a folding bundle (one valid task) published directly, as a
+// merge leaves another branch's admission in the folder.
+func splitTask(t *testing.T, p Project, n int, sequence uint64, command, predecessor model.ID) {
+	t.Helper()
+	b, err := cacheTask(n)(nil)
+	must(t, err)
+	b.Version, b.Project, b.Sequence, b.CommandID, b.Predecessor = model.WireVersion, p.ID, sequence, command, predecessor
+	b.RequestDigest, b.RecordedAt = digestFor(n), time.Date(2026, 10, 9, 0, 0, n, 0, time.UTC)
+	data, err := model.Encode(b)
+	must(t, err)
+	writeLedgerFile(t, p, mustName(t, sequence, command), data)
+}
+
+func TestAMergeThatInsertsABundleMidOrderInvalidatesTheCachedPrefix(t *testing.T) {
+	p := warmProject(t) // sequences 1-4, imaged
+	// The other branch admitted from sequence 2; its command id sorts before
+	// this branch's sequence 3, so it lands inside the imaged prefix.
+	splitTask(t, p, 77, 3, admissionID(0), admissionID(2))
+	s := requireReplayed(t, p, 0)
+	if got := len(s.Snapshot().Records()); got != 5 {
+		t.Fatalf("the merged ledger holds 5 tasks, the answer %d", got)
+	}
+	requireReplayed(t, p, 5) // and the rebuilt image serves the next read
 }

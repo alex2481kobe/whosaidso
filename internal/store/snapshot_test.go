@@ -224,8 +224,8 @@ func must(t testing.TB, err error) {
 func TestABrokenLedgerFailsExactlyAsFullReplayDoes(t *testing.T) {
 	cases := map[string]func(t *testing.T, p Project){
 		"gap": func(t *testing.T, p Project) { must(t, os.Remove(ledgerPath(t, p, 2, admissionID(2)))) },
-		"fork": func(t *testing.T, p Project) {
-			writeLedgerFile(t, p, mustName(t, 4, admissionID(99)), rawBundle(t, p, 4, admissionID(99), admissionID(3)))
+		"second genesis": func(t *testing.T, p Project) {
+			writeLedgerFile(t, p, mustName(t, 1, admissionID(99)), rawBundle(t, p, 1, admissionID(99), ""))
 		},
 		"junk": func(t *testing.T, p Project) { writeLedgerFile(t, p, "notes.txt", []byte("x")) },
 		"corrupt prefix": func(t *testing.T, p Project) {

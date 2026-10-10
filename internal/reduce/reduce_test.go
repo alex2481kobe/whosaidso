@@ -158,6 +158,9 @@ type ledgerBuilder struct {
 	// holders are the attempt actors seen so far, so a receipt's default
 	// packet author is its attempt's holder.
 	holders map[model.ID]model.Actor
+	// names offsets the numbers in minted command and packet ids, so two
+	// branches of one ledger (setaside_test.go) mint different ones.
+	names uint64
 }
 
 func newLedger() *ledgerBuilder { return &ledgerBuilder{project: testProject} }
@@ -165,7 +168,7 @@ func newLedger() *ledgerBuilder { return &ledgerBuilder{project: testProject} }
 func (l *ledgerBuilder) add(t *testing.T, events ...model.TypedEvent) model.Bundle {
 	t.Helper()
 	l.seq++
-	packet := model.PacketRef{CommandID: newID(fmt.Sprintf("PKT%d", l.seq)), Digest: newDigest(fmt.Sprintf("packet-%d", l.seq))}
+	packet := model.PacketRef{CommandID: newID(fmt.Sprintf("PKT%d", l.seq+l.names)), Digest: newDigest(fmt.Sprintf("packet-%d", l.seq+l.names))}
 	if l.holders == nil {
 		l.holders = map[model.ID]model.Actor{}
 	}
@@ -178,7 +181,7 @@ func (l *ledgerBuilder) add(t *testing.T, events ...model.TypedEvent) model.Bund
 		}
 	}
 	if !l.bare {
-		events = attributeFixtureWith(l.seq, events, l.holders)
+		events = attributeFixtureWith(l.seq+l.names, events, l.holders)
 	}
 	raw := make([]model.Event, 0, len(events))
 	for _, e := range events {
@@ -192,9 +195,9 @@ func (l *ledgerBuilder) add(t *testing.T, events ...model.TypedEvent) model.Bund
 		Version:       model.WireVersion,
 		Project:       l.project,
 		Sequence:      l.seq,
-		CommandID:     newID(fmt.Sprintf("CMD%d", l.seq)),
+		CommandID:     newID(fmt.Sprintf("CMD%d", l.seq+l.names)),
 		Predecessor:   l.prev,
-		RequestDigest: newDigest(fmt.Sprintf("request-%d", l.seq)),
+		RequestDigest: newDigest(fmt.Sprintf("request-%d", l.seq+l.names)),
 		Admitter:      model.Actor{ID: "coordinator"},
 		RecordedAt:    baseTime.Add(time.Duration(l.seq) * time.Minute),
 		Packets:       []model.PacketRef{packet},
