@@ -58,7 +58,10 @@ func TestTouchesJudgesARunAsAppliedHistoryDoes(t *testing.T) {
 		t.Fatal("control: a run under an attempt nobody admitted is about no task")
 	}
 	fix := &model.Correction{Target: model.CorrectionTarget{Kind: "criterion", Criterion: ptrProof(proofCriterion(claim))},
-		AffectedRevisions: []model.RecordRef{}, Reason: "wrong unit", CorrectiveRef: blobRef("unit")}
+		AffectedRevisions: []model.RecordRef{ref(newID("TSKA"), 1)}, Reason: "wrong unit", CorrectiveRef: blobRef("unit")}
+	if refs, err := model.SameProjectReferences(fix, testProject); err != nil || len(refs) != 2 {
+		t.Fatalf("control: the correction names its criterion and one other record: %v %v", refs, err)
+	}
 	if s.Touches(fix, Ident{Project: testProject, ID: claim.RecordID}) {
 		t.Fatal("a correction naming only a criterion is not in its claim's applied history, so not in a set-aside one")
 	}

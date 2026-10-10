@@ -123,9 +123,11 @@ func (l *Lineage) reaches(n lineageNode, pos uint64) bool {
 	if pos > n.Position {
 		return false
 	}
-	mark, own := l.order[pos-1].Mark, l.order[n.Position-1].Mark
-	if mark.Chain == own.Chain {
-		return mark.Index <= own.Index
+	// A chain's members are numbered in position order, so a member before n
+	// on n's own chain is one n descends from.
+	mark := l.order[pos-1].Mark
+	if mark.Chain == l.order[n.Position-1].Mark.Chain {
+		return true
 	}
 	clock := l.clockOf(n)
 	i := sort.Search(len(clock), func(i int) bool { return clock[i].Chain >= mark.Chain })
