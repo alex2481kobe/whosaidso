@@ -153,9 +153,6 @@ func load(project Project) (State, bool, error) {
 		usable = false
 	}
 	for i, f := range files {
-		if f.sequence != uint64(i)+1 {
-			return State{}, false, errImage
-		}
 		raw, err := os.ReadFile(filepath.Join(project.Ledger, f.name))
 		if err != nil {
 			return State{}, false, err
@@ -228,22 +225,11 @@ func decodeRange(project Project, files []selectedFile, data [][]byte, from int)
 	return out, nil
 }
 
-// decodeSelected makes readLedger's per-bundle checks against the selection:
-// the body agrees with its filename and project, and names the preceding
-// file's command as predecessor. The reducer then refuses a repeated command.
+// decodeSelected makes readLedger's per-file checks against the selection:
+// the body agrees with its filename and project. The chain is the fold's to
+// check, through the same lineage readLedger uses.
 func decodeSelected(project Project, files []selectedFile, i int, raw []byte) (model.Bundle, error) {
-	path := filepath.Join(project.Ledger, files[i].name)
-	b, err := model.DecodeBundle(raw)
-	if err != nil {
-		return model.Bundle{}, storeFault("ledger-corrupt", path, err.Error())
-	}
-	if b.Sequence != files[i].sequence || b.CommandID != files[i].command || b.Project != project.ID {
-		return model.Bundle{}, storeFault("ledger-corrupt", path, "the bundle body disagrees with its filename or project")
-	}
-	if i > 0 && b.Predecessor != files[i-1].command {
-		return model.Bundle{}, storeFault("ledger-discontinuity", path, "predecessor does not name the preceding bundle")
-	}
-	return b, nil
+	return decodeFile(project, files[i].ledgerFile, filepath.Join(project.Ledger, files[i].name), raw)
 }
 
 // The prefix digest chains every file's name and content hash in sequence

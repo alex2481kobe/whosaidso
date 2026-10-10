@@ -14,6 +14,8 @@ import (
 const (
 	// CodeLedgerDiscontinuity is a broken sequence or predecessor chain.
 	CodeLedgerDiscontinuity = "ledger-discontinuity"
+	// CodeLedgerFork is one position in the chain published twice.
+	CodeLedgerFork = "ledger-fork"
 	// CodeProjectMismatch is a bundle from another project in this ledger.
 	CodeProjectMismatch = "project-mismatch"
 	// CodeDuplicateCommand is a second bundle under an admitted transaction id.

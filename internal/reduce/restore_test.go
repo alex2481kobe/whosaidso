@@ -78,11 +78,11 @@ func TestPersistedFieldsCoverTheWholeState(t *testing.T) {
 	st := reflect.TypeOf(state{})
 	for i := 0; i < st.NumField(); i++ {
 		name := st.Field(i).Name
-		if name == "log" {
+		if name == "log" || name == "lineage" {
 			lt := st.Field(i).Type
 			for j := 0; j < lt.NumField(); j++ {
-				if !named["log."+lt.Field(j).Name] {
-					t.Errorf("event log list %s is neither persisted nor transient", lt.Field(j).Name)
+				if !named[name+"."+lt.Field(j).Name] {
+					t.Errorf("%s field %s is neither persisted nor transient", name, lt.Field(j).Name)
 				}
 			}
 			continue
@@ -123,7 +123,7 @@ func TestRestoreAtEverySplitEqualsReplay(t *testing.T) {
 
 // The golden ledger's image is pinned. A change that moves it must also move
 // snapshotFormat or the state's types, so older images are refused.
-const goldenImageSHA256 = "efecf587712934a86e835bfb3e544010235d3e06355a102e78456d58ee601c5d" // repinned for the module path github.com/alex2481kobe/whosaidso: the shape fingerprint hashes package paths, so the snapshot version changes and old caches rebuild
+const goldenImageSHA256 = "f48c8d6ac9e067d367628ea3f812dca91985db547ec8f62dc4b4ad04b7ce9029" // repinned for snapshot format /4: the state carries the ledger's lineage
 
 func TestGoldenImageIsPinned(t *testing.T) {
 	image := mustEncode(t, mustReplay(t, goldenLedger(t).bundles()))

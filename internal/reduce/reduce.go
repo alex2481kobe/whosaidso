@@ -42,7 +42,7 @@ type state struct {
 	reviews      map[ReviewKey]Review
 	eventPackets map[Origin]ReviewKey // accepted event -> the packet that carried it
 	sources      map[SourceKey]Source
-	commands     map[model.ID]uint64
+	lineage      Lineage
 	events       map[Origin]model.TypedEvent
 	log          eventLog // events' origins in ledger order, by type
 
@@ -72,7 +72,7 @@ func newState() *state {
 		reviews:           map[ReviewKey]Review{},
 		eventPackets:      map[Origin]ReviewKey{},
 		sources:           map[SourceKey]Source{},
-		commands:          map[model.ID]uint64{},
+		lineage:           newLineage(),
 		events:            map[Origin]model.TypedEvent{},
 		reverseRecord:     map[RecordKey][]Referrer{},
 		reverseCriterion:  map[CriterionKey][]Referrer{},
@@ -120,7 +120,7 @@ func (s *state) clone() *state {
 		reviews:           copyMap(s.reviews),
 		eventPackets:      copyMap(s.eventPackets),
 		sources:           copyMap(s.sources),
-		commands:          copyMap(s.commands),
+		lineage:           s.lineage.clone(),
 		events:            copyMap(s.events),
 		log:               s.log.fork(),
 		reverseRecord:     copyReferrers(s.reverseRecord),
@@ -185,10 +185,6 @@ func (s *state) checkEnvelope(b model.Bundle) error {
 	if !model.ValidID(b.CommandID) {
 		return faultAt(CodeInvalidField, b.Sequence, -1, "bundle.command_id", "not a ULID")
 	}
-	if seq, ok := s.commands[b.CommandID]; ok {
-		return faultAt(CodeDuplicateCommand, b.Sequence, -1, "bundle.command_id",
-			fmt.Sprintf("transaction id already admitted at sequence %d", seq))
-	}
 	if !model.ValidDigest(b.RequestDigest) {
 		return faultAt(CodeInvalidField, b.Sequence, -1, "bundle.request_digest", "not lowercase sha-256 hex")
 	}
@@ -200,29 +196,14 @@ func (s *state) checkEnvelope(b model.Bundle) error {
 	if len(b.Events) == 0 {
 		return faultAt(CodeInvalidField, b.Sequence, -1, "bundle.events", "an empty write is not a fact")
 	}
-
-	// Contiguity, not merely monotonicity. A gap means a bundle we never read,
-	// and a fold over an incomplete prefix is wrong in a way no later event
-	// repairs.
-	want := s.watermark.Sequence + 1
-	if b.Sequence != want {
-		return faultAt(CodeLedgerDiscontinuity, b.Sequence, -1, "bundle.sequence",
-			fmt.Sprintf("expected sequence %d", want))
-	}
-	if want == 1 {
-		if b.Predecessor != "" {
-			return faultAt(CodeLedgerDiscontinuity, b.Sequence, -1, "bundle.predecessor",
-				"the genesis bundle has no predecessor")
-		}
-	} else if b.Predecessor != s.watermark.CommandID {
-		return faultAt(CodeLedgerDiscontinuity, b.Sequence, -1, "bundle.predecessor",
-			fmt.Sprintf("expected predecessor %s", s.watermark.CommandID))
-	}
 	return nil
 }
 
 func (s *state) apply(b model.Bundle) error {
 	if err := s.checkEnvelope(b); err != nil {
+		return err
+	}
+	if err := s.lineage.add(b); err != nil {
 		return err
 	}
 	facts, err := indexBundle(b)
@@ -251,7 +232,6 @@ func (s *state) apply(b model.Bundle) error {
 		s.log.add(origin, typed)
 		s.recordReferrers(b, i, typed, refs)
 	}
-	s.commands[b.CommandID] = b.Sequence
 	s.watermark = Watermark{
 		Sequence:   b.Sequence,
 		CommandID:  b.CommandID,

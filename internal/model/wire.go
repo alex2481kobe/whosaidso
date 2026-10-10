@@ -131,6 +131,26 @@ type Bundle struct {
 	Events        []Event     `json:"events"`
 }
 
+// BundleRef names one published bundle by the two halves of its filename.
+type BundleRef struct {
+	Sequence  uint64 `json:"sequence"`
+	CommandID ID     `json:"command_id"`
+}
+
+// Ref is the bundle's own name.
+func (b Bundle) Ref() BundleRef { return BundleRef{Sequence: b.Sequence, CommandID: b.CommandID} }
+
+// Before is the ledger's one canonical order: sequence ascending, then command
+// id ascending. It reads only what a filename says, so the order depends on the
+// set of files alone and never on which machine, directory listing or merge
+// produced it.
+func (r BundleRef) Before(other BundleRef) bool {
+	if r.Sequence != other.Sequence {
+		return r.Sequence < other.Sequence
+	}
+	return r.CommandID < other.CommandID
+}
+
 // Packet and Bundle normalize their timestamps to UTC when encoding. Without
 // this the SAME INSTANT captured in two zones produced different bytes and
 // different digests - one moment with two identities, which breaks the rule

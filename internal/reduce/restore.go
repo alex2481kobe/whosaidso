@@ -26,19 +26,20 @@ import (
 // to the field list below, or to the event format an image carries: /3 is the
 // format whose run outputs are named inside their run, so an image of a
 // pre-migration ledger is refused and rebuilt (and the old ledger refused)
-// rather than answering from old events.
-const snapshotFormat = "whosaidso-snapshot/3"
+// rather than answering from old events. /4 carries the ledger's lineage (its
+// chain structure) in place of a bare command index.
+const snapshotFormat = "whosaidso-snapshot/4"
 
 // persisted names every state field an image carries, in encoding order. The
 // transient ones (the candidate inventory and a dry run's refusal collector)
 // belong to one Apply call and are never part of a state at rest.
 func (s *state) persisted() []persistedField {
-	return []persistedField{
+	return append([]persistedField{
 		{"project", &s.project}, {"watermark", &s.watermark},
 		{"records", &s.records}, {"current", &s.current}, {"closed", &s.closed},
 		{"attempts", &s.attempts}, {"attemptOwner", &s.attemptOwner}, {"blockers", &s.blockers},
 		{"invocations", &s.invocations}, {"criteria", &s.criteria}, {"reviews", &s.reviews},
-		{"eventPackets", &s.eventPackets}, {"sources", &s.sources}, {"commands", &s.commands},
+		{"eventPackets", &s.eventPackets}, {"sources", &s.sources},
 		{"events", &s.events},
 		{"log.all", &s.log.all}, {"log.losses", &s.log.losses}, {"log.proofs", &s.log.proofs},
 		{"log.decisionDisposals", &s.log.decisionDisposals}, {"log.supersessions", &s.log.supersessions},
@@ -46,7 +47,7 @@ func (s *state) persisted() []persistedField {
 		{"log.disposals", &s.log.disposals},
 		{"reverseRecord", &s.reverseRecord}, {"reverseCriterion", &s.reverseCriterion},
 		{"reverseInvocation", &s.reverseInvocation}, {"reverseBlocker", &s.reverseBlocker},
-	}
+	}, s.lineage.fields("lineage")...)
 }
 
 type persistedField struct {

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
 )
 
 // lockName is the admission lock's file, inside the ledger directory so one
@@ -45,9 +46,9 @@ type ledgerFile struct {
 }
 
 // inventory enumerates the ledger exactly once and returns its published
-// bundle files sorted by the sequence their names claim. It refuses every entry
-// a reader cannot account for and every doubly published sequence; it reads no
-// bundle, so gaps and bodies are the caller's to check, in sequence order.
+// bundle files in canonical order by what their names claim. It refuses every
+// entry a reader cannot account for; it reads no bundle, so the chain and the
+// bodies are the caller's to check, in that order.
 func inventory(project Project) ([]ledgerFile, error) {
 	if project.ID == "" {
 		return nil, storeFault("invalid-field", "project.id", "a ledger read needs the declared project id to check what it reads")
@@ -101,21 +102,7 @@ func inventory(project Project) ([]ledgerFile, error) {
 		}
 		files = append(files, ledgerFile{sequence: sequence, command: command, name: name})
 	}
-	sort.Slice(files, func(i, j int) bool {
-		if files[i].sequence != files[j].sequence {
-			return files[i].sequence < files[j].sequence
-		}
-		return files[i].name < files[j].name
-	})
-	for i := 1; i < len(files); i++ {
-		if files[i].sequence == files[i-1].sequence {
-			// The exact race the lock exists to prevent: two writers read the
-			// same tail and both published, under different filenames, so
-			// neither overwrote the other. Name both files and refuse.
-			return nil, storeFault("ledger-fork", filepath.Join(dir, files[i].name),
-				"sequence "+strconv.FormatUint(files[i].sequence, 10)+" is published twice, also as "+files[i-1].name)
-		}
-	}
+	sort.Slice(files, func(i, j int) bool { return files[i].ref().Before(files[j].ref()) })
 	return files, nil
 }
 
@@ -123,10 +110,10 @@ func inventory(project Project) ([]ledgerFile, error) {
 // and validates it.
 //
 // Enumeration order decides nothing. Filesystems return directory entries in
-// whatever order suits their on-disk structure, so the sequence number in each
-// filename is sorted numerically and then checked against the body. Two files
-// claiming one sequence is a fork, which is refused by name rather than
-// resolved by picking whichever the filesystem happened to hand back first.
+// whatever order suits their on-disk structure, so the files are put in the
+// ledger's canonical order by what their names claim, each body is checked
+// against its name, and the chain is checked by the one owner of its
+// structure, reduce.Lineage, the same check every fold makes.
 func readLedger(project Project) ([]model.Bundle, error) {
 	files, err := inventory(project)
 	if err != nil {
@@ -134,55 +121,56 @@ func readLedger(project Project) ([]model.Bundle, error) {
 	}
 	dir := project.Ledger
 	bundles := make([]model.Bundle, 0, len(files))
-	commands := make(map[model.ID]int, len(files))
-	for i, file := range files {
+	var line reduce.Lineage
+	for _, file := range files {
 		path := filepath.Join(dir, file.name)
-		if file.sequence != uint64(i)+1 {
-			// Nothing legitimate creates a hole. Returning the bundles before it
-			// would answer "what is admitted" with a true count of the wrong
-			// thing, so the gap is reported instead of truncated away.
-			return nil, storeFault("ledger-discontinuity", path,
-				"sequence "+strconv.FormatUint(uint64(i)+1, 10)+" is missing")
-		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return nil, storeFault("io", path, err.Error())
 		}
-		bundle, err := model.DecodeBundle(data)
+		bundle, err := decodeFile(project, file, path, data)
 		if err != nil {
-			// A bundle that will not decode is a ledger error. Continuing past
-			// it would replay a ledger that is missing one of its transactions
-			// and report the result as complete.
-			return nil, storeFault("ledger-corrupt", path, err.Error())
+			return nil, err
 		}
-		if bundle.Sequence != file.sequence || bundle.CommandID != file.command {
-			return nil, storeFault("ledger-corrupt", path,
-				"the filename and the bundle body claim different identities")
+		if err := line.Add(bundle); err != nil {
+			return nil, atFile(err, path)
 		}
-		if bundle.Project != project.ID {
-			return nil, storeFault("ledger-corrupt", path,
-				"bundle declares project "+strconv.Quote(string(bundle.Project))+", which is not this ledger's project")
-		}
-		if i > 0 && bundle.Predecessor != bundles[i-1].CommandID {
-			// Sequence alone only counts files. The predecessor is what makes
-			// the chain say which bundle each one was actually appended to.
-			return nil, storeFault("ledger-discontinuity", path,
-				"predecessor does not name the preceding bundle")
-		}
-		if prior, exists := commands[bundle.CommandID]; exists {
-			requests := "matching request digests"
-			if bundles[prior].RequestDigest != bundle.RequestDigest {
-				requests = "different request digests"
-			}
-			return nil, storeFault("ledger-corrupt", path,
-				"command id "+string(bundle.CommandID)+" is published at sequences "+
-					strconv.FormatUint(bundles[prior].Sequence, 10)+" and "+strconv.FormatUint(bundle.Sequence, 10)+
-					" with "+requests+"; admission identity is ambiguous")
-		}
-		commands[bundle.CommandID] = i
 		bundles = append(bundles, bundle)
 	}
 	return bundles, nil
+}
+
+// decodeFile decodes one published bundle and refuses a body that disagrees
+// with its filename or names another project.
+func decodeFile(project Project, file ledgerFile, path string, data []byte) (model.Bundle, error) {
+	bundle, err := model.DecodeBundle(data)
+	if err != nil {
+		// A bundle that will not decode is a ledger error. Continuing past it
+		// would replay a ledger that is missing one of its transactions and
+		// report the result as complete.
+		return model.Bundle{}, storeFault("ledger-corrupt", path, err.Error())
+	}
+	if bundle.Sequence != file.sequence || bundle.CommandID != file.command {
+		return model.Bundle{}, storeFault("ledger-corrupt", path,
+			"the filename and the bundle body claim different identities")
+	}
+	if bundle.Project != project.ID {
+		return model.Bundle{}, storeFault("ledger-corrupt", path,
+			"bundle declares project "+strconv.Quote(string(bundle.Project))+", which is not this ledger's project")
+	}
+	return bundle, nil
+}
+
+// atFile locates a chain fault at the file that broke the chain.
+func atFile(err error, path string) error {
+	if f, ok := err.(*model.Fault); ok {
+		return storeFault(f.Code, path, f.Detail)
+	}
+	return err
+}
+
+func (f ledgerFile) ref() model.BundleRef {
+	return model.BundleRef{Sequence: f.sequence, CommandID: f.command}
 }
 
 // parseBundleName splits a published ledger filename into the identity it

@@ -187,7 +187,8 @@ func TestDuplicateCommandIdentityRefusesReadsRetriesAndAdmissions(t *testing.T) 
 			writeLedgerFile(t, p, filepath.Base(path), data)
 			checkFault := func(err error) {
 				t.Helper()
-				requireFault(t, err, "ledger-corrupt")
+				// The chain's one owner reports it, with the code replay uses.
+				requireFault(t, err, "duplicate-command")
 				var fault *model.Fault
 				if !errors.As(err, &fault) || fault.Path != path ||
 					!strings.Contains(fault.Detail, string(original.CommandID)) ||
