@@ -136,7 +136,9 @@ func bindRefusal(root string, err error) error {
 }
 
 // continues refuses unless every bundle of old is in dest, byte for byte, at
-// the same name: dest's history is old's with only admissions after it.
+// the same name: dest's history holds all of old's. It may hold more, and a
+// branch merged into dest can put some of those between old's bundles in
+// canonical order, so the comparison is by name, never by position.
 func continues(old, dest Project) error {
 	if _, err := readLedger(old); err != nil {
 		return storeFault("home-continuity", old.Ledger, fmt.Sprintf("the old home's history cannot be read, so continuity cannot be compared: %v", err))
@@ -159,9 +161,13 @@ func continues(old, dest Project) error {
 	if len(destFiles) < len(oldFiles) {
 		return broken(fmt.Sprintf("it has %d bundles and the old home has %d", len(destFiles), len(oldFiles)))
 	}
-	for i, file := range oldFiles {
-		if destFiles[i].name != file.name {
-			return broken(fmt.Sprintf("bundle %d is %s here and %s there", i+1, destFiles[i].name, file.name))
+	present := make(map[string]bool, len(destFiles))
+	for _, file := range destFiles {
+		present[file.name] = true
+	}
+	for _, file := range oldFiles {
+		if !present[file.name] {
+			return broken("bundle " + file.name + " is missing")
 		}
 		a, err := os.ReadFile(filepath.Join(old.Ledger, file.name))
 		if err != nil {

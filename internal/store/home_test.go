@@ -182,6 +182,26 @@ func TestMissingHomeRefusesWithoutFallbackOrRecreation(t *testing.T) {
 	requireFault(t, err, "home-unavailable")
 }
 
+// A merged branch can put its bundles between the old home's in canonical
+// order. The old history is still all there, so the move continues it.
+func TestRelocationContinuesIntoAMergeThatSortsBetweenOldBundles(t *testing.T) {
+	old := homeWorld(t)
+	mustBind(t, old, old)
+	opened := mustOpen(t, old)
+	admitSeries(t, opened, 2)
+	if _, err := Transact(context.Background(), opened, admissionID(50), digestFor(50), proposeFor(50)); err != nil {
+		t.Fatal(err)
+	}
+	merged := homeCheckout(t, "team/project")
+	copyLedger(t, old, merged)
+	dest := Project{ID: "team/project", Root: merged, Ledger: filepath.Join(merged, ".whosaidso", "events")}
+	splitBundle(t, dest, 3, admissionID(10), admissionID(2)) // the other branch, sorting before 00000003-...50
+	r, err := Bind(context.Background(), old, merged)
+	if err != nil || r.Continuity != ContinuityContinued || r.Bundles != 4 {
+		t.Fatalf("the merged checkout holds every old bundle and must continue the old home: %+v %v", r, err)
+	}
+}
+
 func TestRelocationChecksContinuity(t *testing.T) {
 	old := homeWorld(t)
 	mustBind(t, old, old)
