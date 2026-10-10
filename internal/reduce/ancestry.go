@@ -36,8 +36,9 @@ type lineageNode struct {
 	// before it.
 	Frontier uint64
 	// Clock names the clock in Lineage.clocks, from 1; 0 is the empty clock.
-	// A clock holds, per chain other than this bundle's own, the highest
-	// member above Frontier this bundle descends from, sorted by chain.
+	// A clock holds, per chain, the highest member above Frontier this bundle
+	// descends from, sorted by chain; its own chain is answered by its mark,
+	// so a mark there is never read.
 	Clock uint32
 }
 
@@ -82,10 +83,6 @@ func (l *Lineage) nodeFor(parents []model.BundleRef, pos uint64, descendsAll boo
 		for _, m := range l.clockOf(pn) {
 			clock = raise(clock, m)
 		}
-	}
-	// Every ancestor on its own chain is an earlier member of it.
-	if i := sort.Search(len(clock), func(i int) bool { return clock[i].Chain >= mark.Chain }); i < len(clock) && clock[i].Chain == mark.Chain {
-		clock = append(clock[:i], clock[i+1:]...)
 	}
 	if len(clock) > 0 {
 		l.clocks = append(l.clocks, clock)
