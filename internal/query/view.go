@@ -191,6 +191,10 @@ func historyView(project store.Project, source Source, h ViewHeader, r ViewReque
 		return nil, err
 	}
 	for position, bundle := range prefix {
+		var aside *reduce.SetAside
+		if v, ok := snapshot.SetAsideBundle(bundle.Ref()); ok {
+			aside = &v
+		}
 		for i, event := range bundle.Events {
 			// The prefix is in canonical order, so its index is the position
 			// every origin in the snapshot carries.
@@ -199,7 +203,7 @@ func historyView(project store.Project, source Source, h ViewHeader, r ViewReque
 				continue
 			}
 			row := Event{Origin: origin, CommandID: bundle.CommandID, Admitter: bundle.Admitter, Packets: bundle.Packets,
-				Event: event, Author: eventAuthor(snapshot, origin, event)}
+				Event: event, Author: eventAuthor(snapshot, origin, event), SetAside: aside}
 			if record, ok := amended[origin]; ok {
 				if amendment, ok := amendmentOf(snapshot, record); ok {
 					row.Amendment = &amendment

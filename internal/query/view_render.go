@@ -125,6 +125,9 @@ func briefTodo(b *briefWriter, a cur) {
 	b.line(0, "totals: tasks", t.at("tasks"), "in flight", t.at("in_flight"), "awaiting acceptance", t.at("awaiting_acceptance"),
 		"blocked", t.at("blocked"), "ready", t.at("ready"), "open decisions", t.at("open_decisions"),
 		"intake unreviewed", t.at("intake_unreviewed"), "correction requested", t.at("intake_correction_requested"), "rejected", t.at("intake_rejected"))
+	if aside := a.at("set_aside"); aside.ok() {
+		briefList(b, 0, "set aside after a merge (kept in the ledger, not applied)", aside, briefSetAside)
+	}
 	briefList(b, 0, "in flight", a.at("in_flight"), briefTodoTask)
 	briefList(b, 0, "awaiting acceptance", a.at("awaiting_acceptance"), briefTodoTask)
 	briefList(b, 0, "blocked", a.at("blocked"), briefTodoTask)
@@ -139,6 +142,13 @@ func briefTodo(b *briefWriter, a cur) {
 		b.line(0, "rejected intake:", n, "(reviewed, nothing owed; whosaidso history lists the reviews)")
 	}
 	briefList(b, 0, "attention", a.at("attention"), briefAttention)
+}
+
+// briefSetAside is one set-aside bundle: which, the fault, what to do.
+func briefSetAside(b *briefWriter, indent int, v cur) {
+	b.line(indent, "sequence", v.at("sequence"), "command", v.at("command_id"), v.at("code"))
+	b.line(indent+1, prefix(v.at("reason")))
+	b.line(indent+1, v.at("next"))
 }
 
 // briefIntake lists the packets_not_accepted packets with one disposition, under

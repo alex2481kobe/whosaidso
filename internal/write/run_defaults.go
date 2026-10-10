@@ -37,6 +37,9 @@ func AdmittedCriteria(state store.State) ([]model.CriterionRef, error) {
 	snapshot := state.Snapshot()
 	var out []model.CriterionRef
 	for _, b := range bundles {
+		if _, aside := snapshot.SetAsideBundle(b.Ref()); aside {
+			continue // its criterion.fix was never applied
+		}
 		for _, raw := range b.Events {
 			if raw.Type != "criterion.fix" {
 				continue

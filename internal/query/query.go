@@ -79,6 +79,7 @@ type Event struct {
 	Event     model.Event         `json:"event"`
 	Author    reduce.PacketAuthor `json:"author"`              // who wrote Event: its packet's author, or a review's own actor
 	Amendment *Amendment          `json:"amendment,omitempty"` // an amending event: what it changed and its review
+	SetAside  *reduce.SetAside    `json:"set_aside,omitempty"` // its bundle is kept but not applied, and why
 }
 type Packet struct {
 	CommandID   model.ID      `json:"command_id"`

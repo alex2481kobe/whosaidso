@@ -24,6 +24,10 @@ type TodoAnswer struct {
 	Attention          []Attention            `json:"attention"`
 	Totals             TodoTotals             `json:"totals"`
 	Omitted            map[string]LimitReport `json:"omitted"`
+	// SetAside lists every bundle replay set aside after a merge. It is absent
+	// when there is none, so a ledger that never clashed answers exactly as
+	// before chains could split.
+	SetAside []SetAsideBundle `json:"set_aside,omitempty"`
 }
 
 // TodoTask is one owed task. Accepter is set for a task awaiting acceptance:
@@ -54,6 +58,7 @@ type TodoTotals struct {
 	IntakeUnreviewed          int `json:"intake_unreviewed"`
 	IntakeCorrectionRequested int `json:"intake_correction_requested"`
 	IntakeRejected            int `json:"intake_rejected"`
+	SetAside                  int `json:"set_aside,omitempty"`
 }
 
 // currentRecords is every current revision, in the snapshot's record order.
@@ -161,5 +166,19 @@ func todoView(project store.Project, s reduce.Snapshot, h ViewHeader, limit int)
 		}
 	}
 	a.Totals.Tasks = len(seen) + report.Omitted
+	for _, v := range s.SetAside() {
+		a.SetAside = append(a.SetAside, SetAsideBundle{SetAside: v, Next: reRecord})
+	}
+	a.Totals.SetAside = len(a.SetAside)
 	return a, nil
 }
+
+// SetAsideBundle is one bundle replay kept but did not apply: the fault that
+// set it aside, and what to do about it.
+type SetAsideBundle struct {
+	reduce.SetAside
+	Next string `json:"next"`
+}
+
+const reRecord = "re-record it: the bundle stays in the ledger and is never applied, so capture its change again " +
+	"against the current records (an amendment from the current revision) and admit it"

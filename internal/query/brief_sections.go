@@ -108,6 +108,9 @@ func briefEvent(b *briefWriter, indent int, e cur) {
 	pieces := []any{"sequence", e.at("origin", "sequence"), "event", e.at("origin", "event_index"), e.at("event", "type"), "command", e.at("command_id")}
 	pieces = append(append(pieces, "admitted by"), who(e.at("admitter"))...)
 	b.line(indent, append(append(pieces, "author"), who(e.at("author", "actor"))...)...)
+	if aside := e.at("set_aside"); aside.ok() {
+		b.line(indent+1, "SET ASIDE, not applied:", aside.at("code"), prefix(aside.at("reason")))
+	}
 	if am := e.at("amendment"); am.ok() {
 		briefAmendment(b, indent+1, am)
 	}
