@@ -2,7 +2,7 @@ package model
 
 // Typed event dependency discovery and project filtering live here.
 // Artifact resolution, event encoding, and stateful dependency checks do not.
-// This file stays below 200 lines because the reference walker is one complete unit.
+// Every event branch stays together so dependency discovery has one owner.
 
 import (
 	"fmt"
@@ -19,6 +19,8 @@ type Reference struct {
 	Criterion  *CriterionRef
 	Invocation *InvocationRef
 	Blocker    *BlockerRef
+	// Gallery is local to the event envelope, which supplies its project.
+	Gallery *ID
 }
 
 func (r Reference) Project() ProjectID {
@@ -46,6 +48,21 @@ func EventReferences(event TypedEvent) ([]Reference, error) {
 	}
 	w := referenceWalker{refs: []Reference{}}
 	switch e := event.(type) {
+	case *GalleryAdd:
+		w.records(e.Tasks, "tasks")
+	case *GalleryRequire:
+		w.record(e.Task, "task")
+		w.gallery(e.EntryID, "entry_id")
+	case *GalleryApprove:
+		w.gallery(e.EntryID, "entry_id")
+	case *GalleryReject:
+		w.gallery(e.EntryID, "entry_id")
+	case *GalleryRetract:
+		w.gallery(e.EntryID, "entry_id")
+	case *GalleryImport:
+		for i, id := range e.Entries {
+			w.gallery(id, fmt.Sprintf("entries[%d]", i))
+		}
 	case *TaskCreate:
 		w.task(e.Spec, "spec")
 	case *TaskAmend:
@@ -144,7 +161,7 @@ func SameProjectReferences(event TypedEvent, project ProjectID) ([]Reference, er
 	}
 	local := []Reference{}
 	for _, r := range refs {
-		if r.Project() == project {
+		if r.Gallery != nil || r.Project() == project {
 			local = append(local, r)
 		}
 	}
@@ -198,4 +215,8 @@ func (w *referenceWalker) envelope(e InvocationEnvelope, p string) {
 	if e.CriterionRef.State == Known && e.CriterionRef.Value != nil {
 		w.criterion(*e.CriterionRef.Value, p+".criterion_ref.value")
 	}
+}
+
+func (w *referenceWalker) gallery(id ID, p string) {
+	w.refs = append(w.refs, Reference{Path: p, Gallery: &id})
 }
