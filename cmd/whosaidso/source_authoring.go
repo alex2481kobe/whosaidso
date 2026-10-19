@@ -39,7 +39,10 @@ func sourceAddVerb(fs *flag.FlagSet) func(*call) error {
 		if err != nil {
 			return err
 		}
-		b := templateBinds{pins: blobPaths{"source_ref=" + file}, sets: blobPaths{jsonSet("speaker", model.Actor{ID: *speaker}), jsonSet("order", *order), jsonSet("referents", refs)}}
+		if err := t.pinPath("source_ref", file, "", model.Selector{Kind: "whole"}); err != nil {
+			return err
+		}
+		b := templateBinds{sets: blobPaths{jsonSet("speaker", model.Actor{ID: *speaker}), jsonSet("order", *order), jsonSet("referents", refs)}}
 		if err := t.fill(b); err != nil {
 			return err
 		}

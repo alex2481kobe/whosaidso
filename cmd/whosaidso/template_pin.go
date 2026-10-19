@@ -34,9 +34,6 @@ func (t *boundTemplate) pin(spec string) error {
 	if !ok || name == "" || target == "" {
 		return usageError("whosaidso template: --pin takes NAME=PATH[@REV][#POINTER], got %q", spec)
 	}
-	if err := t.refSlot(name); err != nil {
-		return err
-	}
 	target, pointer, hasPointer := strings.Cut(target, "#")
 	selector := model.Selector{Kind: "whole"}
 	if hasPointer {
@@ -45,6 +42,15 @@ func (t *boundTemplate) pin(spec string) error {
 	path, rev := target, ""
 	if i := strings.LastIndex(target, "@"); i >= 0 {
 		path, rev = target[:i], target[i+1:]
+	}
+	return t.pinPath(name, path, rev, selector)
+}
+
+// pinPath binds a literal path with an explicit revision and selector.
+// Only pin parses expression syntax; callers with FILE arguments bypass it.
+func (t *boundTemplate) pinPath(name, path, rev string, selector model.Selector) error {
+	if err := t.refSlot(name); err != nil {
+		return err
 	}
 	project, err := store.Discover(t.c.cwd)
 	if err != nil {
