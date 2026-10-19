@@ -86,6 +86,9 @@ func (s *state) galleryEvent(b model.Bundle, idx int, event model.TypedEvent) er
 			if !ok || entry.Add.ImportID != string(legacy) {
 				return fail("entries", "import completion needs every imported entry admitted first")
 			}
+			if model.GalleryImportIdentity(entry.Add.File, entry.Add.AddedAt) != legacy {
+				return fail("entries", "import identity must match the entry's file and added time")
+			}
 		}
 		return nil
 	case *model.GalleryAdd:

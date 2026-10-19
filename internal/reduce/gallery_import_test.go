@@ -9,10 +9,12 @@ import (
 )
 
 func TestGalleryImportCompletionBindsSourceInventory(t *testing.T) {
-	for _, mode := range []string{"control", "foreign-source", "empty", "omitted", "duplicate", "genuinely-empty", "wrong-inventory", "empty-unmarked", "nonempty-marked", "duplicate-inventory"} {
+	for _, mode := range []string{"control", "foreign-source", "foreign-content", "empty", "omitted", "duplicate", "genuinely-empty", "wrong-inventory", "empty-unmarked", "nonempty-marked", "duplicate-inventory"} {
 		t.Run(mode, func(t *testing.T) {
 			l, add, _ := galleryLedger(t)
-			inventory := []model.Digest{newDigest("legacy-one"), newDigest("legacy-two")}
+			otherFile := add.File
+			otherFile.Path = "other.mp4"
+			inventory := []model.Digest{model.GalleryImportIdentity(add.File, add.AddedAt), model.GalleryImportIdentity(otherFile, add.AddedAt)}
 			if mode == "genuinely-empty" || mode == "empty-unmarked" {
 				inventory = []model.Digest{}
 			}
@@ -30,8 +32,14 @@ func TestGalleryImportCompletionBindsSourceInventory(t *testing.T) {
 					continue
 				}
 				entry := *add
+				if i == 1 {
+					entry.File = otherFile
+				}
 				entry.EntryID = newID(string(legacy[:4]))
 				entry.ImportID = string(legacy)
+				if mode == "foreign-content" && i == 0 {
+					entry.File.SHA256 = newDigest("different bytes")
+				}
 				if mode == "foreign-source" && i == 0 {
 					entry.ImportID = string(newDigest("other"))
 				}

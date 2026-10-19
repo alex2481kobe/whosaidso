@@ -141,7 +141,7 @@ func galleryRestoreLedger(t *testing.T) []model.Bundle {
 	galleryFact(t, l, by, &model.GalleryRetract{EntryID: add.EntryID})
 	imported := *add
 	imported.EntryID = newID("GAY2")
-	inventory := []model.Digest{newDigest("legacy")}
+	inventory := []model.Digest{model.GalleryImportIdentity(imported.File, imported.AddedAt)}
 	source := model.GallerySource(inventory)
 	imported.ImportID = string(inventory[0])
 	galleryFact(t, l, imported.Actor, &imported)
