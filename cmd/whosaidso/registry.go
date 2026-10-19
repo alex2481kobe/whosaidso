@@ -44,6 +44,18 @@ last_activity_at, and stale, judged at the time todo runs.
 disposition (pending, captured-elsewhere, correction-requested, rejected) and
 captured_in when noted, and totals counts intake_unreviewed,
 intake_correction_requested, intake_rejected and intake_elsewhere.
+--actor NAME keeps tasks whose next_actor names NAME or whose live claim NAME
+holds, in every task section, and attention about NAME or those tasks.
+Open decisions keep their waiting actor; intake keeps its packet author;
+set-aside bundles are not actor-scoped and are hidden. Totals stay project-wide.
+Filtering precedes --limit; its offered/omitted counts describe filtered READY
+tasks. Names match exactly; an unknown name succeeds with an empty view and note.
+The optional config team = 'worker-a, worker-b' enables actor-idle attention:
+each roster actor with no live claim and no READY task naming it is flagged.
+The nearest BLOCKED task is the actor's task with fewest immediate blocking
+reasons, ties by record id (including awaiting acceptance); all its reasons
+are included. With no such task the note says so. No roster means no idle
+alarms. Nothing is assigned automatically.
 `, define: viewVerb("todo")},
 		{name: "continue", args: "RECORD_ID", summary: "resume any record: detail, closure, what is owed", detail: `Any kind of record. A task adds its progress, every attempt, every run and
 what is owed, item by item for a plan. Every kind gets every amendment since
@@ -214,6 +226,11 @@ ledger. A checkout every read would refuse is not registered: intake that
 is not owner-only, a ledger this binary cannot decode, or an artifact store
 lacking bytes its admitted records cite (each digest and its citer named).
 An entry that cannot be read is replaced.
+Optional whosaidso.toml key team = 'worker-a, worker-b' lists actors for todo's
+idle alarm. Use a single quoted comma-separated string, following the config's
+normal literal or basic string quoting rules. Whitespace around names is
+trimmed, duplicates are counted once, and empty names are refused. Omit team
+to disable the alarm. It changes reads only and never assigns tasks.
 `, define: homeVerb},
 		{name: "id", args: "[N]", summary: "print N fresh record ids (default one)", detail: `Use it rather than inventing an id: hand-typed Crockford base32 parses and
 means nothing.

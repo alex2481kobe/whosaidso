@@ -38,7 +38,7 @@ func viewVerb(view string) func(*flag.FlagSet) func(*call) error {
 	return func(fs *flag.FlagSet) func(*call) error {
 		jsonOutput := jsonFlag(fs)
 		var limit int
-		var kind string
+		var kind, actor string
 		var selfAdmitted selfAdmissionFlag
 		stale := false
 		switch view {
@@ -50,8 +50,11 @@ func viewVerb(view string) func(*flag.FlagSet) func(*call) error {
 		case "history":
 			fs.Var(&selfAdmitted, "self-admitted", "only the per-packet reviews whose self-admission is `true|false|unknown` (bare: true)")
 		}
+		if view == "todo" {
+			fs.StringVar(&actor, "actor", "", "show work for actor `NAME` (next actor or live holder)")
+		}
 		return func(c *call) error {
-			request := query.ViewRequest{View: view, Limit: limit, Kind: kind, SelfAdmitted: model.SelfAdmissionState(selfAdmitted)}
+			request := query.ViewRequest{Actor: actor, View: view, Limit: limit, Kind: kind, SelfAdmitted: model.SelfAdmissionState(selfAdmitted)}
 			switch {
 			case c.argv != nil || len(c.args) > 1 || len(c.args) > 0 && view == "todo":
 				return usageError("whosaidso %s: unexpected positional arguments", view)

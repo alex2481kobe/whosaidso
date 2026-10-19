@@ -25,7 +25,8 @@ whosaidso.toml above the working directory. It holds two required keys,
 each a quoted string on its own line (# starts a comment):
   id = 'animation/toy'          # the project id every record names
   ledger = '.whosaidso/events'  # the ledger folder, inside the checkout
-and optionally stale_after (default '24h'): todo flags a claim with no
+and optionally team = 'worker-a, worker-b' for todo's idle alarm (help todo),
+stale_after (default '24h'): todo flags a claim with no
 admitted activity for longer as a takeover candidate; and self_admission
 ('allow', the default, or 'refuse': an accepting admission then needs a
 known admitter other than each packet's known author).
