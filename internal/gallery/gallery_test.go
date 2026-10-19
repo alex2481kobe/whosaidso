@@ -4,6 +4,7 @@ package gallery
 // Admission, retraction and import behavior are exercised by the CLI tests.
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -115,8 +116,9 @@ func TestPinRefusesParentSwapAfterResolution(t *testing.T) {
 	}
 	defer opened.Close()
 	if err := os.Rename(parent, parent+".old"); err != nil {
-		if runtime.GOOS == "windows" {
-			t.Skip("Windows refuses to rename a directory holding an open file, so the swap this test attacks cannot happen")
+		// On Windows the error os.ErrPermission matches is ERROR_ACCESS_DENIED.
+		if runtime.GOOS == "windows" && errors.Is(err, os.ErrPermission) {
+			t.Skipf("Windows refuses to rename a directory holding an open file, so the swap this test attacks cannot happen: %v", err)
 		}
 		t.Fatal(err)
 	}
