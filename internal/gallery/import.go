@@ -77,7 +77,7 @@ func Import(p store.Project, by model.Actor, now time.Time) ([]model.TypedEvent,
 		imported = append(imported, add.EntryID)
 		seen[importID] = true
 	}
-	return append(out, &model.GalleryImport{Source: source, Entries: imported}), nil
+	return append(out, &model.GalleryImport{Source: source, Inventory: inventory, EmptySource: len(inventory) == 0, Entries: imported}), nil
 }
 
 func TaskRefs(p store.Project, ids []string) ([]model.RecordRef, error) {

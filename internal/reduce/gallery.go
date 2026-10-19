@@ -72,9 +72,18 @@ func (s *state) galleryEvent(b model.Bundle, idx int, event model.TypedEvent) er
 				return fail("source", "gallery list already imported")
 			}
 		}
-		for _, id := range e.Entries {
+		if e.Inventory == nil || model.GallerySource(e.Inventory) != e.Source || len(e.Inventory) != len(e.Entries) || e.EmptySource != (len(e.Inventory) == 0) {
+			return fail("inventory", "completion must name the complete source inventory; an empty source must be explicit")
+		}
+		seen := map[model.Digest]bool{}
+		for i, id := range e.Entries {
+			legacy := e.Inventory[i]
+			if seen[legacy] {
+				return fail("inventory", "duplicate source entry")
+			}
+			seen[legacy] = true
 			entry, ok := s.galleryEntry(id)
-			if !ok || entry.Add.ImportID == "" {
+			if !ok || entry.Add.ImportID != string(e.Source)+":"+string(legacy) {
 				return fail("entries", "import completion needs every imported entry admitted first")
 			}
 		}

@@ -88,8 +88,10 @@ func TestGalleryPacketSetOrdersEntryBeforeVerdictAndImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	add.ImportID = "legacy"
-	marker := f.capture(nil, &model.GalleryImport{Source: model.HashBytes([]byte("list")), Entries: []model.ID{add.EntryID}})
+	inventory := []model.Digest{model.HashBytes([]byte("legacy"))}
+	source := model.GallerySource(inventory)
+	add.ImportID = string(source) + ":" + string(inventory[0])
+	marker := f.capture(nil, &model.GalleryImport{Source: source, Inventory: inventory, Entries: []model.ID{add.EntryID}})
 	verdict := f.capture(nil, &model.GalleryApprove{EntryID: add.EntryID, SHA256: add.File.SHA256, Actor: f.author})
 	entry := f.capture(nil, &add)
 	f.accept(marker, verdict, entry)

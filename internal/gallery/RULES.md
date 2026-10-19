@@ -33,7 +33,10 @@ proof of what a person actually inspected.
 Only import reads the retired per-machine list. It captures one add packet per
 entry, preserving title, note and original added date separately from packet capture time and attributing the new record to the importer.
 Admitted legacy ids prevent duplicates. A final `gallery.import` packet records
-the list inventory's content hash and all imported entry ids; it cannot be admitted before
-those entries. Retries read the list to identify its inventory; an admitted inventory is skipped.
+the list inventory's content hash and its ordered inventory of legacy-entry content hashes and corresponding
+imported entry ids. Admission and replay require exactly that inventory, with each
+entry's import id bound to its source and inventory member. Empty completion
+requires an explicit empty-source declaration and the empty inventory's hash;
+nonempty sources cannot complete without every entry admitted. Retries read the list to identify its inventory; an admitted inventory is skipped.
 The old list and media remain in place. Missing media must be restored to import
 it; pending import packets should be admitted rather than recaptured.
