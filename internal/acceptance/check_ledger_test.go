@@ -1,12 +1,12 @@
 package acceptance_test
 
-// whosaidso check merge through the built binary: clean only when the ledger
-// at the commit is whole for a fresh clone. Each problem is made on a clean
-// control and must flip the answer: a bundle left uncommitted, an artifact
-// store left uncommitted, a git pin to a commit the checked commit cannot
-// reach, and a shallow repository. It reads no home: an unusable
-// WHOSAIDSO_HOME does not change the answer. A set-aside bundle is the
-// many-machine test's (many_machines_test.go).
+// whosaidso check ledger through the built binary: clean only when the ledger
+// at HEAD is whole for a fresh clone. Each problem is made on a clean control
+// and must flip the answer: bundles left uncommitted, an artifact store left
+// uncommitted, a git pin to a commit HEAD cannot reach, and a shallow
+// repository. It reads no home: an unusable WHOSAIDSO_HOME does not change
+// the answer. Set-aside bundles, resolved and not, are the many-machine
+// test's (many_machines_test.go).
 
 import (
 	"encoding/json"
@@ -21,22 +21,23 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/write"
 )
 
-func (w *flowWorld) checkMerge(env ...string) (write.MergeAnswer, int) {
-	w.t.Helper()
-	cmd := exec.Command(pvWhoSaidSo(w.t), "check", "merge", "--json")
-	cmd.Dir = w.root
-	cmd.Env = append(os.Environ(), append([]string{"HOME=" + w.home}, env...)...)
+// checkLedger runs whosaidso check ledger --json in dir with extra env.
+func checkLedger(t *testing.T, dir, home string, env ...string) (write.LedgerCheck, int) {
+	t.Helper()
+	cmd := exec.Command(pvWhoSaidSo(t), "check", "ledger", "--json")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), append([]string{"HOME=" + home}, env...)...)
 	out, err := cmd.Output()
 	code := 0
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {
 		code = exit.ExitCode()
 	} else if err != nil {
-		w.t.Fatal(err)
+		t.Fatal(err)
 	}
-	var a write.MergeAnswer
+	var a write.LedgerCheck
 	if jerr := json.Unmarshal(out, &a); jerr != nil {
-		w.t.Fatalf("check merge --json printed %q (exit %d): %v", out, code, jerr)
+		t.Fatalf("check ledger --json printed %q (exit %d): %v", out, code, jerr)
 	}
 	return a, code
 }
@@ -47,7 +48,7 @@ func (w *flowWorld) commitAll(message string, paths ...string) {
 	nestGit(w.t, w.root, "commit", "-q", "-m", message)
 }
 
-func TestCheckMergeFindsWhatAFreshCloneLacks(t *testing.T) {
+func TestCheckLedgerFindsWhatAFreshCloneLacks(t *testing.T) {
 	t.Parallel()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not installed")
@@ -59,15 +60,15 @@ func TestCheckMergeFindsWhatAFreshCloneLacks(t *testing.T) {
 	w.commitAll("ledger", ".gitignore", "whosaidso.toml", ".whosaidso/events")
 	clean := func(what string) {
 		t.Helper()
-		if a, code := w.checkMerge(); !a.Clean || code != 0 {
+		if a, code := checkLedger(t, w.root, w.home); !a.Clean || code != 0 {
 			t.Fatalf("%s: want clean with exit 0, got exit %d: %+v", what, code, a)
 		}
 	}
 	clean("control: a committed ledger")
 
 	w.task("work not yet committed")
-	if a, code := w.checkMerge(); a.Clean || code != 1 || len(a.NotCommitted) != 2 {
-		t.Fatalf("bundles left out of the commit must fail the gate: exit %d %+v", code, a)
+	if a, code := checkLedger(t, w.root, w.home); a.Clean || code != 1 || len(a.NotCommitted) != 2 {
+		t.Fatalf("bundles left out of HEAD must fail the check: exit %d %+v", code, a)
 	}
 	w.commitAll("second task", ".whosaidso/events")
 	clean("the bundles committed")
@@ -78,8 +79,8 @@ func TestCheckMergeFindsWhatAFreshCloneLacks(t *testing.T) {
 	w.mustAdmit("clerk", &model.SourceIntake{SourceID: w.id(), SourceRef: ref, OriginalDigest: ref.Content.SHA256, Length: ref.Content.Length,
 		Speaker: model.Actor{ID: "owner"}, Referents: []model.RecordRef{task.ref}})
 	w.commitAll("events only", ".whosaidso/events")
-	if a, code := w.checkMerge(); a.Clean || code != 1 || !strings.Contains(a.Artifacts, string(ref.Content.SHA256)) {
-		t.Fatalf("a content artifact missing from the committed store must fail the gate: exit %d %+v", code, a)
+	if a, code := checkLedger(t, w.root, w.home); a.Clean || code != 1 || len(a.NotCommitted) != 1 || !strings.Contains(a.NotCommitted[0], string(ref.Content.SHA256)) {
+		t.Fatalf("a content artifact present only in the working tree must fail the check: exit %d %+v", code, a)
 	}
 	w.commitAll("artifacts", ".whosaidso/artifacts")
 	clean("the artifacts committed")
@@ -95,19 +96,19 @@ func TestCheckMergeFindsWhatAFreshCloneLacks(t *testing.T) {
 	w.mustAdmit(flowAgent, &model.BlockerClear{Task: task.ref, BlockerID: hold, HoldRef: model.BlockerRef{Task: task.ref, BlockerID: hold},
 		ResolvingWitness: model.ArtifactRef{Kind: "git", Git: &model.GitPin{ObjectFormat: "sha1", Commit: side, Path: "witness/side.txt"}, Selector: model.Selector{Kind: "whole"}}})
 	w.commitAll("cleared on a side commit", ".whosaidso/events")
-	a, code := w.checkMerge()
-	if a.Clean || code != 1 || len(a.GitPins) != 1 || !strings.Contains(a.GitPins[0], "not reachable") {
-		t.Fatalf("a git pin the commit cannot reach must fail the gate: exit %d %+v", code, a)
+	a, code := checkLedger(t, w.root, w.home)
+	if a.Clean || code != 1 || len(a.GitPins) != 1 || !strings.Contains(a.GitPins[0], "HEAD cannot reach") {
+		t.Fatalf("a git pin HEAD cannot reach must fail the check: exit %d %+v", code, a)
 	}
 	nestGit(t, w.root, "merge", "-q", "--no-edit", "side")
 	clean("the side branch merged")
-	if a, code := w.checkMerge("WHOSAIDSO_HOME=not/absolute"); !a.Clean || code != 0 {
-		t.Fatalf("the gate reads no home: an unusable WHOSAIDSO_HOME changes nothing, got exit %d %+v", code, a)
+	if a, code := checkLedger(t, w.root, w.home, "WHOSAIDSO_HOME=not/absolute"); !a.Clean || code != 0 {
+		t.Fatalf("the check reads no home: an unusable WHOSAIDSO_HOME changes nothing, got exit %d %+v", code, a)
 	}
 
 	shallow := filepath.Join(t.TempDir(), "shallow")
 	nestGit(t, w.root, "clone", "-q", "--depth", "1", "file://"+w.root, shallow)
-	cmd := exec.Command(pvWhoSaidSo(t), "check", "merge")
+	cmd := exec.Command(pvWhoSaidSo(t), "check", "ledger")
 	cmd.Dir, cmd.Env = shallow, append(os.Environ(), "HOME="+w.home)
 	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "git fetch --unshallow") {
 		t.Fatalf("a shallow repository is refused: %v %s", err, out)
