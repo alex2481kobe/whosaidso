@@ -4,6 +4,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/alex2481kobe/whosaidso/internal/store"
@@ -108,5 +109,62 @@ func TestGalleryImportDeduplicatesEntriesAcrossInventories(t *testing.T) {
 				t.Errorf("got %d entries, want %d", got, step.count)
 			}
 		})
+	}
+}
+
+func TestGalleryImportCollapsesMatchingLegacyRecords(t *testing.T) {
+	root, _ := cliFixture(t)
+	home := t.TempDir()
+	if err := os.Chmod(home, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(store.HomeEnv, home)
+	media := filepath.Join(root, "clip.mp4")
+	if err := os.WriteFile(media, []byte("video"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := store.GalleryFile("test/cli")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(legacy), 0700); err != nil {
+		t.Fatal(err)
+	}
+	first := `{"id":"first","path":` + strconvQuote(media) + `,"title":"First","note":"keep","added_at":"2026-01-01T00:00:00Z"}`
+	second := `{"id":"second","path":` + strconvQuote(media) + `,"title":"Second","note":"different","added_at":"2025-12-31T18:00:00-06:00"}`
+	third := `{"id":"third","path":` + strconvQuote(media) + `,"title":"Third","added_at":"2026-01-01T00:00:00Z"}`
+	raw := "[" + first + "," + second + "," + third + "]"
+	if err := os.WriteFile(legacy, []byte(raw), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range []string{"first import", "repeated import"} {
+		_, diagnostic := galleryCommand(t, root, "gallery", "import", "--admit", "--reason", "reviewed")
+		for _, line := range []string{`collapsed legacy record 2 "second" into record 1 "first"`, `collapsed legacy record 3 "third" into record 1 "first"`} {
+			if !strings.Contains(diagnostic, line) {
+				t.Errorf("%s missing collapse report %q: %s", step, line, diagnostic)
+			}
+		}
+		p, err := store.Discover(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		state, err := store.Load(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		entries := state.Snapshot().Gallery()
+		if len(entries) != 1 {
+			t.Fatalf("%s: got %d entries, want one", step, len(entries))
+		}
+		if entries[0].Add.Title != "First" || entries[0].Add.Note != "keep" {
+			t.Fatalf("first record was not retained: %+v", entries[0].Add)
+		}
+	}
+	after, err := os.ReadFile(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != raw {
+		t.Fatal("import changed the legacy inventory")
 	}
 }

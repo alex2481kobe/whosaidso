@@ -14,46 +14,64 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
-func Import(p store.Project, by model.Actor, now time.Time) ([]model.TypedEvent, error) {
+// ImportCollapse identifies legacy list positions (one-based) and their ids.
+type ImportCollapse struct {
+	Record, Into           int
+	LegacyID, IntoLegacyID string
+}
+
+type ImportResult struct {
+	Events    []model.TypedEvent
+	Collapsed []ImportCollapse
+}
+
+func Import(p store.Project, by model.Actor, now time.Time) (ImportResult, error) {
+	result := ImportResult{}
 	file, err := store.GalleryFile(p.ID)
 	if err != nil {
-		return nil, err
+		return ImportResult{}, err
 	}
 	state, err := store.Load(p)
 	if err != nil {
-		return nil, err
+		return ImportResult{}, err
 	}
 	raw, err := os.ReadFile(file)
 	if errors.Is(err, os.ErrNotExist) {
-		return []model.TypedEvent{}, nil
+		return result, nil
 	}
 	if err != nil {
-		return nil, err
+		return ImportResult{}, err
 	}
 	var old []Entry
 	if err := json.Unmarshal(raw, &old); err != nil {
-		return nil, err
+		return ImportResult{}, err
 	}
 	inventory := make([]model.Digest, 0, len(old))
 	prepared := make([]model.GalleryAdd, 0, len(old))
-	for _, e := range old {
+	first := map[model.Digest]int{}
+	for i, e := range old {
 		add, err := Prepare(p.Root, e.Path, e.Title, e.Note, by, nil, now)
 		if err != nil {
-			return nil, err
+			return ImportResult{}, err
 		}
 		add.AddedAt = e.AddedAt.UTC()
 		identity := model.GalleryImportIdentity(add.File, add.AddedAt)
+		if into, exists := first[identity]; exists {
+			result.Collapsed = append(result.Collapsed, ImportCollapse{Record: i + 1, Into: into + 1, LegacyID: e.ID, IntoLegacyID: old[into].ID})
+			continue
+		}
+		first[identity] = i
 		add.ImportID = string(identity)
 		prepared = append(prepared, add)
 		inventory = append(inventory, identity)
 	}
 	source := model.GallerySource(inventory)
 	if state.Snapshot().GalleryImported(source) {
-		return []model.TypedEvent{}, nil
+		return result, nil
 	}
 	entries, err := Entries(p)
 	if err != nil {
-		return nil, err
+		return ImportResult{}, err
 	}
 	seen := map[string]bool{}
 	for _, e := range entries {
@@ -76,7 +94,8 @@ func Import(p store.Project, by model.Actor, now time.Time) ([]model.TypedEvent,
 		imported = append(imported, add.EntryID)
 		seen[importID] = true
 	}
-	return append(out, &model.GalleryImport{Source: source, Inventory: inventory, EmptySource: len(inventory) == 0, Entries: imported}), nil
+	result.Events = append(out, &model.GalleryImport{Source: source, Inventory: inventory, EmptySource: len(inventory) == 0, Entries: imported})
+	return result, nil
 }
 
 func TaskRefs(p store.Project, ids []string) ([]model.RecordRef, error) {
