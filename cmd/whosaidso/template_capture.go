@@ -76,7 +76,7 @@ func (t *boundTemplate) capture(admit bool, reason string, jsonOutput bool) erro
 		}
 	}
 	if admit {
-		return captureAndAdmit(t.c.ctx, project, t.c.stdout, t.c.stderr, jsonOutput, ref, count, created, "", t.author, reason)
+		return captureAndAdmit(t.c.ctx, project, t.c.stdout, jsonOutput, ref, count, created, "", t.author, reason)
 	}
 	return printResult(t.c.stdout, jsonOutput, captureAnswer{ref.CommandID, ref.Digest, created}, captureAck(ref, count))
 }

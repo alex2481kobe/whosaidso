@@ -214,12 +214,3 @@ func claimsIn(b model.Bundle) []claimEvent {
 	}
 	return out
 }
-
-// ClaimAttempts is the attempt id of every claim one bundle carries.
-func ClaimAttempts(b model.Bundle) []model.ID {
-	out := []model.ID{}
-	for _, c := range claimsIn(b) {
-		out = append(out, c.attempt)
-	}
-	return out
-}
