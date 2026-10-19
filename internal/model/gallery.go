@@ -1,7 +1,6 @@
-package model
-
 // Gallery events pin external media, record verdicts, and bind task criteria.
 // Media bytes and machine-local availability never belong in these payloads.
+package model
 
 import (
 	"strings"
@@ -17,7 +16,7 @@ type GalleryFile struct {
 
 // SameContent compares identities, never retrieval hints.
 func (f GalleryFile) SameContent(other GalleryFile) bool {
-	return f.SHA256 == other.SHA256 && f.Length == other.Length
+	return ValidDigest(f.SHA256) && ValidDigest(other.SHA256) && f.SHA256 == other.SHA256 && f.Length == other.Length
 }
 
 type GalleryAdd struct {

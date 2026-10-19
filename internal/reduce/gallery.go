@@ -1,7 +1,6 @@
-package reduce
-
 // Gallery projection and visual acceptance rules use admitted events only.
 // Local file inspection and packet capture belong to internal/gallery.
+package reduce
 
 import (
 	"fmt"
@@ -99,7 +98,7 @@ func (s *state) galleryEvent(b model.Bundle, idx int, event model.TypedEvent) er
 			if task.Project != b.Project {
 				return fail("tasks", "gallery task must belong to this project")
 			}
-			if _, err := s.taskAt(b, idx, task, "tasks"); err != nil {
+			if err := s.requireKind(b, idx, task, model.Task, "tasks"); err != nil {
 				return err
 			}
 		}
@@ -150,9 +149,6 @@ func (s *state) galleryEvent(b model.Bundle, idx int, event model.TypedEvent) er
 	if !ok || entry.Retracted {
 		return fail("entry_id", "no active admitted gallery entry "+string(id))
 	}
-	if err := s.unseen(b, idx, "entry_id", "gallery entry "+string(id), entry.Origin); err != nil {
-		return err
-	}
 	var digest model.Digest
 	switch e := event.(type) {
 	case *model.GalleryApprove:
@@ -167,20 +163,8 @@ func (s *state) galleryEvent(b model.Bundle, idx int, event model.TypedEvent) er
 }
 
 func (s *state) requireGallery(b model.Bundle, idx int, rec Record) error {
-	for _, o := range s.log.all {
-		r, ok := s.events[o].(*model.GalleryRequire)
-		if !ok || ident(r.Task) != (Ident{Project: rec.Key.Project, ID: rec.Key.ID}) {
-			continue
-		}
-		// The obligation follows its criterion through amendments. Removing that
-		// criterion changes the contract; a revision bump alone cannot bypass it.
-		found := false
-		for _, c := range rec.Task.AcceptanceCriteria {
-			found = found || c.ID == r.CriterionID
-		}
-		if !found {
-			continue
-		}
+	for _, bound := range s.galleryRequirements(model.RecordRef{Project: rec.Key.Project, RecordID: rec.Key.ID, Revision: rec.Key.Revision}) {
+		r, o := bound.Requirement, bound.Origin
 		entry, exists := s.galleryEntry(r.EntryID)
 		if !exists || entry.Retracted || entry.Verdict != "approved" || !model.SameActor(entry.Actor, r.Approver) {
 			return faultAt(CodeInvalidTransition, b.Sequence, idx, "acceptance_witness_refs", fmt.Sprintf("criterion %s needs admitted gallery approval of entry %s hash %s by %s", r.CriterionID, r.EntryID, entry.Add.File.SHA256, r.Approver.ID))
@@ -204,22 +188,33 @@ func (s Snapshot) GalleryImported(source model.Digest) bool {
 
 // GalleryRequirements lists the visual obligations of this task's criteria.
 func (s Snapshot) GalleryRequirements(task model.RecordRef) []model.GalleryRequire {
-	rec, ok := s.inner().records[recordKey(task)]
-	if !ok || rec.Task == nil {
-		return []model.GalleryRequire{}
-	}
 	out := []model.GalleryRequire{}
-	for _, o := range s.inner().log.all {
-		r, ok := s.inner().events[o].(*model.GalleryRequire)
-		if !ok || ident(r.Task) != ident(task) {
-			continue
-		}
-		for _, c := range rec.Task.AcceptanceCriteria {
-			if c.ID == r.CriterionID {
-				out = append(out, *r)
-				break
-			}
-		}
+	for _, bound := range s.inner().galleryRequirements(task) {
+		out = append(out, bound.Requirement)
 	}
 	return deepCopySlice(out)
+}
+
+type galleryRequirement struct {
+	Requirement model.GalleryRequire
+	Origin      Origin
+}
+
+func (s *state) galleryRequirements(task model.RecordRef) []galleryRequirement {
+	rec, ok := s.records[recordKey(task)]
+	if !ok || rec.Task == nil {
+		return nil
+	}
+	criteria := map[model.ID]bool{}
+	for _, c := range rec.Task.AcceptanceCriteria {
+		criteria[c.ID] = true
+	}
+	out := []galleryRequirement{}
+	for _, o := range s.log.all {
+		r, ok := s.events[o].(*model.GalleryRequire)
+		if ok && ident(r.Task) == ident(task) && criteria[r.CriterionID] {
+			out = append(out, galleryRequirement{Requirement: *r, Origin: o})
+		}
+	}
+	return out
 }

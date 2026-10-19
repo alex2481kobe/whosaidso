@@ -1,209 +1,260 @@
 package main
 
-// The gallery is not a record: its verbs and the viewer's Gallery actions
-// leave every ledger, artifact and intake byte as it was; its file lives in
-// the machine's home, never inside the project; rm leaves the file; and add
-// refuses a path that is not there.
+// Gallery integration uses synthetic tasks, local media and an isolated home.
+// A numeric witness cannot replace the named actor's admitted visual verdict.
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/alex2481kobe/whosaidso/internal/gallery"
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/reduce"
 	"github.com/alex2481kobe/whosaidso/internal/store"
 	"github.com/alex2481kobe/whosaidso/internal/ui"
 )
 
-// recordBytes hashes the content and mode of every file under the resolved
-// project root (but its disposable snapshot cache) and the resolved machine
-// home (but the gallery directory, which is expected to change). It first
-// checks that the places the project really stores records, its ledger, its
-// artifact store and its intake as store.Open resolves them, lie inside those
-// two trees, so the comparison covers them and not a spelling of them.
-//
-// Blind to: writes outside those two trees (another home, a temp directory);
-// a change made and undone between the two readings; timestamps and extended
-// attributes; and the snapshot cache, which is derived data.
-func recordBytes(t *testing.T, root string) map[string][32]byte {
+func galleryCommand(t *testing.T, root string, args ...string) (string, string) {
 	t.Helper()
-	p, err := store.Discover(root)
-	if err != nil {
-		t.Fatal(err)
+	out, errout, code := cliRun(t, root, nil, "contributor", args...)
+	if code != 0 {
+		t.Fatalf("%v: %d %s %s", args, code, out, errout)
 	}
-	home, err := store.Home()
-	if err != nil {
-		t.Fatal(err)
-	}
-	intake, err := store.IntakeDir(p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resolve := func(path string) string {
-		// A location not created yet resolves through its nearest parent.
-		for missing := ""; ; path, missing = filepath.Dir(path), filepath.Join(filepath.Base(path), missing) {
-			if real, err := filepath.EvalSymlinks(path); err == nil {
-				return filepath.Join(real, missing)
-			}
+	return out, errout
+}
+
+func galleryEntryID(t *testing.T, diagnostic string) string {
+	t.Helper()
+	fields := strings.Fields(diagnostic)
+	for i, s := range fields {
+		if s == "entry" && i+1 < len(fields) {
+			return fields[i+1]
 		}
 	}
-	trees := []struct{ base, skip string }{{resolve(p.Root), filepath.Join(resolve(p.Root), ".whosaidso", "cache")}, {resolve(home), filepath.Join(resolve(home), "gallery")}}
-	for _, place := range []string{p.Ledger, filepath.Join(p.Root, p.ArtifactDir()), intake} {
-		covered := false
-		for _, tree := range trees {
-			rel, err := filepath.Rel(tree.base, resolve(place))
-			covered = covered || err == nil && !strings.HasPrefix(rel, "..")
-		}
-		if !covered {
-			t.Fatalf("%s is outside every compared tree", place)
-		}
-	}
-	out := map[string][32]byte{}
-	for _, tree := range trees {
-		err := filepath.WalkDir(tree.base, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if d.IsDir() && path == tree.skip {
-				return filepath.SkipDir
-			}
-			if d.IsDir() {
-				return nil
-			}
-			info, err := d.Info()
-			if err != nil {
-				return err
-			}
-			b, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			out[path] = sha256.Sum256(append(b, []byte(info.Mode().String())...))
-			return nil
-		})
+	t.Fatalf("entry id missing: %s", diagnostic)
+	return ""
+}
+
+func galleryCaptureEvents(t *testing.T, root string, events ...model.TypedEvent) string {
+	t.Helper()
+	raw := []model.Event{}
+	for _, e := range events {
+		r, err := model.EncodeEvent(e)
 		if err != nil {
 			t.Fatal(err)
 		}
+		raw = append(raw, r)
+	}
+	data, err := model.Encode(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, errs, code := cliRun(t, root, data, "contributor", "capture", "--admit", "--reason", "fixture reviewed")
+	if code != 0 {
+		t.Fatalf("capture events: %d %s %s", code, out, errs)
 	}
 	return out
 }
 
-func sameBytes(t *testing.T, before, after map[string][32]byte, when string) {
-	t.Helper()
-	if len(before) != len(after) {
-		t.Errorf("%s: %d files became %d", when, len(before), len(after))
+func TestGalleryVisualAcceptanceEndToEnd(t *testing.T) {
+	t.Setenv(store.HomeEnv, t.TempDir())
+	root, data := cliFixture(t)
+	cliControl(t, root, data)
+	video := filepath.Join(root, "clip.mp4")
+	videoBytes, err := os.ReadFile("testdata/gallery/clip.mp4")
+	if err != nil {
+		t.Fatal(err)
 	}
-	for path, sum := range before {
-		if after[path] != sum {
-			t.Errorf("%s changed %s", when, path)
+	if err := os.WriteFile(video, videoBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Capture alone is pending, never a second source of gallery truth.
+	_, diagnostic := galleryCommand(t, root, "gallery", "add", "clip.mp4", "--title", "Arm pose", "--task", string(cliID(1)))
+	entry := galleryEntryID(t, diagnostic)
+	out, _ := galleryCommand(t, root, "gallery", "list", "--json")
+	if !strings.Contains(out, `"entries":[]`) {
+		t.Fatalf("pending entry appeared: %s", out)
+	}
+	p, _ := store.Discover(root)
+	packets, err := store.IntakeDir(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dirs, err := os.ReadDir(packets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range dirs {
+		if dir.Name() != string(cliID(3)) {
+			galleryCommand(t, root, "admit", dir.Name(), "--outcome", "accepted", "--reason", "entry reviewed")
 		}
+	}
+	task := model.RecordRef{Project: p.ID, RecordID: cliID(1), Revision: 1}
+	galleryCaptureEvents(t, root, &model.GalleryRequire{Task: task, CriterionID: cliID(2), CriterionRevision: 1, EntryID: model.ID(entry), Approver: model.Actor{ID: "reviewer"}})
+	witness := []byte("passing number")
+	if err := os.WriteFile(filepath.Join(root, "result.txt"), witness, 0600); err != nil {
+		t.Fatal(err)
+	}
+	pin := model.ArtifactRef{Kind: "content", Content: &model.ContentPin{SHA256: model.HashBytes(witness), Length: uint64(len(witness)), MediaType: "text/plain", Locators: []model.Locator{{Path: "result.txt"}}}, Selector: model.Selector{Kind: "whole"}}
+	closure := &model.TaskClose{Task: task, Outcome: model.ClosureSuccess, AcceptanceWitnessRefs: []model.AcceptanceWitness{{CriterionID: cliID(2), CriterionRevision: 1, WitnessRef: pin}}, DeliveryWitnessRefs: []model.ArtifactRef{pin}}
+	raw, _ := model.EncodeEvent(closure)
+	events, _ := model.Encode([]model.Event{raw})
+	_, errs, code := cliRun(t, root, events, "contributor", "capture", "--admit", "--reason", "close reviewed")
+	if code == 0 || !strings.Contains(errs, "needs admitted gallery approval") {
+		t.Fatalf("number closed unapproved visual task: %d %s", code, errs)
+	}
+	// A captured approval still does not count before admission.
+	approval, _ := galleryCommand(t, root, "gallery", "approve", entry, "--by", "reviewer")
+	approvalPacket := strings.Fields(approval)[1]
+	_, errs, code = cliRun(t, root, events, "contributor", "capture", "--admit", "--reason", "close reviewed")
+	if code == 0 || !strings.Contains(errs, "needs admitted gallery approval") {
+		t.Fatalf("pending approval counted: %d %s", code, errs)
+	}
+	galleryCommand(t, root, "admit", approvalPacket, "--outcome", "accepted", "--reason", "visual inspected")
+	galleryCaptureEvents(t, root, closure)
+	state, err := store.Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projected, ok := state.Snapshot().Task(reduce.Ident{Project: p.ID, ID: cliID(1)})
+	if !ok || projected.Status != reduce.StatusClosed {
+		t.Fatalf("approved task not closed: %+v", projected)
+	}
+	out, _ = galleryCommand(t, root, "gallery", "list", "--json")
+	if !strings.Contains(out, `"verdict":"approved"`) || !strings.Contains(out, `"status":"present"`) {
+		t.Fatalf("approved entry: %s", out)
+	}
+	if err := os.WriteFile(video, []byte("different pose"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	out, _ = galleryCommand(t, root, "gallery", "list", "--json")
+	if !strings.Contains(out, `"status":"changed"`) {
+		t.Fatalf("replacement not flagged: %s", out)
+	}
+	if _, _, code := cliRun(t, root, nil, "", "gallery", "approve", entry, "--by", "reviewer"); code == 0 {
+		t.Fatal("approved changed bytes")
+	}
+	// The UI reads that same ledger pin and verdict, with local changed status.
+	cfg := uiConfig(root)
+	ln, srv, address, err := ui.Listen(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	go srv.Serve(ln)
+	t.Cleanup(func() { _ = srv.Shutdown(context.Background()) })
+	session := uiSession(t, address)
+	status, body := uiGet(t, address, session, "/api/gallery?project=test%2Fcli")
+	if status != 200 || !strings.Contains(body, `"status":"changed"`) || !strings.Contains(body, `"verdict":"approved"`) {
+		t.Fatalf("ui: %d %s", status, body)
+	}
+	galleryCommand(t, root, "gallery", "rm", entry, "--admit", "--reason", "retire preview")
+	out, _ = galleryCommand(t, root, "gallery", "list")
+	if !strings.Contains(out, "empty") {
+		t.Fatalf("retraction not projected: %s", out)
+	}
+	if b, err := os.ReadFile(video); err != nil || string(b) != "different pose" {
+		t.Fatalf("retraction touched media: %q %v", b, err)
 	}
 }
 
-func TestGalleryLeavesTheLedgerAndTheFileUntouched(t *testing.T) {
-	root, data := cliFixture(t)
-	cliControl(t, root, data)
-	for _, name := range []string{"shot.png", "run.log"} {
-		if err := os.WriteFile(filepath.Join(root, name), []byte(name+" bytes"), 0o600); err != nil {
+func TestGalleryImportLeavesLegacyFileAndUsesOnlyLedger(t *testing.T) {
+	t.Setenv(store.HomeEnv, t.TempDir())
+	root, _ := cliFixture(t)
+	path := filepath.Join(t.TempDir(), "clip.mov")
+	if err := os.WriteFile(path, []byte("video"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := store.GalleryFile("test/cli")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(legacy), 0700); err != nil {
+		t.Fatal(err)
+	}
+	before := []byte(`[{"id":"old-entry","path":` + strconvQuote(path) + `,"title":"Old render","added_at":"2026-01-01T00:00:00Z"}]`)
+	if err := os.WriteFile(legacy, before, 0600); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := galleryCommand(t, root, "gallery", "list")
+	if !strings.Contains(out, "empty") {
+		t.Fatalf("legacy read before import: %s", out)
+	}
+	galleryCommand(t, root, "gallery", "import", "--admit", "--reason", "import reviewed")
+	after, err := os.ReadFile(legacy)
+	if err != nil || string(after) != string(before) {
+		t.Fatalf("import changed old file: %s %v", after, err)
+	}
+	galleryCommand(t, root, "gallery", "import", "--admit", "--reason", "retry")
+	if err := os.WriteFile(legacy, []byte("broken legacy list"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	galleryCommand(t, root, "gallery", "import", "--admit", "--reason", "already completed")
+	out, _ = galleryCommand(t, root, "gallery", "list", "--json")
+	var list struct{ Entries []struct{ ID string } }
+	if err := json.Unmarshal([]byte(out), &list); err != nil || len(list.Entries) != 1 {
+		t.Fatalf("dual reading or duplicate import: %s %v", out, err)
+	}
+	p, _ := store.Discover(root)
+	prefix, err := store.ReadPrefix(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap, err := reduce.Replay(prefix)
+	if err != nil || len(snap.Gallery()) != 1 {
+		t.Fatalf("import not in ledger: %v", err)
+	}
+}
+
+func strconvQuote(s string) string { b, _ := json.Marshal(s); return string(b) }
+
+func TestGalleryLedgerTravelsWithoutMedia(t *testing.T) {
+	t.Setenv(store.HomeEnv, t.TempDir())
+	root, _ := cliFixture(t)
+	if err := os.WriteFile(filepath.Join(root, "clip.mp4"), []byte("video"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	galleryCommand(t, root, "gallery", "add", "clip.mp4", "--title", "Portable entry", "--admit", "--reason", "entry reviewed")
+	first, err := store.Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := t.TempDir()
+	config, err := os.ReadFile(filepath.Join(root, "whosaidso.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(other, "whosaidso.toml"), config, 0600); err != nil {
+		t.Fatal(err)
+	}
+	second, err := store.Discover(other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(second.Ledger, 0700); err != nil {
+		t.Fatal(err)
+	}
+	files, err := os.ReadDir(first.Ledger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range files {
+		if filepath.Ext(file.Name()) != ".json" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(first.Ledger, file.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(second.Ledger, file.Name()), data, 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	before := recordBytes(t, root)
-
-	out, errs, code := cliRun(t, root, nil, "agent-7", "gallery", "add", "shot.png", "--title", "the shot", "--note", "check the edge")
-	if code != 0 || !strings.HasPrefix(out, "added ") {
-		t.Fatalf("add: %d %s %s", code, out, errs)
-	}
-	id := strings.Fields(out)[1]
-	out, _, code = cliRun(t, root, nil, "", "gallery", "add", "run.log", "--title", "the run")
-	if code != 0 {
-		t.Fatalf("add: %s", out)
-	}
-	logID := strings.Fields(out)[1]
-	if _, _, code := cliRun(t, root, nil, "", "gallery", "add", "gone.png", "--title", "gone"); code == 0 {
-		t.Fatal("add accepted a missing path")
-	}
-	out, _, code = cliRun(t, root, nil, "", "gallery", "list", "--json")
-	var list struct{ Entries []map[string]any }
-	if err := json.Unmarshal([]byte(out), &list); code != 0 || err != nil || len(list.Entries) != 2 {
-		t.Fatalf("list: %d %v %s", code, err, out)
-	}
-	if e := list.Entries[0]; e["id"] != id || e["path"] != filepath.Join(root, "shot.png") || e["added_by"] != "agent-7" || e["status"] != "present" || e["note"] != "check the edge" {
-		t.Fatalf("listed entry: %v", e)
-	}
-	galleryFile, err := store.GalleryFile("test/cli")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rel, err := filepath.Rel(root, galleryFile); err != nil || !strings.HasPrefix(rel, "..") {
-		t.Fatalf("the gallery file %s is inside the project %s", galleryFile, root)
-	}
-	sameBytes(t, before, recordBytes(t, root), "gallery add and list")
-
-	// The viewer's Gallery: list, file, reveal and remove.
-	var revealed []string
-	cfg := uiConfig(root)
-	cfg.Reveal = func(p string) error { revealed = append(revealed, p); return nil }
-	ln, server, address, err := ui.Listen(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	go server.Serve(ln)
-	t.Cleanup(func() { _ = server.Shutdown(context.Background()) })
-	session := uiSession(t, address)
-	status, listed := uiGet(t, address, session, "/api/gallery?project=test%2Fcli")
-	var viewed struct{ Entries []struct{ ID, Cap string } }
-	if err := json.Unmarshal([]byte(listed), &viewed); status != 200 || err != nil || len(viewed.Entries) != 2 || viewed.Entries[0].Cap == "" {
-		t.Fatalf("viewer list: %d %v %s", status, err, listed)
-	}
-	query := "?project=test%2Fcli&id=" + id
-	for _, c := range []struct{ method, path, want string }{
-		{"GET", "/api/gallery/file" + query + "&cap=" + viewed.Entries[0].Cap, "shot.png bytes"},
-		{"POST", "/api/gallery/reveal" + query, `"revealed"`},
-		{"POST", "/api/gallery/remove" + query, `"removed"`},
-	} {
-		if status, body := uiRequest(t, address, session, c.method, c.path); status != 200 || !strings.Contains(body, c.want) {
-			t.Fatalf("%s %s: %d %s", c.method, c.path, status, body)
-		}
-	}
-	if len(revealed) != 1 || revealed[0] != filepath.Join(root, "shot.png") {
-		t.Fatalf("revealed %v", revealed)
-	}
-	if _, _, code := cliRun(t, root, nil, "", "gallery", "rm", id); code == 0 {
-		t.Fatal("rm of an entry the viewer removed succeeded")
-	}
-	if out, errs, code := cliRun(t, root, nil, "", "gallery", "rm", logID); code != 0 || !strings.Contains(out, "untouched") {
-		t.Fatalf("rm: %d %s %s", code, out, errs)
-	}
-	if entries, _, _ := cliRun(t, root, nil, "", "gallery", "list"); !strings.Contains(entries, "empty") {
-		t.Fatalf("the gallery after both removals: %s", entries)
-	}
-	// The project tree includes both shown files, so this also proves
-	// neither removal touched its file.
-	sameBytes(t, before, recordBytes(t, root), "the viewer's gallery actions and gallery rm")
-}
-
-func TestGalleryRmLeavesTheFile(t *testing.T) {
-	root, _ := cliFixture(t)
-	path := filepath.Join(t.TempDir(), "run.log")
-	if err := os.WriteFile(path, []byte("log"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	out, _, code := cliRun(t, root, nil, "", "gallery", "add", path, "--title", "the run")
-	if code != 0 {
-		t.Fatalf("add: %s", out)
-	}
-	if out, errs, code := cliRun(t, root, nil, "", "gallery", "rm", strings.Fields(out)[1]); code != 0 || !strings.Contains(out, "untouched") {
-		t.Fatalf("rm: %d %s %s", code, out, errs)
-	}
-	if b, err := os.ReadFile(path); err != nil || string(b) != "log" {
-		t.Fatalf("rm touched the file: %q %v", b, err)
-	}
-	if out, _, _ := cliRun(t, root, nil, "", "gallery", "list"); !strings.Contains(out, "empty") {
-		t.Fatalf("list after rm: %s", out)
+	entries, err := gallery.List(second)
+	if err != nil || len(entries) != 1 || entries[0].Title != "Portable entry" || entries[0].Status != "missing" {
+		t.Fatalf("ledger-only clone lost gallery or required media: %+v %v", entries, err)
 	}
 }

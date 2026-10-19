@@ -1,7 +1,6 @@
-package reduce
-
 // Gallery fixtures cover actor/hash identity, retraction and refusal on replay.
 // They contain no machine files: local availability is an admission concern.
+package reduce
 
 import (
 	"fmt"
@@ -79,7 +78,7 @@ func TestGalleryClosureNeedsAdmittedActorAndHashApproval(t *testing.T) {
 }
 
 func TestGalleryRefusesInvalidTransitionsOnApplyAndReplay(t *testing.T) {
-	for _, mode := range []string{"wrong-hash", "unknown-actor", "forged-actor", "duplicate-entry", "bad-criterion", "unknown-entry", "duplicate-requirement", "duplicate-import", "unadmitted-import-entry"} {
+	for _, mode := range []string{"wrong-hash", "unknown-actor", "forged-actor", "duplicate-entry", "bad-criterion", "unknown-entry", "duplicate-requirement", "duplicate-import", "unadmitted-import-entry", "unimported-entry", "duplicate-completion"} {
 		t.Run(mode, func(t *testing.T) {
 			l, add, req := galleryLedger(t)
 			by := model.Actor{ID: "reviewer"}
@@ -114,6 +113,11 @@ func TestGalleryRefusesInvalidTransitionsOnApplyAndReplay(t *testing.T) {
 				add3.EntryID = newID("GAY3")
 				e = &add3
 				by = add.Actor
+			case "unimported-entry":
+				e = &model.GalleryImport{Source: newDigest("legacy"), Entries: []model.ID{add.EntryID}}
+			case "duplicate-completion":
+				e = &model.GalleryImport{Source: newDigest("legacy"), Entries: []model.ID{}}
+				galleryFact(t, l, by, e)
 			case "unadmitted-import-entry":
 				e = &model.GalleryImport{Source: newDigest("legacy"), Entries: []model.ID{newID("N0NE")}}
 			}
@@ -141,4 +145,57 @@ func galleryRestoreLedger(t *testing.T) []model.Bundle {
 	galleryFact(t, l, imported.Actor, &imported)
 	galleryFact(t, l, by, &model.GalleryImport{Source: newDigest("legacy-list"), Entries: []model.ID{imported.EntryID}})
 	return l.bundles()
+}
+
+func TestGalleryMayReferenceAClosedTask(t *testing.T) {
+	l, add, req := galleryLedger(t)
+	by := req.Approver
+	galleryFact(t, l, by, &model.GalleryApprove{EntryID: add.EntryID, SHA256: add.File.SHA256, Actor: by})
+	l.add(t, closeSuccess(req.Task.RecordID, req.Task.Revision))
+	later := *add
+	later.EntryID = newID("GAY3")
+	later.Tasks = []model.RecordRef{req.Task}
+	galleryFact(t, l, later.Actor, &later)
+	s := mustReplay(t, l.bundles())
+	if len(s.Gallery()) != 2 {
+		t.Fatal("a task reference prevented recording later media")
+	}
+}
+
+func TestGalleryRequirementTracksItsTaskAndRetainedCriterion(t *testing.T) {
+	for _, mode := range []string{"revised", "other-task", "criterion-removed"} {
+		t.Run(mode, func(t *testing.T) {
+			l, _, req := galleryLedger(t)
+			target := req.Task
+			spec := taskSpec()
+			if mode == "other-task" {
+				target.RecordID = newID("TSKB")
+				l.add(t, &model.TaskCreate{ID: target.RecordID, Provenance: provenance("contributor"), Spec: spec})
+			} else {
+				if mode == "revised" {
+					spec.AcceptanceCriteria[0].Revision = 2
+				} else {
+					spec.AcceptanceCriteria[0].ID = newID("ACCB")
+				}
+				l.add(t, &model.TaskAmend{Target: target, Provenance: provenance("contributor"), Replacement: spec})
+				target.Revision = 2
+			}
+			close := closeSuccess(target.RecordID, target.Revision)
+			close.AcceptanceWitnessRefs[0].CriterionID = spec.AcceptanceCriteria[0].ID
+			close.AcceptanceWitnessRefs[0].CriterionRevision = spec.AcceptanceCriteria[0].Revision
+			applyErr, replayErr, s := closeBothWays(t, l, close)
+			if mode == "revised" {
+				wantFault(t, applyErr, CodeInvalidTransition)
+				wantFault(t, replayErr, CodeInvalidTransition)
+				return
+			}
+			if applyErr != nil || replayErr != nil {
+				t.Fatalf("unrelated requirement gated closure: %v %v", applyErr, replayErr)
+			}
+			p, _ := s.Task(ident(target))
+			if p.Status != StatusClosed {
+				t.Fatalf("task not closed: %+v", p)
+			}
+		})
+	}
 }

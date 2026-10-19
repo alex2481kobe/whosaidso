@@ -4,8 +4,8 @@
 // single-use launch token exchanged for a session cookie, Host and Origin
 // checks, GET only but for the gallery's two POSTs, and the embedded static
 // files. The JSON it serves is api.go's and gallery.go's; what the page does
-// with it is ui.js's. Nothing here, or anywhere in the package, writes to a
-// ledger or to intake; the one thing the page can change is the gallery list.
+// with it is ui.js's. Nothing in the package writes to a
+// ledger. Remove captures a gallery retraction in intake for later admission.
 package ui
 
 import (

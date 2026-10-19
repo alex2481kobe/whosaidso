@@ -202,8 +202,13 @@ func gateProofs(ctx context.Context, project store.Project, after reduce.Snapsho
 			case *model.ProofAdmit:
 				err = gateProofFamily(ctx, project, after, intake, e, dry)
 				dry.proofMembers(ctx, project, after, intake, e)
+			case *model.GalleryAdd, *model.GalleryApprove:
+				err = gateGallery(project, after, e)
 			case *model.TaskClose:
-				err = gateClosureEffective(after, e)
+				err = gateGallery(project, after, e)
+				if err == nil {
+					err = gateClosureEffective(after, e)
+				}
 			}
 			if err := dry.note("proofs", err); err != nil {
 				return err
