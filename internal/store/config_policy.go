@@ -7,11 +7,12 @@ package store
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
 // policyKeys are the optional keys a config may set.
-var policyKeys = map[string]bool{"stale_after": true, "self_admission": true}
+var policyKeys = map[string]bool{"stale_after": true, "self_admission": true, "team": true}
 
 // DefaultStaleAfter is how long a claim may go without admitted activity
 // before reads flag it a takeover candidate, when the config sets none.
@@ -19,6 +20,8 @@ const DefaultStaleAfter = 24 * time.Hour
 
 // Policy is a project's optional settings.
 type Policy struct {
+	// Team names actors to watch for idle work queues; it never assigns work.
+	Team []string
 	// StaleAfter: a live claim with no admitted activity for longer is
 	// flagged as a takeover candidate. Flagged only: releasing it needs the
 	// owner's approval (an authority on the receipt).
@@ -44,6 +47,19 @@ func policyOf(values map[string]string, path string) (Policy, error) {
 		p.RefuseSelfAdmission = true
 	default:
 		return Policy{}, storeFault("config-invalid-value", path, fmt.Sprintf("self_admission must be 'allow' or 'refuse', got %q", raw))
+	}
+	if raw, ok := values["team"]; ok {
+		seen := map[string]bool{}
+		for _, name := range strings.Split(raw, ",") {
+			name = strings.TrimSpace(name)
+			if name == "" {
+				return Policy{}, storeFault("config-invalid-value", path, "team must contain nonempty comma-separated actor names")
+			}
+			if !seen[name] {
+				p.Team = append(p.Team, name)
+				seen[name] = true
+			}
+		}
 	}
 	return p, nil
 }
