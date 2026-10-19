@@ -87,3 +87,30 @@ func TestDepartedHoldersAttemptIsReleasedOnTheOwnersWord(t *testing.T) {
 		t.Errorf("history must attribute the receipt to whoever recorded it: %.400s", history)
 	}
 }
+
+// Receipts recorded under the departed holder's own name, before a receipt
+// could cite an authority: author.correct names their real writer without
+// rewriting the review, and only that writer may record it.
+func TestAuthorCorrectAnnotatesReceiptsRecordedUnderTheHoldersName(t *testing.T) {
+	t.Parallel()
+	w := flowNew(t)
+	task := w.task("work a departed agent held")
+	receipt := &model.AttemptTerminal{Task: task.ref, AttemptID: task.attempt, Outcome: "stopped", Reason: "recorded by clerk for the departed holder",
+		NextAction: "claim it again", DeliveryRefs: []model.ArtifactRef{}}
+	packet := w.capture(flowAgent, receipt)
+	if err := w.review("accepted", packet); err != nil {
+		t.Fatalf("control: the holder-named receipt admits: %v", err)
+	}
+	correct := &model.AuthorCorrect{Packets: []model.ID{packet}, Writer: model.Actor{ID: "clerk"}, Reason: "clerk wrote it under the holder's name"}
+	w.refused("a correction recorded by someone other than the writer it names", func() error { return w.review("accepted", w.capture("intruder", correct)) })
+	w.mustAdmit("clerk", correct)
+	out, err := w.cli(nil, "history", "--json", string(task.ref.RecordID))
+	compact := strings.Join(strings.Fields(string(out)), "")
+	if err != nil || !strings.Contains(compact, `"actor":{"id":"`+flowAgent+`"},"written_by":{"id":"clerk"}`) {
+		t.Fatalf("history keeps the recorded author and shows the writer: %v %.600s", err, out)
+	}
+	text, _ := w.cli(nil, "history", string(task.ref.RecordID))
+	if !strings.Contains(string(text), "author "+flowAgent+" written by clerk") {
+		t.Fatalf("history text names the writer beside the recorded author:\n%s", text)
+	}
+}

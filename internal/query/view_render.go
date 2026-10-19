@@ -101,7 +101,7 @@ func briefDetail(b *briefWriter, indent int, d cur) {
 		b.line(indent, d.at("fact", "kind"), d.at("ref", "record_id"), "rev", d.at("ref", "revision"))
 		b.line(indent+1, prefix(d.at("label")))
 	}
-	pieces := append([]any{"author"}, who(d.at("author", "actor"))...)
+	pieces := authorPieces(d.at("author"))
 	pieces = append(append(pieces, "admitted by"), who(d.at("admitted_by"))...)
 	b.line(indent+1, append(pieces, "self-admitted", d.at("self_admitted"))...)
 }
@@ -367,7 +367,7 @@ func briefSource(b *briefWriter, indent int, src cur) {
 	briefList(b, indent+1, "referents", in.at("referents"), func(b *briefWriter, indent int, r cur) {
 		b.line(indent, r.at("record_id"), "rev", r.at("revision"))
 	})
-	pieces := append([]any{"author"}, who(src.at("author", "actor"))...)
+	pieces := authorPieces(src.at("author"))
 	pieces = append(append(pieces, "admitted by"), who(src.at("admitted_by"))...)
 	b.line(indent+1, append(pieces, "self-admitted", src.at("self_admitted"))...)
 }

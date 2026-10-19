@@ -21,6 +21,7 @@ var templateEvents = []model.TypedEvent{
 	&model.SourceIntake{}, &model.ClaimAssert{}, &model.ClaimRevise{}, &model.CriterionFix{}, &model.ProofAdmit{},
 	&model.DecisionOpen{}, &model.DecisionRevise{}, &model.DecisionDispose{}, &model.Supersede{}, &model.Correction{},
 	&model.InstrumentDeclare{}, &model.InstrumentRevise{}, &model.TrustWithdraw{}, &model.ReviewAdmit{}, &model.ArtifactDispose{},
+	&model.AuthorCorrect{},
 }
 
 // templateMints names, per event type, the id paths the event creates. They

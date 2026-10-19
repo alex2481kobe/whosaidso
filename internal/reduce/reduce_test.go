@@ -233,7 +233,7 @@ func attributeFixtureWith(seq uint64, events []model.TypedEvent, holders map[mod
 			if e.Envelope.StartedAt.After(latest) {
 				latest = e.Envelope.StartedAt
 			}
-		case *model.CriterionFix, *model.ProofAdmit, *model.TaskTakeover, *model.AttemptTerminal:
+		case *model.CriterionFix, *model.ProofAdmit, *model.TaskTakeover, *model.AttemptTerminal, *model.AuthorCorrect:
 			needed = true
 		}
 	}
@@ -252,6 +252,8 @@ func attributeFixtureWith(seq uint64, events []model.TypedEvent, holders map[mod
 			author = e.Judgment.Actor
 		case *model.TaskTakeover:
 			author = e.Actor
+		case *model.AuthorCorrect:
+			author = e.Writer
 		case *model.AttemptTerminal:
 			if holder, ok := holders[e.AttemptID]; ok {
 				author = holder

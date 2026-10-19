@@ -129,6 +129,12 @@ the attempt's revision or the current one, record it yourself:
       --reason "..." --next-action "..."
 then admit it. The receipt stays yours, recorded on the owner's word, and
 the task is READY again: claim it to take it over, or close it.
+A packet admitted under someone else's name (a receipt captured as the
+departed holder, say) is annotated, never rewritten: its writer captures
+  whosaidso template author.correct --set 'packets[0]=PACKET' \
+      --set writer.id=ME --set reason="..." --capture --admit --reason "..."
+as themselves. Views show the writer beside the recorded author, and
+closer_authored_receipt compares the closer with the writer.
 Not accepted yet: record why as a hold (it prints blocker_id = HOLD), and
 clear it when that is met:
   whosaidso template blocker.hold --task T --set reason=awaiting-acceptance \

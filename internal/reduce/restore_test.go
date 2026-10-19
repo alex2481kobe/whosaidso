@@ -7,6 +7,7 @@ package reduce
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -32,6 +33,8 @@ func restoreFixtures(t *testing.T) map[string][]model.Bundle {
 	tasks.add(t, &model.BlockerHold{Task: tskd, BlockerID: newID("HDD1"), Reason: model.BlockerPrerequisite, Actor: model.Actor{ID: "owner"}, Criterion: "the owner rules"})
 	tasks.add(t, &model.BlockerClear{Task: tskd, BlockerID: newID("HDD1"), HoldRef: model.BlockerRef{Task: tskd, BlockerID: newID("HDD1")}, ResolvingWitness: blobRef("ruling")})
 	tasks.add(t, &model.TaskTakeover{Task: tskc, Actor: model.Actor{ID: "agent-b"}, AttemptID: newID("ATTX"), PriorAttemptID: newID("ATTC"), StoppedConfirmationRef: blobRef("stopped")})
+	// The takeover's packet (attributeFixture's id) was really agent-c's.
+	tasks.add(t, &model.AuthorCorrect{Packets: []model.ID{newID(fmt.Sprintf("PKT%dE0", tasks.seq))}, Writer: model.Actor{ID: "agent-c"}, Reason: "agent-c wrote it"})
 	// Revisions of a proven claim, a decision and an instrument.
 	proof := proofLedger(t, true)
 	proof.add(t, &model.ClaimRevise{Target: ref(newID("CMA1"), 1), Provenance: provenance("agent-a"), Replacement: claimSpec()})
@@ -123,7 +126,7 @@ func TestRestoreAtEverySplitEqualsReplay(t *testing.T) {
 
 // The golden ledger's image is pinned. A change that moves it must also move
 // snapshotFormat or the state's types, so older images are refused.
-const goldenImageSHA256 = "0044ff75c1b02cd7dcdf558f3d677c9c0f2502a01d3a35c03c92f842ee66c45a" // repinned for snapshot format /5: an attempt receipt may carry the authority it was recorded on, and attempts carry their claim and last-activity times
+const goldenImageSHA256 = "f2859e076e2fcc242e7c705f3c008fcc361f28ba71faa6a872899ecb6fcec7fc" // repinned for snapshot format /5: an attempt receipt may carry the authority it was recorded on, attempts carry their claim and last-activity times, and a review may carry an author correction
 
 func TestGoldenImageIsPinned(t *testing.T) {
 	image := mustEncode(t, mustReplay(t, goldenLedger(t).bundles()))

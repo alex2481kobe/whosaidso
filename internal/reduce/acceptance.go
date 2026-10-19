@@ -70,7 +70,7 @@ func (s *state) closerAuthoredReceipt(closer model.Actor, attempts []Attempt) Tr
 			continue
 		}
 		receipts++
-		doer := s.eventAuthor(a.Terminal.Origin).Author
+		doer := s.eventAuthor(a.Terminal.Origin).Writer()
 		if model.SameActor(doer, closer) {
 			return TruthTrue
 		}

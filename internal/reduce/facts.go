@@ -235,6 +235,16 @@ type Review struct {
 	// Invocations are the invocation facts this packet carried when it was not
 	// accepted. Empty for accepted packets.
 	Invocations []model.ReviewedInvocation `json:"invocations"`
+	// Corrected names who really wrote this packet, when an admitted
+	// author.correct says so; Author stays what the review recorded.
+	Corrected *AuthorCorrection `json:"author_correction,omitempty"`
+}
+
+// AuthorCorrection is one admitted author.correct as it applies to a packet.
+type AuthorCorrection struct {
+	Writer model.Actor `json:"writer"`
+	Reason string      `json:"reason"`
+	Origin Origin      `json:"origin"`
 }
 
 // Source is one captured original.

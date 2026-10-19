@@ -107,7 +107,7 @@ func briefRun(b *briefWriter, indent int, v cur) {
 func briefEvent(b *briefWriter, indent int, e cur) {
 	pieces := []any{"sequence", e.at("origin", "sequence"), "event", e.at("origin", "event_index"), e.at("event", "type"), "command", e.at("command_id")}
 	pieces = append(append(pieces, "admitted by"), who(e.at("admitter"))...)
-	b.line(indent, append(append(pieces, "author"), who(e.at("author", "actor"))...)...)
+	b.line(indent, append(pieces, authorPieces(e.at("author"))...)...)
 	if aside := e.at("set_aside"); aside.ok() {
 		b.line(indent+1, "SET ASIDE, not applied:", aside.at("code"), prefix(aside.at("reason")))
 	}
@@ -178,6 +178,19 @@ func briefReview(b *briefWriter, indent int, r cur) {
 	b.line(indent, append(append([]any{"review", r.at("key", "command_id"), r.at("outcome"), "by"}, who(r.at("actor"))...),
 		append(append([]any{"author"}, who(r.at("author"))...), "self-admitted", r.at("self_admission"))...)...)
 	b.line(indent+1, prefix(r.at("reason")))
+	if c := r.at("author_correction"); c.ok() {
+		b.line(indent+1, append(append([]any{"written by"}, who(c.at("writer"))...), "(author.correct at sequence", c.at("origin", "sequence"), "):", prefix(c.at("reason")))...)
+	}
+}
+
+// authorPieces renders a PacketAuthor: the recorded author, and beside it the
+// writer an admitted author.correct named, when one did.
+func authorPieces(a cur) []any {
+	pieces := append([]any{"author"}, who(a.at("actor"))...)
+	if w := a.at("written_by"); w.ok() {
+		pieces = append(append(pieces, "written by"), who(w)...)
+	}
+	return pieces
 }
 
 // briefPacket shows a pending packet's disposition first: a reviewed packet

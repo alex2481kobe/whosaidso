@@ -43,6 +43,10 @@ func gateProofOperation(event model.TypedEvent, author model.Actor) error {
 		return gateValidation(e.Replacement.Validation)
 	case *model.InvocationSeal:
 		return gateReconciliation(e.Envelope, author)
+	case *model.AuthorCorrect:
+		// Admitted packets, once each, claimed by their writer: the reducer
+		// checks all three (reduce/author_correct.go).
+		return nil
 	case *model.TrustWithdraw, *model.Correction, *model.InvocationStart:
 		// Withdrawal and correction only remove support, attributed to the
 		// packet author in the review. Invocation facts are checked by the

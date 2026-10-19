@@ -71,6 +71,8 @@ func (s *state) route(b model.Bundle, idx int, e model.TypedEvent) error {
 		return s.supersede(b, idx, t)
 	case *model.TrustWithdraw:
 		return s.requireKind(b, idx, t.Instrument, model.Instrument, "instrument")
+	case *model.AuthorCorrect:
+		return s.authorCorrect(b, idx, o, t)
 	case *model.Correction, *model.ArtifactDispose:
 		// Loss stays as an admitted fact. Query-time graph expansion also
 		// reaches dependents introduced after this bundle.
