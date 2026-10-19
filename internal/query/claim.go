@@ -136,8 +136,9 @@ func actorName(a model.Actor) string {
 	return a.ID
 }
 
-// currentHolder is the task's live attempt that no takeover replaced.
-func currentHolder(s reduce.Snapshot, task reduce.Ident) *ClaimHolder {
+// holding lists a task's attempts that hold it: live, and replaced by no
+// takeover. A replaced attempt stays live (it has no receipt) by design.
+func holding(s reduce.Snapshot, task reduce.Ident) []reduce.Attempt {
 	attempts := s.Attempts(task)
 	replaced := map[model.ID]bool{}
 	for _, at := range attempts {
@@ -145,12 +146,22 @@ func currentHolder(s reduce.Snapshot, task reduce.Ident) *ClaimHolder {
 			replaced[at.PriorAttempt] = true
 		}
 	}
+	out := []reduce.Attempt{}
 	for _, at := range attempts {
 		if at.Live() && !replaced[at.Key.Attempt] {
-			return &ClaimHolder{Attempt: at.Key.Attempt, Actor: at.Actor}
+			out = append(out, at)
 		}
 	}
-	return nil
+	return out
+}
+
+// currentHolder is the task's first attempt that holds it.
+func currentHolder(s reduce.Snapshot, task reduce.Ident) *ClaimHolder {
+	h := holding(s, task)
+	if len(h) == 0 {
+		return nil
+	}
+	return &ClaimHolder{Attempt: h[0].Key.Attempt, Actor: h[0].Actor}
 }
 
 // lostClaim is a claim carried by a set-aside bundle.
