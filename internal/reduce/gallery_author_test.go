@@ -3,8 +3,9 @@
 package reduce
 
 import (
-	"github.com/alex2481kobe/whosaidso/internal/model"
 	"testing"
+
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 func TestGalleryMakerCannotApproveTheirOwnTaskGate(t *testing.T) {

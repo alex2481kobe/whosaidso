@@ -86,7 +86,7 @@ func TestRelativeMediaStaysInsideCheckout(t *testing.T) {
 			t.Fatalf("control %s: %v", path, err)
 		}
 	}
-	for _, path := range []string{"../external.mp4", "escape.mp4"} {
+	for _, path := range []string{"../external.mp4", "../checkout/inside.mp4", "escape.mp4"} {
 		if _, err := Prepare(root, path, "escape", "", model.Actor{ID: "contributor"}, nil, time.Now()); err == nil {
 			t.Errorf("accepted relative escape %s", path)
 		}

@@ -3,21 +3,32 @@
 package reduce
 
 import (
-	"github.com/alex2481kobe/whosaidso/internal/model"
 	"testing"
+
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 func TestGalleryImportCompletionBindsSourceInventory(t *testing.T) {
-	for _, mode := range []string{"control", "foreign-source", "empty", "omitted", "duplicate", "genuinely-empty", "wrong-inventory"} {
+	for _, mode := range []string{"control", "foreign-source", "empty", "omitted", "duplicate", "genuinely-empty", "wrong-inventory", "empty-unmarked", "nonempty-marked", "duplicate-inventory"} {
 		t.Run(mode, func(t *testing.T) {
 			l, add, _ := galleryLedger(t)
 			inventory := []model.Digest{newDigest("legacy-one"), newDigest("legacy-two")}
-			if mode == "genuinely-empty" {
+			if mode == "genuinely-empty" || mode == "empty-unmarked" {
 				inventory = []model.Digest{}
 			}
+			if mode == "duplicate-inventory" {
+				inventory[1] = inventory[0]
+			}
 			source := model.GallerySource(inventory)
+			if mode == "wrong-inventory" {
+				inventory[0] = newDigest("other")
+			}
 			ids := []model.ID{}
 			for i, legacy := range inventory {
+				if mode == "duplicate-inventory" && i == 1 {
+					ids = append(ids, ids[0])
+					continue
+				}
 				entry := *add
 				entry.EntryID = newID(string(legacy[:4]))
 				entry.ImportID = string(source) + ":" + string(legacy)
@@ -29,8 +40,8 @@ func TestGalleryImportCompletionBindsSourceInventory(t *testing.T) {
 			}
 			event := &model.GalleryImport{Source: source, Inventory: inventory, EmptySource: mode == "genuinely-empty", Entries: ids}
 			switch mode {
-			case "wrong-inventory":
-				event.Inventory = []model.Digest{newDigest("other"), inventory[1]}
+			case "nonempty-marked":
+				event.EmptySource = true
 			case "empty":
 				event.Entries = []model.ID{}
 			case "omitted":
