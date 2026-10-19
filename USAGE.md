@@ -57,6 +57,10 @@ since zsh reads `[]` as a filename pattern.
 
 Commit the `.whosaidso/` folder with your code. It is the record.
 
+On Windows, git converts line endings by default, which changes the bytes the ledger's digests cover. Turn
+that off for the record by adding `.whosaidso/** -text` to the project's `.gitattributes`. The home is
+`%USERPROFILE%\.whosaidso` unless `WHOSAIDSO_HOME` names another.
+
 ## Learn more
 
 The guide ships with the binary, so it cannot drift from the CLI:
