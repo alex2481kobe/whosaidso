@@ -107,7 +107,7 @@ func TestGalleryRefusesInvalidTransitionsOnApplyAndReplay(t *testing.T) {
 			case "duplicate-import":
 				add2 := *add
 				add2.EntryID = newID("GAY2")
-				add2.ImportID = "legacy-entry"
+				add2.ImportID = string(model.GalleryImportIdentity(add2.File, add2.AddedAt))
 				galleryFact(t, l, add.Actor, &add2)
 				add3 := add2
 				add3.EntryID = newID("GAY3")

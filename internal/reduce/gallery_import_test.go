@@ -4,9 +4,48 @@ package reduce
 
 import (
 	"testing"
+	"time"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
 )
+
+func TestGalleryAddBindsImportIdentity(t *testing.T) {
+	for _, mode := range []string{"control", "plain", "forged-file", "forged-time"} {
+		t.Run(mode, func(t *testing.T) {
+			l, add, _ := galleryLedger(t)
+			entry := *add
+			entry.EntryID = newID("GAY2")
+			entry.ImportID = string(model.GalleryImportIdentity(entry.File, entry.AddedAt))
+			switch mode {
+			case "plain":
+				entry.ImportID = ""
+			case "forged-file":
+				entry.File.SHA256 = newDigest("different bytes")
+			case "forged-time":
+				entry.AddedAt = entry.AddedAt.Add(time.Second)
+			}
+			prefix := mustReplay(t, l.bundles())
+			b := galleryFact(t, l, entry.Actor, &entry)
+			_, applyErr := Apply(prefix, b)
+			_, replayErr := Replay(l.bundles())
+			for name, err := range map[string]error{"Apply": applyErr, "Replay": replayErr} {
+				if mode == "control" || mode == "plain" {
+					if err != nil {
+						t.Fatalf("%s %s: %v", name, mode, err)
+					}
+					continue
+				}
+				if err == nil {
+					t.Errorf("%s accepted standalone add with %s import identity", name, mode)
+					continue
+				}
+				if f := wantFault(t, err, CodeInvalidField); f.Path != "import_id" {
+					t.Errorf("%s refused another field: %v", name, err)
+				}
+			}
+		})
+	}
+}
 
 func TestGalleryImportCompletionBindsSourceInventory(t *testing.T) {
 	for _, mode := range []string{"control", "foreign-source", "foreign-content", "empty", "omitted", "duplicate", "genuinely-empty", "wrong-inventory", "empty-unmarked", "nonempty-marked", "duplicate-inventory"} {
@@ -41,9 +80,27 @@ func TestGalleryImportCompletionBindsSourceInventory(t *testing.T) {
 					entry.File.SHA256 = newDigest("different bytes")
 				}
 				if mode == "foreign-source" && i == 0 {
-					entry.ImportID = string(newDigest("other"))
+					entry.File.Path = "another-source.mp4"
 				}
-				galleryFact(t, l, entry.Actor, &entry)
+				if mode == "foreign-source" || mode == "wrong-inventory" {
+					entry.ImportID = string(model.GalleryImportIdentity(entry.File, entry.AddedAt))
+				}
+				prefix := mustReplay(t, l.bundles())
+				b := galleryFact(t, l, entry.Actor, &entry)
+				if mode == "foreign-content" {
+					_, applyErr := Apply(prefix, b)
+					_, replayErr := Replay(l.bundles())
+					for name, err := range map[string]error{"Apply": applyErr, "Replay": replayErr} {
+						if err == nil {
+							t.Errorf("%s accepted foreign-content add", name)
+							continue
+						}
+						if f := wantFault(t, err, CodeInvalidField); f.Path != "import_id" {
+							t.Errorf("%s refused another field: %v", name, err)
+						}
+					}
+					return
+				}
 				ids = append(ids, entry.EntryID)
 			}
 			event := &model.GalleryImport{Source: source, Inventory: inventory, EmptySource: mode == "genuinely-empty", Entries: ids}

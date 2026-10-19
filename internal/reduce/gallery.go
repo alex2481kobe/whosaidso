@@ -96,6 +96,9 @@ func (s *state) galleryEvent(b model.Bundle, idx int, event model.TypedEvent) er
 			return fail("entry_id", "gallery entry already exists")
 		}
 		if e.ImportID != "" {
+			if string(model.GalleryImportIdentity(e.File, e.AddedAt)) != e.ImportID {
+				return fail("import_id", "import identity must match the entry's file and added time")
+			}
 			for _, old := range s.galleryEntries() {
 				if old.Add.ImportID == e.ImportID {
 					return fail("import_id", "legacy entry already imported")
