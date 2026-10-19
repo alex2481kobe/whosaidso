@@ -121,6 +121,9 @@ func admissionProposal(ctx context.Context, project store.Project, request Admit
 	proposal := model.Bundle{Admitter: request.Admitter, Packets: lockedRefs, Events: []model.Event{}}
 	eventPackets := []model.ID{}
 	if request.Outcome == "accepted" {
+		if err := gateSelfAdmission(project, request.Admitter, packets); err != nil {
+			return model.Bundle{}, dry.stop("gate", err)
+		}
 		var err error
 		packets, err = gatePackets(project.ID, snapshot, packets)
 		if err != nil {

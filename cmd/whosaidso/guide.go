@@ -26,12 +26,17 @@ each a quoted string on its own line (# starts a comment):
   id = 'animation/toy'          # the project id every record names
   ledger = '.whosaidso/events'  # the ledger folder, inside the checkout
 and optionally stale_after (default '24h'): todo flags a claim with no
-admitted activity for longer as a takeover candidate.
+admitted activity for longer as a takeover candidate; and self_admission
+('allow', the default, or 'refuse': an accepting admission then needs a
+known admitter other than each packet's known author).
 Reads and writes use the checkout you run them in: each clone and worktree
 records on its own branch, and merging joins them (whosaidso help branches).
 WHOSAIDSO_HOME, when set, must be an absolute path (whosaidso help home).
 Set WHOSAIDSO_ACTOR to your name; --actor overrides it; a missing actor is
-recorded unknown, never guessed. Ids: whosaidso id prints one, whosaidso id 5 five.
+recorded unknown, never guessed. When many agents on many machines share a
+ledger, name yourself ACCOUNT/MACHINE/ROLE (biz1/m2/implementer), so every
+view says which account, machine and role did what. A name is asserted,
+not authenticated. Ids: whosaidso id prints one, whosaidso id 5 five.
 Never hand-write an id.
 
 Writing is two acts: capture, then admit the packet id it prints.
@@ -81,7 +86,8 @@ matters, set WHOSAIDSO_NO_CACHE=1: reads replay the whole ledger and neither
 read nor write the cache; any other value is refused.
 `},
 	{"admit", "admission is the review; any actor; self-admission", `  whosaidso admit --outcome accepted|rejected|correction-requested --reason TEXT PACKET ...
-Any actor may admit. Admitting your own packet is allowed and recorded:
+Any actor may admit, unless the project sets self_admission = 'refuse'.
+Admitting your own packet is otherwise allowed and recorded:
 whosaidso history --self-admitted lists those reviews (--self-admitted=false
 and =unknown too). --command-id is minted when omitted; give the printed id
 again to retry exactly. A refused packet stays in intake until you admit it
@@ -94,6 +100,13 @@ otherwise in capture (packet id) order, each packet's events as authored. A
 proposal naming a revision that an earlier one supersedes is refused as stale
 (revision-conflict or invalid-transition); re-capture it against the current
 revision.
+Review on another machine: intake is per machine, so carry the packet. On
+the author's machine whosaidso home prints its intake directory (SRC), on
+the reviewer's too (DST); copy the packet's directory, owner-only:
+  ssh AUTHOR 'tar -C SRC -cf - PACKET' | (umask 077 && mkdir -p DST && tar -C DST -xpf -)
+The reviewer's todo then lists it with its author and events, and admission
+verifies its bytes as for any packet: a copy changed on the way is refused.
+Admit it in one checkout only.
 `},
 	{"accept", "closing a task: witnesses, outcomes, withheld acceptance", `A success handback closes the attempt, not the task: the task waits in
 todo's awaiting-acceptance section until a task.close ends it. A task may

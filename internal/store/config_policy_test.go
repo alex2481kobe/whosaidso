@@ -30,3 +30,21 @@ func TestConfigStaleAfter(t *testing.T) {
 		}
 	}
 }
+
+// self_admission is 'allow' (the default) or 'refuse'.
+func TestConfigSelfAdmission(t *testing.T) {
+	for line, want := range map[string]string{"": "allow", "self_admission = 'allow'\n": "allow", "self_admission = 'refuse'\n": "refuse", "self_admission = 'no'\n": "error"} {
+		root := t.TempDir()
+		if err := os.WriteFile(filepath.Join(root, "whosaidso.toml"), []byte("id = 'team/project'\nledger = '.whosaidso/events'\n"+line), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		p, err := Discover(root)
+		got := map[bool]string{false: "allow", true: "refuse"}[p.Policy.RefuseSelfAdmission]
+		if err != nil {
+			got = "error"
+		}
+		if got != want {
+			t.Errorf("%q: got %s, want %s (%v)", line, got, want, err)
+		}
+	}
+}

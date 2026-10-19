@@ -24,6 +24,9 @@ type homeAnswer struct {
 	Available    bool    `json:"available"`
 	Unavailable  string  `json:"unavailable_reason,omitempty"`
 	CheckoutRoot string  `json:"checkout_root"`
+	// IntakeDir is this machine's intake for the project: one directory per
+	// packet, which is what moves to a reviewer on another machine.
+	IntakeDir string `json:"intake_dir"`
 }
 
 // bindAnswer is `whosaidso home PATH`: what the registration did.
@@ -47,7 +50,11 @@ func homeVerb(fs *flag.FlagSet) func(*call) error {
 		if err != nil {
 			return err
 		}
-		a := homeAnswer{ProjectID: string(invoked.ID), CheckoutRoot: invoked.Root}
+		intake, err := store.IntakeDir(invoked)
+		if err != nil {
+			return err
+		}
+		a := homeAnswer{ProjectID: string(invoked.ID), CheckoutRoot: invoked.Root, IntakeDir: intake}
 		root, registered, err := store.Binding(invoked.ID)
 		if err != nil {
 			return err
@@ -60,7 +67,8 @@ func homeVerb(fs *flag.FlagSet) func(*call) error {
 				a.Available = true
 			}
 		}
-		text := fmt.Sprintf("project  %s\ncheckout %s (reads and writes here use this checkout's ledger)\n", a.ProjectID, a.CheckoutRoot)
+		text := fmt.Sprintf("project  %s\ncheckout %s (reads and writes here use this checkout's ledger)\nintake   %s (this machine's packets, one directory each)\n",
+			a.ProjectID, a.CheckoutRoot, a.IntakeDir)
 		switch {
 		case !registered:
 			text += "viewer   none registered: whosaidso ui opens a project only from inside its checkout; register one with whosaidso home PATH\n"
