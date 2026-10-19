@@ -33,6 +33,7 @@ type gateVerifyFixture struct {
 func gateVerifyNew(t *testing.T) *gateVerifyFixture {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	root := t.TempDir()
 	return &gateVerifyFixture{t: t, p: store.Project{ID: recProject, Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}, n: 200}
 }
@@ -620,6 +621,7 @@ func TestGateVerifyPermissionRecoveryCommandQuotesExactPath(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Setenv("HOME", home)
+			t.Setenv("USERPROFILE", home)
 			g.control()
 			inbox, err := store.IntakeDir(g.p)
 			if err != nil {

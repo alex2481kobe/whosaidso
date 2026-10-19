@@ -70,6 +70,7 @@ func pvPut(t *testing.T, root, rel string, body []byte) {
 func pvNew(t *testing.T) *pvWorld {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	root := t.TempDir()
 	pvPut(t, root, "whosaidso.toml", []byte("id = \"verify/proof\"\nledger = \".whosaidso/events\"\n"))
 	p, err := store.Discover(root)
@@ -776,7 +777,7 @@ func (w *pvWorld) cli(stdin []byte, args ...string) ([]byte, error) {
 	w.t.Helper()
 	cmd := exec.Command(pvWhoSaidSo(w.t), args...)
 	cmd.Dir, cmd.Stdin = w.p.Root, bytes.NewReader(stdin)
-	cmd.Env = append(os.Environ(), "HOME="+os.Getenv("HOME"), "WHOSAIDSO_ACTOR=agent")
+	cmd.Env = append(os.Environ(), "HOME="+os.Getenv("HOME"), "USERPROFILE="+os.Getenv("HOME"), "WHOSAIDSO_ACTOR=agent")
 	bindProjectHome(cmd)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr

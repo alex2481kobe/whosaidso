@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -31,6 +32,7 @@ func TestInvocationTimestampIsUTCThroughApplicationAdmission(t *testing.T) {
 	// Intake intentionally uses an isolated home so this real capture never
 	// writes to the user's inbox.
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	root := t.TempDir()
 	project := store.Project{ID: "test/zone-admission", Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
 	id := func(n int) model.ID { return model.ID(fmt.Sprintf("%026d", n)) }

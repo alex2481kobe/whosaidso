@@ -46,6 +46,7 @@ func identityRepo(t *testing.T) (repo, root string) {
 
 func TestRunIdentityRecordsMachineHeadAndCleanState(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	repo, root := identityRepo(t)
 	id := RunExecutionIdentity(context.Background(), identityProject(t, root))
 	machine, err := store.MachineID()
@@ -84,6 +85,7 @@ func TestRunIdentityRecordsMachineHeadAndCleanState(t *testing.T) {
 // The excluded artifact store is the one beside the configured ledger.
 func TestRunIdentityExcludesTheStoreBesideAConfiguredLedger(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	_, root := identityRepo(t)
 	moved := store.Project{ID: "test/identity", Root: root, Ledger: filepath.Join(root, "custom", "events")}
 	proofPut(t, root, "custom/artifacts/runs/01ARZ3NDEKTSV4RRFFQ69G5FAX/stdout", "x")
@@ -95,6 +97,7 @@ func TestRunIdentityExcludesTheStoreBesideAConfiguredLedger(t *testing.T) {
 
 func TestRunIdentityDirtyOrUnobservableIsUnknownWithAReason(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	for _, tc := range []struct {
 		name  string
 		setup func(t *testing.T) string
@@ -135,6 +138,7 @@ func TestRunIdentityDirtyOrUnobservableIsUnknownWithAReason(t *testing.T) {
 	t.Run("an unreadable machine id is UNKNOWN, never regenerated", func(t *testing.T) {
 		home := t.TempDir()
 		t.Setenv("HOME", home)
+		t.Setenv("USERPROFILE", home)
 		proofPut(t, home, ".whosaidso/"+store.MachineIDFile, "damaged\n")
 		id := RunExecutionIdentity(context.Background(), identityProject(t, t.TempDir()))
 		if id.MachineID.State != model.Unknown || !strings.Contains(id.MachineID.Reason, "machine id") {

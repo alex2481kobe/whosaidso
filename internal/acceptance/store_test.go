@@ -30,6 +30,7 @@ func stHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	got, err := os.UserHomeDir()
 	if err != nil || got != home {
 		t.Fatalf("home redirection failed, refusing to touch the real inbox: %q, %v", got, err)

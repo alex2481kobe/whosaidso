@@ -17,6 +17,7 @@ import (
 func cliFixture(t *testing.T) (string, []byte) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "whosaidso.toml"), []byte("id = \"test/cli\"\nledger = \".whosaidso/events\"\n"), 0600); err != nil {
 		t.Fatal(err)

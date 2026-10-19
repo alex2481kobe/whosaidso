@@ -64,11 +64,11 @@ func (m *nestMachine) cli(dir string, env []string, stdin []byte, args ...string
 	cmd := exec.Command(pvWhoSaidSo(m.t), args...)
 	cmd.Dir, cmd.Stdin = dir, bytes.NewReader(stdin)
 	for _, e := range os.Environ() {
-		if !strings.HasPrefix(e, "WHOSAIDSO_") && !strings.HasPrefix(e, "HOME=") {
+		if !strings.HasPrefix(e, "WHOSAIDSO_") && !strings.HasPrefix(e, "HOME=") && !strings.HasPrefix(e, "USERPROFILE=") {
 			cmd.Env = append(cmd.Env, e)
 		}
 	}
-	cmd.Env = append(append(cmd.Env, "HOME="+m.home, "WHOSAIDSO_HOME="+filepath.Join(m.home, "whosaidso")), env...)
+	cmd.Env = append(append(cmd.Env, "HOME="+m.home, "USERPROFILE="+m.home, "WHOSAIDSO_HOME="+filepath.Join(m.home, "whosaidso")), env...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()

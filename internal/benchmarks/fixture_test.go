@@ -42,6 +42,9 @@ func TestMain(m *testing.M) {
 	if err == nil {
 		err = os.Setenv("HOME", filepath.Join(benchRoot, "home"))
 	}
+	if err == nil {
+		err = os.Setenv("USERPROFILE", filepath.Join(benchRoot, "home"))
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

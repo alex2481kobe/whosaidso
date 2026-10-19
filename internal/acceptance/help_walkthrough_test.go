@@ -209,11 +209,11 @@ func (w *wtWalk) exec(stdin []byte, stdoutFile string, args ...string) (string, 
 	cmd.Dir, cmd.Stdin = w.root, bytes.NewReader(stdin)
 	env := []string{}
 	for _, e := range os.Environ() {
-		if !strings.HasPrefix(e, "WHOSAIDSO_") && !strings.HasPrefix(e, "HOME=") {
+		if !strings.HasPrefix(e, "WHOSAIDSO_") && !strings.HasPrefix(e, "HOME=") && !strings.HasPrefix(e, "USERPROFILE=") {
 			env = append(env, e)
 		}
 	}
-	cmd.Env = append(env, "HOME="+w.home, "WHOSAIDSO_HOME="+filepath.Join(w.home, ".whosaidso"), "WHOSAIDSO_ACTOR=walker")
+	cmd.Env = append(env, "HOME="+w.home, "USERPROFILE="+w.home, "WHOSAIDSO_HOME="+filepath.Join(w.home, ".whosaidso"), "WHOSAIDSO_ACTOR=walker")
 	var so, se bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &so, &se
 	err := cmd.Run()

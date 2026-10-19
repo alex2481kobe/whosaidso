@@ -23,6 +23,7 @@ func testRef(n int, revision model.Revision) model.RecordRef {
 func testProject(t *testing.T) store.Project {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	root := t.TempDir()
 	return store.Project{ID: projectID, Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
 }
