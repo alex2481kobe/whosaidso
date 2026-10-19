@@ -6,6 +6,7 @@ package gallery
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -114,6 +115,9 @@ func TestPinRefusesParentSwapAfterResolution(t *testing.T) {
 	}
 	defer opened.Close()
 	if err := os.Rename(parent, parent+".old"); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skip("Windows refuses to rename a directory holding an open file, so the swap this test attacks cannot happen")
+		}
 		t.Fatal(err)
 	}
 	if err := os.Symlink(outside, parent); err != nil {

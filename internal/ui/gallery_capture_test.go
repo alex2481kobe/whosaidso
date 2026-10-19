@@ -14,12 +14,13 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/gallery"
 	"github.com/alex2481kobe/whosaidso/internal/model"
 	"github.com/alex2481kobe/whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/testaccess"
 	"github.com/alex2481kobe/whosaidso/internal/write"
 )
 
 func TestGalleryRemovalCanBeAdmittedUnderStrictPolicy(t *testing.T) {
 	home := t.TempDir()
-	if err := os.Chmod(home, 0700); err != nil {
+	if err := testaccess.MakePrivate(home); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv(store.HomeEnv, home)
