@@ -2,14 +2,17 @@
 
 package store
 
-// How the permission tests widen, inspect and restore owner-only access on
-// POSIX lives here: mode bits, changed with chmod.
+// How the store's permission tests inspect owner-only access and predict the
+// restore command on POSIX lives here; widening and restoring go through
+// internal/testaccess.
 
 import (
 	"fmt"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/alex2481kobe/whosaidso/internal/testaccess"
 )
 
 func privateMode(directory bool) os.FileMode {
@@ -32,26 +35,22 @@ func requireOwnerOnly(path string, directory bool) error {
 	return nil
 }
 
-func widenAccess(t *testing.T, path string, directory bool) {
-	t.Helper()
-	if err := os.Chmod(path, privateMode(directory)|0o044); err != nil {
-		t.Fatal(err)
-	}
-}
+func widenAccess(t *testing.T, path string, directory bool) { testaccess.Widen(t, path) }
 
 func accessStaysWidened(path string, directory bool) bool {
 	info, err := os.Stat(path)
-	return err == nil && info.Mode().Perm() == privateMode(directory)|0o044
+	return err == nil && info.Mode().Perm()&0o077 != 0
 }
 
 func wantRestoreCommand(path string, directory bool) string {
 	return fmt.Sprintf("chmod %04o '%s'", privateMode(directory), strings.ReplaceAll(path, "'", "'\\''"))
 }
 
-// restoreAccess applies the restore the refusal named.
+// restoreAccess runs the command the refusal named, so a restore command that
+// does not work fails here.
 func restoreAccess(t *testing.T, path string, directory bool) {
 	t.Helper()
-	if err := os.Chmod(path, privateMode(directory)); err != nil {
-		t.Fatal(err)
+	if out, err := testaccess.RunRestore(wantRestoreCommand(path, directory)); err != nil {
+		t.Fatalf("restore command: %v: %s", err, out)
 	}
 }

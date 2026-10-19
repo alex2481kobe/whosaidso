@@ -2,20 +2,18 @@
 
 package store
 
-// How the permission tests widen, inspect and restore owner-only access on
-// Windows lives here: access-control lists, changed with icacls, the tool a
-// user would run, so the tests never depend on the code they check to make
-// their fixtures.
+// How the store's permission tests inspect owner-only access and predict the
+// restore command on Windows lives here; widening and restoring go through
+// internal/testaccess, which uses icacls, the tool a user would run.
 
 import (
 	"fmt"
-	"os/exec"
-	"slices"
-	"strings"
 	"testing"
+
+	"github.com/alex2481kobe/whosaidso/internal/testaccess"
 )
 
-// everyone is the well-known SID of the Everyone group.
+// everyone is the well-known SID testaccess.Widen grants.
 const everyone = "S-1-1-0"
 
 func requireOwnerOnly(path string, directory bool) error {
@@ -29,21 +27,11 @@ func requireOwnerOnly(path string, directory bool) error {
 	return nil
 }
 
-func icacls(t *testing.T, args ...string) {
-	t.Helper()
-	if out, err := exec.Command("icacls", args...).CombinedOutput(); err != nil {
-		t.Fatalf("icacls %v: %v: %s", args, err, out)
-	}
-}
-
-func widenAccess(t *testing.T, path string, directory bool) {
-	t.Helper()
-	icacls(t, path, "/grant", "*"+everyone+":R")
-}
+func widenAccess(t *testing.T, path string, directory bool) { testaccess.Widen(t, path) }
 
 func accessStaysWidened(path string, directory bool) bool {
 	_, foreign, err := foreignGrants(path)
-	return err == nil && slices.Contains(foreign, everyone)
+	return err == nil && len(foreign) != 0
 }
 
 func wantRestoreCommand(path string, directory bool) string {
@@ -54,14 +42,11 @@ func wantRestoreCommand(path string, directory bool) string {
 	return restoreCommand(path, user, []string{everyone}, directory)
 }
 
-// restoreAccess runs the command the refusal named, split as cmd.exe would
-// split it, so a restore command that does not work fails here.
+// restoreAccess runs the command the refusal named, so a restore command that
+// does not work fails here.
 func restoreAccess(t *testing.T, path string, directory bool) {
 	t.Helper()
-	command := wantRestoreCommand(path, directory)
-	quoted := `icacls "` + path + `" `
-	if !strings.HasPrefix(command, quoted) {
-		t.Fatalf("restore command %q does not start with %q", command, quoted)
+	if out, err := testaccess.RunRestore(wantRestoreCommand(path, directory)); err != nil {
+		t.Fatalf("restore command: %v: %s", err, out)
 	}
-	icacls(t, append([]string{path}, strings.Fields(strings.TrimPrefix(command, quoted))...)...)
 }
