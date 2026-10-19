@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alex2481kobe/whosaidso/internal/gallery"
 	"github.com/alex2481kobe/whosaidso/internal/model"
@@ -192,7 +193,9 @@ func TestGalleryImportLeavesLegacyFileAndUsesOnlyLedger(t *testing.T) {
 	if err := os.WriteFile(legacy, []byte("broken legacy list"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	galleryCommand(t, root, "gallery", "import", "--admit", "--reason", "already completed")
+	if _, _, code := cliRun(t, root, nil, "contributor", "gallery", "import", "--admit", "--reason", "invalid source"); code == 0 {
+		t.Fatal("invalid replacement list accepted")
+	}
 	out, _ = galleryCommand(t, root, "gallery", "list", "--json")
 	var list struct{ Entries []struct{ ID string } }
 	if err := json.Unmarshal([]byte(out), &list); err != nil || len(list.Entries) != 1 {
@@ -206,6 +209,27 @@ func TestGalleryImportLeavesLegacyFileAndUsesOnlyLedger(t *testing.T) {
 	snap, err := reduce.Replay(prefix)
 	if err != nil || len(snap.Gallery()) != 1 {
 		t.Fatalf("import not in ledger: %v", err)
+	}
+	if got := snap.Gallery()[0].AddedAt.Format(time.RFC3339); got != "2026-01-01T00:00:00Z" {
+		t.Fatalf("import re-dated entry: got %s", got)
+	}
+	captureRecorded := false
+	for _, raw := range prefix[0].Events {
+		event, err := model.DecodeEvent(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if review, ok := event.(*model.ReviewAdmit); ok {
+			for _, at := range review.CapturedAt {
+				if at.Value == nil || !at.Value.After(snap.Gallery()[0].AddedAt) {
+					t.Fatalf("capture time was replaced by legacy date: %+v", at)
+				}
+				captureRecorded = true
+			}
+		}
+	}
+	if !captureRecorded {
+		t.Fatal("missing separate packet capture time")
 	}
 }
 

@@ -12,7 +12,10 @@ import (
 )
 
 func gateGalleryPin(p store.Project, pin model.GalleryFile) error {
-	path := gallery.ResolvePath(p.Root, pin.Path)
+	path, err := gallery.ResolvePath(p.Root, pin.Path)
+	if err != nil {
+		return admissionFault("gallery-unavailable", "file", err.Error())
+	}
 	observed, err := gallery.Pin(path)
 	if err != nil {
 		return admissionFault("gallery-unavailable", "file", fmt.Sprintf("missing gallery file %s: %v", pin.Path, err))

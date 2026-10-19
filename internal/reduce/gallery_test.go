@@ -114,12 +114,12 @@ func TestGalleryRefusesInvalidTransitionsOnApplyAndReplay(t *testing.T) {
 				e = &add3
 				by = add.Actor
 			case "unimported-entry":
-				e = &model.GalleryImport{Source: newDigest("legacy"), Entries: []model.ID{add.EntryID}}
+				e = &model.GalleryImport{Source: newDigest("legacy"), Inventory: []model.Digest{newDigest("legacy-entry")}, Entries: []model.ID{add.EntryID}}
 			case "duplicate-completion":
-				e = &model.GalleryImport{Source: newDigest("legacy"), Entries: []model.ID{}}
+				e = &model.GalleryImport{Source: model.GallerySource([]model.Digest{}), Inventory: []model.Digest{}, EmptySource: true, Entries: []model.ID{}}
 				galleryFact(t, l, by, e)
 			case "unadmitted-import-entry":
-				e = &model.GalleryImport{Source: newDigest("legacy"), Entries: []model.ID{newID("N0NE")}}
+				e = &model.GalleryImport{Source: newDigest("legacy"), Inventory: []model.Digest{newDigest("legacy-entry")}, Entries: []model.ID{newID("N0NE")}}
 			}
 			prefix := mustReplay(t, l.bundles())
 			b := galleryFact(t, l, by, e)
@@ -141,9 +141,11 @@ func galleryRestoreLedger(t *testing.T) []model.Bundle {
 	galleryFact(t, l, by, &model.GalleryRetract{EntryID: add.EntryID})
 	imported := *add
 	imported.EntryID = newID("GAY2")
-	imported.ImportID = "legacy"
+	inventory := []model.Digest{newDigest("legacy")}
+	source := model.GallerySource(inventory)
+	imported.ImportID = string(source) + ":" + string(inventory[0])
 	galleryFact(t, l, imported.Actor, &imported)
-	galleryFact(t, l, by, &model.GalleryImport{Source: newDigest("legacy-list"), Entries: []model.ID{imported.EntryID}})
+	galleryFact(t, l, by, &model.GalleryImport{Source: source, Inventory: inventory, Entries: []model.ID{imported.EntryID}})
 	return l.bundles()
 }
 

@@ -23,11 +23,14 @@ func TestGalleryAdmissionVerifiesCurrentBytesAndDoesNotStoreMedia(t *testing.T) 
 			if err := os.WriteFile(path, []byte("video"), 0600); err != nil {
 				t.Fatal(err)
 			}
+			reviewer := f.author
+			f.author = model.Actor{ID: "maker"}
 			add, err := gallery.Prepare(f.project.Root, path, "Rendered pose", "", f.author, nil, time.Now())
 			if err != nil {
 				t.Fatal(err)
 			}
 			packet := f.capture(nil, &add)
+			f.author = reviewer
 			change := func() {
 				if err := os.WriteFile(path, []byte("other"), 0600); err != nil {
 					t.Fatal(err)
@@ -88,13 +91,45 @@ func TestGalleryPacketSetOrdersEntryBeforeVerdictAndImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	add.ImportID = "legacy"
-	marker := f.capture(nil, &model.GalleryImport{Source: model.HashBytes([]byte("list")), Entries: []model.ID{add.EntryID}})
+	inventory := []model.Digest{model.HashBytes([]byte("legacy"))}
+	source := model.GallerySource(inventory)
+	add.ImportID = string(source) + ":" + string(inventory[0])
+	marker := f.capture(nil, &model.GalleryImport{Source: source, Inventory: inventory, Entries: []model.ID{add.EntryID}})
 	verdict := f.capture(nil, &model.GalleryApprove{EntryID: add.EntryID, SHA256: add.File.SHA256, Actor: f.author})
 	entry := f.capture(nil, &add)
 	f.accept(marker, verdict, entry)
 	entries := f.snapshot().Gallery()
 	if len(entries) != 1 || entries[0].Verdict != "approved" {
 		t.Fatalf("packet dependencies not applied: %+v", entries)
+	}
+}
+
+func TestGalleryAdmissionRefusesRelativeEscapes(t *testing.T) {
+	for _, mode := range []string{"parent", "symlink"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Setenv("WHOSAIDSO_HOME", filepath.Join(t.TempDir(), "home"))
+			f := newAdmissionFixture(t)
+			outside := filepath.Join(t.TempDir(), "outside.mp4")
+			if err := os.WriteFile(outside, []byte("video"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			add, err := gallery.Prepare(f.project.Root, outside, "Render", "", f.author, nil, time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mode == "parent" {
+				add.File.Path, err = filepath.Rel(f.project.Root, outside)
+			} else {
+				add.File.Path = "link.mp4"
+				err = os.Symlink(outside, filepath.Join(f.project.Root, add.File.Path))
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			packet := f.capture(nil, &add)
+			if _, err := Admit(context.Background(), f.project, f.request(packet)); err == nil {
+				t.Fatal("admission accepted relative escape")
+			}
+		})
 	}
 }

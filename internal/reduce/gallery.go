@@ -72,9 +72,18 @@ func (s *state) galleryEvent(b model.Bundle, idx int, event model.TypedEvent) er
 				return fail("source", "gallery list already imported")
 			}
 		}
-		for _, id := range e.Entries {
+		if e.Inventory == nil || model.GallerySource(e.Inventory) != e.Source || len(e.Inventory) != len(e.Entries) || e.EmptySource != (len(e.Inventory) == 0) {
+			return fail("inventory", "completion must name the complete source inventory; an empty source must be explicit")
+		}
+		seen := map[model.Digest]bool{}
+		for i, id := range e.Entries {
+			legacy := e.Inventory[i]
+			if seen[legacy] {
+				return fail("inventory", "duplicate source entry")
+			}
+			seen[legacy] = true
 			entry, ok := s.galleryEntry(id)
-			if !ok || entry.Add.ImportID == "" {
+			if !ok || entry.Add.ImportID != string(e.Source)+":"+string(legacy) {
 				return fail("entries", "import completion needs every imported entry admitted first")
 			}
 		}
@@ -166,8 +175,8 @@ func (s *state) requireGallery(b model.Bundle, idx int, rec Record) error {
 	for _, bound := range s.galleryRequirements(model.RecordRef{Project: rec.Key.Project, RecordID: rec.Key.ID, Revision: rec.Key.Revision}) {
 		r, o := bound.Requirement, bound.Origin
 		entry, exists := s.galleryEntry(r.EntryID)
-		if !exists || entry.Retracted || entry.Verdict != "approved" || !model.SameActor(entry.Actor, r.Approver) {
-			return faultAt(CodeInvalidTransition, b.Sequence, idx, "acceptance_witness_refs", fmt.Sprintf("criterion %s needs admitted gallery approval of entry %s hash %s by %s", r.CriterionID, r.EntryID, entry.Add.File.SHA256, r.Approver.ID))
+		if !exists || entry.Retracted || entry.Verdict != "approved" || model.SameActor(entry.Actor, entry.Add.Actor) || !model.SameActor(entry.Actor, r.Approver) {
+			return faultAt(CodeInvalidTransition, b.Sequence, idx, "acceptance_witness_refs", fmt.Sprintf("criterion %s needs admitted gallery approval of entry %s hash %s by %s, independently of its author", r.CriterionID, r.EntryID, entry.Add.File.SHA256, r.Approver.ID))
 		}
 		if err := s.unseen(b, idx, "acceptance_witness_refs", "gallery requirement and approval", o, entry.VerdictOrigin); err != nil {
 			return err

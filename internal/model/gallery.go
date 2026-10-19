@@ -3,6 +3,7 @@
 package model
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -86,11 +87,19 @@ func (e GalleryRequire) validate(p string) error {
 }
 
 // GalleryImport seals a completed import of one machine list without keeping it
-// as a source. Source identifies its locator; Entries must already be admitted.
+// as a source. Source hashes Inventory; Entries correspond in the same order.
 type GalleryImport struct {
-	Source  Digest `json:"source"`
-	Entries []ID   `json:"entries"`
+	Source      Digest   `json:"source"`
+	Inventory   []Digest `json:"inventory"`
+	EmptySource bool     `json:"empty_source,omitempty"`
+	Entries     []ID     `json:"entries"`
 }
 
 func (*GalleryImport) eventPayload()        {}
 func (*GalleryImport) EventType() EventType { return "gallery.import" }
+
+// GallerySource identifies a list by its ordered inventory, independently of its locator.
+func GallerySource(inventory []Digest) Digest {
+	raw, _ := json.Marshal(inventory)
+	return HashBytes(raw)
+}

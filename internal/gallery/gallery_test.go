@@ -61,3 +61,34 @@ func TestPinStreamsFilesBeyondBlobResolverLimit(t *testing.T) {
 		t.Fatalf("large file was bounded or refused: %+v %v", pin, err)
 	}
 }
+
+func TestRelativeMediaStaysInsideCheckout(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "checkout")
+	if err := os.Mkdir(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(parent, "external.mp4")
+	inside := filepath.Join(root, "inside.mp4")
+	for _, path := range []string{outside, inside} {
+		if err := os.WriteFile(path, []byte("video"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "escape.mp4")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(inside, filepath.Join(root, "safe.mp4")); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"inside.mp4", "safe.mp4", outside} {
+		if _, err := Prepare(root, path, "control", "", model.Actor{ID: "contributor"}, nil, time.Now()); err != nil {
+			t.Fatalf("control %s: %v", path, err)
+		}
+	}
+	for _, path := range []string{"../external.mp4", "../checkout/inside.mp4", "escape.mp4"} {
+		if _, err := Prepare(root, path, "escape", "", model.Actor{ID: "contributor"}, nil, time.Now()); err == nil {
+			t.Errorf("accepted relative escape %s", path)
+		}
+	}
+}
