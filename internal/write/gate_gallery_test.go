@@ -23,11 +23,14 @@ func TestGalleryAdmissionVerifiesCurrentBytesAndDoesNotStoreMedia(t *testing.T) 
 			if err := os.WriteFile(path, []byte("video"), 0600); err != nil {
 				t.Fatal(err)
 			}
+			reviewer := f.author
+			f.author = model.Actor{ID: "maker"}
 			add, err := gallery.Prepare(f.project.Root, path, "Rendered pose", "", f.author, nil, time.Now())
 			if err != nil {
 				t.Fatal(err)
 			}
 			packet := f.capture(nil, &add)
+			f.author = reviewer
 			change := func() {
 				if err := os.WriteFile(path, []byte("other"), 0600); err != nil {
 					t.Fatal(err)

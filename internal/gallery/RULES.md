@@ -18,7 +18,9 @@ approver. The task's accepter, when named, must author the requirement. Each
 criterion identity can acquire one requirement; it follows that criterion
 through amendments. Different content needs a new entry and criterion. A success
 close needs an active entry whose latest verdict is an approval by the named
-actor. Numeric witnesses cannot substitute for that approval. Existing acceptance
+actor, who must be different from the entry author. An author may record a
+verdict, including a rejection, but their approval cannot satisfy the task gate.
+Numeric witnesses cannot substitute for that approval. Existing acceptance
 and delivery witnesses are still required.
 
 Replay uses admitted facts alone. Admission additionally hashes the local media

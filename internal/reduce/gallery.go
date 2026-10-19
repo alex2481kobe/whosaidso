@@ -175,8 +175,8 @@ func (s *state) requireGallery(b model.Bundle, idx int, rec Record) error {
 	for _, bound := range s.galleryRequirements(model.RecordRef{Project: rec.Key.Project, RecordID: rec.Key.ID, Revision: rec.Key.Revision}) {
 		r, o := bound.Requirement, bound.Origin
 		entry, exists := s.galleryEntry(r.EntryID)
-		if !exists || entry.Retracted || entry.Verdict != "approved" || !model.SameActor(entry.Actor, r.Approver) {
-			return faultAt(CodeInvalidTransition, b.Sequence, idx, "acceptance_witness_refs", fmt.Sprintf("criterion %s needs admitted gallery approval of entry %s hash %s by %s", r.CriterionID, r.EntryID, entry.Add.File.SHA256, r.Approver.ID))
+		if !exists || entry.Retracted || entry.Verdict != "approved" || model.SameActor(entry.Actor, entry.Add.Actor) || !model.SameActor(entry.Actor, r.Approver) {
+			return faultAt(CodeInvalidTransition, b.Sequence, idx, "acceptance_witness_refs", fmt.Sprintf("criterion %s needs admitted gallery approval of entry %s hash %s by %s, independently of its author", r.CriterionID, r.EntryID, entry.Add.File.SHA256, r.Approver.ID))
 		}
 		if err := s.unseen(b, idx, "acceptance_witness_refs", "gallery requirement and approval", o, entry.VerdictOrigin); err != nil {
 			return err
