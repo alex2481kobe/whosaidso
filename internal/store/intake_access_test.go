@@ -1,8 +1,9 @@
 package store
 
 // What a capture acknowledges must pass the owner-only check a later read
-// applies: staging that widens while it is written is refused before the
-// rename that publishes it.
+// applies: any part of staging that widens while it is written (the staging
+// directory, packet.json, the blobs directory or a blob) is refused before
+// the rename that publishes it.
 
 import (
 	"context"
@@ -13,19 +14,24 @@ import (
 )
 
 func TestCaptureRefusesStagingWidenedBeforePublication(t *testing.T) {
-	for _, target := range []string{"staging", "packet.json"} {
+	for _, target := range []string{"staging", "packet.json", "blobs", "blob"} {
 		t.Run(target, func(t *testing.T) {
 			p := intakeProject(t)
-			directory := target == "staging"
+			directory := target == "staging" || target == "blobs"
 			disk := systemIntakeIO()
 			widened := ""
-			// The flush of the staging directory and of packet.json is the
-			// last moment before publication at which each can be widened.
+			// Each path's flush is the last moment before publication at which
+			// it can be widened.
 			disk.sync = func(f *os.File) error {
-				name := f.Name()
+				name, base := f.Name(), filepath.Base(f.Name())
 				info, err := os.Stat(name)
-				staging := err == nil && info.IsDir() && strings.HasSuffix(name, ".tmp")
-				if widened == "" && (directory && staging || !directory && filepath.Base(name) == "packet.json") {
+				hit := map[string]bool{
+					"staging":     err == nil && info.IsDir() && strings.HasSuffix(name, ".tmp"),
+					"packet.json": base == "packet.json",
+					"blobs":       base == "blobs",
+					"blob":        strings.HasPrefix(base, "blob-"),
+				}[target]
+				if widened == "" && hit {
 					widened = name
 					widenAccess(t, name, directory)
 				}

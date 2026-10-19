@@ -42,3 +42,42 @@ func TestLockRefusesALinkSubstitutedAfterTheCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Every kind of link at the lock path is refused through the full acquire,
+// and a dangling link's target is never created.
+func TestLockRefusesEveryLinkKind(t *testing.T) {
+	cases := map[string]func(t *testing.T, path, target string){
+		"dangling file symlink": func(t *testing.T, path, target string) {
+			if err := os.Symlink(target, path); err != nil {
+				t.Skip(err)
+			}
+		},
+		"directory symlink": func(t *testing.T, path, target string) {
+			must(t, os.Mkdir(target, 0o700))
+			if err := os.Symlink(target, path); err != nil {
+				t.Skip(err)
+			}
+		},
+		"junction": func(t *testing.T, path, target string) {
+			must(t, os.Mkdir(target, 0o700))
+			makeJunction(t, path, target)
+		},
+	}
+	for name, plant := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, lockName)
+			target := filepath.Join(dir, "outside")
+			plant(t, path, target)
+			for opener, open := range map[string]func(string) (*os.File, error){"openLock": openLock, "lockAcquire": lockAcquire} {
+				if f, err := open(path); err == nil {
+					f.Close()
+					t.Fatalf("%s opened a %s at the lock path", opener, name)
+				}
+			}
+			if _, err := os.Lstat(target); name == "dangling file symlink" && err == nil {
+				t.Fatal("the lock created the link's target outside the ledger")
+			}
+		})
+	}
+}

@@ -154,10 +154,14 @@ func writeIntake(ctx context.Context, project Project, request IntakeRequest, di
 	if err := syncIntakePath(tmp, disk); err != nil {
 		return zero, err
 	}
-	// Read back what publication will expose, so a packet is never
+	// Read back everything publication will expose, so a packet is never
 	// acknowledged with access a later read would refuse.
-	for _, path := range []string{tmp, packetPath} {
-		if err := checkIntakePath(path, path == tmp); err != nil {
+	published := []string{tmp, blobDir, packetPath}
+	for _, blob := range captured {
+		published = append(published, filepath.Join(blobDir, string(blob.SHA256)))
+	}
+	for _, path := range published {
+		if err := checkIntakePath(path, path == tmp || path == blobDir); err != nil {
 			return zero, err
 		}
 	}
