@@ -57,6 +57,13 @@ since zsh reads `[]` as a filename pattern.
 
 Commit the `.whosaidso/` folder with your code. It is the record.
 
+To keep machines on the right version, set `requires = 'v0.1.8'` in
+`whosaidso.toml`. Older binaries refuse writes (exit 2) and warn on reads,
+naming the running and required versions and the install command. Versions
+use semantic ordering, including prereleases. Development builds (`(devel)`,
+shown as `dev` by `version`) satisfy the requirement but warn once per command;
+this is a dev convenience. Omit `requires` to leave versions unrestricted.
+
 ## Learn more
 
 The guide ships with the binary, so it cannot drift from the CLI:
