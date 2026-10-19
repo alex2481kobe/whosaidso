@@ -48,9 +48,6 @@ type publishIO struct {
 	write  func(*os.File, []byte) (int, error)
 	sync   func(*os.File) error
 	rename func(string, string) error
-	// beforeLock runs between the first home check and taking the lock; only
-	// tests set it, to rebind inside that window.
-	beforeLock func()
 }
 
 func systemPublishIO() publishIO {
@@ -169,17 +166,8 @@ func admitLocked(ctx context.Context, project Project, admission Admission, disk
 	if admission.Propose == nil || admission.RetryDigest == nil {
 		return zero, nil, storeFault("invalid-field", "admission.propose", "no transaction callback")
 	}
-	// A registered home is checked before its ledger directory is touched, so
-	// a deleted home is refused rather than recreated empty, and again under
-	// the lock, which is what serializes admission with rebinding.
-	if err := recheckHome(project); err != nil {
-		return zero, nil, err
-	}
 	if err := ensureLedgerDir(project.Ledger, disk); err != nil {
 		return zero, nil, err
-	}
-	if disk.beforeLock != nil {
-		disk.beforeLock()
 	}
 	// An invalid cache setting is refused before anything else, on every path:
 	// a retry that finds its bundle already published must not skip the check
@@ -192,7 +180,7 @@ func admitLocked(ctx context.Context, project Project, admission Admission, disk
 		return zero, nil, err
 	}
 	defer lockRelease(lock)
-	if err := recheckHome(project); err != nil {
+	if err := recheckConfig(project); err != nil {
 		return zero, nil, err
 	}
 

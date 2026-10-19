@@ -72,7 +72,7 @@ func TestCLIHomeRefusesAHomeMissingKeptArtifacts(t *testing.T) {
 	if err := os.WriteFile(kept, body, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if out, errs, code := cliRun(t, next, nil, "", "home", "."); code != 0 || !strings.HasPrefix(out, "bound test/cli") {
+	if out, errs, code := cliRun(t, next, nil, "", "home", "."); code != 0 || !strings.HasPrefix(out, "registered test/cli") {
 		t.Fatalf("control: a home holding its kept artifacts binds: %d %q %q", code, out, errs)
 	}
 }
@@ -147,7 +147,7 @@ func TestCLIHomeAsksOnlyForArtifactsTheStoreKeeps(t *testing.T) {
 	if err := store.PublishArtifact(root, project.ArtifactDir(), kept); err != nil {
 		t.Fatal(err)
 	}
-	if out, errs, code := cliRun(t, root, nil, "", "home", "."); code != 0 || !strings.HasPrefix(out, "bound test/cli") {
+	if out, errs, code := cliRun(t, root, nil, "", "home", "."); code != 0 || !strings.HasPrefix(out, "registered test/cli") {
 		t.Fatalf("with the kept bytes held, a git citation and a disposed artifact ask nothing more of the store: %d %q %q", code, out, errs)
 	}
 }

@@ -25,9 +25,9 @@ whosaidso.toml above the working directory. It holds exactly two keys, both
 required, each a quoted string on its own line (# starts a comment):
   id = 'animation/toy'          # the project id every record names
   ledger = '.whosaidso/events'  # the ledger folder, inside the checkout
-Bind the checkout holding the live ledger once per machine:
-whosaidso home PATH (whosaidso help home). WHOSAIDSO_HOME, when set, must be
-an absolute path.
+Reads and writes use the checkout you run them in: each clone and worktree
+records on its own branch, and merging joins them (whosaidso help branches).
+WHOSAIDSO_HOME, when set, must be an absolute path (whosaidso help home).
 Set WHOSAIDSO_ACTOR to your name; --actor overrides it; a missing actor is
 recorded unknown, never guessed. Ids: whosaidso id prints one, whosaidso id 5 five.
 Never hand-write an id.
@@ -284,23 +284,18 @@ is off unless asked, and it cannot see uncommitted changes. Re-measure a
 stale claim; do not change its criterion because the code changed. An old
 failing run is set aside only as inapplicable with a verified code_change.
 `},
-	{"home", "where the ledger, intake and runs live", `Every clone and worktree of a project reads and admits through ONE ledger
-on this machine: the one in its home, the checkout bound with
-whosaidso home PATH. The binding is explicit: in an unbound project reads and
-admission refuse, and a missing home refuses too; WhoSaidSo never falls back to
-the invoking checkout's .whosaidso or creates an empty ledger. Output from
-another checkout names the home it used.
-Two roots: the ledger, definitions, admission, canonical artifacts and the
-cache use the home; run, source capture and fresh git HEAD and dirty state
-use the checkout you invoke them in. A git object missing from the home
-repository stays unavailable. Plain capture needs no home: intake is routed
-by the declared project id.
-Commit the whole .whosaidso/ folder (events and artifacts) together: a move,
-or any binding, refuses a home missing evidence its admitted records cite.
-Per machine, one WhoSaidSo home holds the registry (projects/), intake,
-staging (runs' outputs while they run) and the machine id:
-$WHOSAIDSO_HOME, else $HOME/.whosaidso. Set WHOSAIDSO_HOME to a scratch
-directory to rehearse without touching the real ones.
+	{"home", "where the ledger, intake and runs live", `The project is the nearest whosaidso.toml above the working directory, and
+its ledger, artifacts and cache are that checkout's own: every clone and
+worktree records on its own branch, and git merges join them (whosaidso help
+branches). Runs, source capture and git observation use the same checkout.
+Commit the whole .whosaidso/ folder (events and artifacts) together.
+Per machine, one WhoSaidSo home holds intake, staging (runs' outputs while
+they run), the machine id, the gallery and the viewer's registry
+(projects/): $WHOSAIDSO_HOME, else $HOME/.whosaidso. Two profiles under one
+OS user share it unless one sets WHOSAIDSO_HOME. Intake is shared by every
+checkout of a project on this machine. Set WHOSAIDSO_HOME to a scratch directory to rehearse
+without touching the real ones. whosaidso home PATH only tells whosaidso ui
+which checkout to open from outside any checkout.
 `},
 	{"branches", "recording on git branches and merging them", `Record on any branch and merge it the normal way, merge commit or squash:
 there is no extra step. Two people who admit on separate branches each

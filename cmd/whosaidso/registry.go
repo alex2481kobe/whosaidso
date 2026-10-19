@@ -68,8 +68,8 @@ The page reads with GET only; it writes no ledger and no intake. Its only
 changes are the Gallery's Remove, which drops an entry (never the file), and
 Reveal in Finder (macOS). Every screen is the --json answer of the same
 view; the Gallery is whosaidso gallery list's. Run inside a
-bound project it opens that project; elsewhere it lists every project this
-machine's home binds, an unavailable home with its reason.
+checkout it opens that checkout; elsewhere it lists every project this
+machine registered with whosaidso home PATH, an unavailable one with its reason.
 `, define: uiVerb},
 		{name: "capture", summary: "write a packet to immutable intake; publishes nothing", detail: `Reads a JSON array of typed events (whosaidso template makes one). A
 source.intake is captured with its original bytes, from its reference or
@@ -179,17 +179,15 @@ missing now, who added it, its title, path and note.
 `, define: galleryVerb("list")},
 		{name: "gallery rm", args: "ID", summary: "remove an entry from the gallery, never its file", detail: `Removes the entry from the gallery. The file it names is not touched.
 `, define: galleryVerb("rm")},
-		{name: "home", args: "[PATH]", summary: "show or set where this project's live ledger is", detail: `Bare, shows this project's binding on this machine: its home, or unbound,
-and whether the home is available. With PATH, binds the project to the
-checkout at PATH, which must hold whosaidso.toml declaring the same project id,
-a ledger inside it and a readable history. A home every read would refuse
-is not bound: intake that is not owner-only, or a ledger this binary cannot
-decode, is refused with that reason. Binding again elsewhere is the
-move: while the old home exists, PATH's history must continue it bundle for
-bundle; when it is gone, continuity: not-compared is printed. Any binding
-refuses a home whose artifact store lacks bytes its admitted records cite,
-naming each digest and its citer. An entry that cannot be read is replaced,
-and says so (continuity: unreadable-binding-replaced).
+		{name: "home", args: "[PATH]", summary: "show or set the checkout the viewer opens for this project", detail: `Reads and writes always use the checkout you run them in; this changes
+none of them. Bare, shows this checkout and the checkout this machine's
+viewer opens for the project when whosaidso ui runs outside any checkout,
+and whether it is available. With PATH, registers the checkout at PATH,
+which must hold whosaidso.toml declaring the same project id and a readable
+ledger. A checkout every read would refuse is not registered: intake that
+is not owner-only, a ledger this binary cannot decode, or an artifact store
+lacking bytes its admitted records cite (each digest and its citer named).
+An entry that cannot be read is replaced.
 `, define: homeVerb},
 		{name: "id", args: "[N]", summary: "print N fresh record ids (default one)", detail: `Use it rather than inventing an id: hand-typed Crockford base32 parses and
 means nothing.

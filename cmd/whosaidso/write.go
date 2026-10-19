@@ -51,11 +51,7 @@ func captureVerb(fs *flag.FlagSet) func(*call) error {
 		if !*admitAfter && (isSet(fs, "reason") || isSet(fs, "admit-command-id")) {
 			return usageError("whosaidso capture: --reason and --admit-command-id belong to --admit")
 		}
-		open := c.checkout
-		if *admitAfter {
-			open = c.project
-		}
-		project, err := open()
+		project, err := c.project()
 		if err != nil {
 			return err
 		}

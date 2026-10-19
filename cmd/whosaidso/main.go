@@ -79,21 +79,11 @@ type call struct {
 	json   bool     // the verb's --json was given
 }
 
-// project is the project a command reads and admits through: its bound home
-// (store.Open). It refuses an unbound project or a missing home, and when the
-// home is not the invoking checkout it says on stderr which home was used.
-func (c *call) project() (store.Project, error) {
-	p, err := store.Open(c.cwd)
-	if err == nil && p.Root != p.Checkout {
-		fmt.Fprintf(c.stderr, "home %s (invoked in %s)\n", p.Root, p.Checkout)
-	}
-	return p, err
-}
-
-// checkout is the invoking checkout's project, for what needs only the
-// declared project id and this checkout: capture routes intake by id and
-// captures sources from here, so it needs no home.
-func (c *call) checkout() (store.Project, error) { return store.Discover(c.cwd) }
+// project is the project a command reads and writes: the nearest
+// whosaidso.toml above the working directory, with that checkout's own
+// ledger. No machine registry is consulted, so each clone and worktree
+// records on its own branch.
+func (c *call) project() (store.Project, error) { return store.Discover(c.cwd) }
 
 type countingWriter struct {
 	w io.Writer

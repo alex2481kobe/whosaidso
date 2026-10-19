@@ -31,7 +31,7 @@ import (
 // attributes; and the snapshot cache, which is derived data.
 func recordBytes(t *testing.T, root string) map[string][32]byte {
 	t.Helper()
-	p, err := store.Open(root)
+	p, err := store.Discover(root)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -21,12 +21,12 @@ of the record.
 
 ## The 60-second loop
 
-Declare the project and bind this checkout as the home of its ledger:
+Declare the project; every clone and worktree reads and writes its own copy of the ledger, and git merges join
+them:
 
 ```sh
 cd your-project
 printf "id = 'you/your-project'\nledger = '.whosaidso/events'\n" > whosaidso.toml
-whosaidso home .
 export WHOSAIDSO_ACTOR=alice          # who is acting; never guessed
 ```
 

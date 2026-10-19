@@ -22,7 +22,7 @@ func accepterChangeNew(t *testing.T) *gateVerifyFixture {
 	if _, err := store.Bind(context.Background(), root, root); err != nil {
 		t.Fatal(err)
 	}
-	p, err := store.Open(root)
+	p, err := store.Discover(root)
 	if err != nil {
 		t.Fatal(err)
 	}

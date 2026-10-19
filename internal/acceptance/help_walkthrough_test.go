@@ -351,7 +351,7 @@ func TestHelpWalkthrough(t *testing.T) {
 		return out
 	}
 
-	// ---- setup: whosaidso.toml as the loop topic writes it, then bind home.
+	// ---- setup: whosaidso.toml as the loop topic writes it; nothing is registered.
 	loop := w.guide("loop")
 	var toml []string
 	for _, line := range strings.Split(loop, "\n") {
@@ -364,11 +364,7 @@ func TestHelpWalkthrough(t *testing.T) {
 	}
 	pvPut(t, w.root, "whosaidso.toml", []byte(strings.Join(toml, "\n")+"\n"))
 	v["P"] = regexp.MustCompile(`'([^']*)'`).FindStringSubmatch(toml[0])[1]
-	w.step("an unbound project refuses reads (help home)", 1, w.recipe("views", "whosaidso todo"), nil)
-	out, _ := w.step("bind the home (help loop)", 0, w.recipe("loop", "whosaidso home PATH"), map[string]string{"PATH": "."})
-	if !strings.Contains(out, "bound "+v["P"]) {
-		t.Fatalf("home PATH should report the binding of %s:\n%s", v["P"], out)
-	}
+	views("an empty project reads with no registration (help home)", nil, "whosaidso todo")
 
 	// ---- create a task: template > task.json, fill, capture, admit.
 	w.step("template (help loop)", 0, w.recipe("loop", "whosaidso template task.create >"), nil)
