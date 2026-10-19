@@ -120,9 +120,6 @@ func briefTodoTask(b *briefWriter, indent int, t cur) {
 	}
 	for _, c := range t.at("claims").items() {
 		line := []any{"claim", c.at("attempt_id"), "claimed", c.at("claimed_at"), "last activity", c.at("last_activity_at")}
-		if c.at("idle_for").ok() {
-			line = append(line, "idle", c.at("idle_for"))
-		}
 		if stale, _ := c.at("stale").v.(bool); stale {
 			line = append(line, "STALE")
 		}
