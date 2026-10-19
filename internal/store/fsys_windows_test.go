@@ -15,6 +15,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -77,7 +79,7 @@ func TestRenameGivesUpOnAHandleHeldForGood(t *testing.T) {
 	}
 	defer held.Close()
 	var bound time.Duration
-	for _, d := range renameRetries {
+	for _, d := range sharingRetries {
 		bound += d
 	}
 	start := time.Now()
@@ -219,4 +221,47 @@ func TestNullAccessListIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	requireFault(t, privateAccessFault(dir, info, true), "insecure-permissions")
+}
+
+// holdExclusive opens path sharing nothing, as the kernel holds a file while
+// renaming it, and returns the release.
+func holdExclusive(t *testing.T, path string) func() {
+	t.Helper()
+	p, err := syscall.UTF16PtrFromString(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := syscall.CreateFile(p, syscall.GENERIC_READ, 0, nil, syscall.OPEN_EXISTING, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var once sync.Once
+	release := func() { once.Do(func() { syscall.CloseHandle(h) }) }
+	t.Cleanup(release)
+	return release
+}
+
+func TestBundleReadWaitsOutASharingViolation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "00000001-bundle.json")
+	putFile(t, path, []byte("{}"))
+	release := holdExclusive(t, path)
+	if _, err := os.ReadFile(path); err == nil {
+		t.Fatal("control: a file held without sharing must refuse a plain read")
+	}
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		release()
+	}()
+	if data, err := readBundle(path); err != nil || string(data) != "{}" {
+		t.Fatalf("a handle released within the bound must not fail the read: %q, %v", data, err)
+	}
+}
+
+func TestBundleReadGivesUpOnAHandleHeldForGood(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "00000001-bundle.json")
+	putFile(t, path, []byte("{}"))
+	holdExclusive(t, path)
+	if _, err := readBundle(path); err == nil {
+		t.Fatal("a handle that is never released must surface the sharing violation")
+	}
 }

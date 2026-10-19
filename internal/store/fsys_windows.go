@@ -26,13 +26,13 @@ const (
 	errorSharingViolation = syscall.Errno(32)
 )
 
-// renameRetries bounds how long a publication waits out another process that
-// has one of its files open. Indexers and virus scanners open new files
+// sharingRetries bounds how long a rename, or a read of a bundle, waits out
+// another process that has the file open. Indexers and virus scanners open new files
 // briefly and without FILE_SHARE_DELETE, which makes a rename fail with a
 // sharing violation that clears on its own a moment later. The bound is what
 // keeps a handle held for good from turning into a hang: about a second and a
 // half of waiting, then the error is returned as it is.
-var renameRetries = []time.Duration{
+var sharingRetries = []time.Duration{
 	5 * time.Millisecond, 10 * time.Millisecond, 20 * time.Millisecond, 40 * time.Millisecond,
 	80 * time.Millisecond, 160 * time.Millisecond, 320 * time.Millisecond, 400 * time.Millisecond, 400 * time.Millisecond,
 }
@@ -151,10 +151,26 @@ func renameNoReplace(from, to string) error {
 		if ok != 0 {
 			return nil
 		}
-		if !transientSharing(callErr) || attempt >= len(renameRetries) {
+		if !transientSharing(callErr) || attempt >= len(sharingRetries) {
 			return &os.LinkError{Op: "rename", Old: from, New: to, Err: callErr}
 		}
-		time.Sleep(renameRetries[attempt])
+		time.Sleep(sharingRetries[attempt])
+	}
+}
+
+// readBundle reads a published ledger file. A reader takes no lock, and while
+// a publisher's rename is in flight the kernel holds the renamed file open
+// for deletion without sharing, so an open that lands in that window fails
+// with a sharing violation that clears a moment later. The wait is bounded
+// by the same schedule as a rename's.
+func readBundle(path string) ([]byte, error) {
+	for attempt := 0; ; attempt++ {
+		data, err := os.ReadFile(path)
+		var pathErr *os.PathError
+		if err == nil || !errors.As(err, &pathErr) || !transientSharing(pathErr.Err) || attempt >= len(sharingRetries) {
+			return data, err
+		}
+		time.Sleep(sharingRetries[attempt])
 	}
 }
 

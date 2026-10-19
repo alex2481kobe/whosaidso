@@ -48,6 +48,12 @@ func openForSync(path string) (*os.File, error) {
 	return os.Open(path)
 }
 
+// readBundle reads a published ledger file. POSIX has no sharing modes, so a
+// read never collides with a concurrent rename.
+func readBundle(path string) ([]byte, error) {
+	return os.ReadFile(path)
+}
+
 // renameNoReplace publishes from under the name to. POSIX rename replaces an
 // existing destination, so the never-replace rule here is kept by the callers:
 // publication checks the destination under the admission lock, and an intake

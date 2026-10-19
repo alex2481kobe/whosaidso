@@ -7,7 +7,6 @@ package store
 
 import (
 	"crypto/sha256"
-	"os"
 	"path/filepath"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
@@ -46,7 +45,7 @@ func (s State) published(id model.ID) (model.Bundle, bool, error) {
 			continue
 		}
 		path := filepath.Join(s.project.Ledger, s.files[i].name)
-		raw, err := os.ReadFile(path)
+		raw, err := readBundle(path)
 		if err != nil {
 			return model.Bundle{}, false, storeFault("io", path, err.Error())
 		}
@@ -71,7 +70,7 @@ func (s State) extended(b model.Bundle) *State {
 	if err != nil {
 		return nil
 	}
-	raw, err := os.ReadFile(filepath.Join(s.project.Ledger, name))
+	raw, err := readBundle(filepath.Join(s.project.Ledger, name))
 	if err != nil {
 		return nil
 	}
