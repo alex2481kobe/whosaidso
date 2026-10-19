@@ -114,3 +114,17 @@ func CapturedHere(project Project, origin string) (bool, error) {
 	}
 	return origin == root, nil
 }
+
+// OriginGone reports whether no checkout is left at origin: the checkout was
+// moved or removed. Its packets then belong to no sibling, and read as a
+// packet with no noted origin does, pending in any checkout of the project.
+func OriginGone(origin string) (bool, error) {
+	_, err := os.Stat(origin)
+	if os.IsNotExist(err) {
+		return true, nil
+	}
+	if err != nil {
+		return false, storeFault("io", origin, err.Error())
+	}
+	return false, nil
+}

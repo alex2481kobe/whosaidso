@@ -169,8 +169,9 @@ func pending(project store.Project, s reduce.Snapshot) ([]Packet, error) {
 }
 
 // placeOrigin names the checkout that captured a pending packet, and marks it
-// captured-elsewhere when that is not this checkout. A packet with no noted
-// origin stays pending here, as every packet did before origins were noted.
+// captured-elsewhere when that is another checkout still in place. A packet
+// with no noted origin, or whose checkout has since moved away, stays pending
+// here, as every packet did before origins were noted.
 func placeOrigin(project store.Project, p *Packet) error {
 	origin, known, err := store.IntakeOrigin(project, p.CommandID)
 	if err != nil || !known {
@@ -181,8 +182,13 @@ func placeOrigin(project store.Project, p *Packet) error {
 		return err
 	}
 	p.CapturedIn = origin
-	if !here {
-		p.Disposition = "captured-elsewhere"
+	if here {
+		return nil
 	}
+	gone, err := store.OriginGone(origin)
+	if err != nil || gone {
+		return err
+	}
+	p.Disposition = "captured-elsewhere"
 	return nil
 }
