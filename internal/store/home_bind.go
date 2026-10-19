@@ -96,13 +96,14 @@ func writeBinding(path, root string) error {
 	}
 	// A damaged entry may be a link. POSIX rename replaces a link in place;
 	// Windows refuses to rename a file over a directory link, so the link
-	// itself, never what it points at, is removed first. The registry lock is
-	// held, so no reader of this entry is racing the gap.
+	// itself, never what it points at, is removed first. The registry lock
+	// keeps writers out of the gap; a reader there finds no entry, as it would
+	// before the first bind.
 	if info, statErr := os.Lstat(path); err == nil && statErr == nil && !info.Mode().IsRegular() {
 		err = os.Remove(path)
 	}
 	if err == nil {
-		err = os.Rename(tmp.Name(), path)
+		err = renameReplace(tmp.Name(), path)
 	}
 	if err != nil {
 		return storeFault("io", path, err.Error())

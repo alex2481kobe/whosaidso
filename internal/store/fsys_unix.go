@@ -61,3 +61,9 @@ func readBundle(path string) ([]byte, error) {
 func renameNoReplace(from, to string) error {
 	return os.Rename(from, to)
 }
+
+// renameReplace replaces to with from; POSIX rename does that atomically,
+// whoever has to open.
+func renameReplace(from, to string) error {
+	return os.Rename(from, to)
+}

@@ -98,7 +98,9 @@ func privateAccessFault(path string, info os.FileInfo, directory bool) error {
 // second drops inherited entries and sets the user's own grant, inheritable
 // below a directory as at creation. The grant is quoted so that PowerShell
 // does not read its parentheses as an expression; both lines paste into cmd
-// and PowerShell alike.
+// and PowerShell alike, except for a path holding a character one shell
+// expands inside double quotes ($ or a backtick in PowerShell, % in cmd),
+// which then pastes correctly only into the other.
 func restoreCommand(path, user string, directory bool) string {
 	grant := "F"
 	if directory {
@@ -142,16 +144,20 @@ func renameNoReplace(from, to string) error {
 	if err != nil {
 		return &os.LinkError{Op: "rename", Old: from, New: to, Err: err}
 	}
-	for attempt := 0; ; attempt++ {
+	return waitOutSharing(func() error {
 		ok, _, callErr := procMoveFileExW.Call(uintptr(unsafe.Pointer(f)), uintptr(unsafe.Pointer(t)), moveFileWriteThrough)
 		if ok != 0 {
 			return nil
 		}
-		if !transientSharing(callErr) || attempt >= len(sharingRetries) {
-			return &os.LinkError{Op: "rename", Old: from, New: to, Err: callErr}
-		}
-		time.Sleep(sharingRetries[attempt])
-	}
+		return &os.LinkError{Op: "rename", Old: from, New: to, Err: callErr}
+	})
+}
+
+// renameReplace replaces to with from, for the one entry that is rewritten
+// in place (a home's binding). A reader holding to open without delete
+// sharing makes the replace fail for a moment, so it waits that out too.
+func renameReplace(from, to string) error {
+	return waitOutSharing(func() error { return os.Rename(from, to) })
 }
 
 // readBundle reads a published ledger file. A reader takes no lock, and while
@@ -160,11 +166,23 @@ func renameNoReplace(from, to string) error {
 // with a sharing violation that clears a moment later. The wait is bounded
 // by the same schedule as a rename's.
 func readBundle(path string) ([]byte, error) {
+	var data []byte
+	err := waitOutSharing(func() (err error) {
+		data, err = os.ReadFile(path)
+		return err
+	})
+	return data, err
+}
+
+// waitOutSharing runs op until it succeeds, fails for a reason other than
+// another process's open handle, or the sharingRetries schedule runs out; the
+// last error is returned as it is.
+func waitOutSharing(op func() error) error {
 	for attempt := 0; ; attempt++ {
-		data, err := os.ReadFile(path)
-		var pathErr *os.PathError
-		if err == nil || !errors.As(err, &pathErr) || !transientSharing(pathErr.Err) || attempt >= len(sharingRetries) {
-			return data, err
+		err := op()
+		var errno syscall.Errno
+		if err == nil || !errors.As(err, &errno) || !transientSharing(errno) || attempt >= len(sharingRetries) {
+			return err
 		}
 		time.Sleep(sharingRetries[attempt])
 	}
