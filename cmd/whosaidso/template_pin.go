@@ -25,7 +25,6 @@ import (
 
 	"github.com/alex2481kobe/whosaidso/internal/evidence"
 	"github.com/alex2481kobe/whosaidso/internal/model"
-	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 // pin builds one --pin and puts it at NAME.
@@ -46,7 +45,7 @@ func (t *boundTemplate) pin(spec string) error {
 	if i := strings.LastIndex(target, "@"); i >= 0 {
 		path, rev = target[:i], target[i+1:]
 	}
-	project, err := store.Discover(t.c.cwd)
+	project, err := t.c.project()
 	if err != nil {
 		return err
 	}

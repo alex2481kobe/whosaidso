@@ -24,7 +24,13 @@ func uiVerb(fs *flag.FlagSet) func(*call) error {
 		if err := noPositionals(c, "ui"); err != nil {
 			return err
 		}
-		ln, server, url, err := ui.Listen(uiConfig(c.cwd))
+		cfg := uiConfig(c.cwd)
+		if cfg.Invoked != nil {
+			if err := c.warnVersion(*cfg.Invoked); err != nil {
+				return err
+			}
+		}
+		ln, server, url, err := ui.Listen(cfg)
 		if err != nil {
 			return err
 		}

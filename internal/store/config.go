@@ -299,10 +299,10 @@ func storeFault(code, path, detail string) *model.Fault {
 // and the admission lock, whosaidso.toml can change (an edit, a branch switch);
 // publishing into the ledger opened would acknowledge a fact the configured
 // ledger never holds, so the project and ledger it names now must be the ones
-// being written.
+// being written. Its current version requirement is enforced here too.
 func recheckConfig(project Project) error {
 	if !project.configured {
-		return nil
+		return requireVersion(project)
 	}
 	current, err := configAt(project.Root)
 	if os.IsNotExist(err) {
@@ -319,5 +319,5 @@ func recheckConfig(project Project) error {
 			"project %s was opened with ledger %s and whosaidso.toml now names project %s with ledger %s; nothing was published; run the command again",
 			project.ID, opened, current.ID, named))
 	}
-	return nil
+	return requireVersion(current)
 }

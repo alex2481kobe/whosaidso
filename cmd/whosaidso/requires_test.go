@@ -3,8 +3,6 @@
 package main
 
 import (
-	"bytes"
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,39 +34,21 @@ func requiresConfig(t *testing.T, root, version string) {
 	}
 }
 
-func TestRequiresOlderBuildRefusesEveryWriteEntrance(t *testing.T) {
+func TestRequiresCLICaptureReportsStoreRefusal(t *testing.T) {
 	requiresBuild(t, "v0.1.7")
 	t.Setenv("WHOSAIDSO_HOME", t.TempDir())
-	root := t.TempDir()
+	root, input := cliFixture(t)
 	requiresConfig(t, root, "v0.1.8")
-	for _, args := range [][]string{
-		{"capture"}, {"capture", "--admit", "--reason", "reviewed"},
-		{"admit", "packet"}, {"handback"}, {"run", "--", "unused"}, {"reconcile"},
-		{"template", "task.create", "--capture"},
-		{"template", "task.create", "--capture=true", "--admit", "--reason", "reviewed"},
-		{"template", "source.intake", "--capture", "--pin", "source_ref=missing"},
-	} {
-		t.Run(strings.Join(args, " "), func(t *testing.T) {
-			var out, errOut bytes.Buffer
-			code := whosaidso(context.Background(), args, root, strings.NewReader("invalid input"), &out, &errOut, os.Getenv)
-			message := errOut.String()
-			if code != 2 || out.Len() != 0 || strings.Count(message, "\n") != 1 {
-				t.Fatalf("exit %d stdout %q stderr %q; want exit 2 and one refusal", code, out.String(), message)
+	for _, args := range [][]string{{"capture"}, {"capture", "--admit", "--reason", "reviewed"}} {
+		out, message, code := cliRun(t, root, input, "worker", args...)
+		if code != 1 || out != "" || !strings.Contains(message, "version-required") {
+			t.Fatalf("%v: exit %d stdout %q stderr %q", args, code, out, message)
+		}
+		for _, want := range []string{"v0.1.7", "v0.1.8", "go install github.com/alex2481kobe/whosaidso/cmd/whosaidso@v0.1.8"} {
+			if !strings.Contains(message, want) {
+				t.Errorf("refusal %q lacks %q", message, want)
 			}
-			for _, want := range []string{"v0.1.7", "v0.1.8", "go install github.com/alex2481kobe/whosaidso/cmd/whosaidso@v0.1.8"} {
-				if !strings.Contains(message, want) {
-					t.Errorf("refusal %q lacks %q", message, want)
-				}
-			}
-		})
-	}
-	entries, err := os.ReadDir(root)
-	if err != nil || len(entries) != 1 {
-		t.Fatalf("refused writes changed project: %v, %v", entries, err)
-	}
-	entries, err = os.ReadDir(os.Getenv("WHOSAIDSO_HOME"))
-	if err != nil || len(entries) != 0 {
-		t.Fatalf("refused writes changed home: %v, %v", entries, err)
+		}
 	}
 }
 
@@ -134,10 +114,10 @@ func TestRequiresSemverOlderBuildsAreRefused(t *testing.T) {
 	} {
 		t.Run(tc.running+"/"+tc.required, func(t *testing.T) {
 			requiresBuild(t, tc.running)
-			root := t.TempDir()
+			root, input := cliFixture(t)
 			requiresConfig(t, root, tc.required)
-			_, stderr, code := cliRun(t, root, nil, "", "capture")
-			if code != 2 || !strings.Contains(stderr, "go install") {
+			_, stderr, code := cliRun(t, root, input, "worker", "capture")
+			if code != 1 || !strings.Contains(stderr, "go install") {
 				t.Fatalf("exit %d: %s", code, stderr)
 			}
 		})

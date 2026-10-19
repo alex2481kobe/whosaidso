@@ -22,6 +22,7 @@ import (
 	"os/signal"
 	"strings"
 
+	"github.com/alex2481kobe/whosaidso/internal/buildinfo"
 	"github.com/alex2481kobe/whosaidso/internal/model"
 	"github.com/alex2481kobe/whosaidso/internal/store"
 )
@@ -76,6 +77,7 @@ type call struct {
 	getenv func(string) string
 	args   []string // positional arguments, wherever they stood among the flags
 	argv   []string // everything after a literal --
+	warned bool     // version diagnostic has been printed for this invocation
 	json   bool     // the verb's --json was given
 }
 
@@ -83,7 +85,28 @@ type call struct {
 // whosaidso.toml above the working directory, with that checkout's own
 // ledger. No machine registry is consulted, so each clone and worktree
 // records on its own branch.
-func (c *call) project() (store.Project, error) { return store.Discover(c.cwd) }
+func (c *call) project() (store.Project, error) { return c.openProject(c.cwd) }
+
+func (c *call) openProject(cwd string) (store.Project, error) {
+	project, err := store.Discover(cwd)
+	if err == nil {
+		err = c.warnVersion(project)
+	}
+	return project, err
+}
+
+func (c *call) warnVersion(project store.Project) error {
+	if c.warned {
+		return nil
+	}
+	message, _ := project.Policy.VersionRequirement(buildinfo.Version())
+	if message == "" {
+		return nil
+	}
+	c.warned = true
+	_, err := fmt.Fprintln(c.stderr, "warning: "+message)
+	return err
+}
 
 type countingWriter struct {
 	w io.Writer
@@ -165,9 +188,6 @@ func dispatch(c *call, args []string) error {
 			return err
 		}
 		return usageError("whosaidso %s: %v; run whosaidso help %s", v.name, err, v.name)
-	}
-	if err := c.checkVersion(v.name, fs); err != nil {
-		return err
 	}
 	return run(c)
 }
