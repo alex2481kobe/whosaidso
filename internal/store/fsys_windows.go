@@ -158,7 +158,17 @@ func renameNoReplace(from, to string) error {
 // renameReplace replaces to with from, for the one entry that is rewritten
 // in place (a home's binding). A reader holding to open without delete
 // sharing makes the replace fail for a moment, so it waits that out too.
+// A damaged entry may be a link, which POSIX rename replaces in place but
+// Windows refuses to rename over when it is a directory link, so the link
+// itself, never what it points at, is removed first; a real directory stays
+// and the rename refuses it. The caller's lock keeps writers out of the gap;
+// a reader there finds no entry, as it would before the first write.
 func renameReplace(from, to string) error {
+	if info, err := os.Lstat(to); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		if err := os.Remove(to); err != nil {
+			return &os.LinkError{Op: "rename", Old: from, New: to, Err: err}
+		}
+	}
 	return waitOutSharing(func() error { return os.Rename(from, to) })
 }
 
