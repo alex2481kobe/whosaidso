@@ -13,9 +13,6 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/testaccess"
 )
 
-// everyone is the well-known SID testaccess.Widen grants.
-const everyone = "S-1-1-0"
-
 func requireOwnerOnly(path string, directory bool) error {
 	_, foreign, err := foreignGrants(path)
 	if err != nil {
@@ -39,7 +36,7 @@ func wantRestoreCommand(path string, directory bool) string {
 	if err != nil {
 		return "current user unknown: " + err.Error()
 	}
-	return restoreCommand(path, user, []string{everyone}, directory)
+	return restoreCommand(path, user, directory)
 }
 
 // restoreAccess runs the command the refusal named, so a restore command that

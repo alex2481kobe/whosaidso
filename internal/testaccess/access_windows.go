@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"os/user"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -53,18 +54,20 @@ func Widened(t testing.TB, path string) bool {
 	return strings.Contains(sddl, ";WD)") || strings.Contains(sddl, ";"+everyone+")")
 }
 
-// RunRestore executes a displayed restore command, `icacls "PATH" ARGS...`,
-// with PATH taken whole from between its quotes and ARGS split on spaces as
-// cmd.exe would split them.
+// RunRestore executes a displayed restore command, each of its lines joined
+// by " followed by ", through cmd.exe exactly as a user would paste it.
 func RunRestore(command string) ([]byte, error) {
-	const head = `icacls "`
-	end := strings.Index(command[min(len(head), len(command)):], `" `)
-	if !strings.HasPrefix(command, head) || end < 0 {
-		return nil, fmt.Errorf("not an icacls restore command: %q", command)
+	var all []byte
+	for _, line := range strings.Split(command, " followed by ") {
+		cmd := exec.Command(os.Getenv("ComSpec"))
+		cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: `cmd.exe /d /s /c "` + line + `"`}
+		out, err := cmd.CombinedOutput()
+		all = append(all, out...)
+		if err != nil {
+			return all, fmt.Errorf("%s: %w", line, err)
+		}
 	}
-	path := command[len(head) : len(head)+end]
-	args := strings.Fields(command[len(head)+end+2:])
-	return exec.Command("icacls", append([]string{path}, args...)...).CombinedOutput()
+	return all, nil
 }
 
 // MakePrivate makes an existing directory owner-only, as a home the store

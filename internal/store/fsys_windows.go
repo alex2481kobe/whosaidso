@@ -12,7 +12,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 	"unsafe"
@@ -90,27 +89,24 @@ func privateAccessFault(path string, info os.FileInfo, directory bool) error {
 	if err == nil && len(foreign) == 0 {
 		return nil
 	}
-	restore := restoreCommand(path, user, foreign, directory)
-	if err != nil {
-		restore += " (" + err.Error() + ")"
-	}
-	return insecurePermissions(path, restore)
+	return insecurePermissions(path, restoreCommand(path, user, directory))
 }
 
-// restoreCommand is the one icacls invocation that puts path back to
-// owner-only: inherited entries dropped, each foreign grant removed by SID,
-// and the user's own grant replaced, inheritable below a directory as at
-// creation. SIDs rather than names keep it exact on any machine and locale.
-func restoreCommand(path, user string, foreign []string, directory bool) string {
-	command := `icacls "` + path + `" /inheritance:r`
-	if len(foreign) > 0 {
-		command += " /remove:g *" + strings.Join(foreign, " *")
-	}
+// restoreCommand is the pair of icacls invocations that puts path back to
+// owner-only whatever widened it. /reset drops every explicit entry, including
+// one for a SID no account maps to, which icacls cannot name to remove; the
+// second drops inherited entries and sets the user's own grant, inheritable
+// below a directory as at creation. The grant is quoted so that PowerShell
+// does not read its parentheses as an expression; both lines paste into cmd
+// and PowerShell alike.
+func restoreCommand(path, user string, directory bool) string {
 	grant := "F"
 	if directory {
 		grant = "(OI)(CI)F"
 	}
-	return command + " /grant:r *" + user + ":" + grant
+	quoted := `"` + path + `"`
+	return "icacls " + quoted + " /reset followed by icacls " + quoted +
+		` /inheritance:r /grant:r "*` + user + ":" + grant + `"`
 }
 
 // openForSync opens path so that (*os.File).Sync, which is FlushFileBuffers
