@@ -13,18 +13,37 @@ import (
 	"testing"
 )
 
-// Widen lets group and others read path (and enter it, for a directory).
-func Widen(t testing.TB, path string) {
+// widenedMode is exactly what Widen sets: group and others may read path,
+// and enter it when it is a directory.
+func widenedMode(directory bool) os.FileMode {
+	if directory {
+		return 0o755
+	}
+	return 0o644
+}
+
+// privateMode is exactly what the store creates and its restore command sets.
+func privateMode(directory bool) os.FileMode {
+	if directory {
+		return 0o700
+	}
+	return 0o600
+}
+
+func mode(t testing.TB, path string) (os.FileMode, bool) {
 	t.Helper()
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mode := os.FileMode(0o644)
-	if info.IsDir() {
-		mode = 0o755
-	}
-	if err := os.Chmod(path, mode); err != nil {
+	return info.Mode().Perm(), info.IsDir()
+}
+
+// Widen lets group and others read path (and enter it, for a directory).
+func Widen(t testing.TB, path string) {
+	t.Helper()
+	_, directory := mode(t, path)
+	if err := os.Chmod(path, widenedMode(directory)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -32,27 +51,25 @@ func Widen(t testing.TB, path string) {
 // Restore puts path back to owner-only.
 func Restore(t testing.TB, path string) {
 	t.Helper()
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	mode := os.FileMode(0o600)
-	if info.IsDir() {
-		mode = 0o700
-	}
-	if err := os.Chmod(path, mode); err != nil {
+	_, directory := mode(t, path)
+	if err := os.Chmod(path, privateMode(directory)); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// Widened reports whether anyone but the owner still has access to path.
+// Widened reports whether path still has exactly the access Widen gave it.
 func Widened(t testing.TB, path string) bool {
 	t.Helper()
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return info.Mode().Perm()&0o077 != 0
+	perm, directory := mode(t, path)
+	return perm == widenedMode(directory)
+}
+
+// OwnerOnly reports whether path has exactly the owner-only mode the store
+// creates, not merely no group or other bits.
+func OwnerOnly(t testing.TB, path string) bool {
+	t.Helper()
+	perm, directory := mode(t, path)
+	return perm == privateMode(directory)
 }
 
 // RunRestore executes a displayed restore command exactly as a user would

@@ -37,11 +37,6 @@ func requireOwnerOnly(path string, directory bool) error {
 
 func widenAccess(t *testing.T, path string, directory bool) { testaccess.Widen(t, path) }
 
-func accessStaysWidened(path string, directory bool) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.Mode().Perm()&0o077 != 0
-}
-
 func wantRestoreCommand(path string, directory bool) string {
 	return fmt.Sprintf("chmod %04o '%s'", privateMode(directory), strings.ReplaceAll(path, "'", "'\\''"))
 }

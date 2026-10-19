@@ -26,11 +26,6 @@ func requireOwnerOnly(path string, directory bool) error {
 
 func widenAccess(t *testing.T, path string, directory bool) { testaccess.Widen(t, path) }
 
-func accessStaysWidened(path string, directory bool) bool {
-	_, foreign, _, err := foreignGrants(path)
-	return err == nil && len(foreign) != 0
-}
-
 func wantRestoreCommand(path string, directory bool) string {
 	user, err := currentUserSID()
 	if err != nil {

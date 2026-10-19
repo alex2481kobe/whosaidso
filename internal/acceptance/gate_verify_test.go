@@ -658,7 +658,7 @@ func TestGateVerifyPermissionRecoveryCommandQuotesExactPath(t *testing.T) {
 				if out, err := testaccess.RunRestore(command); err != nil {
 					t.Fatalf("recovery command must quote the exact path %q, command=%q: %v, %s", path, command, err, out)
 				}
-				if testaccess.Widened(t, path) {
+				if !testaccess.OwnerOnly(t, path) {
 					t.Fatalf("expected recovery to restore owner-only access on %q", path)
 				}
 				if _, err := store.ReadIntake(g.p, nil); err != nil {

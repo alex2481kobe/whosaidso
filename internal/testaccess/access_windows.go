@@ -54,6 +54,35 @@ func Widened(t testing.TB, path string) bool {
 	return strings.Contains(sddl, ";WD)") || strings.Contains(sddl, ";"+everyone+")")
 }
 
+// OwnerOnly reports whether path's list holds at least one entry and every
+// entry, explicit or inherited, allows the current user and no one else.
+func OwnerOnly(t testing.TB, path string) bool {
+	t.Helper()
+	u, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
+		"$a = (Get-Item -LiteralPath $env:TESTACCESS_PATH).GetAccessControl('Access'); "+
+			"$a.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]) | "+
+			"ForEach-Object { $_.AccessControlType.ToString() + ' ' + $_.IdentityReference.Value }")
+	cmd.Env = append(os.Environ(), "TESTACCESS_PATH="+path)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("read the access list of %s: %v: %s", path, err, out)
+	}
+	rules := strings.Fields(string(out))
+	if len(rules) == 0 || len(rules)%2 != 0 {
+		return false
+	}
+	for i := 0; i < len(rules); i += 2 {
+		if rules[i] != "Allow" || rules[i+1] != u.Uid {
+			return false
+		}
+	}
+	return true
+}
+
 // RunRestore executes a displayed restore command, each of its lines joined
 // by " followed by ", through cmd.exe exactly as a user would paste it.
 func RunRestore(command string) ([]byte, error) {

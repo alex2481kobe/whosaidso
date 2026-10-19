@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/testaccess"
 )
 
 func intakeProject(t *testing.T) Project {
@@ -349,7 +350,7 @@ func TestIntakePermissionRecovery(t *testing.T) {
 				!strings.Contains(f.Detail, "do not delete or recapture") || packets != nil {
 				t.Fatalf("must give exact recovery command %q and preserve packet: %v", command, err)
 			}
-			if !accessStaysWidened(path, directory) {
+			if !testaccess.Widened(t, path) {
 				t.Fatal("refused read changed permissions")
 			}
 			restoreAccess(t, path, directory)
