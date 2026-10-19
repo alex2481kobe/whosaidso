@@ -127,8 +127,7 @@ jobs:
               fmt.Println("os.ReadFile while held:", err)
               for _, fl := range []uint32{0, syscall.FILE_FLAG_BACKUP_SEMANTICS} {
                   h2, err := syscall.CreateFile(p, syscall.GENERIC_READ, syscall.FILE_SHARE_READ|syscall.FILE_SHARE_WRITE, nil, syscall.OPEN_EXISTING, fl, 0)
-                  fmt.Printf("CreateFile flags %#x while held: %v
-", fl, err)
+                  fmt.Printf("CreateFile flags %#x while held: %v\n", fl, err)
                   if err == nil {
                       syscall.CloseHandle(h2)
                   }
