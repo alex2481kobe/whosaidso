@@ -5,7 +5,10 @@ SHA-256, byte length and locator; it records title, note, actor and optional
 exact task references. Media is streamed for hashing and is never retained as
 an intake blob or published artifact. Project-relative locators travel across
 checkouts; relative locators and their resolved symlink targets must stay inside
-the checkout at capture, admission and preview. External absolute locators are
+the checkout at capture, admission and preview. Relative media opens are rooted
+in the checkout at open time, including every symlink and parent directory;
+hashing and preview use that same open handle. Rooted opens refuse absolute
+symlink targets, even when they name a path inside the checkout. External absolute locators are
 useful only where that path exists.
 
 Capture proposes a record. Admission publishes it under the project's normal
@@ -37,11 +40,13 @@ proof of what a person actually inspected.
 Only import reads the retired per-machine list. It captures one add packet per
 entry, preserving title, note and original added date separately from packet
 capture time and attributing the new record to the importer.
-Admitted legacy ids prevent duplicates. A final `gallery.import` packet records
+Admitted legacy identities prevent duplicates across lists and list order. Each
+identity hashes the file SHA-256, byte length, locator and original added date;
+title, note and machine-local list identity do not distinguish an entry. A final `gallery.import` packet records
 the list inventory's content hash and its ordered inventory of legacy-entry
 content hashes and corresponding
 imported entry ids. Admission and replay require exactly that inventory, with each
-entry's import id bound to its source and inventory member. Empty completion
+entry's import id bound to its inventory member. Empty completion
 requires an explicit empty-source declaration and the empty inventory's hash;
 nonempty sources cannot complete without every entry admitted. Retries read the
 list to identify its inventory; an admitted inventory is skipped.

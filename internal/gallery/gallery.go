@@ -24,6 +24,7 @@ var ErrNoEntry = errors.New("no such gallery entry")
 
 // Entry is a ledger entry with this machine's resolved locator for display.
 type Entry struct {
+	Locator     string            `json:"-"`
 	ID          string            `json:"id"`
 	Path        string            `json:"path"`
 	Title       string            `json:"title"`
@@ -38,29 +39,46 @@ type Entry struct {
 	Tasks       []model.RecordRef `json:"tasks"`
 }
 
-// Pin streams the actual file. Stat before opening avoids blocking on an
-// already-present FIFO; the opened handle is checked again before hashing.
-func Pin(path string) (model.GalleryFile, error) {
-	info, err := os.Stat(path)
+// Open confines relative locators at open time. Its returned regular-file handle
+// is the only handle callers may hash or serve; display paths are not authority.
+func Open(checkout, locator string) (*os.File, error) {
+	var root *os.Root
+	if !filepath.IsAbs(locator) {
+		locator = filepath.Clean(filepath.FromSlash(locator))
+		if !filepath.IsLocal(locator) {
+			return nil, fmt.Errorf("relative gallery locator escapes checkout: %s", locator)
+		}
+		var err error
+		root, err = os.OpenRoot(checkout)
+		if err != nil {
+			return nil, err
+		}
+		defer root.Close()
+	}
+	f, err := openMedia(root, locator)
 	if err != nil {
-		return model.GalleryFile{}, err
+		return nil, err
+	}
+	info, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, err
 	}
 	if !info.Mode().IsRegular() {
-		return model.GalleryFile{}, fmt.Errorf("not a regular file: %s", path)
+		f.Close()
+		return nil, fmt.Errorf("not a regular file: %s", locator)
 	}
-	f, err := openMedia(path)
+	return f, nil
+}
+
+// Pin streams the same handle whose open enforced locator containment.
+func Pin(checkout, locator string) (model.GalleryFile, error) {
+	f, err := Open(checkout, locator)
 	if err != nil {
 		return model.GalleryFile{}, err
 	}
 	defer f.Close()
-	info, err = f.Stat()
-	if err != nil {
-		return model.GalleryFile{}, err
-	}
-	if !info.Mode().IsRegular() {
-		return model.GalleryFile{}, fmt.Errorf("not a regular file: %s", path)
-	}
-	return Hash(f, path)
+	return Hash(f, locator)
 }
 
 // Hash reads the supplied handle, so callers can verify the exact file they serve.
@@ -75,20 +93,21 @@ func Hash(f io.Reader, path string) (model.GalleryFile, error) {
 
 func Prepare(dir, path, title, note string, by model.Actor, tasks []model.RecordRef, now time.Time) (model.GalleryAdd, error) {
 	locator := path
-	path, err := ResolvePath(dir, locator)
-	if err != nil {
-		return model.GalleryAdd{}, err
+	if filepath.IsAbs(locator) {
+		if rel, err := filepath.Rel(dir, locator); err == nil && filepath.IsLocal(rel) {
+			// Only internal absolute locators become portable. Explicit paths
+			// to external targets stay absolute, including symlinks.
+			if _, err := ResolvePath(dir, rel); err == nil {
+				locator = rel
+			}
+		}
 	}
-	pin, err := Pin(path)
+	pin, err := Pin(dir, locator)
 	if err != nil {
 		return model.GalleryAdd{}, err
 	}
 	if !filepath.IsAbs(locator) {
 		pin.Path = filepath.ToSlash(filepath.Clean(locator))
-	} else if rel, err := filepath.Rel(dir, locator); err == nil {
-		if _, err := ResolvePath(dir, rel); err == nil {
-			pin.Path = filepath.ToSlash(rel)
-		}
 	}
 	id, err := model.NewID(now, rand.Reader)
 	if err != nil {
@@ -134,7 +153,7 @@ func List(p store.Project) ([]Shown, error) {
 		e := localEntry(p, record)
 		kind, _ := Kind(e.Path)
 		status := "missing"
-		if pin, err := Pin(e.Path); err == nil {
+		if pin, err := Pin(p.Root, e.Locator); err == nil {
 			status = "changed"
 			if pin.SameContent(record.Add.File) {
 				status = "present"
@@ -161,13 +180,13 @@ func Find(p store.Project, id string) (Entry, error) {
 func localEntry(p store.Project, record reduce.GalleryEntry) Entry {
 	a := record.Add
 	// Unavailable locators remain visible as ledger records, without a usable
-	// local path. Callers cannot accidentally open an escaped locator.
+	// local display path. Media reads use the original locator through Open.
 	path, _ := ResolvePath(p.Root, a.File.Path)
-	return Entry{ID: string(a.EntryID), Path: path, Title: a.Title, Note: a.Note, AddedAt: record.AddedAt, AddedBy: a.Actor.ID, SHA256: a.File.SHA256, Length: a.File.Length, Verdict: record.Verdict, VerdictBy: record.Actor, VerdictNote: record.Note, Tasks: a.Tasks}
+	return Entry{Locator: a.File.Path, ID: string(a.EntryID), Path: path, Title: a.Title, Note: a.Note, AddedAt: record.AddedAt, AddedBy: a.Actor.ID, SHA256: a.File.SHA256, Length: a.File.Length, Verdict: record.Verdict, VerdictBy: record.Actor, VerdictNote: record.Note, Tasks: a.Tasks}
 }
 
-// ResolvePath interprets a locator and confines relative paths, including their
-// symlink targets, to the resolved checkout. Absolute external paths are explicit.
+// ResolvePath supplies a display path after checking current containment. It
+// cannot authorize a later open; media reads must use Open with the locator.
 func ResolvePath(root, locator string) (string, error) {
 	if filepath.IsAbs(locator) {
 		return locator, nil

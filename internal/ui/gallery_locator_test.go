@@ -3,6 +3,8 @@
 package ui
 
 import (
+	"github.com/alex2481kobe/whosaidso/internal/gallery"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,7 +21,7 @@ func TestGalleryPreviewRefusesRetargetedRelativeSymlink(t *testing.T) {
 		}
 	}
 	link := filepath.Join(root, "link.mp4")
-	if err := os.Symlink(inside, link); err != nil {
+	if err := os.Symlink("inside.mp4", link); err != nil {
 		t.Fatal(err)
 	}
 	entry := addShown(t, root, link, "Render", "")
@@ -35,5 +37,43 @@ func TestGalleryPreviewRefusesRetargetedRelativeSymlink(t *testing.T) {
 	}
 	if code, _, body := ask(t, host, "GET", url, "", session); code == 200 {
 		t.Fatalf("served escaped symlink: %s", body)
+	}
+}
+
+func TestGalleryPreviewRefusesParentSwapAfterResolution(t *testing.T) {
+	_, _, root := galleryUI(t, &stubWorld{})
+	parent := filepath.Join(root, "media")
+	outside := t.TempDir()
+	if err := os.Mkdir(parent, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range []string{parent, outside} {
+		if err := os.WriteFile(filepath.Join(dir, "clip.mp4"), []byte("video"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add := addShown(t, root, filepath.Join(parent, "clip.mp4"), "Render", "")
+	entry, err := gallery.Find(galleryProject(t, root), string(add.EntryID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &handler{}
+	serve := func() *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		h.serveEntry(w, httptest.NewRequest("GET", "/api/gallery/file", nil), root, entry)
+		return w
+	}
+	if w := serve(); w.Code != 200 || w.Body.String() != "video" {
+		t.Fatalf("control: %d %s", w.Code, w.Body)
+	}
+	// Find has resolved the locator. Replace a parent before preview opens it.
+	if err := os.Rename(parent, parent+".old"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, parent); err != nil {
+		t.Fatal(err)
+	}
+	if w := serve(); w.Code != 404 {
+		t.Fatalf("escaped bytes served after resolution: %d %s", w.Code, w.Body)
 	}
 }

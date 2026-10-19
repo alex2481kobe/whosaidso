@@ -34,7 +34,7 @@ func TestPreparePinsActualBytesAndChecksWords(t *testing.T) {
 	if err := os.WriteFile(path, []byte("other"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	pin, err := Pin(path)
+	pin, err := Pin("", path)
 	if err != nil || pin.SHA256 == e.File.SHA256 {
 		t.Fatalf("same-length replacement not detected: %+v %v", pin, err)
 	}
@@ -56,7 +56,7 @@ func TestPinStreamsFilesBeyondBlobResolverLimit(t *testing.T) {
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
-	pin, err := Pin(path)
+	pin, err := Pin("", path)
 	if err != nil || pin.Length != uint64(length) || !model.ValidDigest(pin.SHA256) {
 		t.Fatalf("large file was bounded or refused: %+v %v", pin, err)
 	}
@@ -78,10 +78,10 @@ func TestRelativeMediaStaysInsideCheckout(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(root, "escape.mp4")); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(inside, filepath.Join(root, "safe.mp4")); err != nil {
+	if err := os.Symlink("inside.mp4", filepath.Join(root, "safe.mp4")); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"inside.mp4", "safe.mp4", outside} {
+	for _, path := range []string{"inside.mp4", "safe.mp4", outside, filepath.Join(root, "escape.mp4")} {
 		if _, err := Prepare(root, path, "control", "", model.Actor{ID: "contributor"}, nil, time.Now()); err != nil {
 			t.Fatalf("control %s: %v", path, err)
 		}
@@ -90,5 +90,42 @@ func TestRelativeMediaStaysInsideCheckout(t *testing.T) {
 		if _, err := Prepare(root, path, "escape", "", model.Actor{ID: "contributor"}, nil, time.Now()); err == nil {
 			t.Errorf("accepted relative escape %s", path)
 		}
+	}
+}
+
+func TestPinRefusesParentSwapAfterResolution(t *testing.T) {
+	root, outside := t.TempDir(), t.TempDir()
+	parent := filepath.Join(root, "media")
+	if err := os.Mkdir(parent, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range []string{parent, outside} {
+		if err := os.WriteFile(filepath.Join(dir, "clip.mp4"), []byte("video"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	locator := "media/clip.mp4"
+	if _, err := ResolvePath(root, locator); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := Open(root, locator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	if err := os.Rename(parent, parent+".old"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, parent); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Pin(root, locator); err == nil {
+		t.Fatal("pinned escaped bytes after parent swap")
+	}
+	if pin, err := Hash(opened, locator); err != nil || pin.SHA256 != model.HashBytes([]byte("video")) {
+		t.Fatalf("opened handle changed: %+v %v", pin, err)
+	}
+	if _, err := Pin("", filepath.Join(outside, "clip.mp4")); err != nil {
+		t.Fatalf("absolute external control: %v", err)
 	}
 }

@@ -107,7 +107,7 @@ func TestGalleryRefusesInvalidTransitionsOnApplyAndReplay(t *testing.T) {
 			case "duplicate-import":
 				add2 := *add
 				add2.EntryID = newID("GAY2")
-				add2.ImportID = "legacy-entry"
+				add2.ImportID = string(model.GalleryImportIdentity(add2.File, add2.AddedAt))
 				galleryFact(t, l, add.Actor, &add2)
 				add3 := add2
 				add3.EntryID = newID("GAY3")
@@ -141,9 +141,9 @@ func galleryRestoreLedger(t *testing.T) []model.Bundle {
 	galleryFact(t, l, by, &model.GalleryRetract{EntryID: add.EntryID})
 	imported := *add
 	imported.EntryID = newID("GAY2")
-	inventory := []model.Digest{newDigest("legacy")}
+	inventory := []model.Digest{model.GalleryImportIdentity(imported.File, imported.AddedAt)}
 	source := model.GallerySource(inventory)
-	imported.ImportID = string(source) + ":" + string(inventory[0])
+	imported.ImportID = string(inventory[0])
 	galleryFact(t, l, imported.Actor, &imported)
 	galleryFact(t, l, by, &model.GalleryImport{Source: source, Inventory: inventory, Entries: []model.ID{imported.EntryID}})
 	return l.bundles()

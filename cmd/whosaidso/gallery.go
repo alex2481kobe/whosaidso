@@ -124,7 +124,7 @@ func galleryVerb(mode string) func(*flag.FlagSet) func(*call) error {
 					return err
 				}
 				if mode == "approve" {
-					pin, err := gallery.Pin(e.Path)
+					pin, err := gallery.Pin(p.Root, e.Locator)
 					if err != nil {
 						return err
 					}
@@ -136,9 +136,13 @@ func galleryVerb(mode string) func(*flag.FlagSet) func(*call) error {
 					events = []model.TypedEvent{&model.GalleryReject{EntryID: model.ID(e.ID), SHA256: e.SHA256, Actor: author, Note: note}}
 				}
 			case "import":
-				events, err = gallery.Import(p, author, time.Now())
+				result, err := gallery.Import(p, author, time.Now())
 				if err != nil {
 					return err
+				}
+				events = result.Events
+				for _, merged := range result.Collapsed {
+					fmt.Fprintf(c.stderr, "collapsed legacy record %d %q into record %d %q\n", merged.Record, merged.LegacyID, merged.Into, merged.IntoLegacyID)
 				}
 			}
 			for _, event := range events {

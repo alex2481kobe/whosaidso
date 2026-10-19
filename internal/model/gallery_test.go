@@ -57,3 +57,30 @@ func TestGallerySchemaAndContentIdentity(t *testing.T) {
 		t.Fatal("unknown pins matched")
 	}
 }
+
+func TestGalleryImportIdentityUsesOnlyEntryContent(t *testing.T) {
+	file := GalleryFile{SHA256: HashBytes([]byte("video")), Length: 5, Path: "clip.mp4"}
+	date := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	identity := GalleryImportIdentity(file, date)
+	if got := GalleryImportIdentity(file, date.In(time.FixedZone("offset", 3600))); got != identity {
+		t.Fatal("same instant changed identity")
+	}
+	for _, field := range []string{"hash", "length", "locator", "date"} {
+		t.Run(field, func(t *testing.T) {
+			other, added := file, date
+			switch field {
+			case "hash":
+				other.SHA256 = HashBytes([]byte("other"))
+			case "length":
+				other.Length++
+			case "locator":
+				other.Path = "other.mp4"
+			case "date":
+				added = added.Add(time.Second)
+			}
+			if GalleryImportIdentity(other, added) == identity {
+				t.Fatal("changed entry content retained identity")
+			}
+		})
+	}
+}

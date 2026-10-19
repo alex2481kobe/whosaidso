@@ -15,7 +15,6 @@ import (
 	"os/exec"
 	"runtime"
 	"strconv"
-	"syscall"
 
 	"github.com/alex2481kobe/whosaidso/internal/gallery"
 	"github.com/alex2481kobe/whosaidso/internal/model"
@@ -86,7 +85,7 @@ func (h *handler) galleryAnswer(w http.ResponseWriter, r *http.Request, file sto
 	}
 	switch r.URL.Path {
 	case "/api/gallery/file":
-		h.serveEntry(w, r, entry)
+		h.serveEntry(w, r, file.Root, entry)
 	case "/api/gallery/remove":
 		ref, err := gallery.Capture(r.Context(), file, h.cfg.CaptureActor, &model.GalleryRetract{EntryID: model.ID(id)})
 		if err != nil {
@@ -115,17 +114,13 @@ func (h *handler) galleryAnswer(w http.ResponseWriter, r *http.Request, file sto
 // videos whole and seekable (ranges answered by http.ServeContent, never read
 // into memory), text up to maxText. A file the viewer does not preview is
 // not served at all.
-func (h *handler) serveEntry(w http.ResponseWriter, r *http.Request, entry gallery.Entry) {
-	kind, mediaType := gallery.Kind(entry.Path)
+func (h *handler) serveEntry(w http.ResponseWriter, r *http.Request, checkout string, entry gallery.Entry) {
+	kind, mediaType := gallery.Kind(entry.Locator)
 	if kind == gallery.None {
 		h.fail(w, http.StatusUnsupportedMediaType, errText("no preview for this file type"))
 		return
 	}
-	// Non-blocking, so a path swapped for a FIFO or device answers at once
-	// instead of holding the handler until something writes to it; the
-	// fstat below then refuses anything but a regular file, whose reads the
-	// flag does not change.
-	f, err := os.OpenFile(entry.Path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	f, err := gallery.Open(checkout, entry.Locator)
 	if err != nil {
 		h.fail(w, http.StatusNotFound, errText("missing: "+entry.Path))
 		return

@@ -13,6 +13,41 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
+func TestGalleryAdmissionBindsStandaloneImportIdentity(t *testing.T) {
+	for _, mode := range []string{"control", "plain", "forged"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Setenv("WHOSAIDSO_HOME", filepath.Join(t.TempDir(), "home"))
+			f := newAdmissionFixture(t)
+			path := filepath.Join(f.project.Root, "clip.mp4")
+			if err := os.WriteFile(path, []byte("video"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			add, err := gallery.Prepare(f.project.Root, path, "Render", "", f.author, nil, time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mode != "plain" {
+				file := add.File
+				if mode == "forged" {
+					file.Path = "other.mp4"
+				}
+				add.ImportID = string(model.GalleryImportIdentity(file, add.AddedAt))
+			}
+			packet := f.capture(nil, &add)
+			_, err = Admit(context.Background(), f.project, f.request(packet))
+			if mode == "forged" {
+				if err == nil {
+					t.Fatal("admission accepted standalone add with another entry's import identity")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("%s admission: %v", mode, err)
+			}
+		})
+	}
+}
+
 func TestGalleryAdmissionVerifiesCurrentBytesAndDoesNotStoreMedia(t *testing.T) {
 	for _, mode := range []string{"control", "changed-before-add", "changed-before-approve", "changed-before-close", "missing-before-close"} {
 		t.Run(mode, func(t *testing.T) {
@@ -91,9 +126,9 @@ func TestGalleryPacketSetOrdersEntryBeforeVerdictAndImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	inventory := []model.Digest{model.HashBytes([]byte("legacy"))}
+	inventory := []model.Digest{model.GalleryImportIdentity(add.File, add.AddedAt)}
 	source := model.GallerySource(inventory)
-	add.ImportID = string(source) + ":" + string(inventory[0])
+	add.ImportID = string(inventory[0])
 	marker := f.capture(nil, &model.GalleryImport{Source: source, Inventory: inventory, Entries: []model.ID{add.EntryID}})
 	verdict := f.capture(nil, &model.GalleryApprove{EntryID: add.EntryID, SHA256: add.File.SHA256, Actor: f.author})
 	entry := f.capture(nil, &add)
