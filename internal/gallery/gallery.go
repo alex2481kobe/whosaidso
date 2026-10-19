@@ -74,13 +74,21 @@ func Hash(f io.Reader, path string) (model.GalleryFile, error) {
 }
 
 func Prepare(dir, path, title, note string, by model.Actor, tasks []model.RecordRef, now time.Time) (model.GalleryAdd, error) {
-	path = ResolvePath(dir, path)
-	pin, err := Pin(filepath.Clean(path))
+	locator := path
+	path, err := ResolvePath(dir, locator)
 	if err != nil {
 		return model.GalleryAdd{}, err
 	}
-	if rel, err := filepath.Rel(dir, pin.Path); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		pin.Path = filepath.ToSlash(rel)
+	pin, err := Pin(path)
+	if err != nil {
+		return model.GalleryAdd{}, err
+	}
+	if !filepath.IsAbs(locator) {
+		pin.Path = filepath.ToSlash(filepath.Clean(locator))
+	} else if rel, err := filepath.Rel(dir, locator); err == nil {
+		if _, err := ResolvePath(dir, rel); err == nil {
+			pin.Path = filepath.ToSlash(rel)
+		}
 	}
 	id, err := model.NewID(now, rand.Reader)
 	if err != nil {
@@ -152,14 +160,33 @@ func Find(p store.Project, id string) (Entry, error) {
 
 func localEntry(p store.Project, record reduce.GalleryEntry) Entry {
 	a := record.Add
-	path := ResolvePath(p.Root, a.File.Path)
+	// Unavailable locators remain visible as ledger records, without a usable
+	// local path. Callers cannot accidentally open an escaped locator.
+	path, _ := ResolvePath(p.Root, a.File.Path)
 	return Entry{ID: string(a.EntryID), Path: path, Title: a.Title, Note: a.Note, AddedAt: record.AddedAt, AddedBy: a.Actor.ID, SHA256: a.File.SHA256, Length: a.File.Length, Verdict: record.Verdict, VerdictBy: record.Actor, VerdictNote: record.Note, Tasks: a.Tasks}
 }
 
-// ResolvePath interprets a media locator in the caller's checkout.
-func ResolvePath(root, locator string) string {
+// ResolvePath interprets a locator and confines relative paths, including their
+// symlink targets, to the resolved checkout. Absolute external paths are explicit.
+func ResolvePath(root, locator string) (string, error) {
 	if filepath.IsAbs(locator) {
-		return locator
+		return locator, nil
 	}
-	return filepath.Join(root, filepath.FromSlash(locator))
+	local := filepath.Clean(filepath.FromSlash(locator))
+	if !filepath.IsLocal(local) {
+		return "", fmt.Errorf("relative gallery locator escapes checkout: %s", locator)
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", err
+	}
+	path, err := filepath.EvalSymlinks(filepath.Join(resolvedRoot, local))
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(resolvedRoot, path)
+	if err != nil || !filepath.IsLocal(rel) {
+		return "", fmt.Errorf("relative gallery locator escapes checkout: %s", locator)
+	}
+	return path, nil
 }

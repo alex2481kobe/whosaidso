@@ -4,7 +4,8 @@ The ledger is the only gallery source. `gallery.add` pins external media by
 SHA-256, byte length and locator; it records title, note, actor and optional
 exact task references. Media is streamed for hashing and is never retained as
 an intake blob or published artifact. Project-relative locators travel across
-checkouts; external absolute locators are useful only where that path exists.
+checkouts; relative locators and their resolved symlink targets must stay inside
+the checkout at capture, admission and preview. External absolute locators are useful only where that path exists.
 
 Capture proposes a record. Admission publishes it under the project's normal
 self-admission policy. `gallery.retract` hides an entry without changing its

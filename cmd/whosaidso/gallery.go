@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/alex2481kobe/whosaidso/internal/gallery"
@@ -99,7 +100,14 @@ func galleryVerb(mode string) func(*flag.FlagSet) func(*call) error {
 				if err != nil {
 					return err
 				}
-				e, err := gallery.Prepare(p.Root, gallery.ResolvePath(c.cwd, c.args[0]), title, note, author, refs, time.Now())
+				path := c.args[0]
+				if !filepath.IsAbs(path) {
+					path, err = filepath.Rel(p.Root, filepath.Join(c.cwd, path))
+					if err != nil {
+						return err
+					}
+				}
+				e, err := gallery.Prepare(p.Root, path, title, note, author, refs, time.Now())
 				if err != nil {
 					return err
 				}

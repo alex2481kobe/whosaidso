@@ -100,3 +100,33 @@ func TestGalleryPacketSetOrdersEntryBeforeVerdictAndImport(t *testing.T) {
 		t.Fatalf("packet dependencies not applied: %+v", entries)
 	}
 }
+
+func TestGalleryAdmissionRefusesRelativeEscapes(t *testing.T) {
+	for _, mode := range []string{"parent", "symlink"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Setenv("WHOSAIDSO_HOME", filepath.Join(t.TempDir(), "home"))
+			f := newAdmissionFixture(t)
+			outside := filepath.Join(t.TempDir(), "outside.mp4")
+			if err := os.WriteFile(outside, []byte("video"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			add, err := gallery.Prepare(f.project.Root, outside, "Render", "", f.author, nil, time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mode == "parent" {
+				add.File.Path, err = filepath.Rel(f.project.Root, outside)
+			} else {
+				add.File.Path = "link.mp4"
+				err = os.Symlink(outside, filepath.Join(f.project.Root, add.File.Path))
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			packet := f.capture(nil, &add)
+			if _, err := Admit(context.Background(), f.project, f.request(packet)); err == nil {
+				t.Fatal("admission accepted relative escape")
+			}
+		})
+	}
+}
