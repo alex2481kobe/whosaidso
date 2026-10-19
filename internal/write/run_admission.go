@@ -6,7 +6,9 @@ package write
 // families and the admission transaction do not.
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
 )
@@ -34,8 +36,16 @@ func runAdmitOutputs(inbox string, packet model.Packet, env model.InvocationEnve
 		// media type are checked against these bytes by Resolver.RunOutput.
 		b, err := dry.packetBlob(inbox, packet.CommandID, out.SHA256)
 		if err != nil {
+			// Absence is stated as a fact, not as the operating system's text
+			// for it: Windows words a missing blob differently depending on
+			// whether its directory exists, and the dry run, made before
+			// capture, would then disagree with admission over nothing.
+			reason := err.Error()
+			if errors.Is(err, fs.ErrNotExist) {
+				reason = "no captured blob " + string(out.SHA256)
+			}
 			return nil, admissionFault("unavailable", fmt.Sprintf("envelope.outputs[%d]", i),
-				"this run's output "+out.Name+" is not in its own packet's captured blobs: "+err.Error())
+				"this run's output "+out.Name+" is not in its own packet's captured blobs: "+reason)
 		}
 		own = append(own, runOwnOutput{out: out, bytes: b})
 	}

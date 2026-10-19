@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -116,6 +117,17 @@ func Run(ctx context.Context, project store.Project, request RunRequest) (RunRes
 	}
 
 	cmd := exec.CommandContext(ctx, envelope.Argv[0], envelope.Argv[1:]...)
+	// Whether the runner itself ended the child. POSIX reports that kill as a
+	// signal in the wait status; Windows terminates the process with exit code
+	// 1, which would otherwise be recorded as the child choosing to exit 1.
+	var killed atomic.Bool
+	cmd.Cancel = func() error {
+		err := cmd.Process.Kill()
+		if err == nil {
+			killed.Store(true)
+		}
+		return err
+	}
 	cmd.Dir = request.Dir
 	if cmd.Dir == "" {
 		cmd.Dir = project.Root
@@ -151,6 +163,9 @@ func Run(ctx context.Context, project store.Project, request RunRequest) (RunRes
 			if status, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); ok && status.Signaled() {
 				signal := status.Signal().String()
 				envelope.Outcome = runKnown(model.ProcessOutcome{Kind: "signal", Signal: &signal})
+			} else if killed.Load() {
+				signal := syscall.SIGKILL.String()
+				envelope.Outcome = runKnown(model.ProcessOutcome{Kind: "signal", Signal: &signal})
 			} else if code := cmd.ProcessState.ExitCode(); code >= 0 {
 				envelope.Outcome = runKnown(model.ProcessOutcome{Kind: "exit", ExitCode: &code})
 			}
@@ -173,6 +188,9 @@ func Run(ctx context.Context, project store.Project, request RunRequest) (RunRes
 	// in its own durable blobs. An incomplete stream, a refused report or a
 	// failed capture leaves outputs the seal does not hold, so they stay.
 	if captureErr == nil && streamErr == nil && seal.CommandID != "" {
+		// Windows cannot remove a file that is still open, so the streams
+		// close before their directory is retired.
+		_, _ = stdout.file.Close(), stderr.file.Close()
 		if os.RemoveAll(dir) == nil {
 			result.ArtifactDir = ""
 		}

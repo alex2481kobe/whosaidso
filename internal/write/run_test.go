@@ -746,7 +746,7 @@ func TestRunChildProcess(t *testing.T) {
 		// args: the output's path in WHOSAIDSO_RUN_DIR, its body, the report, and
 		// optionally a directory to make unwritable first, so the seal's
 		// capture fails after the output exists.
-		if args[4] != "" && os.Chmod(args[4], 0500) != nil {
+		if args[4] != "" && runTestDenyWrites(args[4]) != nil {
 			os.Exit(96)
 		}
 		// Distinct stream bytes keep every output countable on its own.
