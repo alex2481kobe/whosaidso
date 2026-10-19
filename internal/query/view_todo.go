@@ -69,6 +69,11 @@ type TodoTotals struct {
 	// captured on this machine; absent when none.
 	IntakeElsewhere int `json:"intake_elsewhere,omitempty"`
 	SetAside        int `json:"set_aside,omitempty"`
+	// SetAsideResolved counts set-aside bundles a setaside.resolve dealt
+	// with, and IntakeSetAside pending packets a set-aside bundle carried:
+	// admitted on a branch, not to be admitted again. Absent when none.
+	SetAsideResolved int `json:"set_aside_resolved,omitempty"`
+	IntakeSetAside   int `json:"intake_set_aside,omitempty"`
 	// StaleClaims counts live claims idle past stale_after; absent when none.
 	StaleClaims int `json:"stale_claims,omitempty"`
 }
@@ -166,8 +171,19 @@ func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHea
 	a.Omitted = map[string]LimitReport{"ready": report}
 	a.Totals = TodoTotals{InFlight: len(a.InFlight), AwaitingAcceptance: len(a.AwaitingAcceptance), Blocked: len(a.Blocked),
 		Ready: report.Offered, OpenDecisions: len(a.OpenDecisions), StaleClaims: staleClaims}
-	for _, p := range a.PacketsNotAccepted {
+	var resolved int
+	var asidePackets map[model.ID]bool
+	if a.SetAside, resolved, asidePackets, err = setAsideBundles(s, source); err != nil {
+		return nil, err
+	}
+	a.Totals.SetAside, a.Totals.SetAsideResolved = len(a.SetAside), resolved
+	for i, p := range a.PacketsNotAccepted {
+		if asidePackets[p.CommandID] && (p.Disposition == "pending" || p.Disposition == "captured-elsewhere") {
+			a.PacketsNotAccepted[i].Disposition, p.Disposition = "set-aside", "set-aside"
+		}
 		switch p.Disposition {
+		case "set-aside":
+			a.Totals.IntakeSetAside++
 		case "pending":
 			a.Totals.IntakeUnreviewed++
 		case "correction-requested":
@@ -185,40 +201,50 @@ func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHea
 		}
 	}
 	a.Totals.Tasks = len(seen) + report.Omitted
-	if a.SetAside, err = setAsideBundles(s, source); err != nil {
-		return nil, err
-	}
-	a.Totals.SetAside = len(a.SetAside)
 	return a, nil
 }
 
-// setAsideBundles lists every set-aside bundle with what to do about it. A
-// bundle carrying a claim lost it: its holder stops. Bundles are read only
-// when replay set one aside.
-func setAsideBundles(s reduce.Snapshot, source Source) ([]SetAsideBundle, error) {
+// setAsideBundles lists every set-aside bundle not yet resolved, with what to
+// do about it and the command that records it was dealt with, counts the
+// resolved ones, and names the packets set-aside bundles carried, so todo
+// does not offer them as intake to admit again. Bundles are read only when
+// replay set one aside.
+func setAsideBundles(s reduce.Snapshot, source Source) ([]SetAsideBundle, int, map[model.ID]bool, error) {
 	aside := s.SetAside()
 	if len(aside) == 0 {
-		return nil, nil
+		return nil, 0, nil, nil
 	}
 	bundles, err := source.Bundles()
 	if err != nil {
-		return nil, err
+		return nil, 0, nil, err
 	}
-	claims := map[model.BundleRef][]claimEvent{}
+	claims, packets := map[model.BundleRef][]claimEvent{}, map[model.ID]bool{}
 	for _, b := range bundles {
 		if _, ok := s.SetAsideBundle(b.Ref()); ok {
 			claims[b.Ref()] = claimsIn(b)
+			for _, p := range b.Packets {
+				packets[p.CommandID] = true
+			}
 		}
 	}
-	out := make([]SetAsideBundle, 0, len(aside))
+	out, resolved := []SetAsideBundle{}, 0
 	for _, v := range aside {
-		entry := SetAsideBundle{SetAside: v, Next: reRecord}
+		if v.Resolved != nil {
+			resolved++
+			continue
+		}
+		entry := SetAsideBundle{SetAside: v, Next: setAsideNext[v.Code], Resolve: fmt.Sprintf(
+			"whosaidso template setaside.resolve --set bundle.sequence=%d --set bundle.command_id=%s --set reason=\"...\" --capture --admit --reason \"...\"",
+			v.Sequence, v.CommandID)}
+		if entry.Next == "" {
+			entry.Next = reRecord
+		}
 		if lost := claims[model.BundleRef{Sequence: v.Sequence, CommandID: v.CommandID}]; len(lost) > 0 {
 			entry.Next = lostClaimNext(lost)
 		}
 		out = append(out, entry)
 	}
-	return out, nil
+	return out, resolved, packets, nil
 }
 
 // lostClaimNext tells the holder of each claim a set-aside bundle carried
@@ -229,15 +255,25 @@ func lostClaimNext(lost []claimEvent) string {
 		parts = append(parts, fmt.Sprintf("attempt %s by %s", c.attempt, actorName(c.actor)))
 	}
 	return "lost claim: " + strings.Join(parts, ", ") + " lost the task to a claim on a branch merged first; " +
-		"its holder stops and hands nothing back on it (whosaidso check claim ATTEMPT_ID names who holds the task now)"
+		"its holder stops and hands nothing back on it (whosaidso check claim ATTEMPT_ID names who holds the task now), then resolves it"
 }
 
 // SetAsideBundle is one bundle replay kept but did not apply: the fault that
-// set it aside, and what to do about it.
+// set it aside, what to do about it, and how to record that it was dealt with.
 type SetAsideBundle struct {
 	reduce.SetAside
-	Next string `json:"next"`
+	Next    string `json:"next"`
+	Resolve string `json:"resolve"`
+}
+
+// setAsideNext is what to do about a bundle set aside for each clash code
+// whose remedy is not re-recording its change.
+var setAsideNext = map[string]string{
+	reduce.CodeDuplicateSourceOrder: "one message captured on two branches: if it is the same message, it is already in the ledger and nothing is lost; " +
+		"if it is another, capture it again with its own order; then resolve",
+	reduce.CodeCompetingDisposition: "the decision was disposed on a branch merged first, and that disposition stands; " +
+		"if it should not, the owner rules again as a new disposition; then resolve",
 }
 
 const reRecord = "re-record it: the bundle stays in the ledger and is never applied, so capture its change again " +
-	"against the current records (an amendment from the current revision) and admit it"
+	"against the current records (an amendment from the current revision) and admit it; then resolve"

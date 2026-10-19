@@ -323,8 +323,8 @@ checkout only. Set WHOSAIDSO_HOME to a scratch directory to rehearse without
 touching the real ones. whosaidso home PATH only tells whosaidso ui
 which checkout to open from outside any checkout.
 `},
-	{"branches", "recording on git branches and merging them", `Record on any branch and merge it the normal way, merge commit or squash:
-there is no extra step. Two people who admit on separate branches each
+	{"branches", "recording on git branches and merging them", `Record on any branch and merge it with a merge commit: there is no extra
+step (records pin commits, which a squash or rebase orphans). Two people who admit on separate branches each
 publish the next sequence number, so after the merge two bundles share it.
 That is expected. Every machine reads the files in one order (sequence,
 then command id), so everyone who pulls the merge gets the same answers.
@@ -332,15 +332,16 @@ The next admission after a merge joins the branches: it follows the last
 bundle and names the other branch tips in its bundle, so the ledger shows
 it saw everything.
 When both branches changed the same thing (two amendments of one revision,
-one packet admitted on both), the later bundle in that order is SET ASIDE:
+one packet admitted on both, one speaker's message order captured on both,
+one decision disposed on both), the later bundle in that order is SET ASIDE:
 it stays in the ledger and nothing in it applies. A later bundle on that
 branch is set aside too when it names something the other branch recorded
 in its place (unseen-fact: say, the revision it amends); one that names
 nothing of the kind still applies. todo lists each one with the reason;
-history marks its events, also under history RECORD. To keep that
-change, re-record it: capture it again
-against the current records (an amendment from the current revision) and
-admit it. Nothing else is needed; the set-aside bundle remains as history.
+history marks its events, also under history RECORD. todo says what to do
+for each (to keep a change, re-record it against the current records) and
+prints the setaside.resolve command that records it was dealt with; the
+bundle remains as history, and check ledger fails until each is resolved.
 A ledger is still refused if a sequence number is missing, a bundle names
 a predecessor that is not there, or two first bundles start two histories.
 Commit only .whosaidso/events and .whosaidso/artifacts; keep
@@ -361,7 +362,9 @@ whosaidso check claim A. Exit 0: push again.
 Exit 1: stop; the claim lost and the task is someone else's. When two claims
 of one task merge, the one first in the order above applies and the other is
 set aside; todo calls it a lost claim. Then work on any branch; after every
-merge from main run whosaidso check claim A, and stop on a nonzero exit.
+merge from main run whosaidso check claim A, and stop on a nonzero exit:
+rarely, a claim admitted moments earlier elsewhere and pushed moments later
+still sorts first, and the merge decides for it.
 todo's in-flight tasks list each claim's holder, claim time and last
 activity (its runs and receipt); a claim idle past stale_after is flagged
 in attention as a takeover candidate, never released by itself.

@@ -191,7 +191,7 @@ func TestHelpExplainsBranchesAndSetAsideBundles(t *testing.T) {
 	if code != 0 || !strings.HasPrefix(out, "BRANCHES: ") {
 		t.Fatalf("whosaidso help branches must print the topic, got %d %q", code, out)
 	}
-	for _, want := range []string{"merge commit or squash", "SET ASIDE", "todo lists", "re-record it", ".whosaidso/cache out of git",
+	for _, want := range []string{"merge it with a merge commit", "SET ASIDE", "todo lists", "re-record it", "setaside.resolve", "check ledger", ".whosaidso/cache out of git",
 		"git merge --no-edit origin/main", "whosaidso check claim A", "lost claim"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("help branches must say %q", want)

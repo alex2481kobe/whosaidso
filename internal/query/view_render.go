@@ -141,6 +141,9 @@ func briefTodo(b *briefWriter, a cur) {
 	if aside := a.at("set_aside"); aside.ok() {
 		briefList(b, 0, "set aside after a merge (kept in the ledger, not applied)", aside, briefSetAside)
 	}
+	if n := t.at("set_aside_resolved"); n.ok() {
+		b.line(0, "set aside and resolved:", n)
+	}
 	briefList(b, 0, "in flight", a.at("in_flight"), briefTodoTask)
 	briefList(b, 0, "awaiting acceptance", a.at("awaiting_acceptance"), briefTodoTask)
 	briefList(b, 0, "blocked", a.at("blocked"), briefTodoTask)
@@ -160,6 +163,9 @@ func briefTodo(b *briefWriter, a cur) {
 			}
 		}
 	}
+	if n := t.at("intake_set_aside"); n.ok() {
+		b.line(0, "intake in set-aside bundles (admitted on a branch, then set aside; never admit again):", n)
+	}
 	if n := t.at("intake_rejected"); n.string() != "0" {
 		b.line(0, "rejected intake:", n, "(reviewed, nothing owed; whosaidso history lists the reviews)")
 	}
@@ -171,6 +177,7 @@ func briefSetAside(b *briefWriter, indent int, v cur) {
 	b.line(indent, "sequence", v.at("sequence"), "command", v.at("command_id"), v.at("code"))
 	b.line(indent+1, prefix(v.at("reason")))
 	b.line(indent+1, v.at("next"))
+	b.line(indent+1, "resolve:", v.at("resolve"))
 }
 
 // briefIntake lists the packets_not_accepted packets with one disposition, under
