@@ -29,6 +29,7 @@ func runTestProject(t *testing.T) store.Project {
 	t.Helper()
 	base := t.TempDir()
 	t.Setenv("HOME", base)
+	t.Setenv("USERPROFILE", base)
 	root := filepath.Join(base, "project")
 	if err := os.Mkdir(root, 0700); err != nil {
 		t.Fatal(err)
@@ -364,6 +365,7 @@ func TestRunRefusesBeforeLaunch(t *testing.T) {
 			case "intake unavailable":
 				home := t.TempDir()
 				t.Setenv("HOME", home)
+				t.Setenv("USERPROFILE", home)
 				if err := os.WriteFile(filepath.Join(home, ".whosaidso"), []byte("not a directory"), 0600); err != nil {
 					t.Fatal(err)
 				}
@@ -506,15 +508,19 @@ func TestRunInstrumentIsFrozenBeforeSeal(t *testing.T) {
 func TestRunSurvivingObserverSealsSignalAndCancellation(t *testing.T) {
 	project := runTestProject(t)
 	runTestControl(t, project)
-	result, err := Run(context.Background(), project, runTestRequest(project.Root, "signal"))
-	if err == nil {
-		t.Fatal("signal returned success")
+	if runTestCanSignalSelf {
+		result, err := Run(context.Background(), project, runTestRequest(project.Root, "signal"))
+		if err == nil {
+			t.Fatal("signal returned success")
+		}
+		runTestOutcome(t, result.Envelope, "signal", 0)
+		if result.Envelope.Outcome.Value.Signal == nil || *result.Envelope.Outcome.Value.Signal != syscall.SIGTERM.String() {
+			t.Fatalf("wrong observed signal: %+v", result.Envelope.Outcome.Value)
+		}
+		runTestPackets(t, project, result)
 	}
-	runTestOutcome(t, result.Envelope, "signal", 0)
-	if result.Envelope.Outcome.Value.Signal == nil || *result.Envelope.Outcome.Value.Signal != syscall.SIGTERM.String() {
-		t.Fatalf("wrong observed signal: %+v", result.Envelope.Outcome.Value)
-	}
-	runTestPackets(t, project, result)
+	var result RunResult
+	var err error
 	marker := filepath.Join(project.Root, "cancel-ready")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -690,7 +696,7 @@ func TestRunChildProcess(t *testing.T) {
 		os.Exit(0)
 	}
 	if mode == "signal" {
-		_ = syscall.Kill(os.Getpid(), syscall.SIGTERM)
+		runTestSignalSelf()
 		time.Sleep(time.Second)
 		os.Exit(92)
 	}
