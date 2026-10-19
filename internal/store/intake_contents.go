@@ -301,6 +301,6 @@ func checkIntakePath(path string, directory bool) error {
 // so the fault names the platform's restore command and nothing else.
 func insecurePermissions(path, restore string) error {
 	return storeFault("insecure-permissions", path,
-		"intake requires owner-only access; restore permissions with "+restore+
+		"intake requires owner-only access; restore permissions"+restoreShell+" with "+restore+
 			"; then retry the identical read or write; do not delete or recapture the packet")
 }

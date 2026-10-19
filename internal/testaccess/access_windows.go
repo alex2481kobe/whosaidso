@@ -14,7 +14,6 @@ import (
 	"os/exec"
 	"os/user"
 	"strings"
-	"syscall"
 	"testing"
 )
 
@@ -84,13 +83,11 @@ func OwnerOnly(t testing.TB, path string) bool {
 }
 
 // RunRestore executes a displayed restore command, each of its lines joined
-// by " followed by ", through cmd.exe exactly as a user would paste it.
+// by " followed by ", in PowerShell exactly as a user would paste it.
 func RunRestore(command string) ([]byte, error) {
 	var all []byte
 	for _, line := range strings.Split(command, " followed by ") {
-		cmd := exec.Command(os.Getenv("ComSpec"))
-		cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: `cmd.exe /d /s /c "` + line + `"`}
-		out, err := cmd.CombinedOutput()
+		out, err := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", line).CombinedOutput()
 		all = append(all, out...)
 		if err != nil {
 			return all, fmt.Errorf("%s: %w", line, err)

@@ -3,9 +3,10 @@
 package store
 
 // The restore command an insecure-permissions refusal names must work when a
-// user pastes it, in cmd and in PowerShell, whatever made the path widen.
-// icacls exits 0 even when it changed nothing, so each case reads the list
-// back through PowerShell afterwards instead of trusting the exit status.
+// user pastes it into PowerShell, whatever made the path widen and whatever
+// the path holds. icacls exits 0 even when it changed nothing, so each case
+// reads the list back through PowerShell afterwards instead of trusting the
+// exit status.
 
 import (
 	"errors"
@@ -13,10 +14,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/testaccess"
 )
 
 // unmapped is a SID no account resolves to on any machine, as the capability
@@ -36,26 +37,14 @@ func setList(t *testing.T, path, sddl string) {
 	}
 }
 
-// pasteInto runs one displayed command line as a user typing it would.
-func pasteInto(shell, line string) ([]byte, error) {
-	if shell == "powershell" {
-		return exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", line).CombinedOutput()
-	}
-	cmd := exec.Command(os.Getenv("ComSpec"))
-	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: `cmd.exe /d /s /c "` + line + `"`}
-	return cmd.CombinedOutput()
+type widening struct {
+	name      string
+	directory bool
+	widen     func(t *testing.T, path string)
 }
 
-func TestRestoreCommandMakesThePathOwnerOnly(t *testing.T) {
-	user, err := currentUserSID()
-	if err != nil {
-		t.Fatal(err)
-	}
-	fixtures := []struct {
-		name      string
-		directory bool
-		widen     func(t *testing.T, path string)
-	}{
+func widenings(user string) []widening {
+	return []widening{
 		{"explicit unmapped grant", true, func(t *testing.T, path string) {
 			setList(t, path, "D:P(A;OICI;FA;;;"+user+")(A;OICI;FA;;;"+unmapped+")")
 		}},
@@ -79,53 +68,73 @@ func TestRestoreCommandMakesThePathOwnerOnly(t *testing.T) {
 			setList(t, path, "D:P(A;;FA;;;"+user+")(A;;FA;;;"+unmapped+")")
 		}},
 	}
-	// The user's own entry, as sddl displays it, for a directory and a file.
-	_, ownDirectory, _ := strings.Cut(rendered(t, "D:P(A;OICI;FA;;;"+user+")"), "D:P")
-	_, ownFile, _ := strings.Cut(rendered(t, "D:P(A;;FA;;;"+user+")"), "D:P")
-	for _, shell := range []string{"cmd", "powershell"} {
-		for _, f := range fixtures {
-			t.Run(shell+"/"+f.name, func(t *testing.T) {
-				path := filepath.Join(t.TempDir(), "it's private")
-				if f.directory {
-					if err := mkdirPrivate(path); err != nil {
-						t.Fatal(err)
-					}
-				} else {
-					putFile(t, path, []byte("x"))
-				}
-				f.widen(t, path)
-				info, err := os.Lstat(path)
-				if err != nil {
-					t.Fatal(err)
-				}
-				refusal := privateAccessFault(path, info, f.directory)
-				requireFault(t, refusal, "insecure-permissions")
-				var fault *model.Fault
-				errors.As(refusal, &fault)
-				restore := between(t, fault.Detail, "restore permissions with ", "; then retry")
-				for _, line := range strings.Split(restore, " followed by ") {
-					if out, err := pasteInto(shell, line); err != nil {
-						t.Fatalf("%s: %v: %s", line, err, out)
-					}
-				}
-				t.Setenv("WHOSAIDSO_ACL_PATH", path)
-				want := ownFile
-				if f.directory {
-					want = ownDirectory
-				}
-				// The list must be protected (P; icacls also sets AI) and hold
-				// exactly the user's own entry.
-				got := sddl(t, path)
-				_, list, _ := strings.Cut(got, "D:")
-				flags, entries, _ := strings.Cut(list, "(")
-				if !strings.Contains(flags, "P") || "("+entries != want {
-					t.Fatalf("after %s the list is %s, want protected and exactly %s", restore, got, want)
-				}
-				if err := privateAccessFault(path, info, f.directory); err != nil {
-					t.Fatalf("after the restore: %v", err)
-				}
-			})
+}
+
+func TestRestoreCommandMakesThePathOwnerOnly(t *testing.T) {
+	user, err := currentUserSID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range widenings(user) {
+		t.Run(w.name, func(t *testing.T) {
+			requireRestoreWorks(t, user, filepath.Join(t.TempDir(), "it's private"), w)
+		})
+	}
+}
+
+// Each name holds what PowerShell would expand or end a string at inside
+// double quotes, or cmd would expand: the path must reach icacls as typed.
+func TestRestoreCommandQuotesThePathForPowerShell(t *testing.T) {
+	user, err := currentUserSID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := widenings(user)[0]
+	for _, name := range []string{"$(Write-Output x)", "back`tick", "%USERPROFILE%", "it's", "it’s", "a $b `$c '%d%' (e)"} {
+		t.Run(name, func(t *testing.T) {
+			requireRestoreWorks(t, user, filepath.Join(t.TempDir(), name), w)
+		})
+	}
+}
+
+func requireRestoreWorks(t *testing.T, user, path string, w widening) {
+	t.Helper()
+	if w.directory {
+		if err := mkdirPrivate(path); err != nil {
+			t.Fatal(err)
 		}
+	} else {
+		putFile(t, path, []byte("x"))
+	}
+	w.widen(t, path)
+	info, err := os.Lstat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refusal := privateAccessFault(path, info, w.directory)
+	requireFault(t, refusal, "insecure-permissions")
+	var fault *model.Fault
+	errors.As(refusal, &fault)
+	restore := between(t, fault.Detail, "restore permissions in PowerShell with ", "; then retry")
+	if out, err := testaccess.RunRestore(restore); err != nil {
+		t.Fatalf("%s: %v: %s", restore, err, out)
+	}
+	// The user's own entry, as sddl displays it; the list must be protected
+	// (P; icacls also sets AI) and hold exactly that entry.
+	own := "D:P(A;;FA;;;" + user + ")"
+	if w.directory {
+		own = "D:P(A;OICI;FA;;;" + user + ")"
+	}
+	_, want, _ := strings.Cut(rendered(t, own), "D:P")
+	t.Setenv("WHOSAIDSO_ACL_PATH", path)
+	got := sddl(t, path)
+	_, list, _ := strings.Cut(got, "D:")
+	flags, entries, _ := strings.Cut(list, "(")
+	if !strings.Contains(flags, "P") || "("+entries != want {
+		t.Fatalf("after %s the list is %s, want protected and exactly %s", restore, got, want)
+	}
+	if err := privateAccessFault(path, info, w.directory); err != nil {
+		t.Fatalf("after the restore: %v", err)
 	}
 }
 

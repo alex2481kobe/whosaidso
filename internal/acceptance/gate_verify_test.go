@@ -647,12 +647,14 @@ func TestGateVerifyPermissionRecoveryCommandQuotesExactPath(t *testing.T) {
 				if !errors.As(refusal, &fault) || fault.Code != "insecure-permissions" {
 					t.Fatalf("expected owner-only permission refusal before recovery, got %v", refusal)
 				}
-				const prefix = "intake requires owner-only access; restore permissions with "
+				// The prefix names the shell on platforms that need one ("restore
+				// permissions in PowerShell with"); the command follows the first " with ".
+				const prefix = "intake requires owner-only access; restore permissions"
 				const suffix = "; then retry the identical read or write; do not delete or recapture the packet"
 				if !strings.HasPrefix(fault.Detail, prefix) || !strings.HasSuffix(fault.Detail, suffix) {
 					t.Fatalf("expected extractable recovery command, got %q", fault.Detail)
 				}
-				command := strings.TrimSuffix(strings.TrimPrefix(fault.Detail, prefix), suffix)
+				_, command, _ := strings.Cut(strings.TrimSuffix(strings.TrimPrefix(fault.Detail, prefix), suffix), " with ")
 				// Execute exactly the displayed command, only against our
 				// temporary fixture. Newlines inside quotes must remain literal.
 				if out, err := testaccess.RunRestore(command); err != nil {

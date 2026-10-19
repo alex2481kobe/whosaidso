@@ -12,6 +12,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 	"unsafe"
@@ -94,23 +95,40 @@ func privateAccessFault(path string, info os.FileInfo, directory bool) error {
 	return insecurePermissions(path, restoreCommand(path, user, directory))
 }
 
+// restoreShell names the shell restoreCommand is written for.
+const restoreShell = " in PowerShell"
+
 // restoreCommand is the pair of icacls invocations that puts path back to
 // owner-only whatever widened it. /reset drops every explicit entry, including
 // one for a SID no account maps to, which icacls cannot name to remove; the
 // second drops inherited entries and sets the user's own grant, inheritable
-// below a directory as at creation. The grant is quoted so that PowerShell
-// does not read its parentheses as an expression; both lines paste into cmd
-// and PowerShell alike, except for a path holding a character one shell
-// expands inside double quotes ($ or a backtick in PowerShell, % in cmd),
-// which then pastes correctly only into the other.
+// below a directory as at creation.
 func restoreCommand(path, user string, directory bool) string {
 	grant := "F"
 	if directory {
 		grant = "(OI)(CI)F"
 	}
-	quoted := `"` + path + `"`
+	quoted := powershellLiteral(path)
 	return "icacls " + quoted + " /reset followed by icacls " + quoted +
-		` /inheritance:r /grant:r "*` + user + ":" + grant + `"`
+		" /inheritance:r /grant:r " + powershellLiteral("*"+user+":"+grant)
+}
+
+// powershellLiteral quotes s as a PowerShell single-quoted string, inside
+// which nothing expands: $(...), a backtick and %VAR% stay as typed. The only
+// special characters are the single quotes themselves, which PowerShell also
+// recognises in their typographic forms; each is written twice. The quoting
+// also keeps the grant's parentheses from being read as an expression.
+func powershellLiteral(s string) string {
+	var b strings.Builder
+	b.WriteByte('\'')
+	for _, r := range s {
+		if strings.ContainsRune("'\u2018\u2019\u201a\u201b", r) {
+			b.WriteRune(r)
+		}
+		b.WriteRune(r)
+	}
+	b.WriteByte('\'')
+	return b.String()
 }
 
 // openForSync opens path so that (*os.File).Sync, which is FlushFileBuffers

@@ -28,6 +28,9 @@ func mkdirAllPrivate(path string) error {
 	return os.MkdirAll(path, 0o700)
 }
 
+// restoreShell names the shell restoreCommand is written for: any POSIX one.
+const restoreShell = ""
+
 // privateAccessFault reports whether path, already known to be a real file or
 // directory, is reachable by anyone but its owner.
 func privateAccessFault(path string, info os.FileInfo, directory bool) error {
