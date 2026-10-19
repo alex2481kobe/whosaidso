@@ -31,7 +31,7 @@ Actor names and visual judgments are assertions, not authentication or automated
 proof of what a person actually inspected.
 
 Only import reads the retired per-machine list. It captures one add packet per
-entry, preserving title and note and attributing the new record to the importer.
+entry, preserving title, note and original added date separately from packet capture time and attributing the new record to the importer.
 Admitted legacy ids prevent duplicates. A final `gallery.import` packet records
 the list inventory's content hash and all imported entry ids; it cannot be admitted before
 those entries. Retries read the list to identify its inventory; an admitted inventory is skipped.

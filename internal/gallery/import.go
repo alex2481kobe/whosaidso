@@ -71,6 +71,7 @@ func Import(p store.Project, by model.Actor, now time.Time) ([]model.TypedEvent,
 		if err != nil {
 			return nil, err
 		}
+		add.AddedAt = e.AddedAt.UTC()
 		add.ImportID = importID
 		out = append(out, &add)
 		imported = append(imported, add.EntryID)

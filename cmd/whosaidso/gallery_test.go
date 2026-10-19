@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alex2481kobe/whosaidso/internal/gallery"
 	"github.com/alex2481kobe/whosaidso/internal/model"
@@ -208,6 +209,9 @@ func TestGalleryImportLeavesLegacyFileAndUsesOnlyLedger(t *testing.T) {
 	snap, err := reduce.Replay(prefix)
 	if err != nil || len(snap.Gallery()) != 1 {
 		t.Fatalf("import not in ledger: %v", err)
+	}
+	if got := snap.Gallery()[0].AddedAt.Format(time.RFC3339); got != "2026-01-01T00:00:00Z" {
+		t.Fatalf("import re-dated entry: got %s", got)
 	}
 }
 
