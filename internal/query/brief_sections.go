@@ -92,6 +92,9 @@ func briefRecord(b *briefWriter, indent int, r cur) {
 
 func briefAttention(b *briefWriter, indent int, n cur) {
 	pieces := []any{n.at("kind"), n.at("ref", "record_id"), "rev", n.at("ref", "revision")}
+	if n.at("kind").text() == "actor-idle" && n.at("ref", "record_id").text() == "" {
+		pieces = []any{n.at("kind")}
+	}
 	if n.at("waiting_actor").ok() {
 		pieces = append(append(pieces, "waits on"), who(n.at("waiting_actor"))...)
 	}
