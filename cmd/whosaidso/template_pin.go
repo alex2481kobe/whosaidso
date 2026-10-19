@@ -25,7 +25,6 @@ import (
 
 	"github.com/alex2481kobe/whosaidso/internal/evidence"
 	"github.com/alex2481kobe/whosaidso/internal/model"
-	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
 // pin builds one --pin and puts it at NAME.
@@ -52,7 +51,7 @@ func (t *boundTemplate) pinPath(name, path, rev string, selector model.Selector)
 	if err := t.refSlot(name); err != nil {
 		return err
 	}
-	project, err := store.Discover(t.c.cwd)
+	project, err := t.c.project()
 	if err != nil {
 		return err
 	}

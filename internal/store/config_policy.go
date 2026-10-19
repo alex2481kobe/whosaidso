@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/alex2481kobe/whosaidso/internal/buildinfo"
 )
 
 // policyKeys are the optional keys a config may set.
@@ -89,6 +91,15 @@ func (p Policy) VersionRequirement(running string) (message string, satisfied bo
 		return "", true
 	}
 	return fmt.Sprintf("whosaidso %s: requires %s; install: go install github.com/alex2481kobe/whosaidso/cmd/whosaidso@%s", running, p.requires, p.requires), false
+}
+
+// requireVersion is the write policy shared by intake and locked admission.
+func requireVersion(project Project) error {
+	message, satisfied := project.Policy.VersionRequirement(buildinfo.Version())
+	if !satisfied {
+		return storeFault("version-required", "requires", message)
+	}
+	return nil
 }
 
 type semanticVersion struct {

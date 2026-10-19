@@ -143,7 +143,7 @@ func templateVerb(fs *flag.FlagSet) func(*call) error {
 // fill applies, in order: what needs no flag, the bind flags, --set, then
 // what the final references' pinned bytes state.
 func (t *boundTemplate) fill(b templateBinds) error {
-	if p, err := store.Discover(t.c.cwd); err == nil {
+	if p, err := t.c.openProject(t.c.cwd); err == nil {
 		t.projectID = string(p.ID)
 	}
 	if err := t.fillUnflagged(); err != nil {

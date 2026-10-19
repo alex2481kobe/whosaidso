@@ -26,6 +26,11 @@ func uiVerb(fs *flag.FlagSet) func(*call) error {
 			return err
 		}
 		cfg := uiConfig(c.cwd)
+		if cfg.Invoked != nil {
+			if err := c.warnVersion(*cfg.Invoked); err != nil {
+				return err
+			}
+		}
 		cfg.CaptureActor = actor(c)
 		ln, server, url, err := ui.Listen(cfg)
 		if err != nil {
