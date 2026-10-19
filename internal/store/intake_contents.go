@@ -219,9 +219,9 @@ func readIntakePacket(project Project, dir string) (model.Packet, model.PacketRe
 	}
 	// A same-id writer reads the packet as soon as it finds it published,
 	// and on Windows the winner's rename may still hold the directory without
-	// sharing for a moment; the listing waits that out.
+	// sharing for a moment; the listing waits that out, and only that.
 	var entries []os.DirEntry
-	err := waitOutSharing(func() (err error) {
+	err := waitOutSharingViolation(func() (err error) {
 		entries, err = os.ReadDir(dir)
 		return err
 	})

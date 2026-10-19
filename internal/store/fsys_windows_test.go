@@ -302,6 +302,34 @@ func TestPacketReadWaitsOutASharingViolationOnItsDirectory(t *testing.T) {
 	}
 }
 
+// Only a sharing violation is waited out on a packet listing: a directory this
+// account may not list is refused at once, not after the retry schedule.
+func TestPacketReadReturnsAccessDeniedAtOnce(t *testing.T) {
+	p := intakeProject(t)
+	ref := capturedControl(t, p, commandID(1), "source")
+	dir := packetDir(t, p, ref.CommandID)
+	user, err := currentUserSID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Every right of the owner-only list but FILE_LIST_DIRECTORY (0x1).
+	setList(t, dir, "D:P(A;OICI;0x1f01fe;;;"+user+")")
+	t.Cleanup(func() { setList(t, dir, "D:P(A;OICI;FA;;;"+user+")") })
+	if _, err := os.ReadDir(dir); !errors.Is(err, syscall.ERROR_ACCESS_DENIED) {
+		t.Skipf("this account lists the directory anyway (%v); no access denied can occur here", err)
+	}
+	start := time.Now()
+	_, _, _, err = readIntakePacket(p, dir)
+	requireFault(t, err, "io")
+	var schedule time.Duration
+	for _, d := range sharingRetries {
+		schedule += d
+	}
+	if elapsed := time.Since(start); elapsed >= schedule/2 {
+		t.Fatalf("access denied was retried for %v; it must return at once", elapsed)
+	}
+}
+
 func TestBundleReadGivesUpOnAHandleHeldForGood(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "00000001-bundle.json")
 	putFile(t, path, []byte("{}"))

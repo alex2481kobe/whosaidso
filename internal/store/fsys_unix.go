@@ -57,9 +57,9 @@ func readBundle(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
-// waitOutSharing runs op once: POSIX has no sharing modes, so there is no
-// other process's handle to wait out.
-func waitOutSharing(op func() error) error {
+// waitOutSharingViolation runs op once: POSIX has no sharing modes, so there
+// is no other process's handle to wait out.
+func waitOutSharingViolation(op func() error) error {
 	return op()
 }
 

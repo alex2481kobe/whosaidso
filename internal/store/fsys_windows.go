@@ -209,10 +209,21 @@ func readBundle(path string) ([]byte, error) {
 // another process's open handle, or the sharingRetries schedule runs out; the
 // last error is returned as it is.
 func waitOutSharing(op func() error) error {
+	return retryWhile(op, transientSharing)
+}
+
+// waitOutSharingViolation retries only a sharing violation, for an operation
+// (listing a packet directory) that no scanner turns into access denied; a
+// refusal there is real and returns at once.
+func waitOutSharingViolation(op func() error) error {
+	return retryWhile(op, func(err error) bool { return err == errorSharingViolation })
+}
+
+func retryWhile(op func() error, transient func(error) bool) error {
 	for attempt := 0; ; attempt++ {
 		err := op()
 		var errno syscall.Errno
-		if err == nil || !errors.As(err, &errno) || !transientSharing(errno) || attempt >= len(sharingRetries) {
+		if err == nil || !errors.As(err, &errno) || !transient(errno) || attempt >= len(sharingRetries) {
 			return err
 		}
 		time.Sleep(sharingRetries[attempt])
