@@ -152,6 +152,7 @@ func (s *state) invocationStart(b model.Bundle, idx int, o Origin, e *model.Invo
 		return err
 	}
 	put(s, s.invocations, key, Invocation{Key: key, Attempt: owner, Start: e.Envelope, Started: o})
+	s.touchAttempt(owner, b.RecordedAt)
 	return nil
 }
 
@@ -194,6 +195,7 @@ func (s *state) invocationSeal(b model.Bundle, idx int, o Origin, e *model.Invoc
 	inv.Seal = &seal
 	inv.Sealed = &o
 	put(s, s.invocations, key, inv)
+	s.touchAttempt(inv.Attempt, b.RecordedAt)
 	return nil
 }
 

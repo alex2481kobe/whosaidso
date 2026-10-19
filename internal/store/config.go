@@ -25,6 +25,8 @@ type Project struct {
 	ID     model.ProjectID
 	Root   string
 	Ledger string
+	// Policy is the project's optional settings (config_policy.go).
+	Policy Policy
 	// configured is set when Root's whosaidso.toml produced this Project, so
 	// admission can re-read it under the lock (recheckConfig).
 	configured bool
@@ -95,7 +97,11 @@ func configAt(root string) (Project, error) {
 	if err != nil {
 		return Project{}, err
 	}
-	return Project{ID: model.ProjectID(values["id"]), Root: root, Ledger: ledger, configured: true}, nil
+	policy, err := policyOf(values, path)
+	if err != nil {
+		return Project{}, err
+	}
+	return Project{ID: model.ProjectID(values["id"]), Root: root, Ledger: ledger, Policy: policy, configured: true}, nil
 }
 
 // ledgerInRoot enforces that the ledger is committed with the project,
@@ -164,7 +170,7 @@ func parseConfig(data []byte, path string) (map[string]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		if key != "id" && key != "ledger" {
+		if key != "id" && key != "ledger" && !policyKeys[key] {
 			return nil, storeFault("config-unknown-key", at, "unknown key "+strconv.Quote(key))
 		}
 		if _, exists := values[key]; exists {

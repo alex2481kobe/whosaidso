@@ -36,7 +36,10 @@ listed (whether a corrected packet answered the request is not recorded);
 rejected ones owe nothing and are only
 counted (whosaidso history lists their reviews); pending packets another
 checkout of this project captured on this machine are listed apart, with
-that checkout's path (admit each packet in one checkout only); attention.
+that checkout's path (admit each packet in one checkout only); attention,
+with a stale-claim note for each claim idle past stale_after. Each in-flight
+task lists its claims: attempt, holder, claimed_at, last_activity_at, and,
+judged at the time todo runs, idle_for and stale.
 --json keeps every packet not accepted in packets_not_accepted, each with its
 disposition (pending, captured-elsewhere, correction-requested, rejected) and
 captured_in when noted, and totals counts intake_unreviewed,

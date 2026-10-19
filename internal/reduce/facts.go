@@ -156,6 +156,11 @@ type Attempt struct {
 	PriorAttempt model.ID       `json:"prior_attempt"`
 	Started      Origin         `json:"started"`
 	Terminal     *Terminal      `json:"terminal"`
+	// StartedAt and LastActivityAt are the ledger's own times (the admitting
+	// bundles' recorded_at) of the claim and of the latest admitted act
+	// naming it: its runs' starts and seals and its receipt (activity.go).
+	StartedAt      time.Time `json:"started_at"`
+	LastActivityAt time.Time `json:"last_activity_at"`
 }
 
 // Live reports whether this attempt has no terminal receipt. Holder identity is

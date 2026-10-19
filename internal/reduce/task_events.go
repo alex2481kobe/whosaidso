@@ -82,6 +82,7 @@ func (s *state) start(b model.Bundle, idx int, o Origin, e *model.TaskStart) err
 		TaskRevision: e.Task.Revision,
 		Actor:        e.Actor,
 		Started:      o,
+		StartedAt:    b.RecordedAt.UTC(), LastActivityAt: b.RecordedAt.UTC(),
 	})
 	put(s, s.attemptOwner, Ident{Project: b.Project, ID: e.AttemptID}, key)
 	return nil
@@ -128,6 +129,7 @@ func (s *state) takeover(b model.Bundle, idx int, o Origin, e *model.TaskTakeove
 		Takeover:     true,
 		PriorAttempt: e.PriorAttemptID,
 		Started:      o,
+		StartedAt:    b.RecordedAt.UTC(), LastActivityAt: b.RecordedAt.UTC(),
 	})
 	put(s, s.attemptOwner, Ident{Project: b.Project, ID: e.AttemptID}, key)
 	return nil
@@ -175,6 +177,7 @@ func (s *state) terminal(b model.Bundle, idx int, o Origin, e *model.AttemptTerm
 		Origin:             o,
 		Authority:          e.Authority,
 	}
+	a.LastActivityAt = b.RecordedAt.UTC()
 	put(s, s.attempts, key, a)
 	return nil
 }

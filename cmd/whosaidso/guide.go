@@ -21,10 +21,12 @@ and disagreed"; what could not be compared is UNKNOWN.
   accept    a witnessed task.close ends the task (whosaidso help accept)
 
 Setup. Build with: go build -o whosaidso ./cmd/whosaidso. The project is the nearest
-whosaidso.toml above the working directory. It holds exactly two keys, both
-required, each a quoted string on its own line (# starts a comment):
+whosaidso.toml above the working directory. It holds two required keys,
+each a quoted string on its own line (# starts a comment):
   id = 'animation/toy'          # the project id every record names
   ledger = '.whosaidso/events'  # the ledger folder, inside the checkout
+and optionally stale_after (default '24h'): todo flags a claim with no
+admitted activity for longer as a takeover candidate.
 Reads and writes use the checkout you run them in: each clone and worktree
 records on its own branch, and merging joins them (whosaidso help branches).
 WHOSAIDSO_HOME, when set, must be an absolute path (whosaidso help home).
@@ -334,19 +336,24 @@ Commit only .whosaidso/events and .whosaidso/artifacts; keep
 .whosaidso/cache out of git, or every merge conflicts on it.
 Records pin commits: a squash or rebase leaves a branch's own commits
 unreachable once the branch is gone, so nothing here requires either.
-Claiming a task when many agents share the ledger:
+Claiming a task when many agents share the ledger. A claim counts only once
+it is on origin's main: claim on main, push, and start work only after the
+push succeeds and whosaidso check claim A (A: the attempt id start printed)
+exits 0. A claim that cannot be pushed is no claim; do not work on it.
   git pull --ff-only                  start from a current main
   whosaidso template task.start --task T --capture --admit --reason "..."
-  git add .whosaidso && git commit -m "claim T" && git push
-A claim exists for others only once pushed. If the push is rejected,
-someone pushed first: git fetch origin && git merge --no-edit origin/main
+  git add .whosaidso && git commit -m "claim T" && git push origin main
+If the push is rejected, someone pushed first:
+  git fetch origin && git merge --no-edit origin/main
 (a merge: git pull --ff-only cannot succeed once a claim is committed), then
-whosaidso check claim A, with A the attempt id start printed. Exit 0: push
-again. Exit 1: stop; the claim lost and the task is someone else's. When two
-claims of one task merge, the one first in the order above applies and the
-other is set aside; todo calls it a lost claim. Work on any branch after
-that, run whosaidso check claim A after every merge from main, and stop on
-a nonzero exit.
+whosaidso check claim A. Exit 0: push again.
+Exit 1: stop; the claim lost and the task is someone else's. When two claims
+of one task merge, the one first in the order above applies and the other is
+set aside; todo calls it a lost claim. Then work on any branch; after every
+merge from main run whosaidso check claim A, and stop on a nonzero exit.
+todo's in-flight tasks list each claim's holder, claim time and last
+activity (its runs and receipt); a claim idle past stale_after is flagged
+in attention as a takeover candidate, never released by itself.
 `},
 	{"pitfalls", "rules that prevent the known mistakes", `- Never invent a value: a missing actor, reading, unit or validation stays
   UNKNOWN with its reason. Two unknowns never match.

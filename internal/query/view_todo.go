@@ -10,6 +10,7 @@ package query
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
 	"github.com/alex2481kobe/whosaidso/internal/reduce"
@@ -42,6 +43,9 @@ type TodoTask struct {
 	Detail
 	Accepter any        `json:"accepter,omitempty"`
 	Runs     *[]RunView `json:"runs,omitempty"`
+	// Claims is set for an in-flight task: each live claim, its holder, when
+	// it was claimed and last worked on (view_board.go).
+	Claims []BoardClaim `json:"claims,omitempty"`
 }
 
 // TodoTotals counts each owed task identity once, whichever section holds it;
@@ -65,6 +69,8 @@ type TodoTotals struct {
 	// captured on this machine; absent when none.
 	IntakeElsewhere int `json:"intake_elsewhere,omitempty"`
 	SetAside        int `json:"set_aside,omitempty"`
+	// StaleClaims counts live claims idle past stale_after; absent when none.
+	StaleClaims int `json:"stale_claims,omitempty"`
 }
 
 // currentRecords is every current revision, in the snapshot's record order.
@@ -94,7 +100,7 @@ func accepterOf(spec *model.TaskSpec) any {
 	return actor(*spec.Accepter)
 }
 
-func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHeader, limit int) (*TodoAnswer, error) {
+func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHeader, limit int, now time.Time) (*TodoAnswer, error) {
 	intake, err := pending(project, s)
 	if err != nil {
 		return nil, err
@@ -103,6 +109,7 @@ func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHea
 		Ready: []TodoTask{}, OpenDecisions: []Detail{}, PacketsNotAccepted: intake, Attention: []Attention{}}
 	d := newDetailer(s)
 	owed := []Attention{}
+	staleClaims := 0
 	flying := map[reduce.Ident]int{}
 	for _, fact := range currentRecords(s) {
 		if fact.Kind == model.Decision {
@@ -119,6 +126,10 @@ func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHea
 		switch v.Task.Status {
 		case reduce.StatusInFlight:
 			t.Runs = &[]RunView{}
+			var stale []Attention
+			t.Claims, stale = boardClaims(s, v, project, now)
+			owed = append(owed, stale...)
+			staleClaims += len(stale)
 			flying[reduce.Ident{Project: fact.Key.Project, ID: fact.Key.ID}] = len(a.InFlight)
 			a.InFlight = append(a.InFlight, t)
 		case reduce.StatusBlocked:
@@ -154,7 +165,7 @@ func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHea
 	}
 	a.Omitted = map[string]LimitReport{"ready": report}
 	a.Totals = TodoTotals{InFlight: len(a.InFlight), AwaitingAcceptance: len(a.AwaitingAcceptance), Blocked: len(a.Blocked),
-		Ready: report.Offered, OpenDecisions: len(a.OpenDecisions)}
+		Ready: report.Offered, OpenDecisions: len(a.OpenDecisions), StaleClaims: staleClaims}
 	for _, p := range a.PacketsNotAccepted {
 		switch p.Disposition {
 		case "pending":

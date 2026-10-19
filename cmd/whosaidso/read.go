@@ -60,6 +60,9 @@ func viewVerb(view string) func(*flag.FlagSet) func(*call) error {
 			case len(c.args) == 1:
 				request.ID = model.ID(c.args[0])
 			}
+			if view == "todo" {
+				request.Now = time.Now().UTC()
+			}
 			if err := query.CheckView(request); err != nil {
 				return usageError("whosaidso %s: %v", view, err)
 			}

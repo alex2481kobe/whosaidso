@@ -58,3 +58,39 @@ func TestCheckClaimTakenOverAndEnded(t *testing.T) {
 		t.Fatalf("the text answer names the status and the next step: %s", out)
 	}
 }
+
+// A run admitted on a claim is activity on it: todo's last_activity_at moves
+// past the claim time; the claim time does not move.
+func TestTodoBoardCountsRunsAsActivity(t *testing.T) {
+	t.Parallel()
+	w := flowProofWorld(t)
+	claim := func() query.BoardClaim {
+		t.Helper()
+		out, err := w.cli(nil, "todo", "--json")
+		var a query.TodoAnswer
+		if err != nil || json.Unmarshal(out, &a) != nil {
+			t.Fatalf("todo --json: %v", err)
+		}
+		for _, task := range a.InFlight {
+			for _, c := range task.Claims {
+				if c.Attempt == w.attempt {
+					return c
+				}
+			}
+		}
+		t.Fatalf("todo lists no claim for attempt %s", w.attempt)
+		return query.BoardClaim{}
+	}
+	before := claim()
+	if !before.LastActivityAt.Equal(before.ClaimedAt) {
+		t.Fatalf("control: before any run the last activity is the claim: %+v", before)
+	}
+	w.admittedRun(pvPass)
+	after := claim()
+	if !after.LastActivityAt.After(before.LastActivityAt) || !after.ClaimedAt.Equal(before.ClaimedAt) {
+		t.Fatalf("a run moves the last activity, never the claim time: before %+v after %+v", before, after)
+	}
+	if after.Stale == nil || *after.Stale {
+		t.Fatalf("todo judges a fresh claim not stale at the time it runs: %+v", after)
+	}
+}
