@@ -46,6 +46,11 @@ func EventReferences(event TypedEvent) ([]Reference, error) {
 	}
 	w := referenceWalker{refs: []Reference{}}
 	switch e := event.(type) {
+	case *GalleryAdd:
+		w.records(e.Tasks, "tasks")
+	case *GalleryRequire:
+		w.record(e.Task, "task")
+	case *GalleryApprove, *GalleryReject, *GalleryRetract, *GalleryImport:
 	case *TaskCreate:
 		w.task(e.Spec, "spec")
 	case *TaskAmend:

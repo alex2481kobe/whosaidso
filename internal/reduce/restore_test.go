@@ -58,6 +58,7 @@ func restoreFixtures(t *testing.T) map[string][]model.Bundle {
 	last := all[len(all)-1]
 	clash.add(t, &model.SetAsideResolve{Bundle: last.Ref(), Reason: "captured twice"})
 	return map[string][]model.Bundle{
+		"gallery":   galleryRestoreLedger(t),
 		"clash":     clash.bundles(),
 		"golden":    goldenLedger(t).bundles(),
 		"tasks":     tasks.bundles(),
@@ -136,7 +137,7 @@ func TestRestoreAtEverySplitEqualsReplay(t *testing.T) {
 
 // The golden ledger's image is pinned. A change that moves it must also move
 // snapshotFormat or the state's types, so older images are refused.
-const goldenImageSHA256 = "6eef2a708c664b0a7605a6b2dd2633f247506911dbce5809901e328d7c17eeb4" // repinned for snapshot format /5: an attempt receipt may carry the authority it was recorded on, attempts carry their claim and last-activity times, a review may carry an author correction, and a set-aside bundle its resolution
+const goldenImageSHA256 = "682ccb8e36ae056516665d13bd16aaf196c54d45c737551bfd8ac3fd9d23dadb" // snapshot format /6 includes gallery events in the closed codec set
 
 func TestGoldenImageIsPinned(t *testing.T) {
 	image := mustEncode(t, mustReplay(t, goldenLedger(t).bundles()))

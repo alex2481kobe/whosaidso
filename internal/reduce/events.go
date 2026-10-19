@@ -15,6 +15,8 @@ import (
 func (s *state) route(b model.Bundle, idx int, e model.TypedEvent) error {
 	o := s.bundle.origin(idx)
 	switch t := e.(type) {
+	case *model.GalleryAdd, *model.GalleryRetract, *model.GalleryApprove, *model.GalleryReject, *model.GalleryRequire, *model.GalleryImport:
+		return s.galleryEvent(b, idx, e)
 	case *model.TaskCreate:
 		return s.create(b, idx, o, model.Task, t.ID, t.Provenance, func(r *Record) { r.Task = &t.Spec })
 	case *model.ClaimAssert:
