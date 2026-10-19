@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -160,14 +161,8 @@ func Run(ctx context.Context, project store.Project, request RunRequest) (RunRes
 	} else {
 		processErr = cmd.Wait()
 		if cmd.ProcessState != nil {
-			if status, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); ok && status.Signaled() {
-				signal := status.Signal().String()
-				envelope.Outcome = runKnown(model.ProcessOutcome{Kind: "signal", Signal: &signal})
-			} else if killed.Load() {
-				signal := syscall.SIGKILL.String()
-				envelope.Outcome = runKnown(model.ProcessOutcome{Kind: "signal", Signal: &signal})
-			} else if code := cmd.ProcessState.ExitCode(); code >= 0 {
-				envelope.Outcome = runKnown(model.ProcessOutcome{Kind: "exit", ExitCode: &code})
+			if outcome, ok := runOutcome(cmd.ProcessState, killed.Load(), runtime.GOOS == "windows"); ok {
+				envelope.Outcome = runKnown(outcome)
 			}
 		}
 	}
@@ -201,6 +196,26 @@ func Run(ctx context.Context, project store.Project, request RunRequest) (RunRes
 type runStream struct {
 	file *os.File
 	tail []byte
+}
+
+// runOutcome reads how the child ended. On POSIX the wait status is the whole
+// answer: the runner's kill shows there as a signal, and a kill that lands
+// after the child exited (Kill succeeds until Wait reaps it) leaves the
+// child's own status. Windows has no signals; the runner's kill exits the
+// child with code 1, so there killed decides.
+func runOutcome(state *os.ProcessState, killed, windows bool) (model.ProcessOutcome, bool) {
+	if status, ok := state.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+		signal := status.Signal().String()
+		return model.ProcessOutcome{Kind: "signal", Signal: &signal}, true
+	}
+	if killed && windows {
+		signal := syscall.SIGKILL.String()
+		return model.ProcessOutcome{Kind: "signal", Signal: &signal}, true
+	}
+	if code := state.ExitCode(); code >= 0 {
+		return model.ProcessOutcome{Kind: "exit", ExitCode: &code}, true
+	}
+	return model.ProcessOutcome{}, false
 }
 
 func runOpenStream(path string) (*runStream, error) {
