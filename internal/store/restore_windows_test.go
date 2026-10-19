@@ -76,6 +76,9 @@ func TestRestoreCommandMakesThePathOwnerOnly(t *testing.T) {
 			setList(t, path, "D:P(A;;FA;;;"+user+")(A;;FA;;;"+unmapped+")")
 		}},
 	}
+	// The user's own entry, as sddl displays it, for a directory and a file.
+	_, ownDirectory, _ := strings.Cut(rendered(t, "D:P(A;OICI;FA;;;"+user+")"), "D:P")
+	_, ownFile, _ := strings.Cut(rendered(t, "D:P(A;;FA;;;"+user+")"), "D:P")
 	for _, shell := range []string{"cmd", "powershell"} {
 		for _, f := range fixtures {
 			t.Run(shell+"/"+f.name, func(t *testing.T) {
@@ -103,9 +106,9 @@ func TestRestoreCommandMakesThePathOwnerOnly(t *testing.T) {
 					}
 				}
 				t.Setenv("WHOSAIDSO_ACL_PATH", path)
-				want := "(A;;FA;;;" + user + ")"
+				want := ownFile
 				if f.directory {
-					want = "(A;OICI;FA;;;" + user + ")"
+					want = ownDirectory
 				}
 				// The list must be protected (P; icacls also sets AI) and hold
 				// exactly the user's own entry.

@@ -71,16 +71,20 @@ func RunRestore(command string) ([]byte, error) {
 }
 
 // MakePrivate makes an existing directory owner-only, as a home the store
-// created itself would be: inherited entries dropped and one entry for the
-// current user, inherited by everything later created below it, so fixtures
-// written there by hand pass the store's owner-only checks.
+// created itself would be: explicit entries reset (some machines give a new
+// directory explicit copies of its parent's entries), inherited entries
+// dropped, and one entry for the current user, inherited by everything later
+// created below it, so fixtures written there by hand pass the store's
+// owner-only checks.
 func MakePrivate(dir string) error {
 	u, err := user.Current()
 	if err != nil {
 		return err
 	}
-	if out, err := exec.Command("icacls", dir, "/inheritance:r", "/grant:r", "*"+u.Uid+":(OI)(CI)F").CombinedOutput(); err != nil {
-		return fmt.Errorf("icacls %s: %v: %s", dir, err, out)
+	for _, args := range [][]string{{"/reset"}, {"/inheritance:r", "/grant:r", "*" + u.Uid + ":(OI)(CI)F"}} {
+		if out, err := exec.Command("icacls", append([]string{dir}, args...)...).CombinedOutput(); err != nil {
+			return fmt.Errorf("icacls %s %v: %v: %s", dir, args, err, out)
+		}
 	}
 	return nil
 }

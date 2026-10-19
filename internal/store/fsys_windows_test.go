@@ -128,6 +128,21 @@ func sddl(t *testing.T, path string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// rendered is list as sddl displays it: the same .NET renderer turns a
+// well-known SID into its alias (the built-in Administrator's into LA), so an
+// expectation built from SIDs is compared in that form.
+func rendered(t *testing.T, list string) string {
+	t.Helper()
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
+		"([Security.AccessControl.RawSecurityDescriptor]::new($env:WHOSAIDSO_SDDL)).GetSddlForm('Access')")
+	cmd.Env = append(os.Environ(), "WHOSAIDSO_SDDL="+list)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("render %s: %v: %s", list, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
 func TestPrivateDirectoryListIsSetAtCreation(t *testing.T) {
 	user, err := currentUserSID()
 	if err != nil {
@@ -148,7 +163,7 @@ func TestPrivateDirectoryListIsSetAtCreation(t *testing.T) {
 	t.Setenv("WHOSAIDSO_ACL_PATH", private)
 	got := sddl(t, private)
 	dacl := got[strings.Index(got, "D:"):]
-	if want := "D:P(A;OICI;FA;;;" + user + ")"; dacl != want {
+	if want := rendered(t, "D:P(A;OICI;FA;;;"+user+")"); dacl != want {
 		t.Fatalf("private directory list = %s, want %s", dacl, want)
 	}
 	if err := requireOwnerOnly(private, true); err != nil {
@@ -157,7 +172,7 @@ func TestPrivateDirectoryListIsSetAtCreation(t *testing.T) {
 	child := filepath.Join(private, "packet.json")
 	putFile(t, child, []byte("{}"))
 	t.Setenv("WHOSAIDSO_ACL_PATH", child)
-	if got := sddl(t, child); !strings.HasSuffix(got, "D:(A;ID;FA;;;"+user+")") {
+	if got := sddl(t, child); !strings.HasSuffix(got, rendered(t, "D:(A;ID;FA;;;"+user+")")) {
 		t.Fatalf("a file created inside must inherit only the user's entry, got %s", got)
 	}
 }
