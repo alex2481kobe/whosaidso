@@ -273,6 +273,8 @@ var setAsideNext = map[string]string{
 		"if it is another, capture it again with its own order; then resolve",
 	reduce.CodeCompetingDisposition: "the decision was disposed on a branch merged first, and that disposition stands; " +
 		"if it should not, the owner rules again as a new disposition; then resolve",
+	reduce.CodeAuthorityUnavailable: "the words this act cited were set aside with their own bundle, so the act was too: " +
+		"deal with that bundle first, then record the act again citing words that stand; then resolve",
 }
 
 const reRecord = "re-record it: the bundle stays in the ledger and is never applied, so capture its change again " +

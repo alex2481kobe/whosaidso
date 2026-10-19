@@ -16,6 +16,9 @@ import (
 // forever, which reads as "waiting" when it is really "malformed".
 func (s *state) checkPrerequisites(b model.Bundle, idx int, spec model.TaskSpec) error {
 	for i, r := range spec.Prerequisites {
+		if err := s.authorityApplied(b, idx, fmt.Sprintf("prerequisites[%d].authority", i), r.Authority); err != nil {
+			return err
+		}
 		if r.Target.Project != b.Project {
 			continue // resolves on read
 		}
@@ -164,6 +167,9 @@ func (s *state) terminal(b model.Bundle, idx int, o Origin, e *model.AttemptTerm
 	if err := s.checkReceiptAuthor(b, idx, a.Actor, e.Authority); err != nil {
 		return err
 	}
+	if err := s.authorityApplied(b, idx, "authority", e.Authority); err != nil {
+		return err
+	}
 	if err := s.checkHandbackHold(b, idx, e); err != nil {
 		return err
 	}
@@ -188,6 +194,9 @@ func (s *state) close(b model.Bundle, idx int, o Origin, e *model.TaskClose) err
 		return err
 	}
 	if err := s.checkAccepter(b, idx, rec); err != nil {
+		return err
+	}
+	if err := s.authorityApplied(b, idx, "authority", e.Authority); err != nil {
 		return err
 	}
 	// Whether every attempt is terminal, and whether a success closure has
