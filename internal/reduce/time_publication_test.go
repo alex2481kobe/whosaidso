@@ -28,6 +28,7 @@ import (
 // location. This is a spec change, not a test bent to fit code.
 func TestInvocationTimestampIsUTCThroughLedgerPublication(t *testing.T) {
 	t.Setenv("HOME", t.TempDir()) // isolate the real intake publisher
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	root := t.TempDir()
 	project := store.Project{ID: reduce.TestProject, Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}
 	l, env, _ := reduce.SealStart(t)

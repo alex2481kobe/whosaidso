@@ -16,6 +16,7 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/model"
 	"github.com/alex2481kobe/whosaidso/internal/reduce"
 	"github.com/alex2481kobe/whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/testaccess"
 	"github.com/alex2481kobe/whosaidso/internal/write"
 )
 
@@ -38,6 +39,10 @@ func TestMain(m *testing.M) {
 	}
 	if err == nil {
 		err = os.MkdirAll(filepath.Join(benchRoot, "home"), 0700)
+	}
+	if err == nil {
+		// The fixture writes intake packets by hand, below this home.
+		err = testaccess.MakePrivate(filepath.Join(benchRoot, "home"))
 	}
 	if err == nil {
 		err = os.Setenv("HOME", filepath.Join(benchRoot, "home"))

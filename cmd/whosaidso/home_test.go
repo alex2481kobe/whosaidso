@@ -17,6 +17,7 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/model"
 	"github.com/alex2481kobe/whosaidso/internal/query"
 	"github.com/alex2481kobe/whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/testaccess"
 )
 
 // bindTestHome gives the test its own WhoSaidSo home (WHOSAIDSO_HOME: registry,
@@ -249,18 +250,14 @@ func TestCLIHomeRefusesToBindWhatItCannotServe(t *testing.T) {
 		t.Fatal(err)
 	}
 	packet := filepath.Join(intake, string(cliID(60)))
-	if err := os.Chmod(packet, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testaccess.Widen(t, packet)
 	if _, errs, code := cliRun(t, root, nil, "", "home", "."); code != 1 || !strings.Contains(errs, "not registered") || !strings.Contains(errs, "insecure-permissions") {
 		t.Fatalf("a home whose intake is not owner-only must not bind: %d %q", code, errs)
 	}
 	if _, bound, _ := store.Binding("test/cli"); bound {
 		t.Fatal("a refused home was bound")
 	}
-	if err := os.Chmod(packet, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	testaccess.Restore(t, packet)
 	if out, errs, code := cliRun(t, root, nil, "", "home", "."); code != 0 || !strings.HasPrefix(out, "registered test/cli") {
 		t.Fatalf("control: owner-only intake binds: %d %q", code, errs)
 	}

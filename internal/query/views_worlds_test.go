@@ -43,8 +43,10 @@ func thousandFixture(t testing.TB) (thousandWorld, bool) {
 	}
 	if tt, ok := t.(*testing.T); ok {
 		tt.Setenv("HOME", filepath.Join(root, "home"))
+		tt.Setenv("USERPROFILE", filepath.Join(root, "home"))
 	} else if b, ok := t.(*testing.B); ok {
 		b.Setenv("HOME", filepath.Join(root, "home"))
+		b.Setenv("USERPROFILE", filepath.Join(root, "home"))
 	}
 	dir := filepath.Join(root, "n1000")
 	data, err := os.ReadFile(filepath.Join(dir, "fixture.json"))

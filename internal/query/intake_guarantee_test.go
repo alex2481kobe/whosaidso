@@ -18,6 +18,7 @@ import (
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
 	"github.com/alex2481kobe/whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/testaccess"
 )
 
 type trioPacket struct{ dir, blob string }
@@ -141,16 +142,12 @@ func TestReadIntakeGuaranteePerPacket(t *testing.T) {
 	})
 	t.Run("accepted packet readable by others", func(t *testing.T) {
 		p, trio := intakeTrio(t)
-		if err := os.Chmod(filepath.Join(trio["accepted"].dir, "packet.json"), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		testaccess.Widen(t, filepath.Join(trio["accepted"].dir, "packet.json"))
 		readsFail(t, p, "insecure-permissions")
 	})
 	t.Run("accepted packet directory readable by others", func(t *testing.T) {
 		p, trio := intakeTrio(t)
-		if err := os.Chmod(trio["accepted"].dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
+		testaccess.Widen(t, trio["accepted"].dir)
 		readsFail(t, p, "insecure-permissions")
 	})
 	// The stated blind spot: a read does not rehash an accepted packet's blobs.

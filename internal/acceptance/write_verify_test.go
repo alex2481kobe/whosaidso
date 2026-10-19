@@ -219,7 +219,7 @@ func TestWriteVerifyNestedInvocationIntentCopiesAreOwned(t *testing.T) {
 
 func writeVerifyCLI(t *testing.T) string {
 	t.Helper()
-	binary := filepath.Join(t.TempDir(), "whosaidso")
+	binary := filepath.Join(t.TempDir(), exeName("whosaidso"))
 	cmd := exec.Command("go", "build", "-o", binary, "./cmd/whosaidso")
 	cmd.Dir = filepath.Join("..", "..")
 	cmd.Env = append(os.Environ(), "GOPROXY=off", "GOTOOLCHAIN=local")
