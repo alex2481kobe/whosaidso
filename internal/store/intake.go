@@ -50,7 +50,11 @@ func WriteIntake(ctx context.Context, project Project, request IntakeRequest) (m
 
 func writeIntake(ctx context.Context, project Project, request IntakeRequest, disk intakeIO) (model.PacketRef, error) {
 	var zero model.PacketRef
-	if err := requireVersion(project); err != nil {
+	current, err := currentConfig(project)
+	if err != nil {
+		return zero, err
+	}
+	if err := requireVersion(current); err != nil {
 		return zero, err
 	}
 	// os.Rename's atomic-directory guarantee is platform dependent. Do not
