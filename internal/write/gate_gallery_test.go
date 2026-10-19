@@ -91,7 +91,7 @@ func TestGalleryPacketSetOrdersEntryBeforeVerdictAndImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	inventory := []model.Digest{model.HashBytes([]byte("legacy"))}
+	inventory := []model.Digest{model.GalleryImportIdentity(add.File, add.AddedAt)}
 	source := model.GallerySource(inventory)
 	add.ImportID = string(inventory[0])
 	marker := f.capture(nil, &model.GalleryImport{Source: source, Inventory: inventory, Entries: []model.ID{add.EntryID}})
