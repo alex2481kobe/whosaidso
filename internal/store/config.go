@@ -17,28 +17,17 @@ import (
 // Project keeps absolute paths at the runtime boundary. Only ID is persisted in
 // packets; moving a checkout must not change its identity or lose its intake.
 //
-// Root is the project's home: the ledger, definitions, admission, canonical
-// artifacts and the cache live under it. Checkout is the checkout the command
-// was invoked in: processes run there, sources are captured from it and its
-// git HEAD and dirty state are observed there. Discover sets both to the
-// nearest config's directory; Open sets Root to the registered home (home.go).
+// Root is the checkout the command was invoked in, the nearest config's
+// directory: the ledger, definitions, admission, artifacts and the cache live
+// under it, processes run there, sources are captured from it and its git
+// HEAD and dirty state are observed there.
 type Project struct {
-	ID       model.ProjectID
-	Root     string
-	Ledger   string
-	Checkout string
+	ID     model.ProjectID
+	Root   string
+	Ledger string
 	// configured is set when Root's whosaidso.toml produced this Project, so
 	// admission can re-read it under the lock (recheckConfig).
 	configured bool
-}
-
-// ExecRoot is where processes run and git is observed: the invoking checkout,
-// or Root for a Project built without one, where the two are the same place.
-func (p Project) ExecRoot() string {
-	if p.Checkout == "" {
-		return p.Root
-	}
-	return p.Checkout
 }
 
 // ArtifactDir is the project-relative, slash-separated artifact store: the
@@ -106,7 +95,7 @@ func configAt(root string) (Project, error) {
 	if err != nil {
 		return Project{}, err
 	}
-	return Project{ID: model.ProjectID(values["id"]), Root: root, Ledger: ledger, Checkout: root, configured: true}, nil
+	return Project{ID: model.ProjectID(values["id"]), Root: root, Ledger: ledger, configured: true}, nil
 }
 
 // ledgerInRoot enforces that the ledger is committed with the project,

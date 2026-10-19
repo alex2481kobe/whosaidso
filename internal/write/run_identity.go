@@ -35,17 +35,16 @@ func RunExecutionIdentity(ctx context.Context, project store.Project) model.Exec
 }
 
 // runGitState applies the run's policy to the raw observation of the invoking
-// checkout, which is what executes, whichever checkout holds the home ledger:
+// checkout, which is what executes:
 // a HEAD it cannot read leaves dirty UNKNOWN for the same reason, and a dirty
 // tree is recorded UNKNOWN, never dirty=true, because no source was captured.
 func runGitState(ctx context.Context, project store.Project) (model.Availability[model.GitHead], model.Availability[bool]) {
-	root := project.ExecRoot()
+	root := project.Root
 	head := evidence.CheckoutHead(ctx, evidence.ExecGit, root)
 	if head.State != model.Known {
 		return head, model.Availability[bool]{State: model.Unknown, Reason: head.Reason}
 	}
-	// The project directory only, less WhoSaidSo's own record folders, at the same
-	// project-relative place in this checkout as in the home.
+	// The project directory only, less WhoSaidSo's own record folders.
 	pathspec := []string{"."}
 	ledger, err := filepath.Rel(project.Root, project.Ledger)
 	if err != nil {

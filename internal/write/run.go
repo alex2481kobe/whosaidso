@@ -118,7 +118,7 @@ func Run(ctx context.Context, project store.Project, request RunRequest) (RunRes
 	cmd := exec.CommandContext(ctx, envelope.Argv[0], envelope.Argv[1:]...)
 	cmd.Dir = request.Dir
 	if cmd.Dir == "" {
-		cmd.Dir = project.ExecRoot()
+		cmd.Dir = project.Root
 	}
 	cmd.Env = request.Env
 	if cmd.Env == nil {

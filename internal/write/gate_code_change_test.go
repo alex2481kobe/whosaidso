@@ -79,27 +79,6 @@ func TestCodeChangeVerifiedByGitSetsTheFailingRunAside(t *testing.T) {
 	}
 }
 
-// Two roots: the checkout the admission is invoked from sits at a HEAD
-// the home does not have, and holds none of the home's commits, so a gate
-// that asked it would refuse the change as unverified.
-func TestCodeChangeIsVerifiedInTheHomeNotTheInvokingCheckout(t *testing.T) {
-	w := newCodeWorld(t)
-	checkout := t.TempDir()
-	identityGit(t, checkout, "init", "--quiet")
-	proofPut(t, checkout, "src/code.go", "package src // elsewhere\n")
-	identityGit(t, checkout, "add", ".")
-	identityGit(t, checkout, "commit", "--quiet", "-m", "another history")
-	if identityGit(t, checkout, "rev-parse", "HEAD") == identityGit(t, w.f.project.Root, "rev-parse", "HEAD") {
-		t.Fatal("control: the checkout and the home must sit at different commits")
-	}
-	w.f.project.Checkout = checkout
-	fail, pass := w.runAt(proofFail, &w.a), w.runAt(proofPass, &w.b)
-	w.f.accept(w.f.capture(nil, w.proofSettingAside(pass, fail, &model.CodeChange{From: w.a, To: w.b, ChangedPaths: []string{"src/code.go"}})))
-	if w.status(t) != reduce.StatusProven {
-		t.Fatalf("the code change is the home repository's to verify, got %s", w.status(t))
-	}
-}
-
 func TestCodeChangeRefusals(t *testing.T) {
 	for _, tc := range []struct {
 		name, code string

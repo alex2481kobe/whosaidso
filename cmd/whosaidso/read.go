@@ -109,7 +109,7 @@ func answerView(ctx context.Context, project store.Project, request query.ViewRe
 // Anything git cannot report stays UNKNOWN with the reason. Git runs without
 // optional locks, so continue writes nothing, not even the index.
 func observe(ctx context.Context, project store.Project) query.Observation {
-	root, at := project.ExecRoot(), time.Now().UTC()
+	root, at := project.Root, time.Now().UTC()
 	return query.Observation{Head: evidence.CheckoutHead(ctx, evidence.ExecGit, root), Dirty: evidence.CheckoutDirty(ctx, evidence.ExecGit, root),
 		ObservedAt: model.Availability[time.Time]{State: model.Known, Value: &at}}
 }
@@ -117,7 +117,7 @@ func observe(ctx context.Context, project store.Project) query.Observation {
 // staleGit is show --stale's git, in the invoking checkout: its HEAD, and the
 // scoped diff between a run's commit and that HEAD.
 func staleGit(ctx context.Context, project store.Project) *query.StaleGit {
-	root := project.ExecRoot()
+	root := project.Root
 	return &query.StaleGit{Head: evidence.CheckoutHead(ctx, evidence.ExecGit, root),
 		Changes: func(from, to model.GitHead, scope []string) ([]string, error) {
 			return evidence.ScopeChanges(ctx, evidence.ExecGit, root, from, to, scope)

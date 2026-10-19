@@ -169,7 +169,7 @@ func TestSymlinkAliasesNameOneCheckout(t *testing.T) {
 	}
 	// Opening through the alias keeps the alias's spelling.
 	p := mustOpen(t, alias)
-	if p.Root != alias || p.Checkout != alias {
+	if p.Root != alias {
 		t.Fatalf("alias open: %+v", p)
 	}
 	admitControl(t, p, 1)
