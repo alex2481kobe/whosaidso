@@ -28,7 +28,7 @@ type Project struct {
 	// Policy is the project's optional settings (config_policy.go).
 	Policy Policy
 	// configured is set when Root's whosaidso.toml produced this Project, so
-	// admission can re-read it under the lock (recheckConfig).
+	// writers can re-read it before publishing (currentConfig).
 	configured bool
 }
 
@@ -304,11 +304,7 @@ func recheckConfig(project Project) error {
 	if !project.configured {
 		return requireVersion(project)
 	}
-	current, err := configAt(project.Root)
-	if os.IsNotExist(err) {
-		return storeFault("config-changed", project.Root, fmt.Sprintf(
-			"project %s was opened from %s, which no longer has a whosaidso.toml; nothing was published; run the command again", project.ID, project.Root))
-	}
+	current, err := currentConfig(project)
 	if err != nil {
 		return err
 	}
@@ -320,4 +316,18 @@ func recheckConfig(project Project) error {
 			project.ID, opened, current.ID, named))
 	}
 	return requireVersion(current)
+}
+
+// currentConfig refreshes settings at the original config location, without
+// imposing admission's ledger identity checks on intake capture.
+func currentConfig(project Project) (Project, error) {
+	if !project.configured {
+		return project, nil
+	}
+	current, err := configAt(project.Root)
+	if os.IsNotExist(err) {
+		return Project{}, storeFault("config-changed", project.Root, fmt.Sprintf(
+			"project %s was opened from %s, which no longer has a whosaidso.toml; nothing was published; run the command again", project.ID, project.Root))
+	}
+	return current, err
 }
