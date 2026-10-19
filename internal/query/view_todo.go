@@ -8,6 +8,9 @@ package query
 // READY tasks and says how many it cut. Rendering lives in view_render.go.
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/alex2481kobe/whosaidso/internal/model"
 	"github.com/alex2481kobe/whosaidso/internal/reduce"
 	"github.com/alex2481kobe/whosaidso/internal/store"
@@ -91,7 +94,7 @@ func accepterOf(spec *model.TaskSpec) any {
 	return actor(*spec.Accepter)
 }
 
-func todoView(project store.Project, s reduce.Snapshot, h ViewHeader, limit int) (*TodoAnswer, error) {
+func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHeader, limit int) (*TodoAnswer, error) {
 	intake, err := pending(project, s)
 	if err != nil {
 		return nil, err
@@ -171,11 +174,51 @@ func todoView(project store.Project, s reduce.Snapshot, h ViewHeader, limit int)
 		}
 	}
 	a.Totals.Tasks = len(seen) + report.Omitted
-	for _, v := range s.SetAside() {
-		a.SetAside = append(a.SetAside, SetAsideBundle{SetAside: v, Next: reRecord})
+	if a.SetAside, err = setAsideBundles(s, source); err != nil {
+		return nil, err
 	}
 	a.Totals.SetAside = len(a.SetAside)
 	return a, nil
+}
+
+// setAsideBundles lists every set-aside bundle with what to do about it. A
+// bundle carrying a claim lost it: its holder stops. Bundles are read only
+// when replay set one aside.
+func setAsideBundles(s reduce.Snapshot, source Source) ([]SetAsideBundle, error) {
+	aside := s.SetAside()
+	if len(aside) == 0 {
+		return nil, nil
+	}
+	bundles, err := source.Bundles()
+	if err != nil {
+		return nil, err
+	}
+	claims := map[model.BundleRef][]claimEvent{}
+	for _, b := range bundles {
+		if _, ok := s.SetAsideBundle(b.Ref()); ok {
+			claims[b.Ref()] = claimsIn(b)
+		}
+	}
+	out := make([]SetAsideBundle, 0, len(aside))
+	for _, v := range aside {
+		entry := SetAsideBundle{SetAside: v, Next: reRecord}
+		if lost := claims[model.BundleRef{Sequence: v.Sequence, CommandID: v.CommandID}]; len(lost) > 0 {
+			entry.Next = lostClaimNext(lost)
+		}
+		out = append(out, entry)
+	}
+	return out, nil
+}
+
+// lostClaimNext tells the holder of each claim a set-aside bundle carried
+// that it lost the task to the branch merged first.
+func lostClaimNext(lost []claimEvent) string {
+	parts := make([]string, 0, len(lost))
+	for _, c := range lost {
+		parts = append(parts, fmt.Sprintf("attempt %s by %s", c.attempt, actorName(c.actor)))
+	}
+	return "lost claim: " + strings.Join(parts, ", ") + " lost the task to a claim on a branch merged first; " +
+		"its holder stops and hands nothing back on it (whosaidso check claim ATTEMPT_ID names who holds the task now)"
 }
 
 // SetAsideBundle is one bundle replay kept but did not apply: the fault that

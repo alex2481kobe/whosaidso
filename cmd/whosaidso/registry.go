@@ -126,6 +126,15 @@ each run's criterion verdict, and prints a proof skeleton whose
 dispositions, reasons, judgment and verdict stay placeholders. Exit 1 when
 the gate disagrees with the list.
 `, define: checkVerb("admission")},
+		{name: "check claim", args: "ATTEMPT_ID", summary: "may this attempt's holder keep working?", detail: `Reads this checkout's ledger, after a sync, for the claim (task.start or
+task.takeover) that minted ATTEMPT_ID. HELD (exit 0): keep working. LOST
+(exit 1): another branch claimed the task first and this claim was set aside
+at the merge; stop and hand nothing back on it. TAKEN-OVER (exit 1): a
+takeover replaced it; stop. ENDED (exit 1): its receipt is admitted or the
+task is closed. UNKNOWN (exit 3): no such claim here; sync and ask again.
+Each answer names the attempt that holds the task now, when one does, and
+the next step. Writes nothing.
+`, define: claimCheckVerb},
 		{name: "check disposal", summary: "list what an artifact.dispose must record", detail: `Prints the support_loss targets an artifact.dispose of exactly this identity
 must record at this watermark, and the admitted events citing it. Give --git
 when the disposal names a git pin. Writes nothing.

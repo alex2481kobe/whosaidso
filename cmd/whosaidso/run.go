@@ -156,7 +156,7 @@ func runVerb(fs *flag.FlagSet) func(*call) error {
 		} else if admitErr == nil {
 			io.WriteString(c.stdout, runAck(result, packets))
 		}
-		if err := reportAdmission(c.stdout, *jsonOutput, a, bundle, admitErr, packets); err != nil {
+		if err := reportAdmission(c.stdout, c.stderr, *jsonOutput, a, bundle, admitErr, packets); err != nil {
 			return err
 		}
 		return runErr

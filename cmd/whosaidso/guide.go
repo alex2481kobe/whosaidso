@@ -256,7 +256,7 @@ revision. A FALSE reason names the failing member: its path or id, else
 An observer that died before sealing: whosaidso reconcile --invocation-id ID
 --reason TEXT, then admit its packet; the outcome stays UNKNOWN.
 `},
-	{"check", "the three dry runs and what each did NOT check", `  whosaidso check criterion --events crit.json [--blob EXAMPLE] [--output RUN_OUTPUT]
+	{"check", "the dry runs and the claim check, and what each did NOT check", `  whosaidso check criterion --events crit.json [--blob EXAMPLE] [--output RUN_OUTPUT]
       criterion preview only: instrument validation, proof-family
       completeness, comparability and admission were NOT checked
   whosaidso check admission --events ev.json [--blob FILE ...] [--packet ID ...]
@@ -270,10 +270,14 @@ An observer that died before sealing: whosaidso reconcile --invocation-id ID
   whosaidso check disposal --digest SHA256 [--git FORMAT:COMMIT:PATH]
       disposal-loss preview at watermark W: admission recomputes and stays
       the authority; reasons are yours to write
-Each prints that scope first. None writes anything. Exit status: 0 TRUE,
-would-admit, a listed family or check disposal's list (it has no FALSE);
-1 FALSE, would-refuse or a family the gate disagrees with; 2 usage; 3
-UNKNOWN. A TRUE criterion preview is not an admission.
+  whosaidso check claim ATTEMPT_ID
+      claim status at watermark W in this checkout's ledger: HELD (0), LOST,
+      TAKEN-OVER or ENDED (1), UNKNOWN (3); other branches are NOT seen
+      until merged (whosaidso help branches)
+The dry runs print that scope first; check claim prints its status first.
+None writes anything. Exit status: 0 TRUE, would-admit, a listed family,
+check disposal's list (it has no FALSE) or HELD; 1 FALSE, would-refuse, a
+family the gate disagrees with, or a claim to stop; 2 usage; 3 UNKNOWN. A TRUE criterion preview is not an admission.
 WhoSaidSo never deletes bytes: an artifact.dispose records the loss,
 and check disposal lists what it must account for.
 `},
@@ -321,6 +325,21 @@ A ledger is still refused if a sequence number is missing, a bundle names
 a predecessor that is not there, or two first bundles start two histories.
 Commit only .whosaidso/events and .whosaidso/artifacts; keep
 .whosaidso/cache out of git, or every merge conflicts on it.
+Records pin commits: a squash or rebase leaves a branch's own commits
+unreachable once the branch is gone, so nothing here requires either.
+Claiming a task when many agents share the ledger:
+  git pull --ff-only                  start from a current main
+  whosaidso template task.start --task T --capture --admit --reason "..."
+  git add .whosaidso && git commit -m "claim T" && git push
+A claim exists for others only once pushed. If the push is rejected,
+someone pushed first: git fetch origin && git merge --no-edit origin/main
+(a merge: git pull --ff-only cannot succeed once a claim is committed), then
+whosaidso check claim A, with A the attempt id start printed. Exit 0: push
+again. Exit 1: stop; the claim lost and the task is someone else's. When two
+claims of one task merge, the one first in the order above applies and the
+other is set aside; todo calls it a lost claim. Work on any branch after
+that, run whosaidso check claim A after every merge from main, and stop on
+a nonzero exit.
 `},
 	{"pitfalls", "rules that prevent the known mistakes", `- Never invent a value: a missing actor, reading, unit or validation stays
   UNKNOWN with its reason. Two unknowns never match.

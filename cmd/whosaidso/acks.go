@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/query"
 	"github.com/alex2481kobe/whosaidso/internal/store"
 	"github.com/alex2481kobe/whosaidso/internal/write"
 )
@@ -165,9 +166,10 @@ func admitCaptured(ctx context.Context, project store.Project, commandID model.I
 
 // reportAdmission prints the second step's text and turns a refusal into the
 // partial-success exit: the first act succeeded, the second did not.
-func reportAdmission(stdout io.Writer, jsonOutput bool, a admission, bundle model.Bundle, err error, packets []model.ID) error {
+func reportAdmission(stdout, stderr io.Writer, jsonOutput bool, a admission, bundle model.Bundle, err error, packets []model.ID) error {
 	if err == nil {
 		if !jsonOutput {
+			noteClaims(stderr, bundle)
 			_, werr := io.WriteString(stdout, admitAck(bundle, "accepted"))
 			return werr
 		}
@@ -182,4 +184,18 @@ func reportAdmission(stdout io.Writer, jsonOutput bool, a admission, bundle mode
 			joinIDs(packets), a.Admission.CommandID, *a.Admission.Refusal, stays, a.Retry)
 	}
 	return &exitError{code: 4, msg: fmt.Sprintf("partial success: captured %s, admission refused: %v", joinIDs(packets), err)}
+}
+
+// noteClaims tells the holder of each claim the bundle admitted how to make it
+// visible to other checkouts and machines, and how to learn whether it won:
+// a claim exists for others only once pushed, and a rejected push means
+// someone may have claimed first. Text output only: --json answers carry the
+// bundle, whose claims a program reads itself.
+func noteClaims(stderr io.Writer, b model.Bundle) {
+	for _, attempt := range query.ClaimAttempts(b) {
+		fmt.Fprintf(stderr, "claim %s is admitted in this checkout only; publish it before working:\n"+
+			"  git add .whosaidso && git commit -m 'claim %s' && git push\n"+
+			"  if the push is rejected: git fetch origin && git merge --no-edit origin/main, then whosaidso check claim %s (exit 0: push again; exit 1: stop)\n",
+			attempt, attempt, attempt)
+	}
 }

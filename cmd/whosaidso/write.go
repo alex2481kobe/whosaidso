@@ -68,7 +68,7 @@ func captureVerb(fs *flag.FlagSet) func(*call) error {
 			}
 		}
 		if *admitAfter {
-			return captureAndAdmit(c.ctx, project, c.stdout, *jsonOutput, ref, count, created, model.ID(*admitID), author, *reason)
+			return captureAndAdmit(c.ctx, project, c.stdout, c.stderr, *jsonOutput, ref, count, created, model.ID(*admitID), author, *reason)
 		}
 		return printResult(c.stdout, *jsonOutput, captureAnswer{ref.CommandID, ref.Digest, created}, captureAck(ref, count))
 	}
@@ -102,6 +102,9 @@ func admitVerb(fs *flag.FlagSet) func(*call) error {
 		bundle, err := write.Admit(c.ctx, project, write.AdmitRequest{CommandID: command, PacketIDs: ids, Admitter: actor(c), Outcome: *outcome, Reason: *reason})
 		if err != nil {
 			return err
+		}
+		if !*jsonOutput {
+			noteClaims(c.stderr, bundle)
 		}
 		return printResult(c.stdout, *jsonOutput, bundle, admitAck(bundle, *outcome))
 	}
@@ -187,7 +190,7 @@ func captureAck(ref model.PacketRef, events int) string {
 
 // captureAndAdmit is capture --admit's second step and its report: the
 // spec's partial-success JSON with --json, else one line per act.
-func captureAndAdmit(ctx context.Context, project store.Project, stdout io.Writer, jsonOutput bool, ref model.PacketRef, count int, created []createdRecord, admitID model.ID, actor model.Actor, reason string) error {
+func captureAndAdmit(ctx context.Context, project store.Project, stdout, stderr io.Writer, jsonOutput bool, ref model.PacketRef, count int, created []createdRecord, admitID model.ID, actor model.Actor, reason string) error {
 	packets := []model.ID{ref.CommandID}
 	a, bundle, err := admitCaptured(ctx, project, admitID, actor, reason, packets)
 	if jsonOutput {
@@ -207,7 +210,7 @@ func captureAndAdmit(ctx context.Context, project store.Project, stdout io.Write
 	} else if err == nil {
 		io.WriteString(stdout, captureAck(ref, count))
 	}
-	return reportAdmission(stdout, jsonOutput, a, bundle, err, packets)
+	return reportAdmission(stdout, stderr, jsonOutput, a, bundle, err, packets)
 }
 
 func handbackDeliveryRefs(path string, stdin io.Reader, refs *[]model.ArtifactRef) error {

@@ -134,7 +134,7 @@ func view(project store.Project, r ViewRequest, source Source) (ViewAnswer, erro
 	}
 	switch r.View {
 	case "todo":
-		return todoView(project, s, h, r.Limit)
+		return todoView(project, s, source, h, r.Limit)
 	case "continue":
 		if intake != nil {
 			h.Result, h.Reason = "UNKNOWN", fmt.Sprintf("%s is an admitted source, not a record to resume: show %s or history %s reads it", r.ID, r.ID, r.ID)

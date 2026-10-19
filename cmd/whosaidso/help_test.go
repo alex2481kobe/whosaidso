@@ -15,6 +15,8 @@ import (
 var (
 	helpVerbRef = regexp.MustCompile("(?:^|[\\s`(])whosaidso ([a-z]+)(?: ([a-z]+))?")
 	helpFlagRef = regexp.MustCompile(`(?:^|[^a-z-])--([a-z][a-z-]*)`)
+	// helpGitRef is a git command in a recipe: its flags are git's.
+	helpGitRef = regexp.MustCompile(`(?:^|[\s(])git [a-z]+`)
 )
 
 // flagsOf is the set of flags a verb's FlagSet really declares.
@@ -28,7 +30,8 @@ func flagsOf(v *verb) map[string]bool {
 
 // helpDishonesty lists every `whosaidso VERB`, `whosaidso help NAME` and --flag in
 // text that the CLI does not have. A flag on a line after `whosaidso VERB`
-// must be that verb's; any other flag must be some verb's.
+// must be that verb's, and one after `git CMD` is git's and not checked; any
+// other flag must be some verb's.
 func helpDishonesty(text string) []string {
 	anyFlag := map[string]bool{}
 	for i := range registry {
@@ -73,13 +76,24 @@ func helpDishonesty(text string) []string {
 				refs = append(refs, ref{m[0], v})
 			}
 		}
+		gits := helpGitRef.FindAllStringIndex(line, -1)
 		for _, m := range helpFlagRef.FindAllStringSubmatchIndex(line, -1) {
 			name := line[m[2]:m[3]]
 			var owner *verb
+			at := -1
 			for _, r := range refs {
 				if r.at < m[2] {
-					owner = r.v
+					owner, at = r.v, r.at
 				}
+			}
+			gitOwns := false
+			for _, g := range gits {
+				if g[0] < m[2] && g[0] > at {
+					gitOwns = true
+				}
+			}
+			if gitOwns {
+				continue
 			}
 			if owner != nil && owner.name != "help" && !flagsOf(owner)[name] || (owner == nil || owner.name == "help") && !anyFlag[name] {
 				bad = append(bad, "flag --"+name+" in: "+line)
@@ -98,8 +112,9 @@ func TestHelpNamesOnlyWhatTheCLIHas(t *testing.T) {
 		t.Fatalf("help names what the CLI lacks:\n%s", strings.Join(bad, "\n"))
 	}
 	// Control: the checker sees a removed verb, an unknown mode, a missing
-	// topic, and a flag on the wrong verb.
-	for _, lie := range []string{"run whosaidso now", "whosaidso check proof --events x", "whosaidso help focus", "whosaidso show --digest X", "use --full"} {
+	// topic, and a flag on the wrong verb, also after a git command.
+	for _, lie := range []string{"run whosaidso now", "whosaidso check proof --events x", "whosaidso help focus", "whosaidso show --digest X", "use --full",
+		"git fetch --all && whosaidso todo --digest X"} {
 		if len(helpDishonesty(lie)) == 0 {
 			t.Fatalf("the honesty check passed %q", lie)
 		}
@@ -164,8 +179,8 @@ func TestHelpForms(t *testing.T) {
 			t.Fatalf("%v must be a usage error pointing at whosaidso help, got %d %q %q", args, code, out, errs)
 		}
 	}
-	if out, _, code := cliRun(t, dir, nil, "", "check", "--help"); code != 0 || strings.Count(out, "\nwhosaidso check ")+strings.Count(out[:16], "whosaidso check ") != 3 {
-		t.Fatalf("whosaidso check --help must print its three modes once each, got %d %q", code, out)
+	if out, _, code := cliRun(t, dir, nil, "", "check", "--help"); code != 0 || strings.Count(out, "\nwhosaidso check ")+strings.Count(out[:16], "whosaidso check ") != 4 {
+		t.Fatalf("whosaidso check --help must print its four modes once each, got %d %q", code, out)
 	}
 }
 
@@ -176,7 +191,8 @@ func TestHelpExplainsBranchesAndSetAsideBundles(t *testing.T) {
 	if code != 0 || !strings.HasPrefix(out, "BRANCHES: ") {
 		t.Fatalf("whosaidso help branches must print the topic, got %d %q", code, out)
 	}
-	for _, want := range []string{"merge commit or squash", "SET ASIDE", "todo lists", "re-record it", ".whosaidso/cache out of git"} {
+	for _, want := range []string{"merge commit or squash", "SET ASIDE", "todo lists", "re-record it", ".whosaidso/cache out of git",
+		"git merge --no-edit origin/main", "whosaidso check claim A", "lost claim"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("help branches must say %q", want)
 		}
