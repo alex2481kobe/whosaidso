@@ -96,7 +96,31 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Diagnose the runner account (temporary)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          whoami /user /priv
+          whoami /groups | Select-String 'Mandatory|Administrators'
+          "TEMP=$env:TEMP"
+          icacls $env:TEMP
+          $t = Join-Path $env:TEMP ('diag-' + [guid]::NewGuid()); New-Item -ItemType Directory $t | Out-Null
+          icacls $t
+          $f = Join-Path $t 'held.txt'; Set-Content $f 'x'
+          $h = [IO.File]::Open($f, 'Open', 'Read', 'None')
+          try { [IO.File]::ReadAllBytes($f) | Out-Null; 'read while held exclusively: SUCCEEDED' } catch { "read while held exclusively: $($_.Exception.Message)" }
+          $h.Close()
+          $me = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+          icacls $t /inheritance:r /grant:r "*${me}:(OI)(CI)F"
+          New-Item -ItemType Directory (Join-Path $t 'child') | Out-Null
+          icacls $t; icacls (Join-Path $t 'child')
+
+      - name: Diagnose the failing tests (temporary)
+        continue-on-error: true
+        run: go test ./internal/store -run 'TestPrivateDirectoryListIsSetAtCreation|TestBundleRead' -count=1 -v
+
       - name: Test
+        if: always()
         run: go test ./... -count=1
 
       - name: Test under the race detector
