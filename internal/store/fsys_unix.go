@@ -57,6 +57,12 @@ func readBundle(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
+// waitOutSharing runs op once: POSIX has no sharing modes, so there is no
+// other process's handle to wait out.
+func waitOutSharing(op func() error) error {
+	return op()
+}
+
 // renameNoReplace publishes from under the name to. POSIX rename replaces an
 // existing destination, so the never-replace rule here is kept by the callers:
 // publication checks the destination under the admission lock, and an intake

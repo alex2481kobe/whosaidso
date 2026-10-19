@@ -246,7 +246,8 @@ func holdExclusive(t *testing.T, path string) func() {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err := syscall.CreateFile(p, syscall.GENERIC_READ, 0, nil, syscall.OPEN_EXISTING, 0, 0)
+	// Backup semantics, so a directory can be held as well as a file.
+	h, err := syscall.CreateFile(p, syscall.GENERIC_READ, 0, nil, syscall.OPEN_EXISTING, syscall.FILE_FLAG_BACKUP_SEMANTICS, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,6 +280,25 @@ func TestBundleReadWaitsOutASharingViolation(t *testing.T) {
 	}()
 	if data, err := readBundle(path); err != nil || string(data) != "{}" {
 		t.Fatalf("a handle released within the bound must not fail the read: %q, %v", data, err)
+	}
+}
+
+// A same-id writer that finds the packet already published reads it at once,
+// while the winner's rename may still hold the directory without sharing.
+func TestPacketReadWaitsOutASharingViolationOnItsDirectory(t *testing.T) {
+	p := intakeProject(t)
+	ref := capturedControl(t, p, commandID(1), "source")
+	dir := packetDir(t, p, ref.CommandID)
+	release := holdExclusive(t, dir)
+	if _, err := os.ReadDir(dir); err == nil {
+		t.Skip("this account's listings ignore share modes; no sharing violation can occur here")
+	}
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		release()
+	}()
+	if _, got, _, err := readIntakePacket(p, dir); err != nil || got != ref {
+		t.Fatalf("a handle released within the bound must not fail the packet read: %+v, %v", got, err)
 	}
 }
 

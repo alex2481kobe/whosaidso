@@ -217,7 +217,14 @@ func readIntakePacket(project Project, dir string) (model.Packet, model.PacketRe
 	if err := checkIntakePath(dir, true); err != nil {
 		return p, ref, nil, err
 	}
-	entries, err := os.ReadDir(dir)
+	// A same-id writer reads the packet as soon as it finds it published,
+	// and on Windows the winner's rename may still hold the directory without
+	// sharing for a moment; the listing waits that out.
+	var entries []os.DirEntry
+	err := waitOutSharing(func() (err error) {
+		entries, err = os.ReadDir(dir)
+		return err
+	})
 	if err != nil {
 		return p, ref, nil, storeFault("io", dir, err.Error())
 	}
