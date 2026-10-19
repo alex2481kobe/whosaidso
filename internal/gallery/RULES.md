@@ -5,7 +5,8 @@ SHA-256, byte length and locator; it records title, note, actor and optional
 exact task references. Media is streamed for hashing and is never retained as
 an intake blob or published artifact. Project-relative locators travel across
 checkouts; relative locators and their resolved symlink targets must stay inside
-the checkout at capture, admission and preview. External absolute locators are useful only where that path exists.
+the checkout at capture, admission and preview. External absolute locators are
+useful only where that path exists.
 
 Capture proposes a record. Admission publishes it under the project's normal
 self-admission policy. `gallery.retract` hides an entry without changing its
@@ -34,12 +35,15 @@ Actor names and visual judgments are assertions, not authentication or automated
 proof of what a person actually inspected.
 
 Only import reads the retired per-machine list. It captures one add packet per
-entry, preserving title, note and original added date separately from packet capture time and attributing the new record to the importer.
+entry, preserving title, note and original added date separately from packet
+capture time and attributing the new record to the importer.
 Admitted legacy ids prevent duplicates. A final `gallery.import` packet records
-the list inventory's content hash and its ordered inventory of legacy-entry content hashes and corresponding
+the list inventory's content hash and its ordered inventory of legacy-entry
+content hashes and corresponding
 imported entry ids. Admission and replay require exactly that inventory, with each
 entry's import id bound to its source and inventory member. Empty completion
 requires an explicit empty-source declaration and the empty inventory's hash;
-nonempty sources cannot complete without every entry admitted. Retries read the list to identify its inventory; an admitted inventory is skipped.
+nonempty sources cannot complete without every entry admitted. Retries read the
+list to identify its inventory; an admitted inventory is skipped.
 The old list and media remain in place. Missing media must be restored to import
 it; pending import packets should be admitted rather than recaptured.

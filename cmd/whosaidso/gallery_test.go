@@ -213,6 +213,24 @@ func TestGalleryImportLeavesLegacyFileAndUsesOnlyLedger(t *testing.T) {
 	if got := snap.Gallery()[0].AddedAt.Format(time.RFC3339); got != "2026-01-01T00:00:00Z" {
 		t.Fatalf("import re-dated entry: got %s", got)
 	}
+	captureRecorded := false
+	for _, raw := range prefix[0].Events {
+		event, err := model.DecodeEvent(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if review, ok := event.(*model.ReviewAdmit); ok {
+			for _, at := range review.CapturedAt {
+				if at.Value == nil || !at.Value.After(snap.Gallery()[0].AddedAt) {
+					t.Fatalf("capture time was replaced by legacy date: %+v", at)
+				}
+				captureRecorded = true
+			}
+		}
+	}
+	if !captureRecorded {
+		t.Fatal("missing separate packet capture time")
+	}
 }
 
 func strconvQuote(s string) string { b, _ := json.Marshal(s); return string(b) }
