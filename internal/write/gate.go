@@ -41,6 +41,9 @@ func gatePackets(project model.ProjectID, snapshot reduce.Snapshot, packets []mo
 			}
 			events[i] = append(events[i], event)
 			if source, ok := event.(*model.SourceIntake); ok {
+				if err := gateSourceOrder(sources, source); err != nil {
+					return nil, err
+				}
 				sources = append(sources, reduce.Source{Key: reduce.SourceKey{Project: project, Source: source.SourceID}, Intake: *source})
 			}
 			if key, ok := gateProvides(project, event); ok {
@@ -65,6 +68,9 @@ func gatePackets(project model.ProjectID, snapshot reduce.Snapshot, packets []mo
 				return nil, err
 			}
 			if err := gateCloseAuthority(event, sources); err != nil {
+				return nil, err
+			}
+			if err := gateReceiptAuthority(snapshot, event, sources); err != nil {
 				return nil, err
 			}
 			if err := gateSupersedeCanonical(snapshot, event); err != nil {

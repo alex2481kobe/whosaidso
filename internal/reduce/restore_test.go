@@ -7,6 +7,7 @@ package reduce
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -32,6 +33,8 @@ func restoreFixtures(t *testing.T) map[string][]model.Bundle {
 	tasks.add(t, &model.BlockerHold{Task: tskd, BlockerID: newID("HDD1"), Reason: model.BlockerPrerequisite, Actor: model.Actor{ID: "owner"}, Criterion: "the owner rules"})
 	tasks.add(t, &model.BlockerClear{Task: tskd, BlockerID: newID("HDD1"), HoldRef: model.BlockerRef{Task: tskd, BlockerID: newID("HDD1")}, ResolvingWitness: blobRef("ruling")})
 	tasks.add(t, &model.TaskTakeover{Task: tskc, Actor: model.Actor{ID: "agent-b"}, AttemptID: newID("ATTX"), PriorAttemptID: newID("ATTC"), StoppedConfirmationRef: blobRef("stopped")})
+	// The takeover's packet (attributeFixture's id) was really agent-c's.
+	tasks.add(t, &model.AuthorCorrect{Packets: []model.ID{newID(fmt.Sprintf("PKT%dE0", tasks.seq))}, Writer: model.Actor{ID: "agent-c"}, Reason: "agent-c wrote it"})
 	// Revisions of a proven claim, a decision and an instrument.
 	proof := proofLedger(t, true)
 	proof.add(t, &model.ClaimRevise{Target: ref(newID("CMA1"), 1), Provenance: provenance("agent-a"), Replacement: claimSpec()})
@@ -45,7 +48,17 @@ func restoreFixtures(t *testing.T) map[string][]model.Bundle {
 	for i := range tasks.out {
 		tasks.out[i].RecordedAt = tasks.out[i].RecordedAt.Add(time.Duration(i+1) * 123457 * time.Nanosecond)
 	}
+	// Two branches capturing one message, merged, and the set-aside resolved.
+	base := goodLedger(t)
+	left, right := base.branch(100), base.branch(200)
+	left.add(t, ownerSource("SRCA", 7))
+	right.add(t, ownerSource("SRCB", 7))
+	all := merged(left, right)
+	clash := &ledgerBuilder{project: testProject, seq: all[len(all)-1].Sequence, prev: all[len(all)-1].CommandID, out: all, names: 300}
+	last := all[len(all)-1]
+	clash.add(t, &model.SetAsideResolve{Bundle: last.Ref(), Reason: "captured twice"})
 	return map[string][]model.Bundle{
+		"clash":     clash.bundles(),
 		"golden":    goldenLedger(t).bundles(),
 		"tasks":     tasks.bundles(),
 		"proof":     proof.bundles(),
@@ -123,7 +136,7 @@ func TestRestoreAtEverySplitEqualsReplay(t *testing.T) {
 
 // The golden ledger's image is pinned. A change that moves it must also move
 // snapshotFormat or the state's types, so older images are refused.
-const goldenImageSHA256 = "4134be20075f8e11a071470fca4d705286808c3930912708918a6377ace1e204" // repinned for snapshot format /4: the state carries the ledger's lineage (positions, chains, a table of clocks) and its set-aside bundles
+const goldenImageSHA256 = "6eef2a708c664b0a7605a6b2dd2633f247506911dbce5809901e328d7c17eeb4" // repinned for snapshot format /5: an attempt receipt may carry the authority it was recorded on, attempts carry their claim and last-activity times, a review may carry an author correction, and a set-aside bundle its resolution
 
 func TestGoldenImageIsPinned(t *testing.T) {
 	image := mustEncode(t, mustReplay(t, goldenLedger(t).bundles()))

@@ -122,6 +122,10 @@ func DecodeEvent(raw Event) (TypedEvent, error) {
 		event = &ReviewAdmit{}
 	case "artifact.dispose":
 		event = &ArtifactDispose{}
+	case "author.correct":
+		event = &AuthorCorrect{}
+	case "setaside.resolve":
+		event = &SetAsideResolve{}
 	default:
 		return nil, fault("unknown-event", "event.type", "event is outside the closed set: "+string(raw.Type))
 	}

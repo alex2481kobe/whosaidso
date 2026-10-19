@@ -16,6 +16,9 @@ import (
 // forever, which reads as "waiting" when it is really "malformed".
 func (s *state) checkPrerequisites(b model.Bundle, idx int, spec model.TaskSpec) error {
 	for i, r := range spec.Prerequisites {
+		if err := s.authorityApplied(b, idx, fmt.Sprintf("prerequisites[%d].authority", i), r.Authority); err != nil {
+			return err
+		}
 		if r.Target.Project != b.Project {
 			continue // resolves on read
 		}
@@ -82,6 +85,7 @@ func (s *state) start(b model.Bundle, idx int, o Origin, e *model.TaskStart) err
 		TaskRevision: e.Task.Revision,
 		Actor:        e.Actor,
 		Started:      o,
+		StartedAt:    b.RecordedAt.UTC(), LastActivityAt: b.RecordedAt.UTC(),
 	})
 	put(s, s.attemptOwner, Ident{Project: b.Project, ID: e.AttemptID}, key)
 	return nil
@@ -128,6 +132,7 @@ func (s *state) takeover(b model.Bundle, idx int, o Origin, e *model.TaskTakeove
 		Takeover:     true,
 		PriorAttempt: e.PriorAttemptID,
 		Started:      o,
+		StartedAt:    b.RecordedAt.UTC(), LastActivityAt: b.RecordedAt.UTC(),
 	})
 	put(s, s.attemptOwner, Ident{Project: b.Project, ID: e.AttemptID}, key)
 	return nil
@@ -159,7 +164,10 @@ func (s *state) terminal(b model.Bundle, idx int, o Origin, e *model.AttemptTerm
 		return faultAt(CodeInvalidTransition, b.Sequence, idx, "attempt_id",
 			"the attempt already has a terminal receipt")
 	}
-	if err := s.checkReceiptAuthor(b, idx, a.Actor); err != nil {
+	if err := s.checkReceiptAuthor(b, idx, a.Actor, e.Authority); err != nil {
+		return err
+	}
+	if err := s.authorityApplied(b, idx, "authority", e.Authority); err != nil {
 		return err
 	}
 	if err := s.checkHandbackHold(b, idx, e); err != nil {
@@ -173,7 +181,9 @@ func (s *state) terminal(b model.Bundle, idx int, o Origin, e *model.AttemptTerm
 		CommitsDenied:      e.CommitsDenied,
 		ReconciliationOwed: e.ReconciliationOwed,
 		Origin:             o,
+		Authority:          e.Authority,
 	}
+	a.LastActivityAt = b.RecordedAt.UTC()
 	put(s, s.attempts, key, a)
 	return nil
 }
@@ -184,6 +194,9 @@ func (s *state) close(b model.Bundle, idx int, o Origin, e *model.TaskClose) err
 		return err
 	}
 	if err := s.checkAccepter(b, idx, rec); err != nil {
+		return err
+	}
+	if err := s.authorityApplied(b, idx, "authority", e.Authority); err != nil {
 		return err
 	}
 	// Whether every attempt is terminal, and whether a success closure has

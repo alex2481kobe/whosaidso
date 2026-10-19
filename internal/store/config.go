@@ -17,28 +17,19 @@ import (
 // Project keeps absolute paths at the runtime boundary. Only ID is persisted in
 // packets; moving a checkout must not change its identity or lose its intake.
 //
-// Root is the project's home: the ledger, definitions, admission, canonical
-// artifacts and the cache live under it. Checkout is the checkout the command
-// was invoked in: processes run there, sources are captured from it and its
-// git HEAD and dirty state are observed there. Discover sets both to the
-// nearest config's directory; Open sets Root to the registered home (home.go).
+// Root is the checkout the command was invoked in, the nearest config's
+// directory: the ledger, definitions, admission, artifacts and the cache live
+// under it, processes run there, sources are captured from it and its git
+// HEAD and dirty state are observed there.
 type Project struct {
-	ID       model.ProjectID
-	Root     string
-	Ledger   string
-	Checkout string
-	// bound records that Root came from this machine's registry, so admission
-	// re-checks that binding under the ledger lock (home.go).
-	bound bool
-}
-
-// ExecRoot is where processes run and git is observed: the invoking checkout,
-// or Root for a Project built without one, where the two are the same place.
-func (p Project) ExecRoot() string {
-	if p.Checkout == "" {
-		return p.Root
-	}
-	return p.Checkout
+	ID     model.ProjectID
+	Root   string
+	Ledger string
+	// Policy is the project's optional settings (config_policy.go).
+	Policy Policy
+	// configured is set when Root's whosaidso.toml produced this Project, so
+	// admission can re-read it under the lock (recheckConfig).
+	configured bool
 }
 
 // ArtifactDir is the project-relative, slash-separated artifact store: the
@@ -106,7 +97,11 @@ func configAt(root string) (Project, error) {
 	if err != nil {
 		return Project{}, err
 	}
-	return Project{ID: model.ProjectID(values["id"]), Root: root, Ledger: ledger, Checkout: root}, nil
+	policy, err := policyOf(values, path)
+	if err != nil {
+		return Project{}, err
+	}
+	return Project{ID: model.ProjectID(values["id"]), Root: root, Ledger: ledger, Policy: policy, configured: true}, nil
 }
 
 // ledgerInRoot enforces that the ledger is committed with the project,
@@ -175,7 +170,7 @@ func parseConfig(data []byte, path string) (map[string]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		if key != "id" && key != "ledger" {
+		if key != "id" && key != "ledger" && !policyKeys[key] {
 			return nil, storeFault("config-unknown-key", at, "unknown key "+strconv.Quote(key))
 		}
 		if _, exists := values[key]; exists {
@@ -298,4 +293,31 @@ func configString(s, path string) (string, string, error) {
 
 func storeFault(code, path, detail string) *model.Fault {
 	return &model.Fault{Code: code, EventIndex: -1, Path: path, Detail: detail}
+}
+
+// recheckConfig re-reads the config a Project was opened from. Between opening
+// and the admission lock, whosaidso.toml can change (an edit, a branch switch);
+// publishing into the ledger opened would acknowledge a fact the configured
+// ledger never holds, so the project and ledger it names now must be the ones
+// being written.
+func recheckConfig(project Project) error {
+	if !project.configured {
+		return nil
+	}
+	current, err := configAt(project.Root)
+	if os.IsNotExist(err) {
+		return storeFault("config-changed", project.Root, fmt.Sprintf(
+			"project %s was opened from %s, which no longer has a whosaidso.toml; nothing was published; run the command again", project.ID, project.Root))
+	}
+	if err != nil {
+		return err
+	}
+	opened, openedErr := filepath.Rel(project.Root, project.Ledger)
+	named, namedErr := filepath.Rel(current.Root, current.Ledger)
+	if current.ID != project.ID || openedErr != nil || namedErr != nil || opened != named {
+		return storeFault("config-changed", project.Root, fmt.Sprintf(
+			"project %s was opened with ledger %s and whosaidso.toml now names project %s with ledger %s; nothing was published; run the command again",
+			project.ID, opened, current.ID, named))
+	}
+	return nil
 }

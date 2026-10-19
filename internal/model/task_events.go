@@ -60,6 +60,10 @@ type AttemptTerminal struct {
 	DeliveryRefs       []ArtifactRef  `json:"delivery_refs"`
 	CommitsDenied      bool           `json:"commits_denied"`
 	ReconciliationOwed bool           `json:"reconciliation_owed"`
+	// Authority is optional: a receipt for an attempt someone else holds
+	// (a departed holder's work, closed or released) cites whose word it
+	// is recorded on, and the gate checks that word against its carrier.
+	Authority *Authority `json:"authority,omitempty"`
 }
 
 // TaskClose supplies task reduction and proof revision-applicable witnesses. Whether all

@@ -18,9 +18,21 @@ import (
 // The omitempty keeps an unattributed event from rendering a blank packet id.
 // Author is exported as "actor", so a record's author reads author.actor, not
 // author.author.
+// WrittenBy is set when an admitted author.correct names the packet's real
+// writer (author_correct.go).
 type PacketAuthor struct {
-	Packet model.ID    `json:"packet,omitempty"`
-	Author model.Actor `json:"actor"`
+	Packet    model.ID     `json:"packet,omitempty"`
+	Author    model.Actor  `json:"actor"`
+	WrittenBy *model.Actor `json:"written_by,omitempty"`
+}
+
+// Writer is who wrote the packet: the corrected writer when there is one,
+// else the recorded author.
+func (p PacketAuthor) Writer() model.Actor {
+	if p.WrittenBy != nil {
+		return *p.WrittenBy
+	}
+	return p.Author
 }
 
 const unattributedAuthor = "the ledger does not attribute this event to a reviewed packet"
@@ -39,7 +51,13 @@ func (s *state) eventAuthor(o Origin) PacketAuthor {
 	if !ok {
 		return PacketAuthor{Author: model.Actor{UnknownReason: unattributedAuthor}}
 	}
-	return PacketAuthor{Packet: key.CommandID, Author: s.reviews[key].Author}
+	r := s.reviews[key]
+	a := PacketAuthor{Packet: key.CommandID, Author: r.Author}
+	if r.Corrected != nil {
+		writer := r.Corrected.Writer
+		a.WrittenBy = &writer
+	}
+	return a
 }
 
 // EventAuthor answers who wrote the packet that carried the event at o.

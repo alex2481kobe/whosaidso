@@ -50,7 +50,7 @@ func (t *boundTemplate) pin(spec string) error {
 	if err != nil {
 		return err
 	}
-	root := project.ExecRoot()
+	root := project.Root
 	var ref model.ArtifactRef
 	var from string
 	var data []byte

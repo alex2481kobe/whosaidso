@@ -140,6 +140,9 @@ type Terminal struct {
 	CommitsDenied      bool                 `json:"commits_denied"`
 	ReconciliationOwed bool                 `json:"reconciliation_owed"`
 	Origin             Origin               `json:"origin"`
+	// Authority is the word a receipt for another holder's attempt was
+	// recorded on; nil for a holder's own receipt.
+	Authority *model.Authority `json:"authority,omitempty"`
 }
 
 // Attempt is one admitted start or takeover. A takeover mints a new attempt and
@@ -153,6 +156,11 @@ type Attempt struct {
 	PriorAttempt model.ID       `json:"prior_attempt"`
 	Started      Origin         `json:"started"`
 	Terminal     *Terminal      `json:"terminal"`
+	// StartedAt and LastActivityAt are the ledger's own times (the admitting
+	// bundles' recorded_at) of the claim and of the latest admitted act
+	// naming it: its runs' starts and seals and its receipt (activity.go).
+	StartedAt      time.Time `json:"started_at"`
+	LastActivityAt time.Time `json:"last_activity_at"`
 }
 
 // Live reports whether this attempt has no terminal receipt. Holder identity is
@@ -227,6 +235,16 @@ type Review struct {
 	// Invocations are the invocation facts this packet carried when it was not
 	// accepted. Empty for accepted packets.
 	Invocations []model.ReviewedInvocation `json:"invocations"`
+	// Corrected names who really wrote this packet, when an admitted
+	// author.correct says so; Author stays what the review recorded.
+	Corrected *AuthorCorrection `json:"author_correction,omitempty"`
+}
+
+// AuthorCorrection is one admitted author.correct as it applies to a packet.
+type AuthorCorrection struct {
+	Writer model.Actor `json:"writer"`
+	Reason string      `json:"reason"`
+	Origin Origin      `json:"origin"`
 }
 
 // Source is one captured original.

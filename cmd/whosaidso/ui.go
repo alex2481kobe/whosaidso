@@ -45,11 +45,11 @@ func uiVerb(fs *flag.FlagSet) func(*call) error {
 }
 
 // uiConfig is what the viewer reads through: the read verbs' own answers,
-// this machine's registry and, inside a bound project, that project opened
-// through the same home and checkout as every read verb run in cwd.
+// this machine's registry and, inside a checkout, that checkout, exactly as
+// every read verb run in cwd opens it.
 func uiConfig(cwd string) ui.Config {
 	cfg := ui.Config{View: answerView, Projects: store.Registered, Reveal: ui.RevealInFinder}
-	if project, err := store.Open(cwd); err == nil {
+	if project, err := store.Discover(cwd); err == nil {
 		cfg.Invoked = &project
 	}
 	return cfg

@@ -51,6 +51,9 @@ func (s *state) route(b model.Bundle, idx int, e model.TypedEvent) error {
 		if _, ok := s.sources[key]; ok {
 			return faultAt(CodeDuplicateRecord, b.Sequence, idx, "source_id", "source already captured")
 		}
+		if err := s.unseenSourceOrder(b, idx, t); err != nil {
+			return err
+		}
 		put(s, s.sources, key, Source{Key: key, Intake: *t, Origin: o})
 		return nil
 
@@ -71,6 +74,11 @@ func (s *state) route(b model.Bundle, idx int, e model.TypedEvent) error {
 		return s.supersede(b, idx, t)
 	case *model.TrustWithdraw:
 		return s.requireKind(b, idx, t.Instrument, model.Instrument, "instrument")
+	case *model.AuthorCorrect:
+		return s.authorCorrect(b, idx, o, t)
+	case *model.SetAsideResolve:
+		s.resolveSetAside(o, t)
+		return nil
 	case *model.Correction, *model.ArtifactDispose:
 		// Loss stays as an admitted fact. Query-time graph expansion also
 		// reaches dependents introduced after this bundle.
@@ -152,6 +160,7 @@ func (s *state) invocationStart(b model.Bundle, idx int, o Origin, e *model.Invo
 		return err
 	}
 	put(s, s.invocations, key, Invocation{Key: key, Attempt: owner, Start: e.Envelope, Started: o})
+	s.touchAttempt(owner, b.RecordedAt)
 	return nil
 }
 
@@ -194,6 +203,7 @@ func (s *state) invocationSeal(b model.Bundle, idx int, o Origin, e *model.Invoc
 	inv.Seal = &seal
 	inv.Sealed = &o
 	put(s, s.invocations, key, inv)
+	s.touchAttempt(inv.Attempt, b.RecordedAt)
 	return nil
 }
 

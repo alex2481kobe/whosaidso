@@ -60,11 +60,7 @@ func (t *boundTemplate) capture(admit bool, reason string, jsonOutput bool) erro
 	if err != nil {
 		return err
 	}
-	open := t.c.checkout
-	if admit {
-		open = t.c.project
-	}
-	project, err := open()
+	project, err := t.c.project()
 	if err != nil {
 		return err
 	}

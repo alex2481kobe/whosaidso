@@ -50,7 +50,7 @@ func cliParityNew(t *testing.T) *gateVerifyFixture {
 	if _, err := store.Bind(context.Background(), root, root); err != nil {
 		t.Fatal(err)
 	}
-	p, err := store.Open(root)
+	p, err := store.Discover(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func TestHomeConfigChangeCannotLoseAdmission(t *testing.T) {
 	if err != nil {
 		return
 	}
-	current, err := store.Open(f.p.Root)
+	current, err := store.Discover(f.p.Root)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,15 +3,17 @@ package acceptance_test
 // Nested projects across git worktrees, end to end: the owner's two workflows
 // (an app project born in a worktree below a repo-wide project and merged back;
 // two app projects born in two worktrees, merged, then a root project added)
-// and the rules told to the owner about them (one id, one history; a stale
-// worktree cannot fork a merged project; cross-project references read
-// UNKNOWN; a move reported continued keeps the evidence its records cite).
-// Every step is the built binary in a fresh process against real git
-// repositories, worktrees and merges under t.TempDir(), each test with its own
-// WHOSAIDSO_HOME. It does not reuse flowWorld.cli on purpose: that helper binds
-// the invoking checkout as its home before every call, which would hide exactly
-// the binding moves these tests are about. What does not belong here: the
-// single-project read, write and gate rules the other acceptance files own.
+// and the rules told to the owner about them (every checkout and worktree
+// records in its own ledger, and a late record merges like any branch; two
+// histories born apart under one id refuse once merged; cross-project
+// references read UNKNOWN; registering a checkout for the viewer refuses one
+// that lacks the evidence its records cite). Every step is the built binary in
+// a fresh process against real git repositories, worktrees and merges under
+// t.TempDir(), each test with its own WHOSAIDSO_HOME. It does not reuse
+// flowWorld.cli on purpose: that helper registers the invoking checkout before
+// every call, which would hide that no read or write needs a registration.
+// What does not belong here: the single-project read, write and gate rules the
+// other acceptance files own.
 
 import (
 	"bytes"
@@ -85,18 +87,11 @@ func (m *nestMachine) must(dir string, args ...string) string {
 	return out
 }
 
-// bind is `whosaidso home .` in dir; it returns the continuity it printed.
-func (m *nestMachine) bind(dir string) (string, error) {
+// register is `whosaidso home .` in dir: the viewer's entry, which routes nothing.
+func (m *nestMachine) register(dir string) error {
 	m.t.Helper()
-	out, _, err := m.cli(dir, nil, nil, "home", "--json", ".")
-	if err != nil {
-		return "", err
-	}
-	var a struct{ Continuity string }
-	if jerr := json.Unmarshal([]byte(out), &a); jerr != nil {
-		m.t.Fatalf("home --json printed %q: %v", out, jerr)
-	}
-	return a.Continuity, nil
+	_, _, err := m.cli(dir, nil, nil, "home", ".")
+	return err
 }
 
 // admit captures events as agent in dir, then admits the packet as coordinator.
@@ -384,25 +379,20 @@ type nestA struct {
 
 // nestScenarioA builds scenario A: repo/root on main, repo/foo born in a
 // worktree's apps/foo, root records added on main meanwhile, then (if merge)
-// the feature branch merged into main. The re-bind is left to the caller.
+// the feature branch merged into main. Nothing is registered: reads and
+// admission need no registry entry.
 func nestScenarioA(t *testing.T, merge bool) *nestA {
 	t.Helper()
 	m := nestNew(t)
 	a := &nestA{m: m, repo: nestRepo(t)}
 	a.foo = filepath.Join(a.repo, "apps", "foo")
 	commit := nestProject(t, a.repo, a.repo, "repo/root", "docs/root.json")
-	if c, err := m.bind(a.repo); err != nil || c != "new" {
-		t.Fatalf("control: binding repo/root: %q %v", c, err)
-	}
 	a.root = m.populate(a.repo, commit, "docs/root.json", "repo/root")
 	nestCommitAll(t, a.repo, "root ledger")
 
 	a.wt = nestWorktree(t, a.repo, "feature")
 	a.wtFoo = filepath.Join(a.wt, "apps", "foo")
 	commit = nestProject(t, a.wt, a.wtFoo, "repo/foo", "src/out.json")
-	if c, err := m.bind(a.wtFoo); err != nil || c != "new" {
-		t.Fatalf("control: binding repo/foo in the worktree: %q %v", c, err)
-	}
 	// src/out.json is foo-relative; git holds it at apps/foo/src/out.json.
 	a.fooHist = m.populate(a.wtFoo, commit, "src/out.json", "repo/foo")
 	nestCommitAll(t, a.wt, "foo ledger")
@@ -424,9 +414,6 @@ func TestNestedAppProjectMergesUnderRepoProject(t *testing.T) {
 	m := a.m
 	if !reflect.DeepEqual(nestLedger(t, a.wtFoo), nestLedger(t, a.foo)) {
 		t.Fatalf("control: the merge must carry foo's ledger to main byte for byte: %v vs %v", nestNames(nestLedger(t, a.wtFoo)), nestNames(nestLedger(t, a.foo)))
-	}
-	if c, err := m.bind(a.foo); err != nil || c != "continued" {
-		t.Fatalf("re-binding repo/foo to main's apps/foo must continue the worktree's history: continuity %q, %v", c, err)
 	}
 	after := m.answers(a.foo, false, a.fooHist.ids, a.repo)
 	nestSame(t, "repo/foo read from main after the merge vs the worktree before it", a.before, after)
@@ -489,9 +476,6 @@ func TestNestedTwoWorktreeProjectsThenRootProject(t *testing.T) {
 				wt := nestWorktree(t, repo, "app-"+app)
 				dir, project := filepath.Join(wt, "apps", app), model.ProjectID("repo/"+app)
 				commit := nestProject(t, wt, dir, project, "src/"+app+".json")
-				if c, err := m.bind(dir); err != nil || c != "new" {
-					t.Fatalf("control: binding %s in its worktree: %q %v", project, c, err)
-				}
 				hist[app] = m.populate(dir, commit, "src/"+app+".json", project)
 				nestCommitAll(t, wt, string(project)+" ledger")
 				before[app] = m.answers(dir, false, hist[app].ids, wt)
@@ -501,16 +485,7 @@ func TestNestedTwoWorktreeProjectsThenRootProject(t *testing.T) {
 			for _, app := range order {
 				nestGit(t, repo, "merge", "-q", "--no-ff", "-m", "merge "+app, "app-"+app)
 			}
-			for _, app := range order {
-				dir := filepath.Join(repo, "apps", app)
-				if c, err := m.bind(dir); err != nil || c != "continued" {
-					t.Fatalf("re-binding repo/%s to main must continue its worktree history: continuity %q, %v", app, c, err)
-				}
-			}
 			commit := nestProject(t, repo, repo, "repo/root", "docs/root.json")
-			if c, err := m.bind(repo); err != nil || c != "new" {
-				t.Fatalf("control: binding the new root project: %q %v", c, err)
-			}
 			root := m.populate(repo, commit, "docs/root.json", "repo/root")
 			nestCommitAll(t, repo, "root ledger")
 
@@ -531,36 +506,12 @@ func TestNestedTwoWorktreeProjectsThenRootProject(t *testing.T) {
 
 // ---- the rules told to the owner -------------------------------------------------
 
-// homeOf is the root `whosaidso home` reports for the project at dir.
-func (m *nestMachine) homeOf(dir string) string {
-	m.t.Helper()
-	var a struct {
-		HomeRoot *string `json:"home_root"`
-	}
-	if err := json.Unmarshal([]byte(m.must(dir, "home", "--json")), &a); err != nil || a.HomeRoot == nil {
-		m.t.Fatalf("home --json in %s: %v", dir, err)
-	}
-	return *a.HomeRoot
-}
-
-func nestReal(t *testing.T, dir string) string {
-	t.Helper()
-	real, err := filepath.EvalSymlinks(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return real
-}
-
 // Cross-project: a root task whose prerequisite is foo's closed-success task
 // reads that prerequisite UNKNOWN, never TRUE and never as a refusal.
 func TestNestedCrossProjectPrerequisiteReadsUnknown(t *testing.T) {
 	t.Parallel()
 	a := nestScenarioA(t, true)
 	m := a.m
-	if _, err := m.bind(a.foo); err != nil {
-		t.Fatalf("control: %v", err)
-	}
 	// Control: the same prerequisite on root's own closed-success task is TRUE.
 	control, _ := nestTaskEvent(m, "repo/root", "wait on root's delivery", model.Prerequisite{Kind: "task-success",
 		Target: model.RecordRef{Project: "repo/root", RecordID: a.root.ids[1], Revision: 1}, WaiverPolicy: "forbid"})
@@ -595,110 +546,59 @@ func TestNestedCrossProjectPrerequisiteReadsUnknown(t *testing.T) {
 
 }
 
-// Divergence after scenario A's merge: a record admitted from the old
-// worktree's apps/foo must never leave two live histories of repo/foo.
-func TestNestedStaleWorktreeCannotForkMergedProject(t *testing.T) {
+// After scenario A's merge, a record admitted from the old worktree lands in
+// the worktree's ledger only, and reaches main the way any branch does: the
+// worktree commits, main merges it, and main's reads show it.
+func TestNestedLateWorktreeRecordMergesLikeABranch(t *testing.T) {
 	t.Parallel()
-	t.Run("before re-binding", func(t *testing.T) {
-		t.Parallel()
-		a := nestScenarioA(t, true)
-		m := a.m
-		late := m.task(a.wtFoo, "repo/foo", "admitted in the worktree after the merge")
-		mainBefore := nestLedger(t, a.foo)
-		if _, err := m.bind(a.foo); err == nil {
-			t.Fatal("re-binding repo/foo to main must refuse: the worktree home holds a bundle main's apps/foo lacks, so main does not continue it")
-		}
-		if got, want := m.homeOf(a.foo), nestReal(t, a.wtFoo); got != want {
-			t.Errorf("a refused re-bind changed the binding: home %s, want %s", got, want)
-		}
-		if !reflect.DeepEqual(mainBefore, nestLedger(t, a.foo)) {
-			t.Error("a refused re-bind wrote main's ledger")
-		}
-		// Reads from main answer the one live ledger and say it is the worktree's.
-		ids, _ := m.shownIDs(a.foo)
-		_, stderr, _ := m.cli(a.foo, nil, nil, "show")
-		if !ids[string(late)] || !strings.Contains(stderr, nestReal(t, a.wtFoo)) {
-			t.Errorf("reads from main while the worktree is the home must show the late record and name that home; late listed=%v, stderr %q", ids[string(late)], stderr)
-		}
-		// Control: committing and merging the late bundle lets the move continue.
-		nestCommitAll(t, a.wt, "late foo record")
-		nestGit(t, a.repo, "merge", "-q", "--no-ff", "-m", "merge late", "feature")
-		if c, err := m.bind(a.foo); err != nil || c != "continued" {
-			t.Fatalf("control: after merging the late bundle the move continues: %q %v", c, err)
-		}
-	})
-	t.Run("after re-binding", func(t *testing.T) {
-		t.Parallel()
-		a := nestScenarioA(t, true)
-		m := a.m
-		if c, err := m.bind(a.foo); err != nil || c != "continued" {
-			t.Fatalf("control: %q %v", c, err)
-		}
-		wtBefore, mainBefore := nestLedger(t, a.wtFoo), nestLedger(t, a.foo)
-		late := m.task(a.wtFoo, "repo/foo", "admitted in the worktree after the re-bind")
-		if !reflect.DeepEqual(wtBefore, nestLedger(t, a.wtFoo)) || len(nestLedger(t, a.foo)) != len(mainBefore)+1 {
-			t.Errorf("an admission from the old worktree must land in the bound home (main), never in the worktree's own ledger: worktree changed=%v, main %d -> %d",
-				!reflect.DeepEqual(wtBefore, nestLedger(t, a.wtFoo)), len(mainBefore), len(nestLedger(t, a.foo)))
-		}
-		for _, dir := range []string{a.foo, a.wtFoo} {
-			if ids, _ := m.shownIDs(dir); !ids[string(late)] {
-				t.Errorf("%s: the one live history must show the late record", dir)
-			}
-		}
-		if _, err := m.bind(a.wtFoo); err == nil {
-			t.Error("moving repo/foo back to the worktree must refuse: its ledger lacks the late bundle main holds")
-		}
-		if got, want := m.homeOf(a.wtFoo), nestReal(t, a.foo); got != want {
-			t.Errorf("a refused move changed the binding: home %s, want %s", got, want)
-		}
-	})
+	a := nestScenarioA(t, true)
+	m := a.m
+	wtBefore, mainBefore := nestLedger(t, a.wtFoo), nestLedger(t, a.foo)
+	late := m.task(a.wtFoo, "repo/foo", "admitted in the worktree after the merge")
+	if len(nestLedger(t, a.wtFoo)) != len(wtBefore)+1 || !reflect.DeepEqual(mainBefore, nestLedger(t, a.foo)) {
+		t.Errorf("an admission in the worktree must land in the worktree's ledger only: worktree %d -> %d, main changed=%v",
+			len(wtBefore), len(nestLedger(t, a.wtFoo)), !reflect.DeepEqual(mainBefore, nestLedger(t, a.foo)))
+	}
+	if ids, _ := m.shownIDs(a.foo); ids[string(late)] {
+		t.Error("main must not show a record its checkout does not hold")
+	}
+	nestCommitAll(t, a.wt, "late foo record")
+	nestGit(t, a.repo, "merge", "-q", "--no-ff", "-m", "merge late", "feature")
+	if ids, _ := m.shownIDs(a.foo); !ids[string(late)] {
+		t.Error("after the merge, main must show the late record")
+	}
+	nestSame(t, "repo/foo from main vs the worktree after the late merge",
+		m.answers(a.wtFoo, true, append(append([]model.ID{}, a.fooHist.ids...), late), a.wt),
+		m.answers(a.foo, true, append(append([]model.ID{}, a.fooHist.ids...), late), a.repo))
 }
 
-// Same id in two worktrees: two histories of one project id, on two machines,
-// committed on two branches. The second bind on a machine refuses, and once
-// git puts both ledgers in one folder no read may answer from it.
+// Same id in two worktrees: two histories of one project id born apart, on
+// one machine, committed on two branches. Each worktree records in its own
+// ledger; once git puts both ledgers in one folder no read may answer from it,
+// no admission lands in it, and it cannot be registered.
 func TestNestedSameProjectIDInTwoWorktrees(t *testing.T) {
 	t.Parallel()
 	m1 := nestNew(t)
-	m2 := m1.another()
 	repo := nestRepo(t)
 	wtX, wtY := nestWorktree(t, repo, "x-one"), nestWorktree(t, repo, "x-two")
 	dX, dY, main := filepath.Join(wtX, "apps", "x"), filepath.Join(wtY, "apps", "x"), filepath.Join(repo, "apps", "x")
 	cX := nestProject(t, wtX, dX, "repo/x", "src/one.json")
 	cY := nestProject(t, wtY, dY, "repo/x", "src/two.json")
-	if c, err := m1.bind(dX); err != nil || c != "new" {
-		t.Fatalf("control: %q %v", c, err)
-	}
 	hX := m1.populate(dX, cX, "src/one.json", "repo/x")
 	nestCommitAll(t, wtX, "x history one")
-	if c, err := m2.bind(dY); err != nil || c != "new" {
-		t.Fatalf("control: the second machine binds its own checkout: %q %v", c, err)
-	}
-	hY := m2.populate(dY, cY, "src/two.json", "repo/x")
+	hY := m1.populate(dY, cY, "src/two.json", "repo/x")
 	nestCommitAll(t, wtY, "x history two")
+	m1.owns(dX, hX.ids, hY.ids...)
+	m1.owns(dY, hY.ids, hX.ids...)
 
-	// Rule 1: on one machine the second worktree cannot become the home.
-	if c, err := m1.bind(dY); err == nil {
-		t.Errorf("binding a second history of repo/x on the same machine must refuse, got continuity %q", c)
-	} else {
-		t.Logf("same machine, second history: %v", err)
-	}
-	if got, want := m1.homeOf(dY), nestReal(t, dX); got != want {
-		t.Errorf("the refused bind changed the binding: %s, want %s", got, want)
-	}
-
-	// Machine 1 merges x-one, moves the home to main, reads (so a cache
-	// exists), then merges x-two into the live home.
+	// Merge x-one, read main (so a cache exists), then merge x-two.
 	nestGit(t, repo, "merge", "-q", "--no-ff", "-m", "merge x-one", "x-one")
-	if c, err := m1.bind(main); err != nil || c != "continued" {
-		t.Fatalf("control: main continues x-one's history: %q %v", c, err)
-	}
 	m1.owns(main, hX.ids, hY.ids...)
 	nestGit(t, repo, "merge", "-q", "--no-ff", "-m", "merge x-two", "x-two")
 	if got := len(nestLedger(t, main)); got != len(nestLedger(t, dX))+len(nestLedger(t, dY)) {
 		t.Fatalf("control: git must have merged both ledgers into one folder, found %d bundles", got)
 	}
-	// Rule 2: every read of the merged folder refuses.
+	// Every read of the merged folder refuses.
 	for _, noCache := range []bool{false, true} {
 		var env []string
 		if noCache {
@@ -721,19 +621,16 @@ func TestNestedSameProjectIDInTwoWorktrees(t *testing.T) {
 		Spec: model.ClaimSpec{Assertion: "a", Falsifier: "b", Scope: nestScope, ExternalRefs: []model.ExternalReference{}}}); err == nil {
 		t.Error("admission into a ledger holding two histories must refuse")
 	}
-	// A machine that never bound it cannot adopt the forked folder either.
-	if c, err := m1.another().bind(main); err == nil {
-		t.Errorf("a fresh machine bound the forked ledger (continuity %q)", c)
+	if err := m1.another().register(main); err == nil {
+		t.Error("a forked ledger must not be registered for the viewer")
 	}
 }
 
-// A move compares the old home's bundles with the new one's, and says
-// "continued". The admitted records also cite bytes held only in the home's
-// artifact store: an owner's message captured from outside the project
-// travels as a blob and nowhere else. The guide never says the store must be
-// committed with the ledger, so an owner who commits the ledger (events) and
-// merges gets a move reported continued while the old home, which still
-// exists and could be compared, is the only place those admitted bytes live.
+// The admitted records cite bytes held only in the checkout's artifact store:
+// an owner's message captured from outside the project travels as a blob and
+// nowhere else. An owner who commits the ledger (events) but not the store
+// and merges leaves main citing bytes it lacks; registering main for the
+// viewer must then refuse, and with the store committed main resolves them.
 func TestNestedMoveKeepsCitedArtifacts(t *testing.T) {
 	t.Parallel()
 	for _, commitStore := range []bool{true, false} {
@@ -767,19 +664,20 @@ func TestNestedMoveKeepsCitedArtifacts(t *testing.T) {
 			}
 			nestGit(t, a.wt, "commit", "-q", "-m", "owner source")
 			nestGit(t, a.repo, "merge", "-q", "--no-ff", "-m", "merge feature", "feature")
-			c, err := m.bind(a.foo)
+			err = m.register(a.foo)
+			if !commitStore {
+				if err == nil || !strings.Contains(err.Error(), "home-evidence-missing") {
+					t.Fatalf("registering a checkout that lacks admitted evidence must refuse: %v", err)
+				}
+				return
+			}
 			if err != nil {
-				t.Logf("the move refused: %v", err)
-				return // refusing is an honest answer
+				t.Fatalf("control: with the store committed, main registers: %v", err)
 			}
 			if _, statErr := os.Stat(filepath.Join(a.wtFoo, ".whosaidso", "artifacts", string(pin.Content.SHA256))); statErr != nil {
 				t.Fatalf("control: the old home must still hold the blob: %v", statErr)
 			}
 			m.resolves(a.foo, []model.ArtifactRef{pin})
-			if t.Failed() {
-				t.Errorf("the move to %s reported continuity %q, yet the admitted source.intake's bytes (sha256 %s) no longer resolve from the new home; the old home %s still exists and holds them. Expected the move to refuse, or to compare the artifact store the admitted records cite as it compares bundles: a move reported continued must not lose admitted evidence",
-					a.foo, c, pin.Content.SHA256, a.wtFoo)
-			}
 		})
 	}
 }

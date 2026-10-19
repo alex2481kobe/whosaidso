@@ -103,7 +103,7 @@ func TestFamilyListsWhatTheGateCountsAndItsProofAdmits(t *testing.T) {
 	}
 	// The confirmation is the gate's: a list missing a member is a mismatch
 	// naming it, whichever member is missing.
-	project, err := store.Open(f.root)
+	project, err := store.Discover(f.root)
 	if err != nil {
 		t.Fatal(err)
 	}

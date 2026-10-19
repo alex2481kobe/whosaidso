@@ -21,15 +21,22 @@ and disagreed"; what could not be compared is UNKNOWN.
   accept    a witnessed task.close ends the task (whosaidso help accept)
 
 Setup. Build with: go build -o whosaidso ./cmd/whosaidso. The project is the nearest
-whosaidso.toml above the working directory. It holds exactly two keys, both
-required, each a quoted string on its own line (# starts a comment):
+whosaidso.toml above the working directory. It holds two required keys,
+each a quoted string on its own line (# starts a comment):
   id = 'animation/toy'          # the project id every record names
   ledger = '.whosaidso/events'  # the ledger folder, inside the checkout
-Bind the checkout holding the live ledger once per machine:
-whosaidso home PATH (whosaidso help home). WHOSAIDSO_HOME, when set, must be
-an absolute path.
+and optionally stale_after (default '24h'): todo flags a claim with no
+admitted activity for longer as a takeover candidate; and self_admission
+('allow', the default, or 'refuse': an accepting admission then needs a
+known admitter other than each packet's known author).
+Reads and writes use the checkout you run them in: each clone and worktree
+records on its own branch, and merging joins them (whosaidso help branches).
+WHOSAIDSO_HOME, when set, must be an absolute path (whosaidso help home).
 Set WHOSAIDSO_ACTOR to your name; --actor overrides it; a missing actor is
-recorded unknown, never guessed. Ids: whosaidso id prints one, whosaidso id 5 five.
+recorded unknown, never guessed. When many agents on many machines share a
+ledger, name yourself ACCOUNT/MACHINE/ROLE (biz1/m2/implementer), so every
+view says which account, machine and role did what. A name is asserted,
+not authenticated. Ids: whosaidso id prints one, whosaidso id 5 five.
 Never hand-write an id.
 
 Writing is two acts: capture, then admit the packet id it prints.
@@ -79,7 +86,8 @@ matters, set WHOSAIDSO_NO_CACHE=1: reads replay the whole ledger and neither
 read nor write the cache; any other value is refused.
 `},
 	{"admit", "admission is the review; any actor; self-admission", `  whosaidso admit --outcome accepted|rejected|correction-requested --reason TEXT PACKET ...
-Any actor may admit. Admitting your own packet is allowed and recorded:
+Any actor may admit, unless the project sets self_admission = 'refuse'.
+Admitting your own packet is otherwise allowed and recorded:
 whosaidso history --self-admitted lists those reviews (--self-admitted=false
 and =unknown too). --command-id is minted when omitted; give the printed id
 again to retry exactly. A refused packet stays in intake until you admit it
@@ -92,6 +100,13 @@ otherwise in capture (packet id) order, each packet's events as authored. A
 proposal naming a revision that an earlier one supersedes is refused as stale
 (revision-conflict or invalid-transition); re-capture it against the current
 revision.
+Review on another machine: intake is per machine, so carry the packet. On
+the author's machine whosaidso home prints its intake directory (SRC), on
+the reviewer's too (DST); copy the packet's directory, owner-only:
+  ssh AUTHOR 'tar -C SRC -cf - PACKET' | (umask 077 && mkdir -p DST && tar -C DST -xpf -)
+The reviewer's todo then lists it with its author and events, and admission
+verifies its bytes as for any packet: a copy changed on the way is refused.
+Admit it in one checkout only.
 `},
 	{"accept", "closing a task: witnesses, outcomes, withheld acceptance", `A success handback closes the attempt, not the task: the task waits in
 todo's awaiting-acceptance section until a task.close ends it. A task may
@@ -120,6 +135,19 @@ On someone else's word, cite them as the close's authority: capture their
 message as a source.intake (whosaidso help sources), then set authority.actor.id
 to them, --pin authority.source_ref to the same file, and name the task
 revision in authority.scope.context_refs.
+A holder who left owes a receipt nobody else may write on their own say-so.
+With the owner's approval admitted as a source.intake naming the task, at
+the attempt's revision or the current one, record it yourself:
+  whosaidso handback --attempt-id A --outcome stopped --authority-source SOURCE \
+      --reason "..." --next-action "..."
+then admit it. The receipt stays yours, recorded on the owner's word, and
+the task is READY again: claim it to take it over, or close it.
+A packet admitted under someone else's name (a receipt captured as the
+departed holder, say) is annotated, never rewritten: its writer captures
+  whosaidso template author.correct --set 'packets[0]=PACKET' \
+      --set writer.id=ME --set reason="..." --capture --admit --reason "..."
+as themselves. Views show the writer beside the recorded author, and
+closer_authored_receipt compares the closer with the writer.
 Not accepted yet: record why as a hold (it prints blocker_id = HOLD), and
 clear it when that is met:
   whosaidso template blocker.hold --task T --set reason=awaiting-acceptance \
@@ -256,7 +284,7 @@ revision. A FALSE reason names the failing member: its path or id, else
 An observer that died before sealing: whosaidso reconcile --invocation-id ID
 --reason TEXT, then admit its packet; the outcome stays UNKNOWN.
 `},
-	{"check", "the three dry runs and what each did NOT check", `  whosaidso check criterion --events crit.json [--blob EXAMPLE] [--output RUN_OUTPUT]
+	{"check", "the dry runs and the claim check, and what each did NOT check", `  whosaidso check criterion --events crit.json [--blob EXAMPLE] [--output RUN_OUTPUT]
       criterion preview only: instrument validation, proof-family
       completeness, comparability and admission were NOT checked
   whosaidso check admission --events ev.json [--blob FILE ...] [--packet ID ...]
@@ -270,10 +298,19 @@ An observer that died before sealing: whosaidso reconcile --invocation-id ID
   whosaidso check disposal --digest SHA256 [--git FORMAT:COMMIT:PATH]
       disposal-loss preview at watermark W: admission recomputes and stays
       the authority; reasons are yours to write
-Each prints that scope first. None writes anything. Exit status: 0 TRUE,
-would-admit, a listed family or check disposal's list (it has no FALSE);
-1 FALSE, would-refuse or a family the gate disagrees with; 2 usage; 3
-UNKNOWN. A TRUE criterion preview is not an admission.
+  whosaidso check claim ATTEMPT_ID
+      claim status at watermark W in this checkout's ledger: HELD (0), LOST,
+      TAKEN-OVER or ENDED (1), UNKNOWN (3); other branches are NOT seen
+      until merged (whosaidso help branches)
+  whosaidso check ledger
+      the ledger at HEAD, no cache, no home: bundles and artifacts
+      committed, git pins reachable from HEAD, every set-aside bundle
+      resolved; clean (0) or problems (1)
+The dry runs print that scope first; check claim prints its status first.
+None writes anything. Exit status: 0 TRUE, would-admit, a listed family,
+check disposal's list (it has no FALSE) or HELD; 1 FALSE, would-refuse, a
+family the gate disagrees with, a claim to stop, or ledger problems; 2 usage;
+3 UNKNOWN. A TRUE criterion preview is not an admission.
 WhoSaidSo never deletes bytes: an artifact.dispose records the loss,
 and check disposal lists what it must account for.
 `},
@@ -284,26 +321,23 @@ is off unless asked, and it cannot see uncommitted changes. Re-measure a
 stale claim; do not change its criterion because the code changed. An old
 failing run is set aside only as inapplicable with a verified code_change.
 `},
-	{"home", "where the ledger, intake and runs live", `Every clone and worktree of a project reads and admits through ONE ledger
-on this machine: the one in its home, the checkout bound with
-whosaidso home PATH. The binding is explicit: in an unbound project reads and
-admission refuse, and a missing home refuses too; WhoSaidSo never falls back to
-the invoking checkout's .whosaidso or creates an empty ledger. Output from
-another checkout names the home it used.
-Two roots: the ledger, definitions, admission, canonical artifacts and the
-cache use the home; run, source capture and fresh git HEAD and dirty state
-use the checkout you invoke them in. A git object missing from the home
-repository stays unavailable. Plain capture needs no home: intake is routed
-by the declared project id.
-Commit the whole .whosaidso/ folder (events and artifacts) together: a move,
-or any binding, refuses a home missing evidence its admitted records cite.
-Per machine, one WhoSaidSo home holds the registry (projects/), intake,
-staging (runs' outputs while they run) and the machine id:
-$WHOSAIDSO_HOME, else $HOME/.whosaidso. Set WHOSAIDSO_HOME to a scratch
-directory to rehearse without touching the real ones.
+	{"home", "where the ledger, intake and runs live", `The project is the nearest whosaidso.toml above the working directory, and
+its ledger, artifacts and cache are that checkout's own: every clone and
+worktree records on its own branch, and git merges join them (whosaidso help
+branches). Runs, source capture and git observation use the same checkout.
+Commit the whole .whosaidso/ folder (events and artifacts) together.
+Per machine, one WhoSaidSo home holds intake, staging (runs' outputs while
+they run), the machine id, the gallery and the viewer's registry
+(projects/): $WHOSAIDSO_HOME, else $HOME/.whosaidso. Two profiles under one
+OS user share it unless one sets WHOSAIDSO_HOME. Intake is shared by every
+checkout of a project on this machine; todo lists a packet another checkout
+captured apart, with that checkout's path, so each packet is admitted in one
+checkout only. Set WHOSAIDSO_HOME to a scratch directory to rehearse without
+touching the real ones. whosaidso home PATH only tells whosaidso ui
+which checkout to open from outside any checkout.
 `},
-	{"branches", "recording on git branches and merging them", `Record on any branch and merge it the normal way, merge commit or squash:
-there is no extra step. Two people who admit on separate branches each
+	{"branches", "recording on git branches and merging them", `Record on any branch and merge it with a merge commit: there is no extra
+step (records pin commits, which a squash or rebase orphans). Two people who admit on separate branches each
 publish the next sequence number, so after the merge two bundles share it.
 That is expected. Every machine reads the files in one order (sequence,
 then command id), so everyone who pulls the merge gets the same answers.
@@ -311,19 +345,44 @@ The next admission after a merge joins the branches: it follows the last
 bundle and names the other branch tips in its bundle, so the ledger shows
 it saw everything.
 When both branches changed the same thing (two amendments of one revision,
-one packet admitted on both), the later bundle in that order is SET ASIDE:
+one packet admitted on both, one speaker's message order captured on both,
+one decision disposed on both), the later bundle in that order is SET ASIDE:
 it stays in the ledger and nothing in it applies. A later bundle on that
 branch is set aside too when it names something the other branch recorded
 in its place (unseen-fact: say, the revision it amends); one that names
 nothing of the kind still applies. todo lists each one with the reason;
-history marks its events, also under history RECORD. To keep that
-change, re-record it: capture it again
-against the current records (an amendment from the current revision) and
-admit it. Nothing else is needed; the set-aside bundle remains as history.
+history marks its events, also under history RECORD. todo says what to do
+for each (to keep a change, re-record it against the current records) and
+prints the setaside.resolve command that records it was dealt with; the
+bundle remains as history, and check ledger fails until each is resolved.
 A ledger is still refused if a sequence number is missing, a bundle names
 a predecessor that is not there, or two first bundles start two histories.
 Commit only .whosaidso/events and .whosaidso/artifacts; keep
 .whosaidso/cache out of git, or every merge conflicts on it.
+Records pin commits: a squash or rebase leaves a branch's own commits
+unreachable once the branch is gone, so nothing here requires either.
+Claiming a task when many agents share the ledger. A claim counts only once
+it is on origin's main: claim on main, push, and start work only after the
+push succeeds and whosaidso check claim A (A: the attempt id start printed)
+exits 0. A claim that cannot be pushed is no claim; do not work on it.
+  git pull --ff-only                  start from a current main
+  whosaidso template task.start --task T --capture --admit --reason "..."
+  git add .whosaidso && git commit -m "claim T" && git push origin main
+If the push is rejected, someone pushed first:
+  git fetch origin && git merge --no-edit origin/main
+(a merge: git pull --ff-only cannot succeed once a claim is committed), then
+whosaidso check claim A. Exit 0: push again.
+Exit 1: stop; the claim lost and the task is someone else's. When two claims
+of one task merge, the one first in the order above applies and the other is
+set aside; todo calls it a lost claim. Then work on any branch; after every
+merge from main run whosaidso check claim A, and stop on a nonzero exit:
+rarely, a claim admitted moments earlier elsewhere and pushed moments later
+still sorts first, and the merge decides for it.
+todo's in-flight tasks list each claim's holder, claim time and last
+activity (its runs and receipt); a claim idle past stale_after is flagged
+in attention as a takeover candidate, never released by itself.
+Merging work into main: git merge --no-ff, then whosaidso check ledger on
+the result, and push only on exit 0 (whosaidso help check).
 `},
 	{"pitfalls", "rules that prevent the known mistakes", `- Never invent a value: a missing actor, reading, unit or validation stays
   UNKNOWN with its reason. Two unknowns never match.

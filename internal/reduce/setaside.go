@@ -26,6 +26,9 @@ type SetAside struct {
 	CommandID model.ID `json:"command_id"`
 	Code      string   `json:"code"`
 	Reason    string   `json:"reason"`
+	// Resolved is the setaside.resolve that dealt with it, once one is
+	// admitted (setaside_resolve.go).
+	Resolved *SetAsideResolution `json:"resolved,omitempty"`
 }
 
 // fold applies b's events, or sets b aside.

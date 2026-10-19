@@ -51,11 +51,7 @@ func captureVerb(fs *flag.FlagSet) func(*call) error {
 		if !*admitAfter && (isSet(fs, "reason") || isSet(fs, "admit-command-id")) {
 			return usageError("whosaidso capture: --reason and --admit-command-id belong to --admit")
 		}
-		open := c.checkout
-		if *admitAfter {
-			open = c.project
-		}
-		project, err := open()
+		project, err := c.project()
 		if err != nil {
 			return err
 		}
@@ -130,6 +126,7 @@ func handbackVerb(fs *flag.FlagSet) func(*call) error {
 	holdReason := fs.String("hold-reason", "", "the hold's `REASON`: prerequisite, awaiting-acceptance, resume or reconciliation")
 	holdActor := fs.String("hold-actor", "", "the hold's assigned actor `ID`; missing is unknown, never the receipt's actor")
 	fs.StringVar(&hold.Criterion, "hold-criterion", "", "the hold's authored discharge criterion `TEXT`")
+	authoritySource := fs.String("authority-source", "", "for an attempt another holder holds: the admitted source.intake `ID` whose speaker authorized this receipt")
 	return func(c *call) error {
 		if err := noPositionals(c, "handback"); err != nil {
 			return err
@@ -140,6 +137,7 @@ func handbackVerb(fs *flag.FlagSet) func(*call) error {
 		}
 		r.CommandID, r.Author = model.ID(*id), actor(c)
 		r.AttemptID, r.Outcome, r.Reason = model.ID(*attemptID), model.AttemptOutcome(*outcome), *reason
+		r.AuthoritySource = model.ID(*authoritySource)
 		holdSet := false
 		fs.Visit(func(f *flag.Flag) { holdSet = holdSet || strings.HasPrefix(f.Name, "hold-") })
 		if holdSet {
@@ -294,7 +292,7 @@ func captureCLI(ctx context.Context, project store.Project, id model.ID, author 
 // does not resolve is left to --blob; store.WriteIntake refuses what neither
 // supplied.
 func sourceBlobs(ctx context.Context, project store.Project, events []model.Event) ([]io.Reader, error) {
-	resolver := evidence.NewResolverAt(project.ExecRoot(), project.ArtifactDir())
+	resolver := evidence.NewResolverAt(project.Root, project.ArtifactDir())
 	var readers []io.Reader
 	for _, raw := range events {
 		event, err := model.DecodeEvent(raw)

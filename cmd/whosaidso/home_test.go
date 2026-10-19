@@ -1,8 +1,8 @@
 package main
 
-// The home verb and the two roots, driven through the CLI: unbound refusal,
-// reads and admission from a second worktree landing in the home, a missing
-// home, relocation, and bindTestHome, the one setup every CLI test that reads
+// The home verb and routing, driven through the CLI: every checkout and
+// worktree reads and admits its own ledger, registered or not; the viewer's
+// registry entry; and bindTestHome, the one setup every CLI test that reads
 // or admits uses. The registry's own rules are tested in internal/store.
 
 import (
@@ -86,50 +86,45 @@ func homeLedgerFiles(t *testing.T, root string) int {
 	return len(files)
 }
 
-func TestCLIUnboundProjectRefusesReadsAndAdmission(t *testing.T) {
+// TestCLIUnregisteredProjectReadsAndWritesItsCheckout: no registry entry is
+// needed to read or admit, and no command registers one silently.
+func TestCLIUnregisteredProjectReadsAndWritesItsCheckout(t *testing.T) {
 	root, input := cliFixture(t)
-	t.Setenv("WHOSAIDSO_HOME", filepath.Join(t.TempDir(), "unbound-home"))
-	for _, args := range [][]string{{"show"}, {"todo"}, {"history"}, {"admit", "--outcome", "accepted", "--reason", "r", string(cliID(3))},
-		{"capture", "--admit", "--reason", "r", "--events", "-"}} {
-		_, errOut, code := cliRun(t, root, input, "agent", args...)
-		if code != 1 || !strings.Contains(errOut, "not bound") || !strings.Contains(errOut, "whosaidso home PATH") {
-			t.Fatalf("%v in an unbound project must refuse and say how to bind, got %d %q", args, code, errOut)
+	t.Setenv("WHOSAIDSO_HOME", filepath.Join(t.TempDir(), "unregistered-home"))
+	if _, errOut, code := cliRun(t, root, input, "agent", "capture", "--admit", "--reason", "r", "--events", "-"); code != 0 {
+		t.Fatalf("admission in an unregistered checkout: %d %q", code, errOut)
+	}
+	for _, args := range [][]string{{"show"}, {"todo"}, {"history"}} {
+		if _, errOut, code := cliRun(t, root, nil, "", args...); code != 0 || errOut != "" {
+			t.Fatalf("%v in an unregistered checkout: %d %q", args, code, errOut)
 		}
 	}
-	// Plain capture routes intake by the declared id and needs no home.
-	if out, errOut, code := cliRun(t, root, input, "agent", "capture", "--events", "-"); code != 0 || !strings.HasPrefix(out, "captured ") {
-		t.Fatalf("control: plain capture: %d %q %q", code, out, errOut)
+	if homeLedgerFiles(t, root) != 1 {
+		t.Fatal("the admission must land in the invoking checkout")
 	}
 	out, _, code := cliRun(t, root, nil, "", "home")
-	if code != 0 || !strings.Contains(out, "unbound") {
-		t.Fatalf("whosaidso home must report unbound: %d %q", code, out)
+	if code != 0 || !strings.Contains(out, "none registered") {
+		t.Fatalf("whosaidso home must report no viewer entry: %d %q", code, out)
 	}
-	if _, bound, err := store.Binding("test/cli"); bound || err != nil {
-		t.Fatalf("no command may bind silently: %v %v", bound, err)
+	if _, registered, err := store.Binding("test/cli"); registered || err != nil {
+		t.Fatalf("no command may register silently: %v %v", registered, err)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".whosaidso", "events")); !os.IsNotExist(err) {
-		t.Fatalf("an unbound project must not get a ledger: %v", err)
-	}
-	// Control: bind, and the same read answers.
-	if out, errOut, code := cliRun(t, root, nil, "", "home", "."); code != 0 || !strings.HasPrefix(out, "bound test/cli to ") {
-		t.Fatalf("bind: %d %q %q", code, out, errOut)
-	}
-	if _, errOut, code := cliRun(t, root, nil, "", "show"); code != 0 || errOut != "" {
-		t.Fatalf("a read from the home itself names no other home: %d %q", code, errOut)
+	if out, errOut, code := cliRun(t, root, nil, "", "home", "."); code != 0 || !strings.HasPrefix(out, "registered test/cli at ") {
+		t.Fatalf("control: register: %d %q %q", code, out, errOut)
 	}
 }
 
-func TestCLISecondWorktreeReadsAndAdmitsThroughTheHome(t *testing.T) {
+// TestCLIEachWorktreeRecordsInItsOwnLedger: reads and admission use the
+// invoking checkout's own ledger, whatever this machine's registry names, so
+// two worktrees (two lanes, or two profiles under one OS user sharing one
+// home) each record on their own branch and never into the other's.
+func TestCLIEachWorktreeRecordsInItsOwnLedger(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")
 	}
-	root, input := cliFixture(t) // bound: root is the home
-	real, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		t.Fatal(err)
-	}
+	root, input := cliFixture(t) // registered: root is the viewer's checkout
 	if _, errOut, code := cliRun(t, root, input, "agent", "capture", "--admit", "--reason", "first", "--events", "-"); code != 0 {
-		t.Fatalf("control: admit in the home: %s", errOut)
+		t.Fatalf("control: admit in root: %s", errOut)
 	}
 	homeGit(t, root, "init", "--quiet")
 	homeGit(t, root, "add", "whosaidso.toml", ".whosaidso/events")
@@ -143,59 +138,21 @@ func TestCLISecondWorktreeReadsAndAdmitsThroughTheHome(t *testing.T) {
 	if code != 0 || !strings.Contains(out, "admitted") {
 		t.Fatalf("admit from the worktree: %d %q %q", code, out, errOut)
 	}
-	if !strings.Contains(errOut, "home "+real) || !strings.Contains(errOut, worktree) {
-		t.Fatalf("output from another checkout must name the home used, got %q", errOut)
+	if homeLedgerFiles(t, worktree) != 2 || homeLedgerFiles(t, root) != 1 {
+		t.Fatalf("the admission must land in the invoking worktree only: worktree %d, root %d", homeLedgerFiles(t, worktree), homeLedgerFiles(t, root))
 	}
-	if homeLedgerFiles(t, root) != 2 || homeLedgerFiles(t, worktree) != 1 {
-		t.Fatalf("the admission must land in the home ledger only: home %d, worktree %d", homeLedgerFiles(t, root), homeLedgerFiles(t, worktree))
+	if n, errOut := homeBundles(t, worktree); n != 2 || errOut != "" {
+		t.Fatalf("a read from the worktree answers from its own ledger and names no other: %d %q", n, errOut)
 	}
-	if n, errOut := homeBundles(t, worktree); n != 2 || !strings.Contains(errOut, "home "+real) {
-		t.Fatalf("a read from the worktree must answer from the home (2 bundles), not its own copy: %d %q", n, errOut)
-	}
-	if n, _ := homeBundles(t, root); n != 2 {
-		t.Fatalf("the home reads its own ledger: %d", n)
+	if n, _ := homeBundles(t, root); n != 1 {
+		t.Fatalf("root reads its own ledger: %d", n)
 	}
 }
 
-func TestCLIMissingHomeRefuses(t *testing.T) {
-	root, input := cliFixture(t)
-	clone := t.TempDir()
-	data, err := os.ReadFile(filepath.Join(root, "whosaidso.toml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(clone, "whosaidso.toml"), data, 0600); err != nil {
-		t.Fatal(err)
-	}
-	if n, _ := homeBundles(t, clone); n != 0 {
-		t.Fatalf("control: the clone reads the empty home: %d", n)
-	}
-	if err := os.RemoveAll(root); err != nil {
-		t.Fatal(err)
-	}
-	for _, args := range [][]string{{"show"}, {"capture", "--admit", "--reason", "r", "--events", "-"}} {
-		_, errOut, code := cliRun(t, clone, input, "agent", args...)
-		if code != 1 || !strings.Contains(errOut, "unavailable") {
-			t.Fatalf("%v with the home gone must refuse, got %d %q", args, code, errOut)
-		}
-	}
-	if _, err := os.Lstat(root); !os.IsNotExist(err) {
-		t.Fatalf("the missing home was recreated: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(clone, ".whosaidso", "events")); !os.IsNotExist(err) {
-		t.Fatalf("the clone's own ledger was used as a fallback: %v", err)
-	}
-	out, _, code := cliRun(t, clone, nil, "", "home", "--json")
-	var a struct {
-		Bound, Available bool
-		HomeRoot         *string `json:"home_root"`
-	}
-	if code != 0 || json.Unmarshal([]byte(out), &a) != nil || !a.Bound || a.Available || a.HomeRoot == nil {
-		t.Fatalf("whosaidso home must report a bound, unavailable home: %d %q", code, out)
-	}
-}
-
-func TestCLIRelocation(t *testing.T) {
+// TestCLIRegistration: home PATH refuses another project's checkout, and
+// re-registering names the entry it replaced; a registered checkout that is
+// gone is reported unavailable and changes no read.
+func TestCLIRegistration(t *testing.T) {
 	root, input := cliFixture(t)
 	if _, errOut, code := cliRun(t, root, input, "agent", "capture", "--admit", "--reason", "first", "--events", "-"); code != 0 {
 		t.Fatalf("control: %s", errOut)
@@ -216,32 +173,35 @@ func TestCLIRelocation(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, errOut, code := cliRun(t, root, nil, "", "home", other); code != 1 || !strings.Contains(errOut, "test/elsewhere") {
-		t.Fatalf("binding to another project's checkout must refuse: %d %q", code, errOut)
+		t.Fatalf("registering another project's checkout must refuse: %d %q", code, errOut)
 	}
-	out, errOut, code := cliRun(t, root, nil, "", "home", next)
-	if code != 0 || !strings.Contains(out, "continue the old history") {
-		t.Fatalf("relocation with continuity: %d %q %q", code, out, errOut)
+	out, errOut, code := cliRun(t, root, nil, "", "home", "--json", next)
+	var a struct {
+		Previous string `json:"previous_root"`
+		Viewer   string `json:"viewer_root"`
+		Bundles  int    `json:"bundles"`
 	}
-	if n, errOut := homeBundles(t, root); n != 1 || !strings.Contains(errOut, "home "+next) {
-		t.Fatalf("the old checkout now reads through the new home: %d %q", n, errOut)
+	if code != 0 || json.Unmarshal([]byte(out), &a) != nil || a.Viewer != next || a.Previous == "" || a.Bundles != 1 {
+		t.Fatalf("re-registration: %d %q %q", code, out, errOut)
 	}
-	// The old home is gone: move on again, and say continuity was not compared.
-	last := filepath.Join(parent, "last")
-	if err := os.Rename(next, last); err != nil {
+	if err := os.RemoveAll(next); err != nil {
 		t.Fatal(err)
 	}
-	out, errOut, code = cliRun(t, last, nil, "", "home", "--json", ".")
-	var a struct {
-		Continuity string `json:"continuity"`
-		Bundles    int    `json:"bundles"`
+	if n, errOut := homeBundles(t, root); n != 1 || errOut != "" {
+		t.Fatalf("a gone registered checkout changes no read: %d %q", n, errOut)
 	}
-	if code != 0 || json.Unmarshal([]byte(out), &a) != nil || a.Continuity != "not-compared" || a.Bundles != 1 {
-		t.Fatalf("relocation with the old home gone: %d %q %q", code, out, errOut)
+	out, _, code = cliRun(t, root, nil, "", "home", "--json")
+	var h struct {
+		Registered, Available bool
+	}
+	if code != 0 || json.Unmarshal([]byte(out), &h) != nil || !h.Registered || h.Available {
+		t.Fatalf("whosaidso home must report a registered, unavailable checkout: %d %q", code, out)
 	}
 }
 
-// TestCLICaptureAdmitReadsSourcesFromTheInvokingCheckout: with the home
-// elsewhere, a source file that exists only in this checkout is captured.
+// TestCLICaptureAdmitReadsSourcesFromTheInvokingCheckout: with the registry
+// naming another checkout, a source file that exists only in this checkout
+// is captured, and the admission lands here.
 func TestCLICaptureAdmitReadsSourcesFromTheInvokingCheckout(t *testing.T) {
 	root, _ := cliFixture(t)
 	clone := t.TempDir()
@@ -260,8 +220,8 @@ func TestCLICaptureAdmitReadsSourcesFromTheInvokingCheckout(t *testing.T) {
 	if code != 0 || !strings.HasPrefix(out, "captured ") {
 		t.Fatalf("the source must be read from the invoking checkout, not the home: %d %q %q", code, out, errOut)
 	}
-	if homeLedgerFiles(t, root) != 1 || homeLedgerFiles(t, clone) != 0 {
-		t.Fatal("the admission must land in the home")
+	if homeLedgerFiles(t, root) != 0 || homeLedgerFiles(t, clone) != 1 {
+		t.Fatal("the admission must land in the invoking checkout")
 	}
 }
 
@@ -292,7 +252,7 @@ func TestCLIHomeRefusesToBindWhatItCannotServe(t *testing.T) {
 	if err := os.Chmod(packet, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, errs, code := cliRun(t, root, nil, "", "home", "."); code != 1 || !strings.Contains(errs, "not bound") || !strings.Contains(errs, "insecure-permissions") {
+	if _, errs, code := cliRun(t, root, nil, "", "home", "."); code != 1 || !strings.Contains(errs, "not registered") || !strings.Contains(errs, "insecure-permissions") {
 		t.Fatalf("a home whose intake is not owner-only must not bind: %d %q", code, errs)
 	}
 	if _, bound, _ := store.Binding("test/cli"); bound {
@@ -301,7 +261,7 @@ func TestCLIHomeRefusesToBindWhatItCannotServe(t *testing.T) {
 	if err := os.Chmod(packet, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if out, errs, code := cliRun(t, root, nil, "", "home", "."); code != 0 || !strings.HasPrefix(out, "bound test/cli") {
+	if out, errs, code := cliRun(t, root, nil, "", "home", "."); code != 0 || !strings.HasPrefix(out, "registered test/cli") {
 		t.Fatalf("control: owner-only intake binds: %d %q", code, errs)
 	}
 	// An undecodable ledger: an admitted event with a field this binary does not know.
@@ -324,7 +284,7 @@ func TestCLIHomeRefusesToBindWhatItCannotServe(t *testing.T) {
 	if err := os.WriteFile(bundle, []byte(strings.Replace(string(data), `"intent"`, `"purpose"`, 1)), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, errs, code := cliRun(t, root, nil, "", "home", "."); code != 1 || !strings.Contains(errs, "not bound") || !strings.Contains(errs, "purpose") {
+	if _, errs, code := cliRun(t, root, nil, "", "home", "."); code != 1 || !strings.Contains(errs, "not registered") || !strings.Contains(errs, "purpose") {
 		t.Fatalf("a ledger this binary cannot decode must not bind: %d %q", code, errs)
 	}
 	if _, bound, _ := store.Binding("test/cli"); bound {

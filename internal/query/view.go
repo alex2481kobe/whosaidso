@@ -9,6 +9,7 @@ package query
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
 	"github.com/alex2481kobe/whosaidso/internal/reduce"
@@ -23,6 +24,7 @@ type ViewRequest struct {
 	Observed     *Observation             // continue only: the caller's fresh workspace observation
 	Stale        *StaleGit                // show only, on request: the caller runs git, so never by default
 	SelfAdmitted model.SelfAdmissionState // history without ID only
+	Now          time.Time                // todo only: the caller's clock, to judge claims stale; zero judges none
 }
 
 // ViewHeader opens every view answer: which view, which project, and the
@@ -86,6 +88,8 @@ func CheckView(r ViewRequest) error {
 		return fmt.Errorf("a workspace observation belongs only to continue")
 	case r.Stale != nil && r.View != "show":
 		return fmt.Errorf("the stale-claims check belongs only to show")
+	case !r.Now.IsZero() && r.View != "todo":
+		return fmt.Errorf("the reading time belongs only to todo")
 	case r.SelfAdmitted != "" && r.View != "history":
 		return fmt.Errorf("the self-admitted filter belongs only to history")
 	}
@@ -134,7 +138,7 @@ func view(project store.Project, r ViewRequest, source Source) (ViewAnswer, erro
 	}
 	switch r.View {
 	case "todo":
-		return todoView(project, s, h, r.Limit)
+		return todoView(project, s, source, h, r.Limit, r.Now)
 	case "continue":
 		if intake != nil {
 			h.Result, h.Reason = "UNKNOWN", fmt.Sprintf("%s is an admitted source, not a record to resume: show %s or history %s reads it", r.ID, r.ID, r.ID)

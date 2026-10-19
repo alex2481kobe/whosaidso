@@ -17,10 +17,10 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
-// galleryFile is this checkout's project gallery. It needs only the declared
-// project id, not a bound home.
+// galleryFile is this checkout's project gallery, kept per machine by the
+// declared project id.
 func (c *call) galleryFile() (string, error) {
-	p, err := c.checkout()
+	p, err := c.project()
 	if err != nil {
 		return "", err
 	}

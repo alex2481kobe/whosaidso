@@ -34,10 +34,16 @@ only section --limit cuts), open decisions, intake by what its review says
 is owed: unreviewed packets await review; correction-requested ones are
 listed (whether a corrected packet answered the request is not recorded);
 rejected ones owe nothing and are only
-counted (whosaidso history lists their reviews), attention. --json keeps every
-packet not accepted in packets_not_accepted, each with its disposition, and
-totals counts intake_unreviewed, intake_correction_requested and
-intake_rejected.
+counted (whosaidso history lists their reviews); pending packets another
+checkout of this project captured on this machine are listed apart, with
+that checkout's path (admit each packet in one checkout only); attention,
+with a stale-claim note for each claim idle past stale_after. Each in-flight
+task lists the claims that hold it: attempt, holder, claimed_at,
+last_activity_at, and stale, judged at the time todo runs.
+--json keeps every packet not accepted in packets_not_accepted, each with its
+disposition (pending, captured-elsewhere, correction-requested, rejected) and
+captured_in when noted, and totals counts intake_unreviewed,
+intake_correction_requested, intake_rejected and intake_elsewhere.
 `, define: viewVerb("todo")},
 		{name: "continue", args: "RECORD_ID", summary: "resume any record: detail, closure, what is owed", detail: `Any kind of record. A task adds its progress, every attempt, every run and
 what is owed, item by item for a plan. Every kind gets every amendment since
@@ -68,8 +74,8 @@ The page reads with GET only; it writes no ledger and no intake. Its only
 changes are the Gallery's Remove, which drops an entry (never the file), and
 Reveal in Finder (macOS). Every screen is the --json answer of the same
 view; the Gallery is whosaidso gallery list's. Run inside a
-bound project it opens that project; elsewhere it lists every project this
-machine's home binds, an unavailable home with its reason.
+checkout it opens that checkout; elsewhere it lists every project this
+machine registered with whosaidso home PATH, an unavailable one with its reason.
 `, define: uiVerb},
 		{name: "capture", summary: "write a packet to immutable intake; publishes nothing", detail: `Reads a JSON array of typed events (whosaidso template makes one). A
 source.intake is captured with its original bytes, from its reference or
@@ -90,7 +96,10 @@ bundle SEQ-ID". Several packet ids are separate arguments.
 		{name: "handback", summary: "capture an attempt's terminal receipt", detail: `No outcome is defaulted; whosaidso help outcomes defines the nine. The receipt
 and any hold are one packet; admit it with whosaidso admit. blocked-mid-task
 needs an open hold admitted with it; out-of-scope needs a resume hold with a
-reassignment criterion and actor.
+reassignment criterion and actor. Only the attempt's holder writes its
+receipt, unless --authority-source names an admitted source.intake whose
+speaker (not you) approved it and which names the task: then the receipt
+cites that authority and stays attributed to you.
 `, define: handbackVerb},
 		{name: "run", args: "-- ARGV", summary: "run a measurement; capture its start and seal", detail: `Runs ARGV in this checkout without a shell, and captures the start (before
 launch) and the seal as two packets; admit both, or pass --admit. The
@@ -123,6 +132,23 @@ each run's criterion verdict, and prints a proof skeleton whose
 dispositions, reasons, judgment and verdict stay placeholders. Exit 1 when
 the gate disagrees with the list.
 `, define: checkVerb("admission")},
+		{name: "check claim", args: "ATTEMPT_ID", summary: "may this attempt's holder keep working?", detail: `Reads this checkout's ledger, after a sync, for the claim (task.start or
+task.takeover) that minted ATTEMPT_ID. HELD (exit 0): keep working. LOST
+(exit 1): another branch claimed the task first and this claim was set aside
+at the merge; stop and hand nothing back on it. TAKEN-OVER (exit 1): a
+takeover replaced it; stop. ENDED (exit 1): its receipt is admitted or the
+task is closed. UNKNOWN (exit 3): no such claim here; sync and ask again.
+Each answer names the attempt that holds the task now, when one does, and
+the next step. Writes nothing.
+`, define: claimCheckVerb},
+		{name: "check ledger", summary: "before pushing a merge: is the ledger at HEAD whole for a fresh clone?", detail: `In this checkout, with no cache and no home or intake, replays the ledger
+and lists: bundles and cited content artifacts not committed at HEAD (git's
+tracked tree, so a file only in the working tree counts as missing); cited
+artifacts whose bytes the store lacks; git pins that do not resolve or that
+HEAD cannot reach (a squash or rebase orphans them); set-aside bundles no
+setaside.resolve has dealt with. A shallow repository is refused; deepen it
+with git fetch --unshallow. Exit 0 clean, 1 problems. Writes nothing.
+`, define: ledgerCheckVerb},
 		{name: "check disposal", summary: "list what an artifact.dispose must record", detail: `Prints the support_loss targets an artifact.dispose of exactly this identity
 must record at this watermark, and the admitted events citing it. Give --git
 when the disposal names a git pin. Writes nothing.
@@ -179,17 +205,15 @@ missing now, who added it, its title, path and note.
 `, define: galleryVerb("list")},
 		{name: "gallery rm", args: "ID", summary: "remove an entry from the gallery, never its file", detail: `Removes the entry from the gallery. The file it names is not touched.
 `, define: galleryVerb("rm")},
-		{name: "home", args: "[PATH]", summary: "show or set where this project's live ledger is", detail: `Bare, shows this project's binding on this machine: its home, or unbound,
-and whether the home is available. With PATH, binds the project to the
-checkout at PATH, which must hold whosaidso.toml declaring the same project id,
-a ledger inside it and a readable history. A home every read would refuse
-is not bound: intake that is not owner-only, or a ledger this binary cannot
-decode, is refused with that reason. Binding again elsewhere is the
-move: while the old home exists, PATH's history must continue it bundle for
-bundle; when it is gone, continuity: not-compared is printed. Any binding
-refuses a home whose artifact store lacks bytes its admitted records cite,
-naming each digest and its citer. An entry that cannot be read is replaced,
-and says so (continuity: unreadable-binding-replaced).
+		{name: "home", args: "[PATH]", summary: "show or set the checkout the viewer opens for this project", detail: `Reads and writes always use the checkout you run them in; this changes
+none of them. Bare, shows this checkout and the checkout this machine's
+viewer opens for the project when whosaidso ui runs outside any checkout,
+and whether it is available. With PATH, registers the checkout at PATH,
+which must hold whosaidso.toml declaring the same project id and a readable
+ledger. A checkout every read would refuse is not registered: intake that
+is not owner-only, a ledger this binary cannot decode, or an artifact store
+lacking bytes its admitted records cite (each digest and its citer named).
+An entry that cannot be read is replaced.
 `, define: homeVerb},
 		{name: "id", args: "[N]", summary: "print N fresh record ids (default one)", detail: `Use it rather than inventing an id: hand-typed Crockford base32 parses and
 means nothing.

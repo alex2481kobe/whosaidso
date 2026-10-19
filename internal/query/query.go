@@ -87,6 +87,10 @@ type Packet struct {
 	Unavailable *Unknown      `json:"unavailable,omitempty"`
 	Disposition string        `json:"disposition"`
 	Review      *Review       `json:"review"`
+	// CapturedIn is the checkout that captured a pending packet, when the home
+	// noted it; a packet captured in another checkout reads disposition
+	// captured-elsewhere, that checkout's to review.
+	CapturedIn string `json:"captured_in,omitempty"`
 }
 
 // pending projects the visible intake against this answer's reviews. Every
@@ -132,6 +136,11 @@ func pending(project store.Project, s reduce.Snapshot) ([]Packet, error) {
 	}
 	out := make([]Packet, 0, len(byID))
 	for _, packet := range byID {
+		if packet.Disposition == "pending" {
+			if err := placeOrigin(project, &packet); err != nil {
+				return nil, err
+			}
+		}
 		out = append(out, packet)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CommandID < out[j].CommandID })
@@ -157,4 +166,29 @@ func pending(project store.Project, s reduce.Snapshot) ([]Packet, error) {
 		next++
 	}
 	return out, nil
+}
+
+// placeOrigin names the checkout that captured a pending packet, and marks it
+// captured-elsewhere when that is another checkout still in place. A packet
+// with no noted origin, or whose checkout has since moved away, stays pending
+// here, as every packet did before origins were noted.
+func placeOrigin(project store.Project, p *Packet) error {
+	origin, known, err := store.IntakeOrigin(project, p.CommandID)
+	if err != nil || !known {
+		return err
+	}
+	here, err := store.CapturedHere(project, origin)
+	if err != nil {
+		return err
+	}
+	p.CapturedIn = origin
+	if here {
+		return nil
+	}
+	gone, err := store.OriginGone(origin)
+	if err != nil || gone {
+		return err
+	}
+	p.Disposition = "captured-elsewhere"
+	return nil
 }

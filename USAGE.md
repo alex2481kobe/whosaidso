@@ -21,12 +21,12 @@ of the record.
 
 ## The 60-second loop
 
-Declare the project and bind this checkout as the home of its ledger:
+Declare the project; every clone and worktree reads and writes its own copy of the ledger, and git merges join
+them:
 
 ```sh
 cd your-project
 printf "id = 'you/your-project'\nledger = '.whosaidso/events'\n" > whosaidso.toml
-whosaidso home .
 export WHOSAIDSO_ACTOR=alice          # who is acting; never guessed
 ```
 
@@ -65,6 +65,7 @@ The guide ships with the binary, so it cannot drift from the CLI:
 whosaidso help             # every topic and verb
 whosaidso help loop        # capture, admit, run, handback, accept
 whosaidso help proof       # criterion first, the whole family, a verdict
+whosaidso help branches    # many agents, many machines: claiming, merging, check ledger
 whosaidso VERB --help      # one verb's usage
 whosaidso version          # which build you are running; include it in a report
 ```

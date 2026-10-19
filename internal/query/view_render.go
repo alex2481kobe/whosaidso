@@ -101,7 +101,7 @@ func briefDetail(b *briefWriter, indent int, d cur) {
 		b.line(indent, d.at("fact", "kind"), d.at("ref", "record_id"), "rev", d.at("ref", "revision"))
 		b.line(indent+1, prefix(d.at("label")))
 	}
-	pieces := append([]any{"author"}, who(d.at("author", "actor"))...)
+	pieces := authorPieces(d.at("author"))
 	pieces = append(append(pieces, "admitted by"), who(d.at("admitted_by"))...)
 	b.line(indent+1, append(pieces, "self-admitted", d.at("self_admitted"))...)
 }
@@ -118,6 +118,13 @@ func briefTodoTask(b *briefWriter, indent int, t cur) {
 	if runs := t.at("runs"); runs.ok() {
 		briefList(b, indent+1, "runs", runs, briefRun)
 	}
+	for _, c := range t.at("claims").items() {
+		line := []any{"claim", c.at("attempt_id"), "claimed", c.at("claimed_at"), "last activity", c.at("last_activity_at")}
+		if stale, _ := c.at("stale").v.(bool); stale {
+			line = append(line, "STALE")
+		}
+		b.line(indent+1, line...)
+	}
 }
 
 func briefTodo(b *briefWriter, a cur) {
@@ -125,8 +132,14 @@ func briefTodo(b *briefWriter, a cur) {
 	b.line(0, "totals: tasks", t.at("tasks"), "in flight", t.at("in_flight"), "awaiting acceptance", t.at("awaiting_acceptance"),
 		"blocked", t.at("blocked"), "ready", t.at("ready"), "open decisions", t.at("open_decisions"),
 		"intake unreviewed", t.at("intake_unreviewed"), "correction requested", t.at("intake_correction_requested"), "rejected", t.at("intake_rejected"))
+	if n := t.at("stale_claims"); n.ok() {
+		b.line(0, "stale claims:", n, "(takeover candidates; see attention)")
+	}
 	if aside := a.at("set_aside"); aside.ok() {
 		briefList(b, 0, "set aside after a merge (kept in the ledger, not applied)", aside, briefSetAside)
+	}
+	if n := t.at("set_aside_resolved"); n.ok() {
+		b.line(0, "set aside and resolved:", n)
 	}
 	briefList(b, 0, "in flight", a.at("in_flight"), briefTodoTask)
 	briefList(b, 0, "awaiting acceptance", a.at("awaiting_acceptance"), briefTodoTask)
@@ -138,6 +151,18 @@ func briefTodo(b *briefWriter, a cur) {
 	briefList(b, 0, "open decisions", a.at("open_decisions"), briefDetail)
 	briefIntake(b, "intake unreviewed", t.at("intake_unreviewed"), a.at("packets_not_accepted"), "pending")
 	briefIntake(b, "correction requested (whether a corrected packet answered it is not recorded)", t.at("intake_correction_requested"), a.at("packets_not_accepted"), "correction-requested")
+	if n := t.at("intake_elsewhere"); n.ok() {
+		b.line(0, "intake captured in other checkouts (admit each packet in one checkout only, normally where it was captured):", n)
+		for _, p := range a.at("packets_not_accepted").items() {
+			if p.at("disposition").text() == "captured-elsewhere" {
+				briefPacket(b, 1, p)
+				b.line(2, "captured in", p.at("captured_in"))
+			}
+		}
+	}
+	if n := t.at("intake_set_aside"); n.ok() {
+		b.line(0, "intake in set-aside bundles (admitted on a branch, then set aside; never admit again):", n)
+	}
 	if n := t.at("intake_rejected"); n.string() != "0" {
 		b.line(0, "rejected intake:", n, "(reviewed, nothing owed; whosaidso history lists the reviews)")
 	}
@@ -149,6 +174,7 @@ func briefSetAside(b *briefWriter, indent int, v cur) {
 	b.line(indent, "sequence", v.at("sequence"), "command", v.at("command_id"), v.at("code"))
 	b.line(indent+1, prefix(v.at("reason")))
 	b.line(indent+1, v.at("next"))
+	b.line(indent+1, "resolve:", v.at("resolve"))
 }
 
 // briefIntake lists the packets_not_accepted packets with one disposition, under
@@ -345,7 +371,7 @@ func briefSource(b *briefWriter, indent int, src cur) {
 	briefList(b, indent+1, "referents", in.at("referents"), func(b *briefWriter, indent int, r cur) {
 		b.line(indent, r.at("record_id"), "rev", r.at("revision"))
 	})
-	pieces := append([]any{"author"}, who(src.at("author", "actor"))...)
+	pieces := authorPieces(src.at("author"))
 	pieces = append(append(pieces, "admitted by"), who(src.at("admitted_by"))...)
 	b.line(indent+1, append(pieces, "self-admitted", src.at("self_admitted"))...)
 }

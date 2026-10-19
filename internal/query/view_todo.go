@@ -8,6 +8,10 @@ package query
 // READY tasks and says how many it cut. Rendering lives in view_render.go.
 
 import (
+	"fmt"
+	"strings"
+	"time"
+
 	"github.com/alex2481kobe/whosaidso/internal/model"
 	"github.com/alex2481kobe/whosaidso/internal/reduce"
 	"github.com/alex2481kobe/whosaidso/internal/store"
@@ -39,6 +43,9 @@ type TodoTask struct {
 	Detail
 	Accepter any        `json:"accepter,omitempty"`
 	Runs     *[]RunView `json:"runs,omitempty"`
+	// Claims is set for an in-flight task: each live claim, its holder, when
+	// it was claimed and last worked on (view_board.go).
+	Claims []BoardClaim `json:"claims,omitempty"`
 }
 
 // TodoTotals counts each owed task identity once, whichever section holds it;
@@ -58,7 +65,17 @@ type TodoTotals struct {
 	IntakeUnreviewed          int `json:"intake_unreviewed"`
 	IntakeCorrectionRequested int `json:"intake_correction_requested"`
 	IntakeRejected            int `json:"intake_rejected"`
-	SetAside                  int `json:"set_aside,omitempty"`
+	// IntakeElsewhere counts pending packets another checkout of this project
+	// captured on this machine; absent when none.
+	IntakeElsewhere int `json:"intake_elsewhere,omitempty"`
+	SetAside        int `json:"set_aside,omitempty"`
+	// SetAsideResolved counts set-aside bundles a setaside.resolve dealt
+	// with, and IntakeSetAside pending packets a set-aside bundle carried:
+	// admitted on a branch, not to be admitted again. Absent when none.
+	SetAsideResolved int `json:"set_aside_resolved,omitempty"`
+	IntakeSetAside   int `json:"intake_set_aside,omitempty"`
+	// StaleClaims counts live claims idle past stale_after; absent when none.
+	StaleClaims int `json:"stale_claims,omitempty"`
 }
 
 // currentRecords is every current revision, in the snapshot's record order.
@@ -88,7 +105,7 @@ func accepterOf(spec *model.TaskSpec) any {
 	return actor(*spec.Accepter)
 }
 
-func todoView(project store.Project, s reduce.Snapshot, h ViewHeader, limit int) (*TodoAnswer, error) {
+func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHeader, limit int, now time.Time) (*TodoAnswer, error) {
 	intake, err := pending(project, s)
 	if err != nil {
 		return nil, err
@@ -97,6 +114,7 @@ func todoView(project store.Project, s reduce.Snapshot, h ViewHeader, limit int)
 		Ready: []TodoTask{}, OpenDecisions: []Detail{}, PacketsNotAccepted: intake, Attention: []Attention{}}
 	d := newDetailer(s)
 	owed := []Attention{}
+	staleClaims := 0
 	flying := map[reduce.Ident]int{}
 	for _, fact := range currentRecords(s) {
 		if fact.Kind == model.Decision {
@@ -113,6 +131,10 @@ func todoView(project store.Project, s reduce.Snapshot, h ViewHeader, limit int)
 		switch v.Task.Status {
 		case reduce.StatusInFlight:
 			t.Runs = &[]RunView{}
+			var stale []Attention
+			t.Claims, stale = boardClaims(s, v, project, now)
+			owed = append(owed, stale...)
+			staleClaims += len(stale)
 			flying[reduce.Ident{Project: fact.Key.Project, ID: fact.Key.ID}] = len(a.InFlight)
 			a.InFlight = append(a.InFlight, t)
 		case reduce.StatusBlocked:
@@ -148,15 +170,28 @@ func todoView(project store.Project, s reduce.Snapshot, h ViewHeader, limit int)
 	}
 	a.Omitted = map[string]LimitReport{"ready": report}
 	a.Totals = TodoTotals{InFlight: len(a.InFlight), AwaitingAcceptance: len(a.AwaitingAcceptance), Blocked: len(a.Blocked),
-		Ready: report.Offered, OpenDecisions: len(a.OpenDecisions)}
-	for _, p := range a.PacketsNotAccepted {
+		Ready: report.Offered, OpenDecisions: len(a.OpenDecisions), StaleClaims: staleClaims}
+	var resolved int
+	var asidePackets map[model.ID]bool
+	if a.SetAside, resolved, asidePackets, err = setAsideBundles(s, source); err != nil {
+		return nil, err
+	}
+	a.Totals.SetAside, a.Totals.SetAsideResolved = len(a.SetAside), resolved
+	for i, p := range a.PacketsNotAccepted {
+		if asidePackets[p.CommandID] && (p.Disposition == "pending" || p.Disposition == "captured-elsewhere") {
+			a.PacketsNotAccepted[i].Disposition, p.Disposition = "set-aside", "set-aside"
+		}
 		switch p.Disposition {
+		case "set-aside":
+			a.Totals.IntakeSetAside++
 		case "pending":
 			a.Totals.IntakeUnreviewed++
 		case "correction-requested":
 			a.Totals.IntakeCorrectionRequested++
 		case "rejected":
 			a.Totals.IntakeRejected++
+		case "captured-elsewhere":
+			a.Totals.IntakeElsewhere++
 		}
 	}
 	seen := map[model.ID]bool{}
@@ -166,19 +201,81 @@ func todoView(project store.Project, s reduce.Snapshot, h ViewHeader, limit int)
 		}
 	}
 	a.Totals.Tasks = len(seen) + report.Omitted
-	for _, v := range s.SetAside() {
-		a.SetAside = append(a.SetAside, SetAsideBundle{SetAside: v, Next: reRecord})
-	}
-	a.Totals.SetAside = len(a.SetAside)
 	return a, nil
 }
 
+// setAsideBundles lists every set-aside bundle not yet resolved, with what to
+// do about it and the command that records it was dealt with, counts the
+// resolved ones, and names the packets set-aside bundles carried, so todo
+// does not offer them as intake to admit again. Bundles are read only when
+// replay set one aside.
+func setAsideBundles(s reduce.Snapshot, source Source) ([]SetAsideBundle, int, map[model.ID]bool, error) {
+	aside := s.SetAside()
+	if len(aside) == 0 {
+		return nil, 0, nil, nil
+	}
+	bundles, err := source.Bundles()
+	if err != nil {
+		return nil, 0, nil, err
+	}
+	claims, packets := map[model.BundleRef][]claimEvent{}, map[model.ID]bool{}
+	for _, b := range bundles {
+		if _, ok := s.SetAsideBundle(b.Ref()); ok {
+			claims[b.Ref()] = claimsIn(b)
+			for _, p := range b.Packets {
+				packets[p.CommandID] = true
+			}
+		}
+	}
+	out, resolved := []SetAsideBundle{}, 0
+	for _, v := range aside {
+		if v.Resolved != nil {
+			resolved++
+			continue
+		}
+		entry := SetAsideBundle{SetAside: v, Next: setAsideNext[v.Code], Resolve: fmt.Sprintf(
+			"whosaidso template setaside.resolve --set bundle.sequence=%d --set bundle.command_id=%s --set reason=\"...\" --capture --admit --reason \"...\"",
+			v.Sequence, v.CommandID)}
+		if entry.Next == "" {
+			entry.Next = reRecord
+		}
+		if lost := claims[model.BundleRef{Sequence: v.Sequence, CommandID: v.CommandID}]; len(lost) > 0 {
+			entry.Next = lostClaimNext(lost)
+		}
+		out = append(out, entry)
+	}
+	return out, resolved, packets, nil
+}
+
+// lostClaimNext tells the holder of each claim a set-aside bundle carried
+// that it lost the task to the branch merged first.
+func lostClaimNext(lost []claimEvent) string {
+	parts := make([]string, 0, len(lost))
+	for _, c := range lost {
+		parts = append(parts, fmt.Sprintf("attempt %s by %s", c.attempt, actorName(c.actor)))
+	}
+	return "lost claim: " + strings.Join(parts, ", ") + " lost the task to a claim on a branch merged first; " +
+		"its holder stops and hands nothing back on it (whosaidso check claim ATTEMPT_ID names who holds the task now), then resolves it"
+}
+
 // SetAsideBundle is one bundle replay kept but did not apply: the fault that
-// set it aside, and what to do about it.
+// set it aside, what to do about it, and how to record that it was dealt with.
 type SetAsideBundle struct {
 	reduce.SetAside
-	Next string `json:"next"`
+	Next    string `json:"next"`
+	Resolve string `json:"resolve"`
+}
+
+// setAsideNext is what to do about a bundle set aside for each clash code
+// whose remedy is not re-recording its change.
+var setAsideNext = map[string]string{
+	reduce.CodeDuplicateSourceOrder: "one message captured on two branches: if it is the same message, it is already in the ledger and nothing is lost; " +
+		"if it is another, capture it again with its own order; then resolve",
+	reduce.CodeCompetingDisposition: "the decision was disposed on a branch merged first, and that disposition stands; " +
+		"if it should not, the owner rules again as a new disposition; then resolve",
+	reduce.CodeAuthorityUnavailable: "the words this act cited were set aside with their own bundle, so the act was too: " +
+		"deal with that bundle first, then record the act again citing words that stand; then resolve",
 }
 
 const reRecord = "re-record it: the bundle stays in the ledger and is never applied, so capture its change again " +
-	"against the current records (an amendment from the current revision) and admit it"
+	"against the current records (an amendment from the current revision) and admit it; then resolve"
