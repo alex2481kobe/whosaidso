@@ -19,6 +19,7 @@ type gateKey struct {
 	Criterion  model.CriterionRef
 	Invocation model.InvocationRef
 	Sealed     model.InvocationRef
+	Gallery    model.ID
 }
 
 func gatePackets(project model.ProjectID, snapshot reduce.Snapshot, packets []model.Packet) ([]model.Packet, error) {
@@ -145,6 +146,8 @@ func gatePackets(project model.ProjectID, snapshot reduce.Snapshot, packets []mo
 
 func gateOperation(event model.TypedEvent, author model.Actor) error {
 	switch e := event.(type) {
+	case *model.GalleryAdd, *model.GalleryRetract, *model.GalleryApprove, *model.GalleryReject, *model.GalleryRequire, *model.GalleryImport:
+		return nil
 	case *model.SourceIntake:
 		// A source speaker can differ from the person who captured the words.
 	case *model.TaskCreate, *model.TaskAmend, *model.ClaimAssert:
@@ -164,6 +167,8 @@ func gateOperation(event model.TypedEvent, author model.Actor) error {
 
 func gateProvides(project model.ProjectID, event model.TypedEvent) (gateKey, bool) {
 	switch e := event.(type) {
+	case *model.GalleryAdd:
+		return gateKey{Gallery: e.EntryID}, true
 	case *model.TaskCreate:
 		return gateKey{Record: model.RecordRef{Project: project, RecordID: e.ID, Revision: 1}}, true
 	case *model.ClaimAssert:
@@ -204,6 +209,14 @@ func gateHoldKey(ref model.BlockerRef) gateKey {
 }
 
 func gateReference(snapshot reduce.Snapshot, ref model.Reference) (gateKey, bool) {
+	if ref.Gallery != nil {
+		for _, entry := range snapshot.Gallery() {
+			if entry.Add.EntryID == *ref.Gallery {
+				return gateKey{Gallery: *ref.Gallery}, true
+			}
+		}
+		return gateKey{Gallery: *ref.Gallery}, false
+	}
 	if ref.Record != nil {
 		_, exists := snapshot.Record(*ref.Record)
 		return gateKey{Record: *ref.Record}, exists

@@ -189,6 +189,12 @@ func (s *state) checkReferences(b model.Bundle, idx int, e model.TypedEvent) ([]
 // and, on trial, one to a fact the bundle's branch never saw (setaside.go).
 func (s *state) resolve(b model.Bundle, idx int, e model.TypedEvent, r model.Reference) error {
 	switch {
+	case r.Gallery != nil:
+		entry, ok := s.galleryEntry(*r.Gallery)
+		if !ok {
+			return faultAt(CodeUnknownReference, b.Sequence, idx, r.Path, "no admitted gallery entry "+string(*r.Gallery))
+		}
+		return s.unseen(b, idx, r.Path, "gallery entry "+string(*r.Gallery), entry.Origin)
 	case r.Record != nil:
 		rec, ok := s.records[recordKey(*r.Record)]
 		if !ok {

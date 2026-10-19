@@ -7,36 +7,15 @@ package gallery
 // one.
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 )
 
-// Shown is an entry as it stands now: its preview kind and whether its file
-// is still there, looked at when asked, never remembered.
+// Shown combines the admitted entry with a local availability observation.
 type Shown struct {
 	Entry
 	Kind   string `json:"kind"`
-	Status string `json:"status"` // "present" or "missing"
-}
-
-// List is every entry with its kind and its status at this moment. A file
-// moved to the Trash, renamed, or replaced by a directory is missing.
-func List(file string) ([]Shown, error) {
-	entries, err := Load(file)
-	if err != nil {
-		return nil, err
-	}
-	shown := make([]Shown, 0, len(entries))
-	for _, e := range entries {
-		kind, _ := Kind(e.Path)
-		status := "missing"
-		if info, err := os.Stat(e.Path); err == nil && info.Mode().IsRegular() {
-			status = "present"
-		}
-		shown = append(shown, Shown{Entry: e, Kind: kind, Status: status})
-	}
-	return shown, nil
+	Status string `json:"status"`
 }
 
 // Preview kinds.

@@ -128,6 +128,9 @@ func briefTodoTask(b *briefWriter, indent int, t cur) {
 }
 
 func briefTodo(b *briefWriter, a cur) {
+	if a.at("actor_filter").ok() {
+		b.line(0, "actor:", a.at("actor_filter"), "-", a.at("filter_note"))
+	}
 	t := a.at("totals")
 	b.line(0, "totals: tasks", t.at("tasks"), "in flight", t.at("in_flight"), "awaiting acceptance", t.at("awaiting_acceptance"),
 		"blocked", t.at("blocked"), "ready", t.at("ready"), "open decisions", t.at("open_decisions"),

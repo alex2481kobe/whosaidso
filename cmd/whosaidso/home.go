@@ -61,7 +61,7 @@ func homeVerb(fs *flag.FlagSet) func(*call) error {
 		}
 		if registered {
 			a.Registered, a.ViewerRoot = true, &root
-			if _, err := store.Discover(root); err != nil {
+			if _, err := c.openProject(root); err != nil {
 				a.Unavailable = err.Error()
 			} else {
 				a.Available = true
@@ -111,7 +111,7 @@ func servable(c *call, path string) error {
 	if err != nil {
 		return err
 	}
-	dest, err := store.Discover(path)
+	dest, err := c.openProject(path)
 	if err != nil || dest.ID != invoked.ID {
 		return nil
 	}

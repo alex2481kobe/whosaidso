@@ -19,6 +19,8 @@ import (
 
 type TodoAnswer struct {
 	ViewHeader
+	ActorFilter        string                 `json:"actor_filter,omitempty"`
+	FilterNote         string                 `json:"filter_note,omitempty"`
 	InFlight           []TodoTask             `json:"in_flight"`
 	AwaitingAcceptance []TodoTask             `json:"awaiting_acceptance"`
 	Blocked            []TodoTask             `json:"blocked"`
@@ -105,7 +107,7 @@ func accepterOf(spec *model.TaskSpec) any {
 	return actor(*spec.Accepter)
 }
 
-func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHeader, limit int, now time.Time) (*TodoAnswer, error) {
+func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHeader, limit int, now time.Time, actorFilter string) (*TodoAnswer, error) {
 	intake, err := pending(project, s)
 	if err != nil {
 		return nil, err
@@ -161,8 +163,9 @@ func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHea
 		}
 	}
 	a.Attention = append(a.Attention, owed...)
+	a.Attention = append(a.Attention, idleActors(a, project.Policy.Team)...)
 	report := LimitReport{Requested: "none", Offered: len(a.Ready)}
-	if limit > 0 {
+	if limit > 0 && actorFilter == "" {
 		report.Requested = limit
 		if len(a.Ready) > limit {
 			report.Omitted, a.Ready = len(a.Ready)-limit, a.Ready[:limit]
@@ -201,6 +204,9 @@ func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHea
 		}
 	}
 	a.Totals.Tasks = len(seen) + report.Omitted
+	if actorFilter != "" {
+		filterTodo(a, actorFilter, limit)
+	}
 	return a, nil
 }
 

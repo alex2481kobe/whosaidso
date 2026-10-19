@@ -72,6 +72,18 @@ func (*ArtifactDispose) EventType() EventType   { return "artifact.dispose" }
 func DecodeEvent(raw Event) (TypedEvent, error) {
 	var event TypedEvent
 	switch raw.Type {
+	case "gallery.import":
+		event = &GalleryImport{}
+	case "gallery.add":
+		event = &GalleryAdd{}
+	case "gallery.retract":
+		event = &GalleryRetract{}
+	case "gallery.approve":
+		event = &GalleryApprove{}
+	case "gallery.reject":
+		event = &GalleryReject{}
+	case "gallery.require":
+		event = &GalleryRequire{}
 	case "task.create":
 		event = &TaskCreate{}
 	case "task.amend":

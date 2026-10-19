@@ -4,8 +4,8 @@ package ui
 // the two POSTs, Reveal in Finder and Remove from gallery. A file is reached
 // only through its entry id; no request names a path, and a request that
 // tries is refused before anything is opened. Which files preview, and as
-// what type, is internal/gallery's table. Nothing here touches a ledger;
-// Remove changes the gallery list and never the file.
+// what type, is internal/gallery's table. Remove captures a retraction packet;
+// admission, through the CLI, publishes it. The media file is never changed.
 
 import (
 	"errors"
@@ -15,7 +15,6 @@ import (
 	"os/exec"
 	"runtime"
 	"strconv"
-	"syscall"
 
 	"github.com/alex2481kobe/whosaidso/internal/gallery"
 	"github.com/alex2481kobe/whosaidso/internal/model"
@@ -45,11 +44,8 @@ func (h *handler) gallery(w http.ResponseWriter, r *http.Request) {
 	}
 	project, ok, err := h.find(model.ProjectID(q.Get("project")))
 	if err == nil && ok {
-		var file string
-		if file, err = store.GalleryFile(project.ID); err == nil {
-			h.galleryAnswer(w, r, file, q.Get("id"))
-			return
-		}
+		h.galleryAnswer(w, r, project, q.Get("id"))
+		return
 	}
 	if err != nil {
 		h.fail(w, http.StatusInternalServerError, err)
@@ -58,7 +54,7 @@ func (h *handler) gallery(w http.ResponseWriter, r *http.Request) {
 	h.fail(w, http.StatusNotFound, errText("no available project "+q.Get("project")+" on this machine"))
 }
 
-func (h *handler) galleryAnswer(w http.ResponseWriter, r *http.Request, file, id string) {
+func (h *handler) galleryAnswer(w http.ResponseWriter, r *http.Request, file store.Project, id string) {
 	if r.URL.Path == "/api/gallery" {
 		shown, err := gallery.List(file)
 		if err != nil {
@@ -89,13 +85,14 @@ func (h *handler) galleryAnswer(w http.ResponseWriter, r *http.Request, file, id
 	}
 	switch r.URL.Path {
 	case "/api/gallery/file":
-		h.serveEntry(w, r, entry)
+		h.serveEntry(w, r, file.Root, entry)
 	case "/api/gallery/remove":
-		if _, err := gallery.Remove(r.Context(), file, id); err != nil {
+		ref, err := gallery.Capture(r.Context(), file, h.cfg.CaptureActor, &model.GalleryRetract{EntryID: model.ID(id)})
+		if err != nil {
 			h.fail(w, http.StatusInternalServerError, err)
 			return
 		}
-		h.json(w, map[string]string{"removed": id})
+		h.json(w, map[string]string{"captured": string(ref.CommandID)})
 	case "/api/gallery/reveal":
 		if info, err := os.Stat(entry.Path); err != nil || !info.Mode().IsRegular() {
 			h.fail(w, http.StatusNotFound, errText("missing: "+entry.Path))
@@ -117,17 +114,13 @@ func (h *handler) galleryAnswer(w http.ResponseWriter, r *http.Request, file, id
 // videos whole and seekable (ranges answered by http.ServeContent, never read
 // into memory), text up to maxText. A file the viewer does not preview is
 // not served at all.
-func (h *handler) serveEntry(w http.ResponseWriter, r *http.Request, entry gallery.Entry) {
-	kind, mediaType := gallery.Kind(entry.Path)
+func (h *handler) serveEntry(w http.ResponseWriter, r *http.Request, checkout string, entry gallery.Entry) {
+	kind, mediaType := gallery.Kind(entry.Locator)
 	if kind == gallery.None {
 		h.fail(w, http.StatusUnsupportedMediaType, errText("no preview for this file type"))
 		return
 	}
-	// Non-blocking, so a path swapped for a FIFO or device answers at once
-	// instead of holding the handler until something writes to it; the
-	// fstat below then refuses anything but a regular file, whose reads the
-	// flag does not change.
-	f, err := os.OpenFile(entry.Path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	f, err := gallery.Open(checkout, entry.Locator)
 	if err != nil {
 		h.fail(w, http.StatusNotFound, errText("missing: "+entry.Path))
 		return
@@ -136,6 +129,15 @@ func (h *handler) serveEntry(w http.ResponseWriter, r *http.Request, entry galle
 	info, err := f.Stat()
 	if err != nil || !info.Mode().IsRegular() {
 		h.fail(w, http.StatusNotFound, errText("missing: "+entry.Path))
+		return
+	}
+	pin, err := gallery.Hash(f, entry.Path)
+	if err != nil || !pin.SameContent(model.GalleryFile{SHA256: entry.SHA256, Length: entry.Length}) {
+		h.fail(w, http.StatusConflict, errText("changed: "+entry.Path))
+		return
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		h.fail(w, http.StatusInternalServerError, err)
 		return
 	}
 	w.Header().Set("Content-Type", mediaType)

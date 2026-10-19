@@ -418,7 +418,7 @@ func TestTemplateTablesCoverTheModel(t *testing.T) {
 	for _, event := range templateEvents {
 		listed[string(event.EventType())] = true
 	}
-	if sets < 15 || len(declared) != 27 || fmt.Sprint(declared) != fmt.Sprint(listed) {
+	if sets < 15 || fmt.Sprint(declared) != fmt.Sprint(listed) {
 		t.Fatalf("model declares %d event types %v; template lists %v (%d enum sets read)", len(declared), declared, listed, sets)
 	}
 }

@@ -44,6 +44,18 @@ last_activity_at, and stale, judged at the time todo runs.
 disposition (pending, captured-elsewhere, correction-requested, rejected) and
 captured_in when noted, and totals counts intake_unreviewed,
 intake_correction_requested, intake_rejected and intake_elsewhere.
+--actor NAME keeps tasks whose next_actor names NAME or whose live claim NAME
+holds, in every task section, and attention about NAME or those tasks.
+Open decisions keep their waiting actor; intake keeps its packet author;
+set-aside bundles are not actor-scoped and are hidden. Totals stay project-wide.
+Filtering precedes --limit; its offered/omitted counts describe filtered READY
+tasks. Names match exactly; an unknown name succeeds with an empty view and note.
+The optional config team = 'worker-a, worker-b' enables actor-idle attention:
+each roster actor with no live claim and no READY task naming it is flagged.
+The nearest BLOCKED task is the actor's task with fewest immediate blocking
+reasons, ties by record id (including awaiting acceptance); all its reasons
+are included. With no such task the note says so. No roster means no idle
+alarms. Nothing is assigned automatically.
 `, define: viewVerb("todo")},
 		{name: "continue", args: "RECORD_ID", summary: "resume any record: detail, closure, what is owed", detail: `Any kind of record. A task adds its progress, every attempt, every run and
 what is owed, item by item for a plan. Every kind gets every amendment since
@@ -70,9 +82,10 @@ an unknown author stays UNKNOWN.
 127.0.0.1 port, for as long as the command runs (Ctrl-C stops it). The URL
 it prints carries a one-time token: the first visit trades it for a session
 cookie, and the URL opens nothing after that (run ui again for a new one).
-The page reads with GET only; it writes no ledger and no intake. Its only
-changes are the Gallery's Remove, which drops an entry (never the file), and
-Reveal in Finder (macOS). Every screen is the --json answer of the same
+The page writes no ledger. Its Gallery Remove captures a retraction packet
+for admission through the CLI, attributed to --actor or WHOSAIDSO_ACTOR.
+Reveal in Finder opens the file manager on
+macOS. Every screen is the --json answer of the same
 view; the Gallery is whosaidso gallery list's. Run inside a
 checkout it opens that checkout; elsewhere it lists every project this
 machine registered with whosaidso home PATH, an unavailable one with its reason.
@@ -193,18 +206,43 @@ placeholder remains; an optional key you put nothing into is omitted, and
 the ids it minted are named on stderr, or with --json listed in the answer's created list.
 --admit then admits it, as capture --admit does. Notes go to stderr. Event types:
 ` + templateEventList() + "\n", define: templateVerb},
-		{name: "gallery add", args: "PATH", summary: "show a file to the owner in the viewer's Gallery", detail: `Adds PATH (an existing file) to this project's gallery with a short
-one-line title and an optional note, attributed to WHOSAIDSO_ACTOR when set.
-Prints the entry id. The gallery is a per-machine list, not a record: it
-lives in this machine's WhoSaidSo home, never in the ledger or the
-repository. whosaidso ui previews images, videos and text; anything else is
-listed with no preview.
+		{name: "task new", summary: "capture a new task from flags", detail: taskNewHelp, define: taskAuthoringVerb(false)},
+		{name: "task amend", args: "TASK", summary: "capture changes to a task's current specification", detail: taskAmendHelp, define: taskAuthoringVerb(true)},
+		{name: "task close", args: "TASK", summary: "capture a witnessed task closure", detail: taskCloseHelp, define: taskCloseVerb},
+		{name: "source add", args: "FILE", summary: "capture original source bytes and attribution", detail: sourceAddHelp, define: sourceAddVerb},
+
+		{name: "gallery add", args: "PATH", summary: "capture a content-pinned gallery entry", detail: `Captures an entry with --title, optional --note and repeatable --task ID.
+Prints its entry id on stderr and packet id on stdout. Admit the packet to
+publish it, or use --admit --reason TEXT under the project's self-admission
+policy. The sha256, byte length and locator are recorded; media bytes are
+never copied into the ledger or artifact store. A relative locator resolves
+in each checkout. An external absolute locator works only on that machine.
 `, define: galleryVerb("add")},
-		{name: "gallery list", summary: "every gallery entry, present or missing", detail: `Lists each entry with its id, date, whether its file is present or
-missing now, who added it, its title, path and note.
+		{name: "gallery list", summary: "admitted entries, verdicts and local availability", detail: `Reads only the ledger. Shows present, missing or changed by comparing the
+actual file's sha256 and length with the admitted pin. Availability is a
+local observation, never a replay fact. No legacy per-machine list is read.
 `, define: galleryVerb("list")},
-		{name: "gallery rm", args: "ID", summary: "remove an entry from the gallery, never its file", detail: `Removes the entry from the gallery. The file it names is not touched.
+		{name: "gallery rm", args: "ENTRY", summary: "capture a gallery retraction, never delete media", detail: `Captures gallery.retract. Admit its packet (or --admit --reason TEXT) to
+hide the entry. Its history and media file remain intact.
 `, define: galleryVerb("rm")},
+		{name: "gallery approve", args: "ENTRY", summary: "capture approval of the pinned content", detail: `Requires --by ACTOR, optional --note. The file must still match the entry's
+pin. Captures gallery.approve attributed to that actor; it has no effect
+until admitted. --admit --reason TEXT uses the usual self-admission policy.
+Actor names are asserted, not authenticated.
+`, define: galleryVerb("approve")},
+		{name: "gallery reject", args: "ENTRY", summary: "capture a visual rejection", detail: `Requires --by ACTOR and --note TEXT. Captures gallery.reject for the pinned
+content. Admit its packet to replace the entry's verdict. Rejection prevents
+visual acceptance. --admit --reason TEXT uses the usual policy.
+`, define: galleryVerb("reject")},
+		{name: "gallery import", summary: "capture the retired per-machine gallery once", detail: `Captures each existing local entry as a gallery.add packet. Admit those
+packets, or --admit --reason TEXT. A final gallery.import packet seals the
+completed import. The old list stays in place and is never
+read again after that completion is admitted. list and ui read only the
+ledger. Already admitted import ids are skipped; missing
+files must be restored before import can pin them. Captured packets remain
+pending until admitted; retry admission instead of importing them twice.
+`, define: galleryVerb("import")},
+
 		{name: "home", args: "[PATH]", summary: "show or set the checkout the viewer opens for this project", detail: `Reads and writes always use the checkout you run them in; this changes
 none of them. Bare, shows this checkout and the checkout this machine's
 viewer opens for the project when whosaidso ui runs outside any checkout,
@@ -214,6 +252,11 @@ ledger. A checkout every read would refuse is not registered: intake that
 is not owner-only, a ledger this binary cannot decode, or an artifact store
 lacking bytes its admitted records cite (each digest and its citer named).
 An entry that cannot be read is replaced.
+Optional whosaidso.toml key team = 'worker-a, worker-b' lists actors for todo's
+idle alarm. Use a single quoted comma-separated string, following the config's
+normal literal or basic string quoting rules. Whitespace around names is
+trimmed, duplicates are counted once, and empty names are refused. Omit team
+to disable the alarm. It changes reads only and never assigns tasks.
 `, define: homeVerb},
 		{name: "id", args: "[N]", summary: "print N fresh record ids (default one)", detail: `Use it rather than inventing an id: hand-typed Crockford base32 parses and
 means nothing.

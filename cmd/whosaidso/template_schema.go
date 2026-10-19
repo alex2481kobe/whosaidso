@@ -22,11 +22,13 @@ var templateEvents = []model.TypedEvent{
 	&model.DecisionOpen{}, &model.DecisionRevise{}, &model.DecisionDispose{}, &model.Supersede{}, &model.Correction{},
 	&model.InstrumentDeclare{}, &model.InstrumentRevise{}, &model.TrustWithdraw{}, &model.ReviewAdmit{}, &model.ArtifactDispose{},
 	&model.AuthorCorrect{}, &model.SetAsideResolve{},
+	&model.GalleryAdd{}, &model.GalleryRetract{}, &model.GalleryApprove{}, &model.GalleryReject{}, &model.GalleryRequire{}, &model.GalleryImport{},
 }
 
 // templateMints names, per event type, the id paths the event creates. They
 // are minted fresh; every other id is a reference the author must look up.
 var templateMints = map[model.EventType][]string{
+	"gallery.add":        {"entry_id"},
 	"task.create":        {"id", "spec.acceptance_criteria[0].id"},
 	"task.amend":         {"replacement.acceptance_criteria[0].id"},
 	"claim.assert":       {"id"},

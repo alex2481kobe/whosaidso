@@ -17,6 +17,7 @@ import (
 )
 
 type ViewRequest struct {
+	Actor        string                   // todo only: task next actor or live holder
 	View         string                   // todo, continue, show or history
 	ID           model.ID                 // continue (required), show and history (optional)
 	Kind         string                   // show without ID only: task, claim, decision or instrument
@@ -68,6 +69,8 @@ func ReadViewFrom(project store.Project, request ViewRequest, source Source) (Vi
 // CheckView refuses a request no view can answer, before any ledger is read.
 func CheckView(r ViewRequest) error {
 	switch {
+	case r.Actor != "" && r.View != "todo":
+		return fmt.Errorf("the actor filter belongs only to todo")
 	case r.View != "todo" && r.View != "continue" && r.View != "show" && r.View != "history":
 		return fmt.Errorf("unknown view %q: todo, continue, show or history", r.View)
 	case r.ID != "" && !model.ValidID(r.ID):
@@ -138,7 +141,7 @@ func view(project store.Project, r ViewRequest, source Source) (ViewAnswer, erro
 	}
 	switch r.View {
 	case "todo":
-		return todoView(project, s, source, h, r.Limit, r.Now)
+		return todoView(project, s, source, h, r.Limit, r.Now, r.Actor)
 	case "continue":
 		if intake != nil {
 			h.Result, h.Reason = "UNKNOWN", fmt.Sprintf("%s is an admitted source, not a record to resume: show %s or history %s reads it", r.ID, r.ID, r.ID)

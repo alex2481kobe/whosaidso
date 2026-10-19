@@ -2,7 +2,7 @@
 // own answer. Each card previews its file by the kind the server named
 // (image, video, or text shown as text, never as markup), says Missing when
 // the file is gone, and offers Reveal in Finder and Remove from gallery;
-// Remove drops the entry, never the file. The search, the kind chips and the
+// Remove captures a retraction for admission and never touches the file. The search, the kind chips and the
 // sort menu work here in the browser, with the same parts as Records: the
 // search over title, note, path, author and date. Files are fetched by entry
 // id only.
@@ -28,7 +28,7 @@ const order = {
 // preview draws the file by its kind; a missing file or an unknown kind
 // says so instead.
 function preview(entry, src) {
-  if (entry.status !== "present") return el("div", "gallery-none tone-text red", "Missing");
+  if (entry.status !== "present") return el("div", "gallery-none tone-text red", entry.status === "changed" ? "Changed" : "Missing");
   if (entry.kind === "image") {
     const img = el("img");
     Object.assign(img, { src, alt: entry.title, loading: "lazy" });
@@ -126,14 +126,14 @@ function fullscreen(entry, src, original, trigger) {
 // card is one entry: its preview with the remove X in the corner, then its
 // words and one row of buttons. Double-clicking an image opens it full
 // screen. A failure is said above the cards.
-function card(entry, said, removed) {
+function card(entry, said) {
   const params = { project: project(), id: entry.id };
   const added = new Date(entry.added_at);
   const path = el("span", "mono gallery-path", entry.path);
   path.title = entry.path;
   const fail = (e) => { said.textContent = `${entry.title}: ${e.message}`; };
   const reveal = action("open", "Reveal in Finder", () => send("/api/gallery/reveal", params).catch(fail));
-  const remove = removeButton(() => send("/api/gallery/remove", params).then(removed).catch(fail));
+  const remove = removeButton(() => send("/api/gallery/remove", params).then((receipt) => { said.textContent = `Retraction captured; admit with whosaidso admit ${receipt.captured} --outcome accepted --reason TEXT.`; }).catch(fail));
   const src = apiURL("/api/gallery/file", { ...params, cap: entry.cap });
   const media = preview(entry, src);
   const expand = entry.status === "present" && ["image", "video", "text"].includes(entry.kind)
@@ -142,6 +142,7 @@ function card(entry, said, removed) {
   const node = el("article", "gallery-card", media, remove,
     el("div", "gallery-card-body",
       el("p", "gallery-title", entry.title),
+      el("p", "gallery-note", `${entry.verdict}${entry.verdict_by?.id ? " by " + entry.verdict_by.id : ""}${entry.verdict_note ? ": " + entry.verdict_note : ""}`),
       entry.note ? el("p", "gallery-note", entry.note) : null,
       path,
       el("div", "record-card-foot", el("span", "", entry.added_by || "UNKNOWN"), el("span", "", when(added))),
@@ -180,11 +181,7 @@ export async function renderGallery() {
       const sig = JSON.stringify(entry);
       const had = drawn.get(entry.id);
       if (had && had.sig === sig) return had;
-      const node = card(entry, said, () => {
-        // A poll may have replaced this card meanwhile; its replacement stays
-        // drawn until the next poll, which no longer lists the entry, removes it.
-        node.remove(); if (drawn.get(entry.id)?.node === node) drawn.delete(entry.id); latest = latest.filter((e) => e.id !== entry.id); applied = asked; filter();
-      });
+      const node = card(entry, said);
       return { id: entry.id, sig, node };
     });
     const keep = new Set(want.map((w) => w.node));
@@ -234,7 +231,7 @@ export async function renderGallery() {
   paint();
   return el("div", "screen",
     hero("gallery", "Gallery", icon("file", "hero-icon"), ["What an agent was asked to show you in ", project(), "."],
-      "Removing an entry drops it from this list; the file stays where it is."),
+      "Remove captures a retraction for admission; the file stays where it is."),
     el("section", "panel gallery",
       head("file", "sky", "Files", null, el("label", "search", icon("search"), search), sortMenu, count),
       chips,

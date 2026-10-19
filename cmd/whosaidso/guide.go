@@ -25,7 +25,8 @@ whosaidso.toml above the working directory. It holds two required keys,
 each a quoted string on its own line (# starts a comment):
   id = 'animation/toy'          # the project id every record names
   ledger = '.whosaidso/events'  # the ledger folder, inside the checkout
-and optionally stale_after (default '24h'): todo flags a claim with no
+and optionally team = 'worker-a, worker-b' for todo's idle alarm (help todo),
+stale_after (default '24h'): todo flags a claim with no
 admitted activity for longer as a takeover candidate; and self_admission
 ('allow', the default, or 'refuse': an accepting admission then needs a
 known admitter other than each packet's known author).
@@ -65,7 +66,7 @@ A source's source_id reads with show and history too; bare show lists sources.
 whosaidso ui shows the same four answers in a browser, read-only.
 Asked to show the owner a file (an image, video, log), run
 whosaidso gallery add PATH --title "short title" --note "what to look at";
-it appears in the viewer's Gallery. The gallery is not a record.
+admit its packet and it appears in the viewer's Gallery as a ledger record.
 
 Every answer opens with its watermark (ledger sequence, bundles, events and
 head bundle): quote it with any status you report. result is KNOWN, or
@@ -125,6 +126,18 @@ receipt handback prints):
   whosaidso template task.close --task T --set outcome=success \
       --pin 'acceptance_witness_refs[0].witness_ref=EVIDENCE' \
       --pin 'delivery_witness_refs[0]=DELIVERED' --capture --admit --reason "..."
+A visual acceptance criterion can additionally require a gallery verdict:
+  whosaidso template gallery.require --set task.project=PROJECT \
+      --set task.record_id=T --set task.revision=1 \
+      --set criterion_id=CRITERION --set criterion_revision=1 \
+      --set entry_id=ENTRY --set approver.id=reviewer --capture
+Admit that packet before closing. Only an admitted approval of that entry's
+pinned hash by the named actor witnesses it. A rejection or retraction
+prevents success; local changed/missing status is shown separately. Media
+edits do not rewrite history: add changed content as a new entry and use a
+new acceptance criterion. A passing numeric artifact cannot replace this
+approval. The task's accepter, when named, must author the requirement.
+
 success needs both witnesses: an acceptance witness for each acceptance
 criterion of the revision closed (--task fills each criterion_id and
 revision; its witness_ref pins the evidence that criterion is met) and at
@@ -336,7 +349,9 @@ checkout only. Set WHOSAIDSO_HOME to a scratch directory to rehearse without
 touching the real ones. whosaidso home PATH only tells whosaidso ui
 which checkout to open from outside any checkout.
 `},
-	{"branches", "recording on git branches and merging them", `Record on any branch and merge it with a merge commit: there is no extra
+	{"branches", "recording on git branches and merging them", `To keep machines on the right version, set requires = 'v0.1.8' in whosaidso.toml:
+older builds refuse writes and warn on reads; development builds pass with a warning.
+Record on any branch and merge it with a merge commit: there is no extra
 step (records pin commits, which a squash or rebase orphans). Two people who admit on separate branches each
 publish the next sequence number, so after the merge two bundles share it.
 That is expected. Every machine reads the files in one order (sequence,

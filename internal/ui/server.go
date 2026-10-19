@@ -4,8 +4,8 @@
 // single-use launch token exchanged for a session cookie, Host and Origin
 // checks, GET only but for the gallery's two POSTs, and the embedded static
 // files. The JSON it serves is api.go's and gallery.go's; what the page does
-// with it is ui.js's. Nothing here, or anywhere in the package, writes to a
-// ledger or to intake; the one thing the page can change is the gallery list.
+// with it is ui.js's. Nothing in the package writes to a
+// ledger. Remove captures a gallery retraction in intake for later admission.
 package ui
 
 import (
@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alex2481kobe/whosaidso/internal/model"
 	"github.com/alex2481kobe/whosaidso/internal/query"
 	"github.com/alex2481kobe/whosaidso/internal/store"
 )
@@ -59,12 +60,14 @@ type Viewer func(ctx context.Context, project store.Project, request query.ViewR
 // command was run inside, opened as the CLI opens it there; nil elsewhere.
 // Projects lists this machine's registry (store.Registered). Reveal shows
 // a gallery file in the desktop's file manager (RevealInFinder); nil, the
-// viewer says it cannot.
+// viewer says it cannot. CaptureActor is the attributed author of a retraction
+// packet; a missing actor remains explicitly unknown.
 type Config struct {
-	Invoked  *store.Project
-	View     Viewer
-	Projects func() ([]store.Registration, error)
-	Reveal   func(path string) error
+	CaptureActor model.Actor
+	Invoked      *store.Project
+	View         Viewer
+	Projects     func() ([]store.Registration, error)
+	Reveal       func(path string) error
 }
 
 type handler struct {
@@ -83,6 +86,9 @@ type handler struct {
 // while its caller serves the listener. The returned URL carries the launch
 // token.
 func Listen(cfg Config) (net.Listener, *http.Server, string, error) {
+	if cfg.CaptureActor.ID == "" && cfg.CaptureActor.UnknownReason == "" {
+		cfg.CaptureActor = model.Actor{UnknownReason: "viewer did not identify an actor"}
+	}
 	ln, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		return nil, nil, "", err

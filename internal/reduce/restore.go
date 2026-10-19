@@ -28,7 +28,7 @@ import (
 // pre-migration ledger is refused and rebuilt (and the old ledger refused)
 // rather than answering from old events. /4 carries the ledger's lineage (its
 // chain structure) in place of a bare command index, and its set-aside bundles.
-const snapshotFormat = "whosaidso-snapshot/5"
+const snapshotFormat = "whosaidso-snapshot/7"
 
 // persisted names every state field an image carries, in encoding order. The
 // transient ones (the candidate inventory and a dry run's refusal collector)

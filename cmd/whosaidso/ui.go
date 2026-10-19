@@ -13,18 +13,64 @@ import (
 	"net/http"
 	"os/exec"
 	"runtime"
+	"sync"
 
+	"github.com/alex2481kobe/whosaidso/internal/buildinfo"
 	"github.com/alex2481kobe/whosaidso/internal/store"
 	"github.com/alex2481kobe/whosaidso/internal/ui"
 )
 
 func uiVerb(fs *flag.FlagSet) func(*call) error {
+	actor := actorFlag(fs)
 	noOpen := fs.Bool("no-open", false, "print the URL without opening a browser")
 	return func(c *call) error {
 		if err := noPositionals(c, "ui"); err != nil {
 			return err
 		}
-		ln, server, url, err := ui.Listen(uiConfig(c.cwd))
+		cfg := uiConfig(c.cwd)
+		// Registry reads open projects on each request. Keep warning state for
+		// this viewer's lifetime and serialize diagnostics across requests.
+		var warningMu sync.Mutex
+		warned := make(map[string]bool)
+		warn := func(project store.Project) error {
+			warningMu.Lock()
+			defer warningMu.Unlock()
+			id := string(project.ID)
+			if warned[id] {
+				return nil
+			}
+			message, _ := project.Policy.VersionRequirement(buildinfo.Version())
+			if message == "" {
+				return nil
+			}
+			_, err := fmt.Fprintf(c.stderr, "warning: project %s: %s\n", id, message)
+			if err == nil {
+				warned[id] = true
+			}
+			return err
+		}
+		if cfg.Invoked != nil {
+			if err := warn(*cfg.Invoked); err != nil {
+				return err
+			}
+		}
+		projects := cfg.Projects
+		cfg.Projects = func() ([]store.Registration, error) {
+			list, err := projects()
+			if err != nil {
+				return nil, err
+			}
+			for _, entry := range list {
+				if entry.Reason == "" {
+					if err := warn(entry.Project); err != nil {
+						return nil, err
+					}
+				}
+			}
+			return list, nil
+		}
+		cfg.CaptureActor = actor(c)
+		ln, server, url, err := ui.Listen(cfg)
 		if err != nil {
 			return err
 		}

@@ -34,6 +34,7 @@ var typedEventType = reflect.TypeOf((*model.TypedEvent)(nil)).Elem()
 var codecEvents = func() map[model.EventType]reflect.Type {
 	out := map[model.EventType]reflect.Type{}
 	for _, e := range []model.TypedEvent{
+		&model.GalleryAdd{}, &model.GalleryRetract{}, &model.GalleryApprove{}, &model.GalleryReject{}, &model.GalleryRequire{}, &model.GalleryImport{},
 		&model.TaskCreate{}, &model.TaskAmend{}, &model.TaskStart{}, &model.TaskTakeover{},
 		&model.AttemptTerminal{}, &model.TaskClose{}, &model.BlockerHold{}, &model.BlockerClear{},
 		&model.InvocationStart{}, &model.InvocationSeal{}, &model.SourceIntake{}, &model.ClaimAssert{},

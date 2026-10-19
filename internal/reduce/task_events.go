@@ -216,6 +216,11 @@ func (s *state) close(b model.Bundle, idx int, o Origin, e *model.TaskClose) err
 	if err := s.requireHoldsCleared(b, idx, who, e.Outcome); err != nil {
 		return err
 	}
+	if e.Outcome == model.ClosureSuccess {
+		if err := s.requireGallery(b, idx, rec); err != nil {
+			return err
+		}
+	}
 	put(s, s.closed, who, Closure{
 		Task:                e.Task,
 		Outcome:             e.Outcome,
