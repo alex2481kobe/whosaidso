@@ -179,8 +179,8 @@ func TestHelpForms(t *testing.T) {
 			t.Fatalf("%v must be a usage error pointing at whosaidso help, got %d %q %q", args, code, out, errs)
 		}
 	}
-	if out, _, code := cliRun(t, dir, nil, "", "check", "--help"); code != 0 || strings.Count(out, "\nwhosaidso check ")+strings.Count(out[:16], "whosaidso check ") != 4 {
-		t.Fatalf("whosaidso check --help must print its four modes once each, got %d %q", code, out)
+	if out, _, code := cliRun(t, dir, nil, "", "check", "--help"); code != 0 || strings.Count(out, "\nwhosaidso check ")+strings.Count(out[:16], "whosaidso check ") != 5 {
+		t.Fatalf("whosaidso check --help must print its five modes once each, got %d %q", code, out)
 	}
 }
 

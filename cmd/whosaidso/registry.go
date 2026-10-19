@@ -141,6 +141,16 @@ task is closed. UNKNOWN (exit 3): no such claim here; sync and ask again.
 Each answer names the attempt that holds the task now, when one does, and
 the next step. Writes nothing.
 `, define: claimCheckVerb},
+		{name: "check merge", summary: "the merge gate: is the ledger at a commit whole for a fresh clone?", detail: `Clones this checkout's repository with its full history into a temporary
+directory, checks out --ref (default HEAD), and there, with no cache and no
+home or intake, replays the ledger and checks: every content artifact an
+admitted event cites is in the committed artifact store; every git pin
+resolves and is reachable from the commit (a squash or rebase orphans pins);
+no bundle is set aside; every bundle in this checkout's ledger is in the
+commit. A refused shallow repository needs git fetch --unshallow. Exit 0
+clean, 1 problems. Run it on the merge result before pushing main. Writes
+nothing in the checkout.
+`, define: mergeCheckVerb},
 		{name: "check disposal", summary: "list what an artifact.dispose must record", detail: `Prints the support_loss targets an artifact.dispose of exactly this identity
 must record at this watermark, and the admitted events citing it. Give --git
 when the disposal names a git pin. Writes nothing.

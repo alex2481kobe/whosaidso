@@ -289,10 +289,15 @@ An observer that died before sealing: whosaidso reconcile --invocation-id ID
       claim status at watermark W in this checkout's ledger: HELD (0), LOST,
       TAKEN-OVER or ENDED (1), UNKNOWN (3); other branches are NOT seen
       until merged (whosaidso help branches)
+  whosaidso check merge [--ref COMMIT]
+      the merge gate: the ledger at COMMIT in a fresh full-history clone,
+      no cache, no home: artifacts committed, git pins reachable, nothing
+      set aside, nothing left out of the commit; clean (0) or problems (1)
 The dry runs print that scope first; check claim prints its status first.
 None writes anything. Exit status: 0 TRUE, would-admit, a listed family,
 check disposal's list (it has no FALSE) or HELD; 1 FALSE, would-refuse, a
-family the gate disagrees with, or a claim to stop; 2 usage; 3 UNKNOWN. A TRUE criterion preview is not an admission.
+family the gate disagrees with, a claim to stop, or merge problems; 2 usage;
+3 UNKNOWN. A TRUE criterion preview is not an admission.
 WhoSaidSo never deletes bytes: an artifact.dispose records the loss,
 and check disposal lists what it must account for.
 `},
@@ -360,6 +365,8 @@ merge from main run whosaidso check claim A, and stop on a nonzero exit.
 todo's in-flight tasks list each claim's holder, claim time and last
 activity (its runs and receipt); a claim idle past stale_after is flagged
 in attention as a takeover candidate, never released by itself.
+Merging work into main: git merge --no-ff, then whosaidso check merge on the
+result, and push only on exit 0 (whosaidso help check).
 `},
 	{"pitfalls", "rules that prevent the known mistakes", `- Never invent a value: a missing actor, reading, unit or validation stays
   UNKNOWN with its reason. Two unknowns never match.
