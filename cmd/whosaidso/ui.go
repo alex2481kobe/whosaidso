@@ -19,12 +19,15 @@ import (
 )
 
 func uiVerb(fs *flag.FlagSet) func(*call) error {
+	actor := actorFlag(fs)
 	noOpen := fs.Bool("no-open", false, "print the URL without opening a browser")
 	return func(c *call) error {
 		if err := noPositionals(c, "ui"); err != nil {
 			return err
 		}
-		ln, server, url, err := ui.Listen(uiConfig(c.cwd))
+		cfg := uiConfig(c.cwd)
+		cfg.CaptureActor = actor(c)
+		ln, server, url, err := ui.Listen(cfg)
 		if err != nil {
 			return err
 		}

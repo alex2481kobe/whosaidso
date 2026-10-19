@@ -24,14 +24,15 @@ import (
 )
 
 type stubWorld struct {
-	reads    atomic.Int32
-	projects []store.Registration
-	reveal   func(path string) error
+	reads        atomic.Int32
+	projects     []store.Registration
+	captureActor model.Actor
+	reveal       func(path string) error
 }
 
 func (w *stubWorld) config() Config {
 	return Config{
-		View: func(_ context.Context, p store.Project, r query.ViewRequest, _ bool) (query.ViewAnswer, error) {
+		CaptureActor: w.captureActor, View: func(_ context.Context, p store.Project, r query.ViewRequest, _ bool) (query.ViewAnswer, error) {
 			w.reads.Add(1)
 			return &query.TodoAnswer{ViewHeader: query.ViewHeader{View: r.View, Project: p.ID, Result: "KNOWN"}}, nil
 		},

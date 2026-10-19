@@ -25,6 +25,8 @@ before adding, approving or closing a visual task, refusing changed or unavailab
 bytes. Gallery list and the viewer report local availability separately from the
 historical verdict. Later file edits do not rewrite an admitted close. The viewer
 verifies the opened file before serving a preview and refuses changed content.
+Viewer retractions use --actor or WHOSAIDSO_ACTOR and remain pending until
+admitted, including under the strict self-admission policy.
 Actor names and visual judgments are assertions, not authentication or automated
 proof of what a person actually inspected.
 

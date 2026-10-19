@@ -88,7 +88,7 @@ func (h *handler) galleryAnswer(w http.ResponseWriter, r *http.Request, file sto
 	case "/api/gallery/file":
 		h.serveEntry(w, r, entry)
 	case "/api/gallery/remove":
-		ref, err := gallery.Capture(r.Context(), file, model.Actor{UnknownReason: "viewer did not identify an actor"}, &model.GalleryRetract{EntryID: model.ID(id)})
+		ref, err := gallery.Capture(r.Context(), file, h.cfg.CaptureActor, &model.GalleryRetract{EntryID: model.ID(id)})
 		if err != nil {
 			h.fail(w, http.StatusInternalServerError, err)
 			return

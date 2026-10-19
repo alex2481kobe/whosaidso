@@ -71,7 +71,8 @@ an unknown author stays UNKNOWN.
 it prints carries a one-time token: the first visit trades it for a session
 cookie, and the URL opens nothing after that (run ui again for a new one).
 The page writes no ledger. Its Gallery Remove captures a retraction packet
-for admission through the CLI. Reveal in Finder opens the file manager on
+for admission through the CLI, attributed to --actor or WHOSAIDSO_ACTOR.
+Reveal in Finder opens the file manager on
 macOS. Every screen is the --json answer of the same
 view; the Gallery is whosaidso gallery list's. Run inside a
 checkout it opens that checkout; elsewhere it lists every project this
