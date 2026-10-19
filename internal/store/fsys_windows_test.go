@@ -256,13 +256,23 @@ func holdExclusive(t *testing.T, path string) func() {
 	return release
 }
 
+// requireSharingConflict skips when a plain read of a file held without
+// sharing succeeds. Go opens files with FILE_FLAG_BACKUP_SEMANTICS, and on an
+// elevated administrator's account (the CI runner's) such an open ignores
+// other handles' share modes, so no reader there can meet the violation these
+// tests wait out.
+func requireSharingConflict(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.ReadFile(path); err == nil {
+		t.Skip("this account's reads ignore share modes; no sharing violation can occur here")
+	}
+}
+
 func TestBundleReadWaitsOutASharingViolation(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "00000001-bundle.json")
 	putFile(t, path, []byte("{}"))
 	release := holdExclusive(t, path)
-	if _, err := os.ReadFile(path); err == nil {
-		t.Fatal("control: a file held without sharing must refuse a plain read")
-	}
+	requireSharingConflict(t, path)
 	go func() {
 		time.Sleep(50 * time.Millisecond)
 		release()
@@ -276,6 +286,7 @@ func TestBundleReadGivesUpOnAHandleHeldForGood(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "00000001-bundle.json")
 	putFile(t, path, []byte("{}"))
 	holdExclusive(t, path)
+	requireSharingConflict(t, path)
 	if _, err := readBundle(path); err == nil {
 		t.Fatal("a handle that is never released must surface the sharing violation")
 	}
