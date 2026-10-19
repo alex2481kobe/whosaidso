@@ -349,7 +349,9 @@ checkout only. Set WHOSAIDSO_HOME to a scratch directory to rehearse without
 touching the real ones. whosaidso home PATH only tells whosaidso ui
 which checkout to open from outside any checkout.
 `},
-	{"branches", "recording on git branches and merging them", `Record on any branch and merge it with a merge commit: there is no extra
+	{"branches", "recording on git branches and merging them", `To keep machines on the right version, set requires = 'v0.1.8' in whosaidso.toml:
+older builds refuse writes and warn on reads; development builds pass with a warning.
+Record on any branch and merge it with a merge commit: there is no extra
 step (records pin commits, which a squash or rebase orphans). Two people who admit on separate branches each
 publish the next sequence number, so after the merge two bundles share it.
 That is expected. Every machine reads the files in one order (sequence,

@@ -166,6 +166,9 @@ func dispatch(c *call, args []string) error {
 		}
 		return usageError("whosaidso %s: %v; run whosaidso help %s", v.name, err, v.name)
 	}
+	if err := c.checkVersion(v.name, fs); err != nil {
+		return err
+	}
 	return run(c)
 }
 
