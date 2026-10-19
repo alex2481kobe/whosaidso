@@ -58,7 +58,10 @@ type TodoTotals struct {
 	IntakeUnreviewed          int `json:"intake_unreviewed"`
 	IntakeCorrectionRequested int `json:"intake_correction_requested"`
 	IntakeRejected            int `json:"intake_rejected"`
-	SetAside                  int `json:"set_aside,omitempty"`
+	// IntakeElsewhere counts pending packets another checkout of this project
+	// captured on this machine; absent when none.
+	IntakeElsewhere int `json:"intake_elsewhere,omitempty"`
+	SetAside        int `json:"set_aside,omitempty"`
 }
 
 // currentRecords is every current revision, in the snapshot's record order.
@@ -157,6 +160,8 @@ func todoView(project store.Project, s reduce.Snapshot, h ViewHeader, limit int)
 			a.Totals.IntakeCorrectionRequested++
 		case "rejected":
 			a.Totals.IntakeRejected++
+		case "captured-elsewhere":
+			a.Totals.IntakeElsewhere++
 		}
 	}
 	seen := map[model.ID]bool{}

@@ -150,6 +150,9 @@ func writeIntake(ctx context.Context, project Project, request IntakeRequest, di
 	if err := ctx.Err(); err != nil {
 		return zero, err
 	}
+	if err := noteIntakeOrigin(project, id); err != nil {
+		return zero, err
+	}
 	final := filepath.Join(inbox, string(id))
 	if _, err := os.Lstat(final); err == nil {
 		return retryIntake(project, final, p.RequestDigest, disk)

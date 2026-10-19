@@ -34,10 +34,13 @@ only section --limit cuts), open decisions, intake by what its review says
 is owed: unreviewed packets await review; correction-requested ones are
 listed (whether a corrected packet answered the request is not recorded);
 rejected ones owe nothing and are only
-counted (whosaidso history lists their reviews), attention. --json keeps every
-packet not accepted in packets_not_accepted, each with its disposition, and
-totals counts intake_unreviewed, intake_correction_requested and
-intake_rejected.
+counted (whosaidso history lists their reviews); pending packets another
+checkout of this project captured on this machine are listed apart, with
+that checkout's path (admit each packet in one checkout only); attention.
+--json keeps every packet not accepted in packets_not_accepted, each with its
+disposition (pending, captured-elsewhere, correction-requested, rejected) and
+captured_in when noted, and totals counts intake_unreviewed,
+intake_correction_requested, intake_rejected and intake_elsewhere.
 `, define: viewVerb("todo")},
 		{name: "continue", args: "RECORD_ID", summary: "resume any record: detail, closure, what is owed", detail: `Any kind of record. A task adds its progress, every attempt, every run and
 what is owed, item by item for a plan. Every kind gets every amendment since

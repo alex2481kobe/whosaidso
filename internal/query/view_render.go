@@ -138,6 +138,15 @@ func briefTodo(b *briefWriter, a cur) {
 	briefList(b, 0, "open decisions", a.at("open_decisions"), briefDetail)
 	briefIntake(b, "intake unreviewed", t.at("intake_unreviewed"), a.at("packets_not_accepted"), "pending")
 	briefIntake(b, "correction requested (whether a corrected packet answered it is not recorded)", t.at("intake_correction_requested"), a.at("packets_not_accepted"), "correction-requested")
+	if n := t.at("intake_elsewhere"); n.ok() {
+		b.line(0, "intake captured in other checkouts (admit each packet in one checkout only, normally where it was captured):", n)
+		for _, p := range a.at("packets_not_accepted").items() {
+			if p.at("disposition").text() == "captured-elsewhere" {
+				briefPacket(b, 1, p)
+				b.line(2, "captured in", p.at("captured_in"))
+			}
+		}
+	}
 	if n := t.at("intake_rejected"); n.string() != "0" {
 		b.line(0, "rejected intake:", n, "(reviewed, nothing owed; whosaidso history lists the reviews)")
 	}

@@ -293,8 +293,10 @@ Per machine, one WhoSaidSo home holds intake, staging (runs' outputs while
 they run), the machine id, the gallery and the viewer's registry
 (projects/): $WHOSAIDSO_HOME, else $HOME/.whosaidso. Two profiles under one
 OS user share it unless one sets WHOSAIDSO_HOME. Intake is shared by every
-checkout of a project on this machine. Set WHOSAIDSO_HOME to a scratch directory to rehearse
-without touching the real ones. whosaidso home PATH only tells whosaidso ui
+checkout of a project on this machine; todo lists a packet another checkout
+captured apart, with that checkout's path, so each packet is admitted in one
+checkout only. Set WHOSAIDSO_HOME to a scratch directory to rehearse without
+touching the real ones. whosaidso home PATH only tells whosaidso ui
 which checkout to open from outside any checkout.
 `},
 	{"branches", "recording on git branches and merging them", `Record on any branch and merge it the normal way, merge commit or squash:
