@@ -14,7 +14,8 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/query"
 )
 
-// ownerSays admits a source.intake by speaker naming refs, and returns its id.
+// ownerSays admits a source.intake by speaker naming refs, each a new message
+// with its own order, and returns its id.
 func (w *flowWorld) ownerSays(speaker, file string, refs ...model.RecordRef) model.ID {
 	w.t.Helper()
 	body := []byte(`{"ruling":"release the departed agent's attempts"}`)
@@ -22,7 +23,7 @@ func (w *flowWorld) ownerSays(speaker, file string, refs ...model.RecordRef) mod
 	ref := pvPin(body, file)
 	id := w.id()
 	w.mustAdmit("clerk", &model.SourceIntake{SourceID: id, SourceRef: ref, OriginalDigest: ref.Content.SHA256, Length: ref.Content.Length,
-		Speaker: model.Actor{ID: speaker}, Referents: refs})
+		Speaker: model.Actor{ID: speaker}, Order: uint64(w.n), Referents: refs}) // w.n only grows: one order per message
 	return id
 }
 

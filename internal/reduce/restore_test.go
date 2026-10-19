@@ -48,7 +48,17 @@ func restoreFixtures(t *testing.T) map[string][]model.Bundle {
 	for i := range tasks.out {
 		tasks.out[i].RecordedAt = tasks.out[i].RecordedAt.Add(time.Duration(i+1) * 123457 * time.Nanosecond)
 	}
+	// Two branches capturing one message, merged, and the set-aside resolved.
+	base := goodLedger(t)
+	left, right := base.branch(100), base.branch(200)
+	left.add(t, ownerSource("SRCA", 7))
+	right.add(t, ownerSource("SRCB", 7))
+	all := merged(left, right)
+	clash := &ledgerBuilder{project: testProject, seq: all[len(all)-1].Sequence, prev: all[len(all)-1].CommandID, out: all, names: 300}
+	last := all[len(all)-1]
+	clash.add(t, &model.SetAsideResolve{Bundle: last.Ref(), Reason: "captured twice"})
 	return map[string][]model.Bundle{
+		"clash":     clash.bundles(),
 		"golden":    goldenLedger(t).bundles(),
 		"tasks":     tasks.bundles(),
 		"proof":     proof.bundles(),
@@ -126,7 +136,7 @@ func TestRestoreAtEverySplitEqualsReplay(t *testing.T) {
 
 // The golden ledger's image is pinned. A change that moves it must also move
 // snapshotFormat or the state's types, so older images are refused.
-const goldenImageSHA256 = "f2859e076e2fcc242e7c705f3c008fcc361f28ba71faa6a872899ecb6fcec7fc" // repinned for snapshot format /5: an attempt receipt may carry the authority it was recorded on, attempts carry their claim and last-activity times, and a review may carry an author correction
+const goldenImageSHA256 = "6eef2a708c664b0a7605a6b2dd2633f247506911dbce5809901e328d7c17eeb4" // repinned for snapshot format /5: an attempt receipt may carry the authority it was recorded on, attempts carry their claim and last-activity times, a review may carry an author correction, and a set-aside bundle its resolution
 
 func TestGoldenImageIsPinned(t *testing.T) {
 	image := mustEncode(t, mustReplay(t, goldenLedger(t).bundles()))

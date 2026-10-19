@@ -40,7 +40,7 @@ var codecEvents = func() map[model.EventType]reflect.Type {
 		&model.ClaimRevise{}, &model.CriterionFix{}, &model.ProofAdmit{}, &model.DecisionOpen{},
 		&model.DecisionRevise{}, &model.DecisionDispose{}, &model.Supersede{}, &model.Correction{},
 		&model.InstrumentDeclare{}, &model.InstrumentRevise{}, &model.TrustWithdraw{},
-		&model.ReviewAdmit{}, &model.ArtifactDispose{}, &model.AuthorCorrect{},
+		&model.ReviewAdmit{}, &model.ArtifactDispose{}, &model.AuthorCorrect{}, &model.SetAsideResolve{},
 	} {
 		out[e.EventType()] = reflect.TypeOf(e).Elem()
 	}

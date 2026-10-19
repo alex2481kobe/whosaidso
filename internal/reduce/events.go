@@ -51,6 +51,9 @@ func (s *state) route(b model.Bundle, idx int, e model.TypedEvent) error {
 		if _, ok := s.sources[key]; ok {
 			return faultAt(CodeDuplicateRecord, b.Sequence, idx, "source_id", "source already captured")
 		}
+		if err := s.unseenSourceOrder(b, idx, t); err != nil {
+			return err
+		}
 		put(s, s.sources, key, Source{Key: key, Intake: *t, Origin: o})
 		return nil
 
@@ -73,6 +76,9 @@ func (s *state) route(b model.Bundle, idx int, e model.TypedEvent) error {
 		return s.requireKind(b, idx, t.Instrument, model.Instrument, "instrument")
 	case *model.AuthorCorrect:
 		return s.authorCorrect(b, idx, o, t)
+	case *model.SetAsideResolve:
+		s.resolveSetAside(o, t)
+		return nil
 	case *model.Correction, *model.ArtifactDispose:
 		// Loss stays as an admitted fact. Query-time graph expansion also
 		// reaches dependents introduced after this bundle.

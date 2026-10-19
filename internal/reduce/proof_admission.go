@@ -162,7 +162,7 @@ func (s *state) decisionDispose(b model.Bundle, idx int, e *model.DecisionDispos
 	if model.Blank(e.Authority.Actor.ID) || !sameScope(rec.Decision.Scope, e.Scope) || !sameScope(e.Scope, e.Authority.Scope) {
 		return faultAt(CodeInvalidTransition, b.Sequence, idx, "authority", "disposition requires a named authority and the exact declared scope")
 	}
-	return nil
+	return s.competingDisposition(b, idx, e)
 }
 
 func (s *state) supersede(b model.Bundle, idx int, e *model.Supersede) error {

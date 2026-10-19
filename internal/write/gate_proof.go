@@ -43,6 +43,9 @@ func gateProofOperation(event model.TypedEvent, author model.Actor) error {
 		return gateValidation(e.Replacement.Validation)
 	case *model.InvocationSeal:
 		return gateReconciliation(e.Envelope, author)
+	case *model.SetAsideResolve:
+		// A note on a set-aside bundle: never refused (reduce/setaside_resolve.go).
+		return nil
 	case *model.AuthorCorrect:
 		// Admitted packets, once each, claimed by their writer: the reducer
 		// checks all three (reduce/author_correct.go).

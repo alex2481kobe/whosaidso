@@ -120,6 +120,7 @@ func EventReferences(event TypedEvent) ([]Reference, error) {
 		w.scope(e.Scope, "scope")
 	case *ReviewAdmit: // packet existence is checked against intake, not record state
 	case *AuthorCorrect: // packets are checked against admitted reviews by the reducer
+	case *SetAsideResolve: // names a bundle, which need not be set aside
 	case *ArtifactDispose:
 		for i, s := range e.SupportLoss {
 			w.record(s.Target, fmt.Sprintf("support_loss[%d].target", i))
