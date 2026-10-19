@@ -33,7 +33,7 @@ proof of what a person actually inspected.
 Only import reads the retired per-machine list. It captures one add packet per
 entry, preserving title and note and attributing the new record to the importer.
 Admitted legacy ids prevent duplicates. A final `gallery.import` packet records
-the list locator's hash and all imported entry ids; it cannot be admitted before
-those entries. Once completion is admitted that locator is never opened again.
+the list inventory's content hash and all imported entry ids; it cannot be admitted before
+those entries. Retries read the list to identify its inventory; an admitted inventory is skipped.
 The old list and media remain in place. Missing media must be restored to import
 it; pending import packets should be admitted rather than recaptured.

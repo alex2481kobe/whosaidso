@@ -3,6 +3,7 @@
 package model
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -94,3 +95,9 @@ type GalleryImport struct {
 
 func (*GalleryImport) eventPayload()        {}
 func (*GalleryImport) EventType() EventType { return "gallery.import" }
+
+// GallerySource identifies a list by its ordered inventory, independently of its locator.
+func GallerySource(inventory []Digest) Digest {
+	raw, _ := json.Marshal(inventory)
+	return HashBytes(raw)
+}

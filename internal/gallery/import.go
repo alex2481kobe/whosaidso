@@ -23,10 +23,6 @@ func Import(p store.Project, by model.Actor, now time.Time) ([]model.TypedEvent,
 	if err != nil {
 		return nil, err
 	}
-	source := model.HashBytes([]byte(file))
-	if state.Snapshot().GalleryImported(source) {
-		return []model.TypedEvent{}, nil
-	}
 	raw, err := os.ReadFile(file)
 	if errors.Is(err, os.ErrNotExist) {
 		return []model.TypedEvent{}, nil
@@ -38,6 +34,18 @@ func Import(p store.Project, by model.Actor, now time.Time) ([]model.TypedEvent,
 	if err := json.Unmarshal(raw, &old); err != nil {
 		return nil, err
 	}
+	inventory := make([]model.Digest, 0, len(old))
+	for _, e := range old {
+		raw, err := json.Marshal(e)
+		if err != nil {
+			return nil, err
+		}
+		inventory = append(inventory, model.HashBytes(raw))
+	}
+	source := model.GallerySource(inventory)
+	if state.Snapshot().GalleryImported(source) {
+		return []model.TypedEvent{}, nil
+	}
 	entries, err := Entries(p)
 	if err != nil {
 		return nil, err
@@ -48,8 +56,8 @@ func Import(p store.Project, by model.Actor, now time.Time) ([]model.TypedEvent,
 	}
 	out := []model.TypedEvent{}
 	imported := []model.ID{}
-	for _, e := range old {
-		importID := string(source) + ":" + e.ID
+	for i, e := range old {
+		importID := string(source) + ":" + string(inventory[i])
 		if seen[importID] {
 			for _, existing := range entries {
 				if existing.Add.ImportID == importID {

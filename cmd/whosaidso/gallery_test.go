@@ -192,7 +192,9 @@ func TestGalleryImportLeavesLegacyFileAndUsesOnlyLedger(t *testing.T) {
 	if err := os.WriteFile(legacy, []byte("broken legacy list"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	galleryCommand(t, root, "gallery", "import", "--admit", "--reason", "already completed")
+	if _, _, code := cliRun(t, root, nil, "contributor", "gallery", "import", "--admit", "--reason", "invalid source"); code == 0 {
+		t.Fatal("invalid replacement list accepted")
+	}
 	out, _ = galleryCommand(t, root, "gallery", "list", "--json")
 	var list struct{ Entries []struct{ ID string } }
 	if err := json.Unmarshal([]byte(out), &list); err != nil || len(list.Entries) != 1 {
