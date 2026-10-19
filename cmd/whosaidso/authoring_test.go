@@ -142,3 +142,43 @@ func TestAuthoringMissingFieldsAreCollected(t *testing.T) {
 		})
 	}
 }
+
+func TestSourceAddPinsLiteralFileBytes(t *testing.T) {
+	root, _ := cliFixture(t)
+	files := []struct{ name, body string }{
+		{"request.txt", "plain request\n"},
+		{"request.txt@", "request with a trailing at sign\n"},
+		{"request.txt#", "request with a hash sign\n"},
+	}
+	for _, file := range files {
+		proofWrite(t, root, file.name, file.body)
+	}
+	for _, file := range files {
+		t.Run(file.name, func(t *testing.T) {
+			packet := authoringPacket(t, root, "source", "add", file.name, "--speaker", "requester", "--order", "0")
+			if len(packet.Packet.Events) != 1 {
+				t.Fatalf("expected one source event, got %d", len(packet.Packet.Events))
+			}
+			event, err := model.DecodeEvent(packet.Packet.Events[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			source, ok := event.(*model.SourceIntake)
+			if !ok {
+				t.Fatalf("expected source.intake, got %T", event)
+			}
+			want := model.HashBytes([]byte(file.body))
+			length := uint64(len(file.body))
+			if source.OriginalDigest != want || source.Length != length {
+				t.Errorf("%q: captured digest %s, length %d; want own digest %s, length %d", file.name, source.OriginalDigest, source.Length, want, length)
+			}
+			ref := source.SourceRef
+			if ref.Kind != "content" || ref.Content == nil || ref.Content.SHA256 != want || ref.Content.Length != length || ref.Selector != (model.Selector{Kind: "whole"}) {
+				t.Errorf("%q: expected whole-file content pin of its own bytes, got %+v", file.name, ref)
+			}
+			if len(packet.Blobs) != 1 || packet.Blobs[0] != (store.CapturedBlob{SHA256: want, Length: length}) {
+				t.Errorf("%q: captured blobs do not preserve its own bytes: %+v", file.name, packet.Blobs)
+			}
+		})
+	}
+}
