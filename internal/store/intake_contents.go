@@ -8,8 +8,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -79,11 +81,14 @@ func captureBlob(ctx context.Context, dir string, reader io.Reader, disk intakeI
 		return zero, storeFault("io", path, closeErr.Error())
 	}
 	blob := CapturedBlob{SHA256: model.Digest(hex.EncodeToString(h.Sum(nil))), Length: uint64(n)}
-	// Duplicate bytes in one request share an identity and one immutable file,
-	// so an existing name already holds these exact bytes and the copy is dropped.
+	// Duplicate bytes in one request share an identity and one immutable file.
+	// Only a name that already exists as a regular file of the same length is
+	// those bytes captured earlier, and only then is the fresh copy dropped;
+	// any other failure, or anything else at the name, is not this blob.
 	final := filepath.Join(dir, string(blob.SHA256))
 	if err := renameNoReplace(path, final); err != nil {
-		if _, statErr := os.Lstat(final); statErr != nil {
+		info, statErr := os.Lstat(final)
+		if !errors.Is(err, fs.ErrExist) || statErr != nil || !info.Mode().IsRegular() || uint64(info.Size()) != blob.Length {
 			return zero, storeFault("io", path, err.Error())
 		}
 		if err := os.Remove(path); err != nil {
