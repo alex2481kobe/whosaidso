@@ -7,17 +7,21 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime/debug"
 	"strings"
 	"testing"
+
+	"github.com/alex2481kobe/whosaidso/internal/buildinfo"
 )
 
 func requiresBuild(t *testing.T, version string) {
 	t.Helper()
-	old := readBuildInfo
-	t.Cleanup(func() { readBuildInfo = old })
-	readBuildInfo = func() (*debug.BuildInfo, bool) {
-		return &debug.BuildInfo{Main: debug.Module{Version: version}}, true
+	old := buildinfo.Version
+	t.Cleanup(func() { buildinfo.Version = old })
+	buildinfo.Version = func() string {
+		if version == "(devel)" {
+			return "dev"
+		}
+		return version
 	}
 }
 
