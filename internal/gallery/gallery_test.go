@@ -4,12 +4,14 @@ package gallery
 // Admission, retraction and import behavior are exercised by the CLI tests.
 
 import (
-	"github.com/alex2481kobe/whosaidso/internal/model"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/alex2481kobe/whosaidso/internal/evidence"
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 func TestPreparePinsActualBytesAndChecksWords(t *testing.T) {
@@ -35,5 +37,27 @@ func TestPreparePinsActualBytesAndChecksWords(t *testing.T) {
 	pin, err := Pin(path)
 	if err != nil || pin.SHA256 == e.File.SHA256 {
 		t.Fatalf("same-length replacement not detected: %+v %v", pin, err)
+	}
+}
+
+func TestPinStreamsFilesBeyondBlobResolverLimit(t *testing.T) {
+	// External media has no blob resolver size limit. A sparse file provides
+	// real readable bytes without committing a large binary fixture.
+	path := filepath.Join(t.TempDir(), "large.mp4")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	length := int64(evidence.DefaultMaxBytes) + 1
+	if err := f.Truncate(length); err != nil {
+		f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	pin, err := Pin(path)
+	if err != nil || pin.Length != uint64(length) || !model.ValidDigest(pin.SHA256) {
+		t.Fatalf("large file was bounded or refused: %+v %v", pin, err)
 	}
 }
