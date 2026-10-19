@@ -57,6 +57,68 @@ since zsh reads `[]` as a filename pattern.
 
 Commit the `.whosaidso/` folder with your code. It is the record.
 
+## Common records from flags
+
+Create a task without editing JSON. Scope is authored explicitly; the remaining
+context lists start empty. Repeated criteria and non-goals form lists.
+
+```sh
+whosaidso task new --subject "Export report" --intent "Export results" \
+  --for worker --criterion "CSV opens" --non-goal "PDF export" \
+  --applies-when "Report export" --limitations "CSV only"
+```
+
+`--after TASK` adds a prerequisite requiring success at that task's current
+revision, without a waiver. `--source SOURCE_ID` cites an admitted source;
+`--pin PATH` pins provenance bytes (the template pin syntax also accepts a git
+revision and selector). Both may be supplied. The output includes the packet
+id and newly created task and criterion ids.
+
+Amend the current specification; omitted spec fields stay unchanged. Repeated
+`--criterion`, `--non-goal` or `--after` flags replace that list. Replacement
+criteria get fresh ids; omitted criteria keep their ids. Provenance belongs to
+this amendment and is empty unless supplied with `--source` or `--pin`.
+
+```sh
+whosaidso task amend TASK --for reviewer
+```
+
+Close a task with one witness per current acceptance criterion, in criterion
+order. Each witness also serves as a delivery witness. The admission gate still
+checks that the closure is effective. Outcomes are `success`, `cancelled`,
+`withdrawn` and `waived`.
+
+```sh
+whosaidso task close TASK --outcome success --witness report.csv \
+  --reason "Reviewed the exported CSV" --admit
+```
+
+`--reason` is required for close. The existing `task.close` event has no reason
+field: only `--admit` stores it, as the review reason. To preserve separate
+reason text, capture it with `source add`. `--authority SOURCE_ID` uses an
+admitted source's speaker and whole bytes; supply `--applies-when` and
+`--limitations` to author its scope over the current task.
+
+Capture an original message file with explicit speaker and zero-based order.
+Repeated `--about TASK` flags bind tasks at their current revisions.
+
+```sh
+whosaidso source add request.txt --speaker requester --order 0 --about TASK
+```
+
+All four verbs collect missing required inputs into one error, support
+`--actor` (otherwise `WHOSAIDSO_ACTOR`), and capture through the existing
+template/capture path. `--json` returns the packet and created ids.
+`--dry-run` prints the admission result without capturing (exit 0 would-admit,
+1 would-refuse). `--admit --reason TEXT` captures then admits under the same
+actor and obeys the project's self-admission policy; refusal leaves the packet
+captured and exits 4. `--dry-run` and `--admit` cannot be combined.
+
+Use `template` for fields without these flags: structured context, accepter,
+progress, other prerequisite policies, distinct delivery witnesses, narrower
+authority selectors or source referents of other record kinds. Each verb's
+`help` lists its exact translation and limitations.
+
 ## Learn more
 
 The guide ships with the binary, so it cannot drift from the CLI:
