@@ -124,7 +124,7 @@ func galleryVerb(mode string) func(*flag.FlagSet) func(*call) error {
 					return err
 				}
 				if mode == "approve" {
-					pin, err := gallery.Pin(e.Path)
+					pin, err := gallery.Pin(p.Root, e.Locator)
 					if err != nil {
 						return err
 					}

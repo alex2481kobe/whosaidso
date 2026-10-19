@@ -10,6 +10,9 @@ import (
 	"syscall"
 )
 
-func openMedia(path string) (*os.File, error) {
+func openMedia(root *os.Root, path string) (*os.File, error) {
+	if root != nil {
+		return root.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	}
 	return os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 }

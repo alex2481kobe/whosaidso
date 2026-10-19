@@ -5,7 +5,10 @@ SHA-256, byte length and locator; it records title, note, actor and optional
 exact task references. Media is streamed for hashing and is never retained as
 an intake blob or published artifact. Project-relative locators travel across
 checkouts; relative locators and their resolved symlink targets must stay inside
-the checkout at capture, admission and preview. External absolute locators are
+the checkout at capture, admission and preview. Relative media opens are rooted
+in the checkout at open time, including every symlink and parent directory;
+hashing and preview use that same open handle. Rooted opens refuse absolute
+symlink targets, even when they name a path inside the checkout. External absolute locators are
 useful only where that path exists.
 
 Capture proposes a record. Admission publishes it under the project's normal

@@ -7,7 +7,7 @@ only there.
 
 ## The build
 
-- Go 1.22 is the target and the standard library is the only dependency. Say
+- `go.mod` sets the Go target; the standard library is the only dependency. Say
   which Go version you actually ran.
 - Before calling work done: `gofmt -l .` (must print nothing), `go vet ./...`,
   `go test ./... -count=1`, and `go test -race` on the packages you touched.
