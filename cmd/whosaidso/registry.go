@@ -205,6 +205,11 @@ placeholder remains; an optional key you put nothing into is omitted, and
 the ids it minted are named on stderr, or with --json listed in the answer's created list.
 --admit then admits it, as capture --admit does. Notes go to stderr. Event types:
 ` + templateEventList() + "\n", define: templateVerb},
+		{name: "task new", summary: "capture a new task from flags", detail: taskNewHelp, define: taskAuthoringVerb(false)},
+		{name: "task amend", args: "TASK", summary: "capture changes to a task's current specification", detail: taskAmendHelp, define: taskAuthoringVerb(true)},
+		{name: "task close", args: "TASK", summary: "capture a witnessed task closure", detail: taskCloseHelp, define: taskCloseVerb},
+		{name: "source add", args: "FILE", summary: "capture original source bytes and attribution", detail: sourceAddHelp, define: sourceAddVerb},
+
 		{name: "gallery add", args: "PATH", summary: "show a file to the owner in the viewer's Gallery", detail: `Adds PATH (an existing file) to this project's gallery with a short
 one-line title and an optional note, attributed to WHOSAIDSO_ACTOR when set.
 Prints the entry id. The gallery is a per-machine list, not a record: it
