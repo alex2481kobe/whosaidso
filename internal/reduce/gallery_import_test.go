@@ -31,9 +31,9 @@ func TestGalleryImportCompletionBindsSourceInventory(t *testing.T) {
 				}
 				entry := *add
 				entry.EntryID = newID(string(legacy[:4]))
-				entry.ImportID = string(source) + ":" + string(legacy)
+				entry.ImportID = string(legacy)
 				if mode == "foreign-source" && i == 0 {
-					entry.ImportID = string(newDigest("other")) + ":" + string(legacy)
+					entry.ImportID = string(newDigest("other"))
 				}
 				galleryFact(t, l, entry.Actor, &entry)
 				ids = append(ids, entry.EntryID)

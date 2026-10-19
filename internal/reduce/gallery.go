@@ -83,7 +83,7 @@ func (s *state) galleryEvent(b model.Bundle, idx int, event model.TypedEvent) er
 			}
 			seen[legacy] = true
 			entry, ok := s.galleryEntry(id)
-			if !ok || entry.Add.ImportID != string(e.Source)+":"+string(legacy) {
+			if !ok || entry.Add.ImportID != string(legacy) {
 				return fail("entries", "import completion needs every imported entry admitted first")
 			}
 		}

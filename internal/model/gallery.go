@@ -103,3 +103,13 @@ func GallerySource(inventory []Digest) Digest {
 	raw, _ := json.Marshal(inventory)
 	return HashBytes(raw)
 }
+
+// GalleryImportIdentity identifies one legacy entry independently of its list,
+// machine, presentation metadata and newly assigned ledger id.
+func GalleryImportIdentity(file GalleryFile, addedAt time.Time) Digest {
+	raw, _ := json.Marshal(struct {
+		File    GalleryFile `json:"file"`
+		AddedAt time.Time   `json:"added_at"`
+	}{file, addedAt.UTC()})
+	return HashBytes(raw)
+}

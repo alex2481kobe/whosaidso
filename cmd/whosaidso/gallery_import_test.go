@@ -57,3 +57,56 @@ func TestGalleryImportIdentityFollowsListContent(t *testing.T) {
 		t.Errorf("moved list duplicated: got %d entries", got)
 	}
 }
+
+func TestGalleryImportDeduplicatesEntriesAcrossInventories(t *testing.T) {
+	root, _ := cliFixture(t)
+	media := filepath.Join(root, "clip.mp4")
+	if err := os.WriteFile(media, []byte("video"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	a := `{"id":"a","path":` + strconvQuote(media) + `,"title":"A","added_at":"2026-01-01T00:00:00Z"}`
+	b := `{"id":"b","path":` + strconvQuote(media) + `,"title":"B","added_at":"2026-01-02T00:00:00Z"}`
+	home := t.TempDir()
+	for _, step := range []struct {
+		name, list string
+		count      int
+		newHome    bool
+	}{
+		{"first", "[" + a + "]", 1, false},
+		{"extended", "[" + a + "," + b + "]", 2, false},
+		{"reordered", "[" + b + "," + a + "]", 2, false},
+		{"other-home", "[" + b + "," + a + "]", 2, true},
+	} {
+		t.Run(step.name, func(t *testing.T) {
+			if step.newHome {
+				home = t.TempDir()
+			}
+			if err := os.Chmod(home, 0700); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv(store.HomeEnv, home)
+			legacy, err := store.GalleryFile("test/cli")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(filepath.Dir(legacy), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(legacy, []byte(step.list), 0600); err != nil {
+				t.Fatal(err)
+			}
+			galleryCommand(t, root, "gallery", "import", "--admit", "--reason", "reviewed")
+			p, err := store.Discover(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			state, err := store.Load(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := len(state.Snapshot().Gallery()); got != step.count {
+				t.Errorf("got %d entries, want %d", got, step.count)
+			}
+		})
+	}
+}

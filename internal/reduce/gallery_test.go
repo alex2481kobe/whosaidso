@@ -143,7 +143,7 @@ func galleryRestoreLedger(t *testing.T) []model.Bundle {
 	imported.EntryID = newID("GAY2")
 	inventory := []model.Digest{newDigest("legacy")}
 	source := model.GallerySource(inventory)
-	imported.ImportID = string(source) + ":" + string(inventory[0])
+	imported.ImportID = string(inventory[0])
 	galleryFact(t, l, imported.Actor, &imported)
 	galleryFact(t, l, by, &model.GalleryImport{Source: source, Inventory: inventory, Entries: []model.ID{imported.EntryID}})
 	return l.bundles()
