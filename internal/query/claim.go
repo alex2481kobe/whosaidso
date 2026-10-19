@@ -104,7 +104,10 @@ func appliedClaim(a *ClaimAnswer, s reduce.Snapshot, task reduce.Ident, at reduc
 	for _, other := range s.Attempts(task) {
 		if other.Takeover && other.PriorAttempt == at.Key.Attempt {
 			a.Status = ClaimTakenOver
-			a.Current = &ClaimHolder{Attempt: other.Key.Attempt, Actor: other.Actor}
+			// Who holds the task now, not who took this attempt over: through
+			// a chain of takeovers the first taker may itself be replaced or
+			// have ended.
+			a.Current = currentHolder(s, task)
 			a.Reason = fmt.Sprintf("attempt %s took the task over at sequence %d", other.Key.Attempt, other.Started.Sequence)
 			a.Next = "stop work on this attempt and hand nothing back on it; " + afterLoss(a.Current)
 			return
