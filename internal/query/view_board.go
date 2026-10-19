@@ -17,7 +17,7 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
-// BoardClaim is one live claim on an in-flight task. IdleFor and Stale are
+// BoardClaim is one claim that holds an in-flight task. IdleFor and Stale are
 // set only when the read was given the time.
 type BoardClaim struct {
 	Attempt        model.ID  `json:"attempt_id"`
@@ -37,15 +37,13 @@ func staleAfter(project store.Project) time.Duration {
 	return store.DefaultStaleAfter
 }
 
-// boardClaims lists a task's live claims, and the attention each stale one
-// is owed.
+// boardClaims lists the claims that hold a task, and the attention each
+// stale one is owed. A claim taken over holds nothing, so it is never a
+// takeover candidate.
 func boardClaims(s reduce.Snapshot, d Detail, project store.Project, now time.Time) ([]BoardClaim, []Attention) {
 	claims, notes := []BoardClaim{}, []Attention{}
 	limit := staleAfter(project)
-	for _, a := range s.Attempts(reduce.Ident{Project: d.Ref.Project, ID: d.Ref.RecordID}) {
-		if !a.Live() {
-			continue
-		}
+	for _, a := range holding(s, reduce.Ident{Project: d.Ref.Project, ID: d.Ref.RecordID}) {
 		c := BoardClaim{Attempt: a.Key.Attempt, Holder: actor(a.Actor), ClaimedAt: a.StartedAt, LastActivityAt: a.LastActivityAt}
 		if !now.IsZero() {
 			idle := now.Sub(a.LastActivityAt).Truncate(time.Minute)
