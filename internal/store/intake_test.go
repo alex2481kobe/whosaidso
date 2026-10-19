@@ -312,18 +312,7 @@ func TestOwnerOnlyPermissions(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		want := os.FileMode(0600)
-		if entry.IsDir() {
-			want = 0700
-		}
-		if info.Mode().Perm() != want {
-			return fmt.Errorf("%s mode %o, want %o", path, info.Mode().Perm(), want)
-		}
-		return nil
+		return requireOwnerOnly(path, entry.IsDir())
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -350,28 +339,20 @@ func TestIntakePermissionRecovery(t *testing.T) {
 				"json": jsonPath, "blob": blobPath,
 			}
 			path := paths[target]
-			mode := os.FileMode(0700)
-			if target == "json" || target == "blob" {
-				mode = 0600
-			}
-			if err := os.Chmod(path, mode|0044); err != nil {
-				t.Fatal(err)
-			}
+			directory := target != "json" && target != "blob"
+			widenAccess(t, path, directory)
 			packets, err := ReadIntake(p, nil)
 			f, ok := err.(*model.Fault)
-			command := fmt.Sprintf("chmod %04o '%s'", mode, strings.ReplaceAll(path, "'", "'\\''"))
+			command := wantRestoreCommand(path, directory)
 			if !ok || f.Code != "insecure-permissions" || f.Path != path ||
 				!strings.Contains(f.Detail, command) || !strings.Contains(f.Detail, "retry") ||
 				!strings.Contains(f.Detail, "do not delete or recapture") || packets != nil {
 				t.Fatalf("must give exact recovery command %q and preserve packet: %v", command, err)
 			}
-			info, err := os.Stat(path)
-			if err != nil || info.Mode().Perm() != mode|0044 {
-				t.Fatalf("refused read changed permissions: %v", err)
+			if !accessStaysWidened(path, directory) {
+				t.Fatal("refused read changed permissions")
 			}
-			if err := os.Chmod(path, mode); err != nil {
-				t.Fatal(err)
-			}
+			restoreAccess(t, path, directory)
 			packets, err = ReadIntake(p, nil)
 			if err != nil || len(packets) != 1 || packets[0].CommandID != ref.CommandID {
 				t.Fatalf("recovered read: %+v, %v", packets, err)
@@ -414,9 +395,7 @@ func TestReadRefusesIncompleteOrAlteredPackets(t *testing.T) {
 		{"extra file", "intake-corrupt", func(t *testing.T, dir string) { putFile(t, filepath.Join(dir, "extra"), nil) }},
 		{"malformed json", "intake-corrupt", func(t *testing.T, dir string) { putFile(t, filepath.Join(dir, "packet.json"), []byte("{")) }},
 		{"permissive file", "insecure-permissions", func(t *testing.T, dir string) {
-			if err := os.Chmod(filepath.Join(dir, "packet.json"), 0644); err != nil {
-				t.Fatal(err)
-			}
+			widenAccess(t, filepath.Join(dir, "packet.json"), false)
 		}},
 		{"symlink blob", "intake-corrupt", func(t *testing.T, dir string) {
 			path := filepath.Join(dir, "blobs", string(model.HashBytes([]byte("source"))))

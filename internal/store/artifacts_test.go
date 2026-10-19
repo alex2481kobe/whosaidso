@@ -110,8 +110,11 @@ func TestRunStagingLivesInTheWhoSaidSoHomeOutsideTheProject(t *testing.T) {
 	if rel, err := filepath.Rel(p.Root, dir); err != nil || !strings.HasPrefix(rel, "..") {
 		t.Fatalf("staging %s must be outside the project %s", dir, p.Root)
 	}
-	if info, err := os.Stat(dir); err != nil || !info.IsDir() || info.Mode().Perm() != 0700 {
-		t.Fatalf("staging must be a private directory: %v, %v", info, err)
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		t.Fatalf("staging must be a directory: %v, %v", info, err)
+	}
+	if err := requireOwnerOnly(dir, true); err != nil {
+		t.Fatalf("staging must be a private directory: %v", err)
 	}
 
 	t.Run("an existing invocation directory is not fresh", func(t *testing.T) {

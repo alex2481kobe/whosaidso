@@ -50,7 +50,7 @@ func Bind(ctx context.Context, cwd, target string) (BindResult, error) {
 		return BindResult{}, err
 	}
 	registry := filepath.Dir(path)
-	if err := os.MkdirAll(registry, 0o700); err != nil {
+	if err := mkdirAllPrivate(registry); err != nil {
 		return BindResult{}, storeFault("io", registry, err.Error())
 	}
 	lock, err := holdAdmissionLock(ctx, registry)
@@ -93,6 +93,13 @@ func writeBinding(path, root string) error {
 	}
 	if closeErr := tmp.Close(); err == nil {
 		err = closeErr
+	}
+	// A damaged entry may be a link. POSIX rename replaces a link in place;
+	// Windows refuses to rename a file over a directory link, so the link
+	// itself, never what it points at, is removed first. The registry lock is
+	// held, so no reader of this entry is racing the gap.
+	if info, statErr := os.Lstat(path); err == nil && statErr == nil && !info.Mode().IsRegular() {
+		err = os.Remove(path)
 	}
 	if err == nil {
 		err = os.Rename(tmp.Name(), path)

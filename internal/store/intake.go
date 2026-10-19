@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
@@ -38,7 +37,7 @@ type intakeIO struct {
 }
 
 func systemIntakeIO() intakeIO {
-	return intakeIO{sync: (*os.File).Sync, rename: os.Rename}
+	return intakeIO{sync: (*os.File).Sync, rename: renameNoReplace}
 }
 
 // WriteIntake acknowledges only after blob bytes, packet bytes, their directory
@@ -50,11 +49,6 @@ func WriteIntake(ctx context.Context, project Project, request IntakeRequest) (m
 
 func writeIntake(ctx context.Context, project Project, request IntakeRequest, disk intakeIO) (model.PacketRef, error) {
 	var zero model.PacketRef
-	// os.Rename's atomic-directory guarantee is platform dependent. Do not
-	// acknowledge durable capture on a platform this publisher cannot support.
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-		return zero, storeFault("unsupported-platform", "intake", "durable intake publication currently supports Linux and macOS")
-	}
 	if err := ctx.Err(); err != nil {
 		return zero, err
 	}
@@ -201,18 +195,14 @@ func uncertainIntake(id model.ID, path string, err error) error {
 }
 
 func intakeMkdir(path string) error {
-	if err := os.Mkdir(path, 0700); err != nil {
-		if !os.IsExist(err) {
-			return storeFault("io", path, err.Error())
-		}
-	} else if err := os.Chmod(path, 0700); err != nil {
+	if err := mkdirPrivate(path); err != nil && !os.IsExist(err) {
 		return storeFault("io", path, err.Error())
 	}
 	return checkIntakePath(path, true)
 }
 
 func syncIntakePath(path string, disk intakeIO) error {
-	f, err := os.Open(path)
+	f, err := openForSync(path)
 	if err != nil {
 		return storeFault("io", path, err.Error())
 	}

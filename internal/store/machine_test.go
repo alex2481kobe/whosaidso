@@ -15,6 +15,7 @@ import (
 func TestMachineIDIsCreatedOnceUnderTheUserHome(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	first, err := MachineID()
 	if err != nil || !model.ValidID(first) {
 		t.Fatalf("control: the first call creates a ULID: %q, %v", first, err)
@@ -28,6 +29,7 @@ func TestMachineIDIsCreatedOnceUnderTheUserHome(t *testing.T) {
 		t.Fatalf("a second call must read the same identity: %q vs %q, %v", again, first, err)
 	}
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	other, err := MachineID()
 	if err != nil || other == first {
 		t.Fatalf("another home is another machine identity: %q vs %q, %v", other, first, err)

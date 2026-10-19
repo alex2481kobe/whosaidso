@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -50,8 +51,13 @@ func TestDiscoverRefusesALedgerLeavingItsRoot(t *testing.T) {
 		requireFault(t, err, "config-invalid-value")
 		var f *model.Fault
 		errors.As(err, &f)
-		if !strings.Contains(f.Detail, "proj") || !strings.Contains(f.Detail, ledger) {
+		if !strings.Contains(f.Detail, "proj") || !strings.Contains(f.Detail, strconv.Quote(ledger)) {
 			t.Errorf("fault for %q must name the ledger and the root: %v", ledger, f)
+		}
+		// An absolute ledger joined to the root names a place that exists
+		// nowhere; the refusal must not claim the ledger resolves there.
+		if filepath.IsAbs(ledger) && strings.Contains(f.Detail, strconv.Quote(filepath.Join(root, ledger))) {
+			t.Errorf("fault for %q names a path the ledger never resolves to: %v", ledger, f)
 		}
 	}
 	putFile(t, filepath.Join(root, "whosaidso.toml"), []byte("id='p'\nledger='dangling/events'"))
