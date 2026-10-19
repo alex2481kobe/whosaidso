@@ -14,7 +14,7 @@ import (
 )
 
 func requireOwnerOnly(path string, directory bool) error {
-	_, foreign, err := foreignGrants(path)
+	_, foreign, _, err := foreignGrants(path)
 	if err != nil {
 		return err
 	}
@@ -27,7 +27,7 @@ func requireOwnerOnly(path string, directory bool) error {
 func widenAccess(t *testing.T, path string, directory bool) { testaccess.Widen(t, path) }
 
 func accessStaysWidened(path string, directory bool) bool {
-	_, foreign, err := foreignGrants(path)
+	_, foreign, _, err := foreignGrants(path)
 	return err == nil && len(foreign) != 0
 }
 

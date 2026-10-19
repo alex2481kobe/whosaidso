@@ -29,6 +29,8 @@ const (
 	accessDeniedCallbackType  = 0xA
 	accessDeniedCallbackObj   = 0xC
 	accessAllowedACEType      = 0x0
+	objectInheritACE          = 0x1
+	containerInheritACE       = 0x2
 )
 
 // currentUserSID is the principal "owner-only" means: the user the process
@@ -91,35 +93,37 @@ type aceHeader struct {
 // (object, callback, compound) is reported rather than interpreted: an entry
 // this function cannot read is not evidence of owner-only access. Inherit-only
 // entries are judged too, because they decide what every packet created below
-// this directory will allow.
-func foreignGrants(path string) (user string, foreign []string, err error) {
+// this directory will allow. inherits reports whether an entry grants the user
+// something that files and directories created below inherit; without one, a
+// child gets the creating token's default list instead.
+func foreignGrants(path string) (user string, foreign []string, inherits bool, err error) {
 	user, err = currentUserSID()
 	if err != nil {
-		return "", nil, err
+		return "", nil, false, err
 	}
 	p, err := syscall.UTF16PtrFromString(path)
 	if err != nil {
-		return "", nil, err
+		return "", nil, false, err
 	}
 	var dacl *aclHeader
 	var sd uintptr
 	status, _, _ := procGetNamedSecurityInfoW.Call(uintptr(unsafe.Pointer(p)), seFileObject, daclSecurityInformation,
 		0, 0, uintptr(unsafe.Pointer(&dacl)), 0, uintptr(unsafe.Pointer(&sd)))
 	if status != 0 {
-		return "", nil, syscall.Errno(status)
+		return "", nil, false, syscall.Errno(status)
 	}
 	defer syscall.LocalFree(syscall.Handle(sd))
 	if dacl == nil {
-		return user, nil, fmt.Errorf("%w: the list is missing, which grants everyone", errNotOwnerOnly)
+		return user, nil, false, fmt.Errorf("%w: the list is missing, which grants everyone", errNotOwnerOnly)
 	}
 	offset := uintptr(unsafe.Sizeof(*dacl))
 	for i := 0; i < int(dacl.Count); i++ {
 		if offset+unsafe.Sizeof(aceHeader{}) > uintptr(dacl.Size) {
-			return "", nil, fmt.Errorf("access list entry %d lies outside the list", i)
+			return "", nil, false, fmt.Errorf("access list entry %d lies outside the list", i)
 		}
 		ace := (*aceHeader)(unsafe.Add(unsafe.Pointer(dacl), offset))
 		if uintptr(ace.Size) < unsafe.Sizeof(aceHeader{}) || offset+uintptr(ace.Size) > uintptr(dacl.Size) {
-			return "", nil, fmt.Errorf("access list entry %d has an impossible size", i)
+			return "", nil, false, fmt.Errorf("access list entry %d has an impossible size", i)
 		}
 		switch ace.Type {
 		case accessDeniedACEType, accessDeniedObjectACEType, accessDeniedCallbackType, accessDeniedCallbackObj:
@@ -128,15 +132,18 @@ func foreignGrants(path string) (user string, foreign []string, err error) {
 			trustee := (*syscall.SID)(unsafe.Add(unsafe.Pointer(ace), unsafe.Sizeof(*ace)+4))
 			got, err := trustee.String()
 			if err != nil {
-				return "", nil, err
+				return "", nil, false, err
+			}
+			if got == user && ace.Flags&(objectInheritACE|containerInheritACE) == objectInheritACE|containerInheritACE {
+				inherits = true
 			}
 			if got != user && !slices.Contains(foreign, got) {
 				foreign = append(foreign, got)
 			}
 		default:
-			return user, foreign, fmt.Errorf("%w: entry type %#x grants access this check does not interpret", errNotOwnerOnly, ace.Type)
+			return user, foreign, false, fmt.Errorf("%w: entry type %#x grants access this check does not interpret", errNotOwnerOnly, ace.Type)
 		}
 		offset += uintptr(ace.Size)
 	}
-	return user, foreign, nil
+	return user, foreign, inherits, nil
 }

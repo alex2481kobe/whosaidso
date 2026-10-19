@@ -69,6 +69,9 @@ func TestRestoreCommandMakesThePathOwnerOnly(t *testing.T) {
 				t.Fatal(err)
 			}
 		}},
+		{"directory whose own entry is not inherited", true, func(t *testing.T, path string) {
+			setList(t, path, "D:P(A;;FA;;;"+user+")")
+		}},
 		{"NULL list", true, func(t *testing.T, path string) {
 			setList(t, path, "D:NO_ACCESS_CONTROL")
 		}},

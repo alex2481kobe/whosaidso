@@ -82,11 +82,13 @@ func mkdirAllPrivate(path string) error {
 // anything that grants access to a principal other than the current user.
 // Mode bits say nothing on Windows: Go reports 0777 for every directory.
 func privateAccessFault(path string, info os.FileInfo, directory bool) error {
-	user, foreign, err := foreignGrants(path)
+	user, foreign, inherits, err := foreignGrants(path)
 	if err != nil && !errors.Is(err, errNotOwnerOnly) {
 		return storeFault("io", path, err.Error())
 	}
-	if err == nil && len(foreign) == 0 {
+	// A directory whose own entry is not inherited passes nothing owner-only
+	// down: what is created inside gets the token's default list.
+	if err == nil && len(foreign) == 0 && (inherits || !directory) {
 		return nil
 	}
 	return insecurePermissions(path, restoreCommand(path, user, directory))

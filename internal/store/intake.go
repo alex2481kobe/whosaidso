@@ -6,6 +6,7 @@ package store
 import (
 	"context"
 	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -89,16 +90,20 @@ func writeIntake(ctx context.Context, project Project, request IntakeRequest, di
 			return zero, err
 		}
 	}
-	tmp, err := os.MkdirTemp(inbox, string(id)+"-*.tmp")
-	if err != nil {
+	// The temporary is created owner-only, not narrowed afterwards: on Windows
+	// os.MkdirTemp would give it the token's default list, which the packet
+	// and blobs written inside would then inherit.
+	suffix := make([]byte, 8)
+	if _, err := rand.Read(suffix); err != nil {
 		return zero, storeFault("io", inbox, err.Error())
+	}
+	tmp := filepath.Join(inbox, string(id)+"-"+hex.EncodeToString(suffix)+".tmp")
+	if err := mkdirPrivate(tmp); err != nil {
+		return zero, storeFault("io", tmp, err.Error())
 	}
 	// Only this writer's unpublished temporary is ours to remove. A crash may
 	// leave it behind; readers ignore it and never clean another writer's temp.
 	defer os.RemoveAll(tmp)
-	if err := os.Chmod(tmp, 0700); err != nil {
-		return zero, storeFault("io", tmp, err.Error())
-	}
 	blobDir := filepath.Join(tmp, "blobs")
 	if err := intakeMkdir(blobDir); err != nil {
 		return zero, err
@@ -142,11 +147,19 @@ func writeIntake(ctx context.Context, project Project, request IntakeRequest, di
 	if err := syncIntakePath(blobDir, disk); err != nil {
 		return zero, err
 	}
-	if err := writeIntakeFile(filepath.Join(tmp, "packet.json"), data, disk); err != nil {
+	packetPath := filepath.Join(tmp, "packet.json")
+	if err := writeIntakeFile(packetPath, data, disk); err != nil {
 		return zero, err
 	}
 	if err := syncIntakePath(tmp, disk); err != nil {
 		return zero, err
+	}
+	// Read back what publication will expose, so a packet is never
+	// acknowledged with access a later read would refuse.
+	for _, path := range []string{tmp, packetPath} {
+		if err := checkIntakePath(path, path == tmp); err != nil {
+			return zero, err
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return zero, err
