@@ -18,17 +18,26 @@ const CodeMissingHold = "missing-hold"
 // the attempt's holder. When the holder is UNKNOWN, a receipt from a NAMED
 // author is admissible and stays attributed to that author through its packet:
 // closing an attempt requires no authority or judgment, so unknown attribution
-// must not make it unclosable (C782). Two unknowns never match, and an event
+// must not make it unclosable. Two unknowns never match, and an event
 // no review attributes has no author, so it matches nobody.
-func (s *state) checkReceiptAuthor(b model.Bundle, idx int, holder model.Actor) error {
+// A named author may also record the receipt of another holder's attempt (a
+// departed holder's work) on someone else's word: the receipt cites an
+// authority whose actor is named and is not the author, so nobody closes
+// another's attempt on their own say-so. That the authority's words exist and
+// name the task is the admission gate's carrier check.
+func (s *state) checkReceiptAuthor(b model.Bundle, idx int, holder model.Actor, authority *model.Authority) error {
 	author, _ := s.bundle.packetAuthor(idx)
+	named := !model.Blank(author.ID) && model.Blank(author.UnknownReason)
 	ok := model.SameActor(holder, author)
 	if model.Blank(holder.ID) {
-		ok = !model.Blank(author.ID) && model.Blank(author.UnknownReason)
+		ok = named
+	}
+	if !ok && authority != nil && named && !model.Blank(authority.Actor.ID) && !model.SameActor(authority.Actor, author) {
+		ok = true
 	}
 	if !ok {
 		return faultAt(CodeAttributionMismatch, b.Sequence, idx, "author",
-			"receipt must be authored by the attempt holder, or by a named author when the holder is unknown")
+			"receipt must be authored by the attempt holder, by a named author when the holder is unknown, or by a named author citing another actor's authority")
 	}
 	return nil
 }

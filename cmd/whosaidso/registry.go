@@ -93,7 +93,10 @@ bundle SEQ-ID". Several packet ids are separate arguments.
 		{name: "handback", summary: "capture an attempt's terminal receipt", detail: `No outcome is defaulted; whosaidso help outcomes defines the nine. The receipt
 and any hold are one packet; admit it with whosaidso admit. blocked-mid-task
 needs an open hold admitted with it; out-of-scope needs a resume hold with a
-reassignment criterion and actor.
+reassignment criterion and actor. Only the attempt's holder writes its
+receipt, unless --authority-source names an admitted source.intake whose
+speaker (not you) approved it and which names the task: then the receipt
+cites that authority and stays attributed to you.
 `, define: handbackVerb},
 		{name: "run", args: "-- ARGV", summary: "run a measurement; capture its start and seal", detail: `Runs ARGV in this checkout without a shell, and captures the start (before
 launch) and the seal as two packets; admit both, or pass --admit. The

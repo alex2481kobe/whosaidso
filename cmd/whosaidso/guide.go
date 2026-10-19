@@ -120,6 +120,13 @@ On someone else's word, cite them as the close's authority: capture their
 message as a source.intake (whosaidso help sources), then set authority.actor.id
 to them, --pin authority.source_ref to the same file, and name the task
 revision in authority.scope.context_refs.
+A holder who left owes a receipt nobody else may write on their own say-so.
+With the owner's approval admitted as a source.intake naming the task, at
+the attempt's revision or the current one, record it yourself:
+  whosaidso handback --attempt-id A --outcome stopped --authority-source SOURCE \
+      --reason "..." --next-action "..."
+then admit it. The receipt stays yours, recorded on the owner's word, and
+the task is READY again: claim it to take it over, or close it.
 Not accepted yet: record why as a hold (it prints blocker_id = HOLD), and
 clear it when that is met:
   whosaidso template blocker.hold --task T --set reason=awaiting-acceptance \

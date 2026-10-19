@@ -2,6 +2,8 @@ package write
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -26,6 +28,10 @@ type HandbackRequest struct {
 	CommitsDenied      bool
 	ReconciliationOwed bool
 	Holds              []HandbackHold
+	// AuthoritySource, when set, is an admitted source.intake whose speaker
+	// is the authority the receipt is recorded on: for an attempt another,
+	// departed, holder holds.
+	AuthoritySource model.ID
 }
 
 // HandbackHold preserves the author's assignment and discharge criterion. A
@@ -79,10 +85,16 @@ func Handback(ctx context.Context, project store.Project, r HandbackRequest) (mo
 	if r.DeliveryRefs == nil {
 		r.DeliveryRefs = []model.ArtifactRef{}
 	}
+	var authority *model.Authority
+	if r.AuthoritySource != "" {
+		if authority, err = receiptAuthority(snapshot, r.AuthoritySource, task, r.AttemptID); err != nil {
+			return model.PacketRef{}, err
+		}
+	}
 	terminal, err := model.EncodeEvent(&model.AttemptTerminal{
 		Task: task, AttemptID: r.AttemptID, Outcome: r.Outcome, Reason: r.Reason,
 		NextAction: r.NextAction, DeliveryRefs: r.DeliveryRefs,
-		CommitsDenied: r.CommitsDenied, ReconciliationOwed: r.ReconciliationOwed,
+		CommitsDenied: r.CommitsDenied, ReconciliationOwed: r.ReconciliationOwed, Authority: authority,
 	})
 	if err != nil {
 		return model.PacketRef{}, err
@@ -178,4 +190,37 @@ func gateHandbacks(base reduce.Snapshot, packets []model.Packet) ([]model.Packet
 		}
 	}
 	return packets, nil
+}
+
+// receiptAuthority is the authority of an admitted source.intake for one
+// attempt's receipt: its speaker and whole source, scoped to the task
+// revision the source names. A source that names neither the attempt's nor
+// the current revision is refused here, before capture, with the revisions
+// it would have to name.
+func receiptAuthority(snapshot reduce.Snapshot, sourceID model.ID, task model.RecordRef, attempt model.ID) (*model.Authority, error) {
+	var found *reduce.Source
+	for _, s := range snapshot.Sources() {
+		if s.Intake.SourceID == sourceID {
+			s := s
+			found = &s
+		}
+	}
+	if found == nil {
+		return nil, admissionFault("unknown-reference", "authority_source", fmt.Sprintf("no admitted source.intake %s; admit the authority's words first (whosaidso help sources)", sourceID))
+	}
+	revisions := ReceiptAuthorityRevisions(snapshot, task)
+	for _, r := range revisions {
+		if containsAdmissionRef(found.Intake.Referents, r) {
+			return &model.Authority{Actor: found.Intake.Speaker, SourceRef: found.Intake.SourceRef, Selector: model.Selector{Kind: "whole"},
+				Scope: model.Scope{SourcePaths: []string{}, ContextRefs: []model.RecordRef{r},
+					AppliesWhen: fmt.Sprintf("the receipt of attempt %s, recorded for its holder", attempt),
+					Limitations: "this one receipt; the source's own words say what was approved"}}, nil
+		}
+	}
+	names := make([]string, len(revisions))
+	for i, r := range revisions {
+		names[i] = fmt.Sprintf("%s revision %d", r.RecordID, r.Revision)
+	}
+	return nil, admissionFault("authority-scope", "authority_source", fmt.Sprintf("source %s does not name task %s among its referents; it must name %s",
+		sourceID, task.RecordID, strings.Join(names, " or ")))
 }

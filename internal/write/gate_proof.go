@@ -229,6 +229,50 @@ func gateCloseAuthority(event model.TypedEvent, sources []reduce.Source) error {
 	return admissionFault("authority-unavailable", "authority.source_ref", "no admitted or bundled carrier matches the source, speaker and exact task revision")
 }
 
+// gateReceiptAuthority: a receipt that cites an authority (for an attempt
+// someone else holds) names it, and its exact words are an admitted or
+// bundled source.intake spoken by that actor, as a closure's authority is
+// checked. The words name the task at the revision the attempt started
+// against or at its current one: a departed holder's task may have been
+// amended since, and whoever speaks for it names the task as it reads now.
+func gateReceiptAuthority(snapshot reduce.Snapshot, event model.TypedEvent, sources []reduce.Source) error {
+	e, ok := event.(*model.AttemptTerminal)
+	if !ok || e.Authority == nil {
+		return nil
+	}
+	if model.Blank(e.Authority.Actor.ID) {
+		return admissionFault("authority-unavailable", "authority.actor", "unknown attribution cannot authorize another holder's receipt")
+	}
+	revisions := ReceiptAuthorityRevisions(snapshot, e.Task)
+	names := func(refs []model.RecordRef) bool {
+		for _, r := range revisions {
+			if containsAdmissionRef(refs, r) {
+				return true
+			}
+		}
+		return false
+	}
+	if !names(e.Authority.Scope.ContextRefs) {
+		return admissionFault("authority-scope", "authority.scope.context_refs", "receipt authority must name the task at the attempt's revision or its current one")
+	}
+	for _, source := range sources {
+		if source.Intake.Speaker == e.Authority.Actor && sameAdmissionArtifact(source.Intake.SourceRef, e.Authority.SourceRef) && names(source.Intake.Referents) {
+			return nil
+		}
+	}
+	return admissionFault("authority-unavailable", "authority.source_ref", "no admitted or bundled carrier matches the source, speaker and the task's attempt or current revision")
+}
+
+// ReceiptAuthorityRevisions is the task as a receipt's authority may name it:
+// at the attempt's revision, then at the current one when that differs.
+func ReceiptAuthorityRevisions(snapshot reduce.Snapshot, task model.RecordRef) []model.RecordRef {
+	out := []model.RecordRef{task}
+	if current, ok := snapshot.CurrentRevision(reduce.Ident{Project: task.Project, ID: task.RecordID}); ok && current != task.Revision {
+		out = append(out, model.RecordRef{Project: task.Project, RecordID: task.RecordID, Revision: current})
+	}
+	return out
+}
+
 // gateClosureEffective refuses a closure the projection would not honour: a
 // writer still holds an attempt, or success lacks witnesses for the revision.
 func gateClosureEffective(after reduce.Snapshot, e *model.TaskClose) error {

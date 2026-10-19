@@ -140,6 +140,9 @@ type Terminal struct {
 	CommitsDenied      bool                 `json:"commits_denied"`
 	ReconciliationOwed bool                 `json:"reconciliation_owed"`
 	Origin             Origin               `json:"origin"`
+	// Authority is the word a receipt for another holder's attempt was
+	// recorded on; nil for a holder's own receipt.
+	Authority *model.Authority `json:"authority,omitempty"`
 }
 
 // Attempt is one admitted start or takeover. A takeover mints a new attempt and

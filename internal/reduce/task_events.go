@@ -159,7 +159,7 @@ func (s *state) terminal(b model.Bundle, idx int, o Origin, e *model.AttemptTerm
 		return faultAt(CodeInvalidTransition, b.Sequence, idx, "attempt_id",
 			"the attempt already has a terminal receipt")
 	}
-	if err := s.checkReceiptAuthor(b, idx, a.Actor); err != nil {
+	if err := s.checkReceiptAuthor(b, idx, a.Actor, e.Authority); err != nil {
 		return err
 	}
 	if err := s.checkHandbackHold(b, idx, e); err != nil {
@@ -173,6 +173,7 @@ func (s *state) terminal(b model.Bundle, idx int, o Origin, e *model.AttemptTerm
 		CommitsDenied:      e.CommitsDenied,
 		ReconciliationOwed: e.ReconciliationOwed,
 		Origin:             o,
+		Authority:          e.Authority,
 	}
 	put(s, s.attempts, key, a)
 	return nil

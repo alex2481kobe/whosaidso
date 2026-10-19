@@ -129,6 +129,7 @@ func handbackVerb(fs *flag.FlagSet) func(*call) error {
 	holdReason := fs.String("hold-reason", "", "the hold's `REASON`: prerequisite, awaiting-acceptance, resume or reconciliation")
 	holdActor := fs.String("hold-actor", "", "the hold's assigned actor `ID`; missing is unknown, never the receipt's actor")
 	fs.StringVar(&hold.Criterion, "hold-criterion", "", "the hold's authored discharge criterion `TEXT`")
+	authoritySource := fs.String("authority-source", "", "for an attempt another holder holds: the admitted source.intake `ID` whose speaker authorized this receipt")
 	return func(c *call) error {
 		if err := noPositionals(c, "handback"); err != nil {
 			return err
@@ -139,6 +140,7 @@ func handbackVerb(fs *flag.FlagSet) func(*call) error {
 		}
 		r.CommandID, r.Author = model.ID(*id), actor(c)
 		r.AttemptID, r.Outcome, r.Reason = model.ID(*attemptID), model.AttemptOutcome(*outcome), *reason
+		r.AuthoritySource = model.ID(*authoritySource)
 		holdSet := false
 		fs.Visit(func(f *flag.Flag) { holdSet = holdSet || strings.HasPrefix(f.Name, "hold-") })
 		if holdSet {
