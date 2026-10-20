@@ -155,7 +155,6 @@ export async function renderGallery() {
   const [answer, records] = await Promise.all([api("/api/gallery",{project:project()}), view("show").catch(() => ({records:[]}))]);
   taskTitles = new Map(records.records.map(r => [r.ref.record_id, fullTitle(r)]));
   if(state.project!==project())Object.assign(state,{project:project(),search:"",kind:""});
-  const count=el("span","gallery-total");
   const empty=el("div","gallery-empty",icon("file"),el("h2","","No artifacts here"),el("p","","Try another filter, or ask your agent to add a file to the gallery."));
   const cards=el("div","gallery-cards");
   const tools=el("div","gallery-tools");
@@ -163,8 +162,7 @@ export async function renderGallery() {
   const filter=()=>{let shown=0;
   for(const c of cards.children){c.hidden=!!((state.search&&!c.dataset.search.includes(state.search.toLowerCase()))||(state.kind&&c.dataset.kind!==state.kind));
   if(!c.hidden)shown++;
-  }count.textContent=`${shown} ${shown===1?"artifact":"artifacts"}`;
-  empty.hidden=shown>0;
+  }empty.hidden=shown>0;
   };
   const draw=()=>{const nodes=ordered(entries).map(e=>{const sig=JSON.stringify(e),old=drawn.get(e.id);
   if(old?.sig===sig)return old.node;
@@ -173,7 +171,9 @@ export async function renderGallery() {
   return node;
   });
   const keep=new Set(nodes);
-  for(const c of cards.children)if(!keep.has(c))c.remove();
+  for(const c of [...cards.children])if(!keep.has(c))c.remove();
+  const live=new Set(entries.map(e=>e.id));
+  for(const id of drawn.keys())if(!live.has(id))drawn.delete(id);
   let at=cards.firstChild;
   for(const node of nodes){if(node===at)at=at.nextSibling;
   else cards.insertBefore(node,at);
@@ -201,7 +201,6 @@ export async function renderGallery() {
   busy=true;
   const stop=new AbortController(),limit=setTimeout(()=>stop.abort(),10000);
   api("/api/gallery",{project:shown},stop.signal).then(next=>{if(cards.isConnected && JSON.stringify(entries)!==JSON.stringify(next.entries)){entries=next.entries;
-  paint();
   draw();
   }}).catch(()=>{}).finally(()=>{clearTimeout(limit);
   busy=false;

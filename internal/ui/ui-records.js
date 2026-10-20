@@ -54,6 +54,7 @@ function table(rows) {
   const tasksOnly = state.kind === "task";
   const body = el("tbody", "", rows.map((r) => {
     const title = link(r.id, r.title, "record-title-link");
+    title.title = r.title;
     const titleContent = el("div", "", title, r.record.task?.status === "BLOCKED" && r.reason ? el("span", "record-blocker", r.reason) : null);
     const tr = el("tr", "", cell("title-cell", titleContent, r.title));
     if (!tasksOnly) tr.append(cell("", kindCell(r.kind), kinds[r.kind].one));

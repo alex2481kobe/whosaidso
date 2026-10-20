@@ -1,24 +1,15 @@
-// Home: the greeting, six stat cards counted by the todo view's own totals,
-// then recent activity (or the list behind a picked stat card) beside the
+// Home: six work-status filters counted by the todo view's own totals,
+// then recent activity (or the list behind a picked filter) beside the
 // project summary. "In 7 days" is counted from the history's events
 // (ui-derive.js). A list row is one line: the record's title first, then who
 // and when; a blocked row's reasons open under a one-line summary at its end.
-// Every note and message says only what the counts it reads say.
 import { el, link, icon, disclose, facts, actorName, since, fullTitle, view, when, status } from "./ui.js";
 import { activity, within, count, packetTitle } from "./ui-derive.js";
-import { hero, statCard, head, more } from "./ui-parts.js";
+import { hero, chip, more } from "./ui-parts.js";
 import { mark } from "./ui-icons.js";
 
-// focus is the stat card whose list replaces recent activity; "" shows activity.
+// focus is the filter whose list replaces recent activity; "" shows activity.
 let focus = null;
-
-// greeting follows the local clock: morning 5-12, afternoon 12-17, evening 17-21, night 21-5.
-export function greeting(hour = new Date().getHours()) {
-  if (hour >= 5 && hour < 12) return ["Good morning!", "☀️"];
-  if (hour >= 12 && hour < 17) return ["Good afternoon!", "🌤️"];
-  if (hour >= 17 && hour < 21) return ["Good evening!", "🌆"];
-  return ["Good night!", "🌙"];
-}
 
 // row opens its record; meta is the muted who-and-when line; extra, when
 // given, is a [summary, detail] pair that opens under the row.
@@ -94,31 +85,6 @@ export function activityRow(r) {
   return a;
 }
 
-// proposalNote splits the Proposals count into its two parts: packets no
-// review has judged, and packets a review sent back for correction.
-export function proposalNote(unreviewed, correction) {
-  if (!unreviewed && !correction) return "No proposals waiting.";
-  const parts = [];
-  if (unreviewed) parts.push(`${unreviewed} awaiting review`);
-  if (correction) parts.push(`${correction} correction requested`);
-  return parts.join(", ") + ".";
-}
-
-// message is the summary footer's line. Each one claims only what its own
-// test checked, most pressing first; "nothing is owed" needs every todo
-// section and the intake to be empty.
-export function message(t, attention) {
-  // a correction request waits on its author's correction, not on a review
-  const review = t.intake_unreviewed + t.awaiting_acceptance + t.open_decisions;
-  if (t.blocked) return ["Some work is blocked.", "Take a look."];
-  if (review && t.intake_correction_requested) return ["Some work is waiting on a review, a ruling or a correction.", ""];
-  if (review) return ["Some work is waiting on a review or a ruling.", ""];
-  if (t.intake_correction_requested) return ["Some proposals are waiting on a correction.", ""];
-  if (attention) return ["Some records need attention.", ""];
-  if (t.in_flight || t.ready) return ["Work is in progress or ready to start.", "Keep building. ✨"];
-  return ["Nothing is owed right now.", ""];
-}
-
 export async function renderHome(todo) {
   const [act, show] = await Promise.all([activity(), view("show")]);
   const t = todo.totals;
@@ -136,13 +102,7 @@ export async function renderHome(todo) {
   const main = el("section", "overview-list");
   const pick = (key) => { focus = key; paint(); };
   function paint() {
-    const button = (key, label) => {
-      const b = el("button", "chip", label);
-      b.type = "button";
-      b.setAttribute("aria-pressed", String(focus === key));
-      b.addEventListener("click", () => pick(key));
-      return b;
-    };
+    const button = (key, label) => chip(label, focus === key, () => pick(key));
     tabs.replaceChildren(...categories.map(([key, n, label]) => button(key, `${label} ${n}`)), button("", "Recent activity"));
     const selected = categories.find(([key]) => key === focus);
     main.replaceChildren(selected

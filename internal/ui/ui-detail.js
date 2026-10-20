@@ -34,9 +34,11 @@ export function frame({ id, kind, title, tone, statusLabel, chip, details }, ...
   const primary = details.filter(([label]) => ["Next actor", "Progress", "Outcome"].includes(label));
   const secondary = details.filter(([label]) => !["Next actor", "Progress", "Outcome"].includes(label));
   const row = facts([["Status", [el("span", "tone-text " + tone, statusLabel), chip?.[0]]], ...primary], "facts details");
+  // The heading holds three lines; a longer subject is given whole under the status row.
+  const subject = title.length > 80 || title.includes("\n") ? el("p", "detail-subject", title) : null;
   const metadata = el("details", "record-metadata", el("summary", "", "Record details"), facts(secondary), copyButton("Copy id", id));
   return el("div", "screen detail",
-    el("header", "detail-head", back, el("h1", "detail-title", title), row, chip?.[1], metadata), grid);
+    el("header", "detail-head", back, el("h1", "detail-title", title), row, subject, chip?.[1], metadata), grid);
 
 }
 
