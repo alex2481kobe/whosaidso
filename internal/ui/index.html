@@ -1,46 +1,29 @@
 <!doctype html>
-<!-- The viewer's one page: the header (the owl and the name with the project
-     switch beside them; the tabs and the theme switch on the right), and the
-     main area ui.js renders each screen into. Screens live in the ui-*.js modules, styles in ui.css
-     and ui-screens.css. -->
+<!-- Viewer shell only. Data and authenticated requests remain in the existing ES modules. -->
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WhoSaidSo</title>
-  <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
-  <link rel="apple-touch-icon" href="/favicon-180.png">
-  <link rel="stylesheet" href="/ui.css">
-  <link rel="stylesheet" href="/ui-screens.css">
-  <link rel="stylesheet" href="/ui-gallery.css">
-  <script type="module" src="/ui.js"></script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhoSaidSo</title>
+<link rel="icon" href="/favicon-32.png" type="image/png">
+<link rel="stylesheet" href="/ui.css"><link rel="stylesheet" href="/ui-screens.css"><link rel="stylesheet" href="/ui-gallery.css">
+<script type="module" src="/ui.js"></script>
 </head>
 <body>
-  <header class="topbar">
-    <div class="header-start">
-      <a class="brand" href="#/"><img src="/owl.png" alt="" width="24" height="39"><span>WhoSaidSo</span></a>
-      <div class="project">
-        <button id="project-button" class="project-button" type="button" aria-haspopup="listbox" aria-expanded="false">
-          <span id="project-name">Projects</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-        </button>
-        <div id="project-menu" class="menu" role="listbox" hidden></div>
-      </div>
-    </div>
-    <div class="header-end">
-      <span id="offline" class="offline" hidden>Viewer stopped. Run whosaidso ui again.</span>
-      <nav class="tabstrip" role="tablist" aria-label="Screens">
-        <a data-nav="home" role="tab" href="#/">Home</a>
-        <a data-nav="records" role="tab" href="#/records">Records</a>
-        <a data-nav="history" role="tab" href="#/history">History</a>
-        <a data-nav="gallery" role="tab" href="#/gallery">Gallery</a>
-      </nav>
-      <div class="theme-control">
-        <span class="theme-label" aria-hidden="true">☀</span>
-        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false"><span></span></button>
-        <span class="theme-label moon" aria-hidden="true">☾</span>
-      </div>
-    </div>
-  </header>
-  <main id="main" class="page" aria-live="polite"></main>
-</body>
-</html>
+<header class="topbar">
+<a class="brand" href="#/gallery"><img src="/owl.png" alt="" width="27" height="44"><span>WhoSaidSo</span></a>
+<div class="project"><button id="project-button" class="project-button" type="button" aria-haspopup="listbox" aria-controls="project-menu" aria-label="Choose workspace" aria-expanded="false"><svg class="icon workspace-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v13H3zM3 7V4h7l3 3"/></svg><span id="project-name">Workspace</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button><div id="project-menu" class="menu" role="listbox" aria-label="Workspaces" hidden></div></div>
+<nav class="tabstrip" aria-label="Screens">
+<a data-nav="gallery" href="#/gallery"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>Gallery</a>
+<a data-nav="home" href="#/home"><svg class="icon" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8v10H3Z M9 21v-7h6v7"/></svg>Overview</a>
+<a data-nav="records" href="#/records?kind=TASK"><svg class="icon" viewBox="0 0 24 24"><path d="m3 6 2 2 4-4m-6 9 2 2 4-4m-6 9 2 2 4-4M13 6h8M13 13h8M13 20h8"/></svg>Tasks & records</a>
+<a data-nav="history" href="#/history"><svg class="icon" viewBox="0 0 24 24"><path d="M3 11a9 9 0 1 1 2 7M3 4v7h7M12 7v5l3 2"/></svg>Activity</a>
+</nav>
+<div class="sidebar-bottom"><span id="offline" class="offline" hidden>Viewer stopped. Run whosaidso ui again.</span></div>
+</header>
+<div class="theme-control">
+<span class="theme-label" aria-hidden="true">☀</span>
+<button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false"><span></span></button>
+<span class="theme-label moon" aria-hidden="true">☾</span>
+</div>
+<main id="main" class="page" aria-live="polite"></main>
+</body></html>

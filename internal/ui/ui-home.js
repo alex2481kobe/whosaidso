@@ -1,24 +1,15 @@
-// Home: the greeting, six stat cards counted by the todo view's own totals,
-// then recent activity (or the list behind a picked stat card) beside the
+// Home: six work-status filters counted by the todo view's own totals,
+// then recent activity (or the list behind a picked filter) beside the
 // project summary. "In 7 days" is counted from the history's events
 // (ui-derive.js). A list row is one line: the record's title first, then who
 // and when; a blocked row's reasons open under a one-line summary at its end.
-// Every note and message says only what the counts it reads say.
 import { el, link, icon, disclose, facts, actorName, since, fullTitle, view, when, status } from "./ui.js";
 import { activity, within, count, packetTitle } from "./ui-derive.js";
-import { hero, statCard, head, more } from "./ui-parts.js";
+import { hero, chip, more } from "./ui-parts.js";
 import { mark } from "./ui-icons.js";
 
-// focus is the stat card whose list replaces recent activity; "" shows activity.
-let focus = "";
-
-// greeting follows the local clock: morning 5-12, afternoon 12-17, evening 17-21, night 21-5.
-export function greeting(hour = new Date().getHours()) {
-  if (hour >= 5 && hour < 12) return ["Good morning!", "☀️"];
-  if (hour >= 12 && hour < 17) return ["Good afternoon!", "🌤️"];
-  if (hour >= 17 && hour < 21) return ["Good evening!", "🌆"];
-  return ["Good night!", "🌙"];
-}
+// focus is the filter whose list replaces recent activity; "" shows activity.
+let focus = null;
 
 // row opens its record; meta is the muted who-and-when line; extra, when
 // given, is a [summary, detail] pair that opens under the row.
@@ -94,88 +85,43 @@ export function activityRow(r) {
   return a;
 }
 
-// proposalNote splits the Proposals count into its two parts: packets no
-// review has judged, and packets a review sent back for correction.
-export function proposalNote(unreviewed, correction) {
-  if (!unreviewed && !correction) return "No proposals waiting.";
-  const parts = [];
-  if (unreviewed) parts.push(`${unreviewed} awaiting review`);
-  if (correction) parts.push(`${correction} correction requested`);
-  return parts.join(", ") + ".";
-}
-
-// message is the summary footer's line. Each one claims only what its own
-// test checked, most pressing first; "nothing is owed" needs every todo
-// section and the intake to be empty.
-export function message(t, attention) {
-  // a correction request waits on its author's correction, not on a review
-  const review = t.intake_unreviewed + t.awaiting_acceptance + t.open_decisions;
-  if (t.blocked) return ["Some work is blocked.", "Take a look."];
-  if (review && t.intake_correction_requested) return ["Some work is waiting on a review, a ruling or a correction.", ""];
-  if (review) return ["Some work is waiting on a review or a ruling.", ""];
-  if (t.intake_correction_requested) return ["Some proposals are waiting on a correction.", ""];
-  if (attention) return ["Some records need attention.", ""];
-  if (t.in_flight || t.ready) return ["Work is in progress or ready to start.", "Keep building. ✨"];
-  return ["Nothing is owed right now.", ""];
-}
-
 export async function renderHome(todo) {
   const [act, show] = await Promise.all([activity(), view("show")]);
   const t = todo.totals;
-  const proposals = t.intake_unreviewed + t.intake_correction_requested;
-  // [key, tone, count, label, note]; a note restates its own card's count and nothing else
-  const cards = [
-    ["progress", "blue", t.in_flight, "Work in progress", t.in_flight ? `${t.in_flight} being worked on.` : "No work in progress."],
-    ["back", "green", t.awaiting_acceptance, "Handed back", t.awaiting_acceptance ? `${t.awaiting_acceptance} waiting for acceptance.` : "Nothing handed back."],
-    ["blocked", "red", t.blocked, "Blocked", t.blocked ? `${t.blocked} blocked.` : "Nothing blocked."],
-    ["ready", "amber", t.ready, "Ready to start", t.ready ? `${t.ready} ready to pick up.` : "Nothing ready to start."],
-    ["decision", "purple", t.open_decisions, "Open decisions", t.open_decisions ? `${t.open_decisions} waiting for a ruling.` : "No open decisions."],
-    ["proposal", "sky", proposals, "Proposals", proposalNote(t.intake_unreviewed, t.intake_correction_requested)],
+  const categories = [
+    ["blocked", t.blocked, "Blocked"],
+    ["back", t.awaiting_acceptance, "Awaiting acceptance"],
+    ["progress", t.in_flight, "In progress"],
+    ["ready", t.ready, "Ready"],
+    ["decision", t.open_decisions, "Decisions"],
+    ["proposal", t.intake_unreviewed + t.intake_correction_requested, "Proposals"],
   ];
   const lists_ = lists(todo, act.at, act.names);
-  const main = el("div", "home-main");
-  const stats = el("div", "stats six");
-  // pick shows a card's list in place of recent activity; picking it again,
-  // or "Recent activity", goes back.
-  const pick = (key) => { focus = focus === key ? "" : key; paint(); };
+  const tabs = el("nav", "overview-filters");
+  tabs.setAttribute("aria-label", "Work status");
+  const main = el("section", "overview-list");
+  const pick = (key) => { focus = key; paint(); };
   function paint() {
-    stats.replaceChildren(...cards.map(([key, tone, n, label, note]) => statCard({
-      glyph: key, tone, value: n, label, note, selected: focus === key, onPick: () => pick(key),
-    })));
-    const card = cards.find((c) => c[0] === focus);
-    main.replaceChildren(card
-      ? el("section", "panel fill", head(card[0], card[1], card[3], `${card[2]} ${card[2] === 1 ? "item" : "items"}`, more("Recent activity", () => pick(focus))),
-        el("div", "panel-scroll", lists_[focus].length ? el("ul", "rows", lists_[focus]) : el("p", "empty", "empty...")))
-      : el("section", "panel fill", head("progress", "blue", "Recent activity", null, more("View all", () => { location.hash = "#/history"; })),
-        el("div", "panel-scroll", act.rows.length ? el("div", "act-list", act.rows.slice(-30).reverse().map(activityRow)) : el("p", "empty", "empty..."))));
+    const button = (key, label) => chip(label, focus === key, () => pick(key));
+    tabs.replaceChildren(...categories.map(([key, n, label]) => button(key, `${label} ${n}`)), button("", "Recent activity"));
+    const selected = categories.find(([key]) => key === focus);
+    main.replaceChildren(selected
+      ? el("div", "", lists_[focus].length ? el("ul", "rows", lists_[focus]) : el("p", "empty", "Nothing here."))
+      : el("div", "", el("div", "overview-list-head", more("View all activity", () => { location.hash = "#/history"; })),
+        act.rows.length ? el("div", "act-list", act.rows.slice(-15).reverse().map(activityRow)) : el("p", "empty", "No activity yet.")));
   }
+  if (focus === null) focus = categories.find(([, n]) => n > 0)?.[0] || "";
   paint();
-
   const records = show.records;
-  const kind = (k) => records.filter((r) => r.fact.kind === k);
+  const tasks = records.filter((r) => r.fact.kind === "TASK");
+  const claims = records.filter((r) => r.fact.kind === "CLAIM");
+  const instruments = records.filter((r) => r.fact.kind === "INSTRUMENT");
   const everything = records.map((r) => r.ref.record_id).concat((show.sources || []).map((s) => s.intake.source_id));
-  const tasks = kind("TASK"), claims = kind("CLAIM"), instruments = kind("INSTRUMENT");
-  const closed = count(tasks, (r) => r.task?.status === "CLOSED");
-  const withdrawn = count(instruments, (r) => status(r)[0] === "Withdrawn");
-  const added = count(everything, (id) => within(act.created.get(id), 7));
-  const proven = count(claims, (r) => r.claim?.status === "PROVEN");
-  const metric = (glyph, value, label, note, tone) => el("div", "metric", el("span", "tile round tone-tint slate", icon(glyph)),
-    el("div", "metric-words", el("span", "metric-value", String(value)), el("span", "metric-label", label), el("span", "metric-note tone-text " + tone, note)));
-  const [strong, rest] = message(t, (todo.attention || []).length);
-  const owl = el("img", "summary-owl");
-  owl.src = "/owl.png";
-  owl.alt = "";
-  const summary = el("section", "panel", head("bars", "blue", "Project summary", null, more("View records", () => { location.hash = "#/records"; })),
-    el("div", "metrics",
-      metric("file", everything.length, "Total records", `+${added} in 7 days`, added ? "green" : "muted"),
-      metric("check", closed, "Closed tasks", tasks.length ? `${Math.round((closed / tasks.length) * 100)}% of tasks` : "No tasks yet", "muted"),
-      metric("claim", claims.length, "Claims", claims.length ? `${proven} proven` : "None yet", proven ? "green" : "muted"),
-      metric("box", instruments.length, "Instruments", !instruments.length ? "None yet" : withdrawn ? `${withdrawn} withdrawn` : "None withdrawn", !instruments.length ? "muted" : withdrawn ? "red" : "green")),
-    el("div", "summary-foot", owl, el("p", "", el("strong", "", strong), rest ? " " + rest : ""), el("span", "summary-tag", "Small steps. Solid records.")));
-
-  const [hello, emoji] = greeting();
-  return el("div", "screen home",
-    hero("home", hello, emoji, ["Here's what's happening in ", todo.project, "."], "Track progress, review recent activity, and keep things moving."),
-    stats,
-    el("div", "home-body", main, el("div", "home-side", summary)));
+  const summary = el("details", "overview-summary", el("summary", "", "Project totals"), facts([
+    ["Records", everything.length], ["Added in 7 days", count(everything, (id) => within(act.created.get(id), 7))],
+    ["Closed tasks", count(tasks, (r) => r.task?.status === "CLOSED")],
+    ["Claims", claims.length], ["Proven claims", count(claims, (r) => r.claim?.status === "PROVEN")],
+    ["Instruments", instruments.length], ["Withdrawn instruments", count(instruments, (r) => status(r)[0] === "Withdrawn")],
+  ]));
+  return el("div", "screen home", hero("Overview"), tabs, main, summary);
 }

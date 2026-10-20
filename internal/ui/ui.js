@@ -249,36 +249,71 @@ function initTheme() {
 }
 
 function renderMenu() {
-  document.getElementById("project-name").textContent = state.project || "No project";
+  document.getElementById("project-name").textContent = state.project || "No workspace";
+  document.getElementById("project-button").setAttribute("aria-label", "Choose workspace, " + (state.project || "none selected"));
   const menu = document.getElementById("project-menu");
+  const focused = menu.contains(document.activeElement) ? document.activeElement.dataset.project : null;
   menu.replaceChildren(...state.projects.map((p) => {
-    const row = el("button", "menu-row", p.id);
+    const row = el("button", "menu-row", el("span", "workspace-name", p.id),
+      p.id === state.project ? icon("check") : !p.available ? el("span", "menu-extra", "Unavailable") : null);
     row.type = "button";
+    row.dataset.project = p.id;
+    row.tabIndex = -1;
     row.setAttribute("role", "option");
     row.setAttribute("aria-selected", String(p.id === state.project));
     row.disabled = !p.available;
-    row.addEventListener("click", () => { closeMenu(); select(p.id); });
+    row.addEventListener("click", () => { closeMenu(true); select(p.id); });
     return row;
   }));
+  if (focused && !menu.hidden) {
+    const available = [...menu.children].filter((row) => !row.disabled);
+    (available.find((row) => row.dataset.project === focused) || available.find((row) => row.getAttribute("aria-selected") === "true") || available[0] || document.getElementById("project-button")).focus();
+  }
 }
-function closeMenu() {
+function closeMenu(restoreFocus = false) {
   document.getElementById("project-menu").hidden = true;
-  document.getElementById("project-button").setAttribute("aria-expanded", "false");
+  const button = document.getElementById("project-button");
+  button.setAttribute("aria-expanded", "false");
+  if (restoreFocus) button.focus();
 }
 function initMenu() {
   const button = document.getElementById("project-button");
-  button.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const menu = document.getElementById("project-menu");
-    menu.hidden = !menu.hidden;
-    button.setAttribute("aria-expanded", String(!menu.hidden));
-    if (!menu.hidden) {
-      place(menu, button);
-      api("/api/projects").then((list) => { state.projects = list.projects; renderMenu(); place(menu, button); }).catch(() => {});
-    }
+  const menu = document.getElementById("project-menu");
+  const options = () => [...menu.querySelectorAll("button:not(:disabled)")];
+  const focusOption = (last = false) => {
+    const rows = options();
+    (last ? rows.at(-1) : rows.find((row) => row.getAttribute("aria-selected") === "true") || rows[0])?.focus();
+  };
+  const open = (last = false) => {
+    menu.hidden = false;
+    button.setAttribute("aria-expanded", "true");
+    place(menu, button);
+    focusOption(last);
+    api("/api/projects").then((list) => {
+      state.projects = list.projects;
+      renderMenu();
+      if (!menu.hidden) { place(menu, button); if (document.activeElement === button) focusOption(last); }
+    }).catch(() => {});
+  };
+  button.addEventListener("click", (e) => { e.stopPropagation(); if (menu.hidden) open(); else closeMenu(true); });
+  button.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); open(e.key === "ArrowUp"); }
   });
-  document.addEventListener("click", closeMenu);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
+  menu.addEventListener("keydown", (e) => {
+    const rows = options(), index = rows.indexOf(document.activeElement);
+    let next;
+    if (e.key === "ArrowDown") next = rows[(index + 1) % rows.length];
+    if (e.key === "ArrowUp") next = rows[(index - 1 + rows.length) % rows.length];
+    if (e.key === "Home") next = rows[0];
+    if (e.key === "End") next = rows.at(-1);
+    if (e.key.length === 1 && e.key !== " " && !e.ctrlKey && !e.metaKey) {
+      next = rows.slice(index + 1).concat(rows.slice(0, index + 1)).find((row) => row.dataset.project.toLowerCase().startsWith(e.key.toLowerCase()));
+    }
+    if (next) { e.preventDefault(); next.focus(); }
+    if (e.key === "Tab") closeMenu(true);
+  });
+  document.addEventListener("click", () => closeMenu());
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !menu.hidden) { e.preventDefault(); closeMenu(true); } });
 }
 async function select(id) {
   state.switches++;
@@ -288,19 +323,47 @@ async function select(id) {
   state.cache.clear();
   try { sessionStorage.setItem("whosaidso-project", id); } catch {}
   await check().catch(() => {});
-  location.hash = "#/";
+  location.hash = "#/gallery";
   route();
 }
 
 // ---- routing and the live poll
+let lastRoute = "", lastProject = "";
+const scrollPositions = new Map();
+// Save while the current screen is active, before native hash navigation can
+// reset scroll. Delay restoration until the replacement layout has settled.
+if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+const rememberScroll = () => {
+  if (lastRoute && lastRoute === project() + location.hash)
+    scrollPositions.set(lastRoute, { page: main.scrollTop, window: window.scrollY });
+};
+window.addEventListener("scroll", rememberScroll, { passive: true });
+main.addEventListener("scroll", rememberScroll, { passive: true });
+document.addEventListener("click", (event) => {
+  if (event.target.closest("a[href^='#/']")) rememberScroll();
+}, true);
 async function route() {
+  const routeKey = project() + location.hash;
+  if (lastRoute === routeKey) rememberScroll();
+  const restore = routeKey !== lastRoute || project() !== lastProject;
+  lastRoute = routeKey; lastProject = project();
   const mine = ++state.renders;
-  const show = (node) => { if (mine === state.renders) main.replaceChildren(node); };
+  const show = (node) => {
+    if (mine !== state.renders) return;
+    const saved = scrollPositions.get(routeKey);
+    main.replaceChildren(node);
+    if (restore) {
+      const apply = () => { if (mine === state.renders) { main.scrollTop = saved?.page || 0; window.scrollTo(0, saved?.window || 0); } };
+      apply();
+      requestAnimationFrame(() => { apply(); requestAnimationFrame(apply); });
+    }
+  };
   const [path, rest = ""] = location.hash.replace(/^#/, "").split("?");
   const parts = path.split("/").filter(Boolean).map(decodeURIComponent);
-  const screen = parts[0] || "home";
+  const screen = parts[0] || "gallery";
   for (const a of document.querySelectorAll("[data-nav]")) {
-    a.setAttribute("aria-selected", String(a.dataset.nav === (screen === "record" ? "records" : screen)));
+    if (a.dataset.nav === (screen === "record" ? "records" : screen)) a.setAttribute("aria-current", "page");
+    else a.removeAttribute("aria-current");
   }
   renderMenu();
   if (!state.project) {

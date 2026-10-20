@@ -6,7 +6,7 @@
 // is one line; a cell too long for it ends in an ellipsis and holds its whole
 // text as a tooltip. Narrow windows stack each row so the title keeps its
 // width. A row opens its record; its id is copied on the record's page.
-import { el, view, status, actorName, sourceTitle, fullTitle, tablePanel, when, icon, project } from "./ui.js";
+import { el, view, status, actorName, sourceTitle, fullTitle, tablePanel, when, icon, project, link } from "./ui.js";
 import { activity, within, count } from "./ui-derive.js";
 import { hero, head, chip, dropdown } from "./ui-parts.js";
 import { kinds } from "./ui-icons.js";
@@ -39,6 +39,8 @@ function rowsOf(show, act) {
   return records.concat(sources).map((r) => {
     const [label, tone] = status(r.record);
     return { ...r, status: label, tone, author: actorName(r.record.author?.actor), self: yesNo(r.record.self_admitted),
+      next: r.record.task ? (r.record.task.status === "CLOSED" ? "None" : actorName(r.record.task.expected_next_actor)) : "—",
+      reason: (r.record.task?.reasons || []).map(x => x.detail || x.kind).join(", ") || (r.record.task?.status === "IN FLIGHT" ? "Attempt in progress" : r.record.task?.status === "READY" ? "Ready to start" : ""),
       review: review.has(r.id), created: act.created.get(r.id) || null, updated: act.updated.get(r.id) || null };
   });
 }
@@ -49,16 +51,20 @@ const cell = (className, content, text) => { const td = el("td", className, cont
 const open = (id) => { location.hash = "#/record/" + encodeURIComponent(id); };
 
 function table(rows) {
+  const tasksOnly = state.kind === "task";
   const body = el("tbody", "", rows.map((r) => {
-    const tr = el("tr", "", cell("title-cell", r.title), cell("", kindCell(r.kind), kinds[r.kind].one), cell("tone-text " + r.tone, r.status),
-      cell("author", r.author), cell("self", r.self), cell("muted updated", when(r.updated)));
-    tr.tabIndex = 0;
-    tr.addEventListener("click", () => open(r.id));
-    tr.addEventListener("keydown", (e) => { if (e.key === "Enter") open(r.id); });
+    const title = link(r.id, r.title, "record-title-link");
+    title.title = r.title;
+    const titleContent = el("div", "", title, r.record.task?.status === "BLOCKED" && r.reason ? el("span", "record-blocker", r.reason) : null);
+    const tr = el("tr", "", cell("title-cell", titleContent, r.title));
+    if (!tasksOnly) tr.append(cell("", kindCell(r.kind), kinds[r.kind].one));
+    tr.append(cell("tone-text " + r.tone, r.status), cell("next-actor", r.next));
+    tr.addEventListener("click", (e) => { if (!e.target.closest("a")) open(r.id); });
     return tr;
   }));
-  const panel = tablePanel("records", ["Title", "Kind", "Status", "Author", "Self-approved", "Updated"], ["", "130px", "190px", "140px", "120px", "130px"],
-    body, rows.length ? null : el("p", "empty", "empty..."));
+  const headers = ["Title", ...(!tasksOnly ? ["Kind"] : []), "Status", "Next actor"];
+  const widths = tasksOnly ? ["58%", "25%", "17%"] : ["45%", "15%", "25%", "15%"];
+  const panel = tablePanel("records", headers, widths, body, rows.length ? null : el("p", "empty", "No records match these filters."));
   panel.classList.add("records-table");
   return panel;
 }
@@ -66,9 +72,9 @@ function table(rows) {
 function grid(rows) {
   if (!rows.length) return el("div", "cards-scroll", el("p", "empty", "empty..."));
   return el("div", "cards-scroll", el("div", "record-cards", rows.map((r) => {
-    const card = el("a", "record-card", el("div", "record-card-top", kindCell(r.kind), el("span", "tone-text " + r.tone, r.status)),
-      el("p", "record-card-title", r.title), el("span", "record-card-meta", "Self-approved: " + r.self),
-      el("div", "record-card-foot", el("span", "", r.author), el("span", "", when(r.updated))));
+    const card = el("a", "record-card", el("div", "record-card-top", state.kind ? null : kindCell(r.kind), el("span", "tone-text " + r.tone, r.status)),
+      el("p", "record-card-title", r.title), el("span", "record-card-meta", "Next: " + r.next),
+      r.record.task?.status === "BLOCKED" && r.reason ? el("p", "record-card-reason", r.reason) : null);
     card.href = "#/record/" + encodeURIComponent(r.id);
     card.title = r.title;
     return card;
@@ -95,11 +101,11 @@ function side(rows, recent, paint, statuses) {
     return b;
   };
   // "Needs attention" counts the show view's attention items, which are not only reviews.
-  const views = [["all", "All records", "file", rows.length], ["review", "Needs attention", "review", count(rows, (r) => r.review)], ["recent", "Recently added", "progress", recent]];
+  const views = [["all", "All records", "file", rows.length], ["recent", "Recently added", "progress", recent]];
   const clear = el("button", "button wide", icon("refresh"), el("span", "", "Clear filters"));
   clear.type = "button";
   clear.addEventListener("click", () => { clearAll(); paint(true); });
-  return el("aside", "panel side",
+  return el("aside", "side",
     el("h3", "side-head", icon("bars"), "Views"),
     views.map(([key, text, glyph, n]) => option(state.view === key, icon(glyph), text, n, () => { state.view = key; paint(); })),
     el("h3", "side-head ruled", icon("filter"), "Filters"),
@@ -108,9 +114,11 @@ function side(rows, recent, paint, statuses) {
     clear);
 }
 
-export async function renderRecords() {
+export async function renderRecords(params = new URLSearchParams()) {
   const [show, act] = await Promise.all([view("show"), activity()]);
-  if (state.project !== project()) { clearAll(); state.project = project(); }
+  if (state.project !== project()) { clearAll(); state.routeKind = undefined; state.project = project(); }
+  const requestedKind = (params.get("kind") || "").toLowerCase();
+  if (state.routeKind !== requestedKind) { state.routeKind = requestedKind; if (requestedKind in kinds) state.kind = requestedKind; }
   const rows = rowsOf(show, act);
   const recent = count(rows, (r) => within(r.created, 7));
 
@@ -121,7 +129,7 @@ export async function renderRecords() {
   tabs.setAttribute("aria-label", "Kind");
   const sidebar = el("div", "side-holder");
   sidebar.id = "records-filters";
-  const listing = el("section", "panel listing");
+  const listing = el("section", "listing");
   const body = el("div", "records-body", sidebar, listing);
   // On narrow windows the sidebar folds into this disclosure above the list,
   // closed until opened; wider windows hide the button and show the sidebar.
@@ -135,18 +143,20 @@ export async function renderRecords() {
   const statuses = statusList(rows);
   const top = statuses.map((s) => s[0]);
   const statusOk = (r) => !state.statuses.size || state.statuses.has(r.status) || (state.statuses.has(OTHER) && !top.includes(r.status));
+  const quick = chip("Needs attention", state.view === "review", () => { state.view = state.view === "review" ? "all" : "review"; paint(); });
   function paint(reset) {
+    quick.setAttribute("aria-pressed", String(state.view === "review"));
     if (reset) search.value = state.search;
     const q = state.search.trim().toLowerCase();
     const shown = rows.filter((r) => (state.view !== "review" || r.review) && (state.view !== "recent" || within(r.created, 7))
       && (!state.kind || state.kind === r.kind) && statusOk(r)
-      && (!q || [r.title, r.id, r.author, r.status, kinds[r.kind].one].some((t) => t.toLowerCase().includes(q)))).sort(order[state.sort]);
+      && (!q || [r.title, r.id, r.author, r.status, r.next, r.reason, kinds[r.kind].one].some((t) => t.toLowerCase().includes(q)))).sort(order[state.sort]);
     // "All" is pressed only while nothing is filtered, and picking it clears every filter.
     tabs.replaceChildren(chip("All", !filtered(), () => { clearAll(); paint(true); }),
       ...Object.entries(kinds).map(([key, k]) => chip(k.many, state.kind === key, () => { state.kind = key; paint(); })));
     sidebar.replaceChildren(side(rows, recent, paint, statuses));
     // the count is the filters inside the disclosure: a view other than All records, and each status
-    const inside = (state.view !== "all" ? 1 : 0) + state.statuses.size;
+    const inside = (state.view === "recent" ? 1 : 0) + state.statuses.size;
     filterCount.textContent = inside ? `(${inside})` : "";
     filters.setAttribute("aria-label", inside ? `Filters, ${inside} active` : "Filters");
     filters.setAttribute("aria-expanded", String(state.filtersOpen));
@@ -160,7 +170,7 @@ export async function renderRecords() {
       return b;
     };
     listing.replaceChildren(
-      head("file", "blue", `Records (${shown.length})`, null,
+      el("header", "records-controls", el("span", "muted", `${shown.length} ${state.kind === "task" ? "tasks" : "records"}`),
         dropdown({ glyph: "sort", prefix: "Sort: ", options: sorts, value: state.sort, onPick: (v) => { state.sort = v; paint(); } }),
         el("div", "segmented", layout("list", "list", "List"), layout("grid", "grid", "Grid"))),
       state.layout === "grid" ? grid(shown) : table(shown));
@@ -169,7 +179,7 @@ export async function renderRecords() {
   paint();
 
   return el("div", "screen records",
-    hero("records", "Records", null, ["Browse all records in ", show.project, "."], "Tasks, claims, decisions, instruments, and sources, all in one place."),
+    hero("Tasks & records"),
     el("div", "records-top", el("label", "search", icon("search"), search), tabs),
-    filters, body);
+    el("div", "records-quick", quick, filters), body);
 }
