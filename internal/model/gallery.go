@@ -102,9 +102,11 @@ func (*GalleryImport) eventPayload()        {}
 func (*GalleryImport) EventType() EventType { return "gallery.import" }
 
 // GalleryImportSkip records a non-import without pretending to have a file pin.
+// Its words are the legacy list's, kept as written: a path of only spaces is a
+// legal file name and must still be sealable, so none of them is required text.
 type GalleryImportSkip struct {
 	LegacyID string `json:"legacy_id"`
-	Path     string `json:"path" semantic:"text"`
+	Path     string `json:"path"`
 	Title    string `json:"title"`
 	Reason   string `json:"reason"`
 }

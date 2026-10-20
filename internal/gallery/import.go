@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
@@ -47,14 +48,25 @@ func Import(p store.Project, by model.Actor, now time.Time) (ImportResult, error
 	if err := json.Unmarshal(raw, &old); err != nil {
 		return ImportResult{}, err
 	}
+	entries, err := Entries(p)
+	if err != nil {
+		return ImportResult{}, err
+	}
+	sealed := state.Snapshot().GallerySealedIdentities()
 	inventory := make([]model.Digest, 0, len(old))
 	prepared := make([]model.GalleryAdd, 0, len(old))
 	first := map[model.Digest]int{}
 	for i, e := range old {
 		add, err := Prepare(p.Root, e.Path, e.Title, e.Note, by, nil, now)
 		if errors.Is(err, os.ErrNotExist) {
-			result.Skipped = append(result.Skipped, model.GalleryImportSkip{LegacyID: e.ID, Path: e.Path, Title: e.Title, Reason: "file missing"})
-			continue
+			// A file that vanished after the ledger took the entry is not a
+			// skip: the entry keeps the identity it was sealed under.
+			held, ok := heldFile(p.Root, e, entries, sealed)
+			if !ok {
+				result.Skipped = append(result.Skipped, model.GalleryImportSkip{LegacyID: e.ID, Path: e.Path, Title: e.Title, Reason: "file missing"})
+				continue
+			}
+			add, err = model.GalleryAdd{File: held}, nil
 		}
 		if err != nil {
 			return ImportResult{}, err
@@ -74,10 +86,6 @@ func Import(p store.Project, by model.Actor, now time.Time) (ImportResult, error
 	if state.Snapshot().GalleryImported(source) {
 		return result, nil
 	}
-	entries, err := Entries(p)
-	if err != nil {
-		return ImportResult{}, err
-	}
 	out := []model.TypedEvent{}
 	imported := []model.ID{}
 	reused := []model.GalleryImportReuse{}
@@ -93,8 +101,36 @@ func Import(p store.Project, by model.Actor, now time.Time) (ImportResult, error
 			reused = append(reused, model.GalleryImportReuse{EntryID: match.Add.EntryID, AddedAt: add.AddedAt})
 		}
 	}
-	result.Events = append(out, &model.GalleryImport{Source: source, Inventory: inventory, EmptySource: len(inventory) == 0 && len(result.Skipped) == 0, Entries: imported, Skipped: result.Skipped, Reused: reused})
+	seal := &model.GalleryImport{Source: source, Inventory: inventory, EmptySource: len(inventory) == 0 && len(result.Skipped) == 0, Entries: imported, Skipped: result.Skipped, Reused: reused}
+	// A seal that cannot be encoded must stop the import before any add is
+	// captured, or a half import would be left admitted.
+	if err := model.ValidateSchema(seal); err != nil {
+		return ImportResult{}, err
+	}
+	result.Events = append(out, seal)
 	return result, nil
+}
+
+// heldFile finds the file pin the ledger already holds for a legacy entry whose
+// file is now gone: an entry at the same locator whose identity, made with the
+// legacy date, was sealed in an earlier import or is the entry's own import id.
+func heldFile(root string, e Entry, entries []reduce.GalleryEntry, sealed map[model.Digest]bool) (model.GalleryFile, bool) {
+	locators := map[string]bool{e.Path: true}
+	if !filepath.IsAbs(e.Path) {
+		locators[filepath.ToSlash(filepath.Clean(e.Path))] = true
+	} else if rel, err := filepath.Rel(root, e.Path); err == nil && filepath.IsLocal(rel) {
+		locators[filepath.ToSlash(rel)] = true
+	}
+	for _, held := range entries {
+		if !locators[held.Add.File.Path] {
+			continue
+		}
+		identity := model.GalleryImportIdentity(held.Add.File, e.AddedAt)
+		if sealed[identity] || held.Add.ImportID == string(identity) {
+			return held.Add.File, true
+		}
+	}
+	return model.GalleryFile{}, false
 }
 
 // existingEntry finds what already holds a legacy entry: the entry an earlier
@@ -107,12 +143,21 @@ func existingEntry(entries []reduce.GalleryEntry, add model.GalleryAdd) (match *
 			return &entries[i], false
 		}
 	}
+	// An entry still in the gallery wins over one retracted; with only a
+	// retracted one, the legacy entry binds to it and stays removed.
+	var retracted *reduce.GalleryEntry
 	for i := range entries {
-		if entries[i].Add.ImportID == "" && entries[i].Add.File == add.File {
+		if entries[i].Add.ImportID != "" || entries[i].Add.File != add.File {
+			continue
+		}
+		if !entries[i].Retracted {
 			return &entries[i], true
 		}
+		if retracted == nil {
+			retracted = &entries[i]
+		}
 	}
-	return nil, false
+	return retracted, retracted != nil
 }
 
 func TaskRefs(p store.Project, ids []string) ([]model.RecordRef, error) {

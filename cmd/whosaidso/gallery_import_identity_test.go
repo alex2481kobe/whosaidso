@@ -58,10 +58,10 @@ func TestGalleryImportRetryCapturesNothingWhenASealedFileLaterVanishes(t *testin
 	}
 }
 
-// A retracted entry is not in the gallery. Binding a legacy entry to it
-// satisfies the seal while leaving the legacy entry invisible, so an entry
-// whose file exists would not be imported.
-func TestGalleryImportDoesNotBindToARetractedHandEntry(t *testing.T) {
+// A deliberate removal wins. When the only hand-added entry holding the pin was
+// retracted, the legacy entry binds to it (the seal records the reuse) and the
+// image stays out of the gallery.
+func TestGalleryImportBindsToARetractedHandEntryAndKeepsItRemoved(t *testing.T) {
 	root := importFixture(t, `[{"id":"old","path":"present.png","title":"Old image","added_at":"2026-01-01T00:00:00Z"}]`)
 	_, diagnostic := galleryCommand(t, root, "gallery", "add", "present.png", "--title", "Hand added", "--admit", "--reason", "reviewed")
 	galleryCommand(t, root, "gallery", "rm", galleryEntryID(t, diagnostic), "--admit", "--reason", "removed on purpose")
@@ -69,10 +69,13 @@ func TestGalleryImportDoesNotBindToARetractedHandEntry(t *testing.T) {
 		t.Fatalf("control: the retracted entry is still listed: %s", out)
 	}
 	importOnce(t, root)
-	if out, _ := galleryCommand(t, root, "gallery", "list"); strings.Contains(out, "empty") {
-		t.Fatalf("every legacy entry whose file exists must be in the gallery after import, but the gallery is empty: "+
-			"the legacy entry was bound to the retracted entry (seals %+v)", importSeals(t, root))
+	if out, _ := galleryCommand(t, root, "gallery", "list"); !strings.Contains(out, "empty") {
+		t.Fatalf("a removed image came back through import: %s", out)
 	}
+	if seals := importSeals(t, root); len(seals) != 1 || len(seals[0].Reused) != 1 {
+		t.Fatalf("the seal does not record the reuse of the retracted entry: %+v", seals)
+	}
+	importRetryCapturesNothing(t, root)
 }
 
 // When the same file was added, removed and added again by hand, the legacy
@@ -107,4 +110,32 @@ func TestGalleryImportCompletesWhenAMissingEntryHasAnUnusualPath(t *testing.T) {
 	if _, errout, code := cliRun(t, root, nil, "contributor", "gallery", "import", "--admit", "--reason", "reviewed"); code != 0 {
 		t.Fatalf("import failed after admitting %v and before sealing: %s", galleryTitles(t, root), errout)
 	}
+}
+
+// A hand-added entry that merely shares the vanished file's locator does not
+// hold the legacy entry: nothing sealed it, so the missing file is reported.
+func TestGalleryImportReportsAMissingFileThatNoSealedEntryHolds(t *testing.T) {
+	root := importFixture(t, `[{"id":"b","path":"second.png","title":"Second","added_at":"2026-01-02T00:00:00Z"}]`)
+	writeSecond(t, root)
+	galleryCommand(t, root, "gallery", "add", "second.png", "--title", "Hand added", "--admit", "--reason", "reviewed")
+	if err := os.Remove(filepath.Join(root, "second.png")); err != nil {
+		t.Fatal(err)
+	}
+	importOnce(t, root)
+	if seals := importSeals(t, root); len(seals) != 1 || len(seals[0].Skipped) != 1 {
+		t.Fatalf("a missing file no sealed entry holds must be reported: %+v", seals)
+	}
+}
+
+// An entry bound to a hand-added one stays held when its file later vanishes:
+// the retry captures nothing and reports no skip.
+func TestGalleryImportRetryCapturesNothingWhenAReusedFileLaterVanishes(t *testing.T) {
+	root := importFixture(t, `[{"id":"old","path":"second.png","title":"Old","added_at":"2026-01-02T00:00:00Z"}]`)
+	writeSecond(t, root)
+	galleryCommand(t, root, "gallery", "add", "second.png", "--title", "Hand added", "--admit", "--reason", "reviewed")
+	importOnce(t, root)
+	if err := os.Remove(filepath.Join(root, "second.png")); err != nil {
+		t.Fatal(err)
+	}
+	importRetryCapturesNothing(t, root)
 }

@@ -57,6 +57,10 @@ entry whose file pin (hash, length and locator) an entry added by hand (no
 import id) already holds is not added again: the seal names that entry in
 place of a new one, with the legacy date its identity was made from. Imported
 entries match by identity only, so one file listed under two dates stays two
-entries. Any other error fails the import.
+entries. When several hand-added entries hold the pin, one still in the gallery
+is preferred; if all were retracted the legacy entry binds to one of them and
+stays removed. A file that vanishes after its entry was sealed or reused is not
+a skip: the entry keeps its sealed identity, so a retry captures nothing. The
+seal is validated before any add is captured. Any other error fails the import.
 The old list and media remain in place; pending import packets should be
 admitted rather than recaptured.

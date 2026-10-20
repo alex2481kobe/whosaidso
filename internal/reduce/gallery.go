@@ -222,6 +222,20 @@ func (s Snapshot) GalleryImported(source model.Digest) bool {
 	return false
 }
 
+// GallerySealedIdentities is every legacy identity a gallery.import seal has
+// listed in its inventory, whichever entry now holds it.
+func (s Snapshot) GallerySealedIdentities() map[model.Digest]bool {
+	out := map[model.Digest]bool{}
+	for _, o := range s.inner().log.all {
+		if e, ok := s.inner().events[o].(*model.GalleryImport); ok {
+			for _, legacy := range e.Inventory {
+				out[legacy] = true
+			}
+		}
+	}
+	return out
+}
+
 // GalleryRequirements lists the visual obligations of this task's criteria.
 func (s Snapshot) GalleryRequirements(task model.RecordRef) []model.GalleryRequire {
 	out := []model.GalleryRequire{}
