@@ -6,11 +6,11 @@ package store
 import (
 	"context"
 	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
@@ -38,7 +38,7 @@ type intakeIO struct {
 }
 
 func systemIntakeIO() intakeIO {
-	return intakeIO{sync: (*os.File).Sync, rename: os.Rename}
+	return intakeIO{sync: (*os.File).Sync, rename: renameNoReplace}
 }
 
 // WriteIntake acknowledges only after blob bytes, packet bytes, their directory
@@ -56,11 +56,6 @@ func writeIntake(ctx context.Context, project Project, request IntakeRequest, di
 	}
 	if err := requireVersion(current); err != nil {
 		return zero, err
-	}
-	// os.Rename's atomic-directory guarantee is platform dependent. Do not
-	// acknowledge durable capture on a platform this publisher cannot support.
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-		return zero, storeFault("unsupported-platform", "intake", "durable intake publication currently supports Linux and macOS")
 	}
 	if err := ctx.Err(); err != nil {
 		return zero, err
@@ -95,16 +90,20 @@ func writeIntake(ctx context.Context, project Project, request IntakeRequest, di
 			return zero, err
 		}
 	}
-	tmp, err := os.MkdirTemp(inbox, string(id)+"-*.tmp")
-	if err != nil {
+	// The temporary is created owner-only, not narrowed afterwards: on Windows
+	// os.MkdirTemp would give it the token's default list, which the packet
+	// and blobs written inside would then inherit.
+	suffix := make([]byte, 8)
+	if _, err := rand.Read(suffix); err != nil {
 		return zero, storeFault("io", inbox, err.Error())
+	}
+	tmp := filepath.Join(inbox, string(id)+"-"+hex.EncodeToString(suffix)+".tmp")
+	if err := mkdirPrivate(tmp); err != nil {
+		return zero, storeFault("io", tmp, err.Error())
 	}
 	// Only this writer's unpublished temporary is ours to remove. A crash may
 	// leave it behind; readers ignore it and never clean another writer's temp.
 	defer os.RemoveAll(tmp)
-	if err := os.Chmod(tmp, 0700); err != nil {
-		return zero, storeFault("io", tmp, err.Error())
-	}
 	blobDir := filepath.Join(tmp, "blobs")
 	if err := intakeMkdir(blobDir); err != nil {
 		return zero, err
@@ -148,11 +147,23 @@ func writeIntake(ctx context.Context, project Project, request IntakeRequest, di
 	if err := syncIntakePath(blobDir, disk); err != nil {
 		return zero, err
 	}
-	if err := writeIntakeFile(filepath.Join(tmp, "packet.json"), data, disk); err != nil {
+	packetPath := filepath.Join(tmp, "packet.json")
+	if err := writeIntakeFile(packetPath, data, disk); err != nil {
 		return zero, err
 	}
 	if err := syncIntakePath(tmp, disk); err != nil {
 		return zero, err
+	}
+	// Read back everything publication will expose, so a packet is never
+	// acknowledged with access a later read would refuse.
+	published := []string{tmp, blobDir, packetPath}
+	for _, blob := range captured {
+		published = append(published, filepath.Join(blobDir, string(blob.SHA256)))
+	}
+	for _, path := range published {
+		if err := checkIntakePath(path, path == tmp || path == blobDir); err != nil {
+			return zero, err
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return zero, err
@@ -208,18 +219,14 @@ func uncertainIntake(id model.ID, path string, err error) error {
 }
 
 func intakeMkdir(path string) error {
-	if err := os.Mkdir(path, 0700); err != nil {
-		if !os.IsExist(err) {
-			return storeFault("io", path, err.Error())
-		}
-	} else if err := os.Chmod(path, 0700); err != nil {
+	if err := mkdirPrivate(path); err != nil && !os.IsExist(err) {
 		return storeFault("io", path, err.Error())
 	}
 	return checkIntakePath(path, true)
 }
 
 func syncIntakePath(path string, disk intakeIO) error {
-	f, err := os.Open(path)
+	f, err := openForSync(path)
 	if err != nil {
 		return storeFault("io", path, err.Error())
 	}

@@ -66,7 +66,21 @@ func (f *fixture) envelope(attempt model.ID, criterion model.CriterionRef) model
 		ExecutionSourceIdentity: model.ExecutionIdentity{Project: f.Project.ID, MachineID: known(model.ID("7ZZZZZZZZZZZZZZZZZZZZZZZZZ")), SourceRefs: []model.ArtifactRef{}, Head: known(model.GitHead{ObjectFormat: "sha1", Commit: "0123456789abcdef0123456789abcdef01234567"}), Dirty: known(false)},
 		Argv:                    []string{"measure-request-corpus"}, InputRefs: []model.ArtifactRef{}, ConfigRequested: map[string]model.Scalar{}, ConditionsDeclared: map[string]model.Scalar{},
 		ConfigEffective: unknown[map[string]model.Availability[model.Scalar]](), ConditionsObserved: unknown[map[string]model.Availability[model.Scalar]](),
-		Isolation: unknown[model.Isolation](), StartedAt: time.Now().UTC(), ObservedAt: unknown[time.Time](), Outcome: unknown[model.ProcessOutcome](), Outputs: unknown[[]model.RunOutput](), Visual: unknown[model.VisualObservation](),
+		Isolation: unknown[model.Isolation](), StartedAt: nextTick(), ObservedAt: unknown[time.Time](), Outcome: unknown[model.ProcessOutcome](), Outputs: unknown[[]model.RunOutput](), Visual: unknown[model.VisualObservation](),
+	}
+}
+
+// nextTick reads the wall clock once it has moved past its reading at the
+// call. A run must start strictly after its criterion's bundle was recorded,
+// and the Windows wall clock can give both the same reading; the monotonic
+// reading is stripped, since only wall time is recorded.
+func nextTick() time.Time {
+	before := time.Now().Round(0)
+	for {
+		if now := time.Now().Round(0); now.After(before) {
+			return now.UTC()
+		}
+		time.Sleep(50 * time.Microsecond)
 	}
 }
 

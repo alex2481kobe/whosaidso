@@ -7,6 +7,7 @@ package store
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
@@ -33,6 +34,20 @@ func TestBindReplacesAnUnreadableEntry(t *testing.T) {
 		if got, bound, err := Binding("team/project"); err != nil || !bound || got != root {
 			t.Fatalf("the entry must name the checkout again: %q %t %v", got, bound, err)
 		}
+	}
+}
+
+// A real directory where the entry belongs is not an entry to replace: the
+// write is refused and the directory and what it holds stay.
+func TestBindingWriteRefusesADirectoryAtTheEntry(t *testing.T) {
+	dir := t.TempDir()
+	entry := filepath.Join(dir, "binding")
+	must(t, os.Mkdir(entry, 0o700))
+	if err := writeBinding(entry, filepath.Join(dir, "checkout")); !isFault(err, "io") {
+		t.Fatalf("a directory at the entry must refuse the write, got %v", err)
+	}
+	if info, err := os.Lstat(entry); err != nil || !info.IsDir() {
+		t.Fatalf("the directory at the entry must stay: %v", err)
 	}
 }
 

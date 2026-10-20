@@ -54,7 +54,7 @@ func cliHoldDraft(t *testing.T, f *gateVerifyFixture, bin string, args ...string
 }
 
 func TestCLITemplateRetryAndHoldCapture(t *testing.T) {
-	bin := filepath.Join(t.TempDir(), "whosaidso")
+	bin := filepath.Join(t.TempDir(), exeName("whosaidso"))
 	c := exec.Command("go", "build", "-o", bin, "./cmd/whosaidso")
 	c.Dir = "../.."
 	if out, err := c.CombinedOutput(); err != nil {

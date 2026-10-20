@@ -60,7 +60,7 @@ func systemPublishIO() publishIO {
 		},
 		write:  (*os.File).Write,
 		sync:   (*os.File).Sync,
-		rename: os.Rename,
+		rename: renameNoReplace,
 	}
 }
 
@@ -148,9 +148,6 @@ func transactAdmission(ctx context.Context, project Project, admission Admission
 func admitLocked(ctx context.Context, project Project, admission Admission, disk publishIO) (model.Bundle, *State, error) {
 	var zero model.Bundle
 	admissionID := admission.ID
-	if err := publicationDurability(); err != nil {
-		return zero, nil, err
-	}
 	if err := ctx.Err(); err != nil {
 		return zero, nil, err
 	}
@@ -346,6 +343,12 @@ func publishBundle(ctx context.Context, dir string, bundle model.Bundle, disk pu
 		return storeFault("io", final, err.Error())
 	}
 	if err := disk.rename(tmp, final); err != nil {
+		if os.IsExist(err) {
+			// Where the platform refuses an existing destination atomically, a
+			// publisher that slipped past the check above is caught here.
+			return storeFault("ledger-fork", final,
+				"the next sequence is already published, so this transaction would overwrite an admitted bundle")
+		}
 		return storeFault("io", final, err.Error())
 	}
 	// Published. From here a failure is uncertainty about durability, never a
@@ -457,6 +460,35 @@ func ensureLedgerDir(dir string, disk publishIO) error {
 		if err := syncLedgerPath(filepath.Dir(missing[i]), disk); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// syncLedgerPath flushes one file or directory.
+//
+// A rename makes the new name visible immediately and does not make it durable.
+// The name lives in the DIRECTORY, so the directory is what has to be flushed
+// before publication can be acknowledged. Flushing the bundle file alone would
+// leave a crash able to lose the name that points at perfectly durable bytes.
+//
+// The crash and injected-failure tests in publish_test.go exercise every point
+// from temporary creation to the acknowledgement, on darwin, linux and windows,
+// on whatever filesystem the tests run on. Those tests kill processes and inject
+// errors. They do not cut power, so what they establish is that an interrupted
+// publication is classified correctly, not that this filesystem honours a flush
+// against a power loss.
+func syncLedgerPath(path string, disk publishIO) error {
+	f, err := openForSync(path)
+	if err != nil {
+		return storeFault("io", path, err.Error())
+	}
+	syncErr := disk.sync(f)
+	closeErr := f.Close()
+	if syncErr != nil {
+		return storeFault("io", path, syncErr.Error())
+	}
+	if closeErr != nil {
+		return storeFault("io", path, closeErr.Error())
 	}
 	return nil
 }

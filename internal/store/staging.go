@@ -35,14 +35,14 @@ func MakeRunStaging(project Project, invocation model.ID) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(home, 0700); err != nil {
+	if err := mkdirAllPrivate(home); err != nil {
 		return "", storeFault("io", home, err.Error())
 	}
 	dir := home
 	parts := []string{"staging", encoded, string(invocation)}
 	for i, part := range parts {
 		dir = filepath.Join(dir, part)
-		err := os.Mkdir(dir, 0700)
+		err := mkdirPrivate(dir)
 		if err != nil && (!os.IsExist(err) || i == len(parts)-1) {
 			return "", storeFault("io", dir, err.Error())
 		}

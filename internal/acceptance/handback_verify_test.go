@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
@@ -79,7 +80,7 @@ func hbVerifyAPI(f *gateVerifyFixture, r write.HandbackRequest) (model.PacketRef
 
 func hbVerifyCLI(t *testing.T) hbVerifyCapture {
 	t.Helper()
-	binary := filepath.Join(t.TempDir(), "whosaidso")
+	binary := filepath.Join(t.TempDir(), exeName("whosaidso"))
 	cmd := exec.Command("go", "build", "-o", binary, "./cmd/whosaidso")
 	cmd.Dir = filepath.Join("..", "..")
 	cmd.Env = append(os.Environ(), "GOPROXY=off", "GOTOOLCHAIN=local")
@@ -144,6 +145,12 @@ func TestHandbackVerifyAuthoredBytesAndActorCannotBeRewritten(t *testing.T) {
 			hbVerifyControl(t, f, route.capture)
 			for _, field := range []string{"reason", "next-action", "author"} {
 				t.Run(field, func(t *testing.T) {
+					if route.name == "CLI" && runtime.GOOS == "windows" {
+						// A Windows command line is UTF-16: an invalid UTF-8 byte
+						// is replaced before the CLI starts, so this input cannot
+						// reach it and there is nothing for it to refuse.
+						t.Skip("invalid UTF-8 cannot travel through a Windows command line")
+					}
 					// U+FFFD is a legitimate known ID; an invalid byte is a
 					// different input, and must not acquire that ID's authority.
 					ref, r := hbVerifyStart(t, f, model.Actor{ID: "holder-\ufffd"})

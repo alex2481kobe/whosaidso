@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -57,7 +58,12 @@ func TestCLIHomeRefusesAHomeMissingKeptArtifacts(t *testing.T) {
 	if err := os.Remove(kept); err != nil {
 		t.Fatal(err)
 	}
-	refused("no such file")
+	// The reason is the operating system's own words for the missing file.
+	missing := "no such file"
+	if runtime.GOOS == "windows" {
+		missing = "cannot find the file"
+	}
+	refused(missing)
 	still(root)
 	// The same length, different bytes: present is not the same as held.
 	if err := os.WriteFile(kept, []byte(strings.Repeat("x", len(body))), 0600); err != nil {

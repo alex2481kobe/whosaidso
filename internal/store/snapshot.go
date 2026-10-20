@@ -62,7 +62,7 @@ func (s State) Bundles() ([]model.Bundle, error) {
 	}
 	out := make([]model.Bundle, 0, len(s.files))
 	for i := range s.files {
-		data, err := os.ReadFile(filepath.Join(s.project.Ledger, s.files[i].name))
+		data, err := readBundle(filepath.Join(s.project.Ledger, s.files[i].name))
 		if err != nil {
 			return nil, storeFault("io", filepath.Join(s.project.Ledger, s.files[i].name), err.Error())
 		}
@@ -153,7 +153,7 @@ func load(project Project) (State, bool, error) {
 		usable = false
 	}
 	for i, f := range files {
-		raw, err := os.ReadFile(filepath.Join(project.Ledger, f.name))
+		raw, err := readBundle(filepath.Join(project.Ledger, f.name))
 		if err != nil {
 			return State{}, false, err
 		}
@@ -209,7 +209,7 @@ func decodeRange(project Project, files []selectedFile, data [][]byte, from int)
 		raw := data[i]
 		if raw == nil {
 			var err error
-			if raw, err = os.ReadFile(filepath.Join(project.Ledger, files[i].name)); err != nil {
+			if raw, err = readBundle(filepath.Join(project.Ledger, files[i].name)); err != nil {
 				return nil, err
 			}
 			if sha256.Sum256(raw) != files[i].hash {

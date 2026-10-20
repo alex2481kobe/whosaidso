@@ -108,12 +108,16 @@ func configAt(root string) (Project, error) {
 // so it may not leave the whosaidso root. Containment is asked of the filesystem by
 // path segments, with symlinks resolved on both sides (macOS /tmp is a link).
 func ledgerInRoot(root, declared, config string) (string, error) {
+	if filepath.IsAbs(declared) || filepath.VolumeName(declared) != "" {
+		// Joined to the root, an absolute path would name a directory that
+		// exists nowhere ("root/C:/..." or "root/tmp/..."); the refusal names
+		// the path the author actually wrote.
+		return "", storeFault("config-invalid-value", config,
+			fmt.Sprintf("ledger %q is absolute, outside the whosaidso root %q", declared, root))
+	}
 	ledger := filepath.Join(root, declared)
 	outside := storeFault("config-invalid-value", config,
 		fmt.Sprintf("ledger %q resolves to %q, outside the whosaidso root %q", declared, ledger, root))
-	if filepath.IsAbs(declared) || filepath.VolumeName(declared) != "" {
-		return "", outside
-	}
 	realRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		return "", storeFault("io", root, err.Error())

@@ -63,3 +63,44 @@ jobs:
         run: |
           GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/whosaidso
           GOOS=darwin GOARCH=amd64 go build -o /dev/null ./cmd/whosaidso
+
+  windows:
+    # The store's Windows code (owner-only access lists, no-replace
+    # publication, directory flushes, the lock) runs only here: none of it is
+    # compiled into the Linux job.
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Checkout has LF line endings
+        # .gitattributes pins LF. A CRLF checkout would fail gofmt and the
+        # byte-exact fixtures for a reason that has nothing to do with the code.
+        run: |
+          ! git ls-files --eol | grep -q 'w/crlf' || { git ls-files --eol | grep 'w/crlf'; exit 1; }
+
+      - name: Format
+        run: |
+          unformatted=$(gofmt -l .)
+          test -z "$unformatted" || { echo "gofmt needed on:"; echo "$unformatted"; exit 1; }
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./... -count=1
+
+      - name: Test under the race detector
+        if: always()
+        env:
+          CGO_ENABLED: '1'
+        run: go test ./... -race -count=1

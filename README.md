@@ -59,7 +59,7 @@ first loop are in [Usage and setup](USAGE.md).
 
 ## Works with
 
-Any project and any agent that can run a command. Tested on macOS and, in CI, on Linux; Windows is untested. Early:
+Any project and any agent that can run a command. Tested on macOS and, in CI, on Linux and Windows. Early:
 the design is still settling. Until 1.0 the ledger format may change; when it does, the release includes a one-time
 converter.
 

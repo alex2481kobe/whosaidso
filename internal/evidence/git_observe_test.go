@@ -22,7 +22,7 @@ func TestScopeChangesListsOnlyScopedFilesBetweenTwoCommits(t *testing.T) {
 	repo := newRepo(t)
 	head := func(c string) model.GitHead { return model.GitHead{ObjectFormat: "sha1", Commit: c} }
 	a := head(commitFile(t, repo, "project/src/a.go", "v1\n"))
-	commitFile(t, repo, "project/src/*.go", "a file literally named star\n")
+	commitIndexOnly(t, repo, "project/src/*.go", "a file literally named star\n")
 	commitFile(t, repo, "project/notes.txt", "outside the scope\n")
 	commitFile(t, repo, "outside/src/a.go", "outside the whosaidso root\n")
 	gitRun(t, repo, "mv", "project/src/a.go", "project/src/b.go")

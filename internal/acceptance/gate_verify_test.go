@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +19,7 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/query"
 	"github.com/alex2481kobe/whosaidso/internal/reduce"
 	"github.com/alex2481kobe/whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/testaccess"
 	"github.com/alex2481kobe/whosaidso/internal/write"
 )
 
@@ -33,6 +34,7 @@ type gateVerifyFixture struct {
 func gateVerifyNew(t *testing.T) *gateVerifyFixture {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	root := t.TempDir()
 	return &gateVerifyFixture{t: t, p: store.Project{ID: recProject, Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}, n: 200}
 }
@@ -614,12 +616,16 @@ func TestGateVerifyPermissionRecoveryCommandQuotesExactPath(t *testing.T) {
 	f.control()
 	for _, name := range []string{"plain", "with space", "with'quote", "with\nnewline", "space ' quote\n$(false); tail"} {
 		t.Run(fmt.Sprintf("%q", name), func(t *testing.T) {
+			if runtime.GOOS == "windows" && strings.Contains(name, "\n") {
+				t.Skip("Windows file names cannot hold a newline")
+			}
 			g := gateVerifyNew(t)
 			home := filepath.Join(t.TempDir(), name)
 			if err := os.Mkdir(home, 0700); err != nil {
 				t.Fatal(err)
 			}
 			t.Setenv("HOME", home)
+			t.Setenv("USERPROFILE", home)
 			g.control()
 			inbox, err := store.IntakeDir(g.p)
 			if err != nil {
@@ -635,32 +641,27 @@ func TestGateVerifyPermissionRecoveryCommandQuotesExactPath(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, path := range []string{packetPath, inbox} {
-				mode, insecure := os.FileMode(0600), os.FileMode(0644)
-				if path == inbox {
-					mode, insecure = 0700, 0755
-				}
-				if err := os.Chmod(path, insecure); err != nil {
-					t.Fatal(err)
-				}
+				testaccess.Widen(t, path)
 				_, refusal := store.ReadIntake(g.p, nil)
 				var fault *model.Fault
 				if !errors.As(refusal, &fault) || fault.Code != "insecure-permissions" {
 					t.Fatalf("expected owner-only permission refusal before recovery, got %v", refusal)
 				}
-				const prefix = "intake requires owner-only access; restore permissions with "
+				// The prefix names the shell on platforms that need one ("restore
+				// permissions in PowerShell with"); the command follows the first " with ".
+				const prefix = "intake requires owner-only access; restore permissions"
 				const suffix = "; then retry the identical read or write; do not delete or recapture the packet"
 				if !strings.HasPrefix(fault.Detail, prefix) || !strings.HasSuffix(fault.Detail, suffix) {
 					t.Fatalf("expected extractable recovery command, got %q", fault.Detail)
 				}
-				command := strings.TrimSuffix(strings.TrimPrefix(fault.Detail, prefix), suffix)
-				// Execute exactly the displayed POSIX command, only against our
+				_, command, _ := strings.Cut(strings.TrimSuffix(strings.TrimPrefix(fault.Detail, prefix), suffix), " with ")
+				// Execute exactly the displayed command, only against our
 				// temporary fixture. Newlines inside quotes must remain literal.
-				if out, err := exec.Command("/bin/sh", "-c", command).CombinedOutput(); err != nil {
+				if out, err := testaccess.RunRestore(command); err != nil {
 					t.Fatalf("recovery command must quote the exact path %q, command=%q: %v, %s", path, command, err, out)
 				}
-				info, err := os.Stat(path)
-				if err != nil || info.Mode().Perm() != mode {
-					t.Fatalf("expected recovery to restore mode %o on %q, stat=%v error=%v", mode, path, info, err)
+				if !testaccess.OwnerOnly(t, path) {
+					t.Fatalf("expected recovery to restore owner-only access on %q", path)
 				}
 				if _, err := store.ReadIntake(g.p, nil); err != nil {
 					t.Fatalf("recovery must make the identical packet readable: %v", err)

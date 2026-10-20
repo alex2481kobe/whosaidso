@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/alex2481kobe/whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/testaccess"
 )
 
 func TestGalleryImportIdentityFollowsListContent(t *testing.T) {
@@ -82,7 +83,7 @@ func TestGalleryImportDeduplicatesEntriesAcrossInventories(t *testing.T) {
 			if step.newHome {
 				home = t.TempDir()
 			}
-			if err := os.Chmod(home, 0700); err != nil {
+			if err := testaccess.MakePrivate(home); err != nil {
 				t.Fatal(err)
 			}
 			t.Setenv(store.HomeEnv, home)
@@ -115,7 +116,7 @@ func TestGalleryImportDeduplicatesEntriesAcrossInventories(t *testing.T) {
 func TestGalleryImportCollapsesMatchingLegacyRecords(t *testing.T) {
 	root, _ := cliFixture(t)
 	home := t.TempDir()
-	if err := os.Chmod(home, 0700); err != nil {
+	if err := testaccess.MakePrivate(home); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv(store.HomeEnv, home)

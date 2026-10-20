@@ -17,6 +17,7 @@ import (
 func homeWorld(t *testing.T) (root string) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv(HomeEnv, filepath.Join(t.TempDir(), "whosaidso-home"))
 	return homeCheckout(t, "team/project")
 }
@@ -60,6 +61,7 @@ func mustMkdirAll(t *testing.T, dir string) {
 func TestHomeEnvIsolatesAllFourStores(t *testing.T) {
 	userHome := t.TempDir()
 	t.Setenv("HOME", userHome)
+	t.Setenv("USERPROFILE", userHome)
 	home := filepath.Join(t.TempDir(), "whosaidso-home")
 	t.Setenv(HomeEnv, home)
 	root := homeCheckout(t, "team/project")

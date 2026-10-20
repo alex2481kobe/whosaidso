@@ -53,6 +53,21 @@ func commitFile(t *testing.T, root, rel, body string) string {
 	return gitRun(t, root, "rev-parse", "HEAD")
 }
 
+// commitIndexOnly commits a path through the index alone, without writing it
+// to the working tree, for names a filesystem cannot hold (Windows refuses
+// "*" in a file name) but a Git tree can.
+func commitIndexOnly(t *testing.T, root, rel, body string) string {
+	t.Helper()
+	blob := filepath.Join(t.TempDir(), "blob")
+	if err := os.WriteFile(blob, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sha := gitRun(t, root, "hash-object", "-w", blob)
+	gitRun(t, root, "-c", "core.protectNTFS=false", "update-index", "--add", "--cacheinfo", "100644,"+sha+","+rel)
+	gitRun(t, root, "commit", "--quiet", "-m", "add "+rel)
+	return gitRun(t, root, "rev-parse", "HEAD")
+}
+
 func gitRef(format, commit, path, selector, pointer string) model.ArtifactRef {
 	return model.ArtifactRef{
 		Kind:     "git",

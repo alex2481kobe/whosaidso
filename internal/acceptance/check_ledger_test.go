@@ -26,7 +26,7 @@ func checkLedger(t *testing.T, dir, home string, env ...string) (write.LedgerChe
 	t.Helper()
 	cmd := exec.Command(pvWhoSaidSo(t), "check", "ledger", "--json")
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), append([]string{"HOME=" + home}, env...)...)
+	cmd.Env = append(os.Environ(), append([]string{"HOME=" + home, "USERPROFILE=" + home}, env...)...)
 	out, err := cmd.Output()
 	code := 0
 	var exit *exec.ExitError
@@ -109,7 +109,7 @@ func TestCheckLedgerFindsWhatAFreshCloneLacks(t *testing.T) {
 	shallow := filepath.Join(t.TempDir(), "shallow")
 	nestGit(t, w.root, "clone", "-q", "--depth", "1", "file://"+w.root, shallow)
 	cmd := exec.Command(pvWhoSaidSo(t), "check", "ledger")
-	cmd.Dir, cmd.Env = shallow, append(os.Environ(), "HOME="+w.home)
+	cmd.Dir, cmd.Env = shallow, append(os.Environ(), "HOME="+w.home, "USERPROFILE="+w.home)
 	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "git fetch --unshallow") {
 		t.Fatalf("a shallow repository is refused: %v %s", err, out)
 	}

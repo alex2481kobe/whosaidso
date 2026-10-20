@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -76,7 +77,8 @@ func TestArtifactFilesystemContainment(t *testing.T) {
 			if len(got.Bytes) != 0 {
 				t.Fatalf("escaped bytes returned: %q", got.Bytes)
 			}
-			for _, detail := range []string{"resolved outside the root", root, target} {
+			// Paths are quoted with %q, which escapes Windows separators.
+			for _, detail := range []string{"resolved outside the root", strconv.Quote(root), strconv.Quote(target)} {
 				if !strings.Contains(err.Error(), detail) {
 					t.Errorf("fault must name containment failure, root and destination; missing %q: %v", detail, err)
 				}

@@ -30,6 +30,7 @@ type admissionFixture struct {
 func newAdmissionFixture(t *testing.T) *admissionFixture {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	root := t.TempDir()
 	return &admissionFixture{t: t, project: store.Project{ID: "test/admission", Root: root, Ledger: filepath.Join(root, ".whosaidso", "events")}, author: model.Actor{ID: "agent-c2"}}
 }

@@ -70,6 +70,7 @@ func pvPut(t *testing.T, root, rel string, body []byte) {
 func pvNew(t *testing.T) *pvWorld {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	root := t.TempDir()
 	pvPut(t, root, "whosaidso.toml", []byte("id = \"verify/proof\"\nledger = \".whosaidso/events\"\n"))
 	p, err := store.Discover(root)
@@ -760,7 +761,7 @@ func pvWhoSaidSo(t *testing.T) string {
 			pvBinaryErr = err
 			return
 		}
-		pvBinary = filepath.Join(dir, "whosaidso")
+		pvBinary = filepath.Join(dir, exeName("whosaidso"))
 		out, err := exec.Command("go", "build", "-o", pvBinary, "github.com/alex2481kobe/whosaidso/cmd/whosaidso").CombinedOutput()
 		if err != nil {
 			pvBinaryErr = fmt.Errorf("%v: %s", err, out)
@@ -776,7 +777,7 @@ func (w *pvWorld) cli(stdin []byte, args ...string) ([]byte, error) {
 	w.t.Helper()
 	cmd := exec.Command(pvWhoSaidSo(w.t), args...)
 	cmd.Dir, cmd.Stdin = w.p.Root, bytes.NewReader(stdin)
-	cmd.Env = append(os.Environ(), "HOME="+os.Getenv("HOME"), "WHOSAIDSO_ACTOR=agent")
+	cmd.Env = append(os.Environ(), "HOME="+os.Getenv("HOME"), "USERPROFILE="+os.Getenv("HOME"), "WHOSAIDSO_ACTOR=agent")
 	bindProjectHome(cmd)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
@@ -799,6 +800,9 @@ func (w *pvWorld) cliAdmit(packets ...model.ID) error {
 
 func (w *pvWorld) cliRun(script string) (model.InvocationEnvelope, []model.ID, error) {
 	w.t.Helper()
+	if runtime.GOOS == "windows" {
+		w.t.Skip("the producer is a POSIX shell script")
+	}
 	pvPut(w.t, w.p.Root, "tools/run.sh", []byte(script))
 	// Writes print a one-line acknowledgement by default; --json is the full result this test decodes.
 	out, err := w.cli(nil, "run", "--json", "--attempt-id", string(w.attempt), "--instrument", string(w.instrument.RecordID),

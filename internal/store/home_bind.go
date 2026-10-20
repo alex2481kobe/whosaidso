@@ -50,7 +50,7 @@ func Bind(ctx context.Context, cwd, target string) (BindResult, error) {
 		return BindResult{}, err
 	}
 	registry := filepath.Dir(path)
-	if err := os.MkdirAll(registry, 0o700); err != nil {
+	if err := mkdirAllPrivate(registry); err != nil {
 		return BindResult{}, storeFault("io", registry, err.Error())
 	}
 	lock, err := holdAdmissionLock(ctx, registry)
@@ -95,7 +95,7 @@ func writeBinding(path, root string) error {
 		err = closeErr
 	}
 	if err == nil {
-		err = os.Rename(tmp.Name(), path)
+		err = renameReplace(tmp.Name(), path)
 	}
 	if err != nil {
 		return storeFault("io", path, err.Error())

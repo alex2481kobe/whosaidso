@@ -107,7 +107,7 @@ func TestRunCaptureFailureKeepsStaging(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(inbox, 0700) })
+	t.Cleanup(func() { runTestAllowWrites(inbox) })
 	result, err := Run(context.Background(), project, runTestRequest(project.Root, "output", proofPath, runOwnBody, runStorageReport, inbox))
 	if err == nil || result.SealPacket.CommandID != "" || result.StartPacket.CommandID == "" {
 		t.Fatalf("fixture: the seal's capture must fail after a durable start: %+v, %v", result, err)

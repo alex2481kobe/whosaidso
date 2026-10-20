@@ -36,7 +36,7 @@ func cliParityNew(t *testing.T) *gateVerifyFixture {
 		if err != nil {
 			t.Fatal(err)
 		}
-		cliParityBinary = filepath.Join(dir, "whosaidso")
+		cliParityBinary = filepath.Join(dir, exeName("whosaidso"))
 		cmd := exec.Command("go", "build", "-o", cliParityBinary, "./cmd/whosaidso")
 		cmd.Dir = repo
 		if out, err := cmd.CombinedOutput(); err != nil {

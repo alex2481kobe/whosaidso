@@ -121,7 +121,7 @@ func readArtifact(path string, want int) ([]byte, error) {
 }
 
 func syncArtifactPath(path string) error {
-	f, err := os.Open(path)
+	f, err := openForSync(path)
 	if err != nil {
 		return err
 	}

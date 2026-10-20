@@ -42,7 +42,7 @@ func machineIDAt(dir string) (model.ID, error) {
 	if id, err := readMachineID(final); !os.IsNotExist(err) {
 		return id, err
 	}
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := mkdirAllPrivate(dir); err != nil {
 		return "", storeFault("io", dir, err.Error())
 	}
 	if info, err := os.Lstat(dir); err != nil || !info.IsDir() {
@@ -70,7 +70,7 @@ func machineIDAt(dir string) (model.ID, error) {
 	if err := os.Link(tmp.Name(), final); err != nil && !os.IsExist(err) {
 		return "", storeFault("io", final, err.Error())
 	}
-	if d, err := os.Open(dir); err == nil {
+	if d, err := openForSync(dir); err == nil {
 		_ = d.Sync()
 		_ = d.Close()
 	}

@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
@@ -642,7 +641,7 @@ func TestAdmissionLockIsNotInheritedByChildren(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer grandchild.Kill()
-	if err := grandchild.Signal(syscall.Signal(0)); err != nil {
+	if err := processAlive(grandchild); err != nil {
 		t.Fatalf("the grandchild is already gone, so this proves nothing: %v", err)
 	}
 	// The writer that held the lock is dead. Its long running grandchild is
@@ -740,19 +739,4 @@ func TestTransactStopsOnACancelledContext(t *testing.T) {
 	readControl(t, p, 1)
 	requireNoTemporaries(t, p)
 	admitControl(t, p, 2)
-}
-
-func TestPublicationIsRefusedWhereDurabilityIsUntested(t *testing.T) {
-	// The refusal and the platforms it names travel together, so a port cannot
-	// quietly acquire a durability claim by adding a build tag.
-	err := publicationDurability()
-	if err != nil {
-		requireFault(t, err, "unsupported-platform")
-		return
-	}
-	p := ledgerProject(t)
-	admitControl(t, p, 1)
-	if _, statErr := os.Lstat(filepath.Join(p.Ledger, lockName)); statErr != nil {
-		t.Fatalf("no admission lock file: %v", statErr)
-	}
 }

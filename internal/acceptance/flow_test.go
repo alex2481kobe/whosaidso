@@ -85,11 +85,11 @@ func (w *flowWorld) cli(stdin []byte, args ...string) ([]byte, error) {
 	cmd.Dir, cmd.Stdin = w.root, bytes.NewReader(stdin)
 	env := []string{}
 	for _, entry := range os.Environ() {
-		if !strings.HasPrefix(entry, "WHOSAIDSO_ACTOR=") && !strings.HasPrefix(entry, "HOME=") {
+		if !strings.HasPrefix(entry, "WHOSAIDSO_ACTOR=") && !strings.HasPrefix(entry, "HOME=") && !strings.HasPrefix(entry, "USERPROFILE=") {
 			env = append(env, entry)
 		}
 	}
-	cmd.Env = append(env, "HOME="+w.home)
+	cmd.Env = append(env, "HOME="+w.home, "USERPROFILE="+w.home)
 	bindProjectHome(cmd)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
@@ -967,7 +967,7 @@ func TestFlowRecovery(t *testing.T) {
 		"--claim", string(w.claim.RecordID), "--claim-revision", "1", "--criterion-id", string(w.criterion.CriterionID), "--criterion-revision", "1",
 		"--", "/bin/sh", "tools/run.sh")
 	cmd.Dir = w.root
-	cmd.Env = append(os.Environ(), "HOME="+w.home)
+	cmd.Env = append(os.Environ(), "HOME="+w.home, "USERPROFILE="+w.home)
 	bindProjectHome(cmd)
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout

@@ -124,7 +124,7 @@ func readLedger(project Project) ([]model.Bundle, error) {
 	var line reduce.Lineage
 	for _, file := range files {
 		path := filepath.Join(dir, file.name)
-		data, err := os.ReadFile(path)
+		data, err := readBundle(path)
 		if err != nil {
 			return nil, storeFault("io", path, err.Error())
 		}
