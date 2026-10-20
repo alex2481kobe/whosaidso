@@ -111,7 +111,9 @@ function fullscreen(entry, src, original, trigger) {
     surface.removeEventListener("fullscreenchange", changed);
     if (document.fullscreenElement === surface) document.exitFullscreen().catch(() => {});
     surface.remove();
-    if (trigger.isConnected) trigger.focus();
+    // Return focus without scrolling: a trigger outside the viewport would
+    // otherwise jump the gallery list away from where the reader was.
+    if (trigger.isConnected) trigger.focus({ preventScroll: true });
   }, { once: true });
   document.body.append(surface);
   // The dialog opens only once the fullscreen request has settled: the top

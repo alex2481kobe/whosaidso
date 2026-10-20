@@ -87,20 +87,53 @@ func (e GalleryRequire) validate(p string) error {
 }
 
 // GalleryImport seals a completed import of one machine list without keeping it
-// as a source. Source hashes Inventory; Entries correspond in the same order.
+// as a source. Source hashes Inventory and Skipped; Entries correspond to
+// Inventory in the same order. Reused binds a legacy date to an existing pin.
 type GalleryImport struct {
-	Source      Digest   `json:"source"`
-	Inventory   []Digest `json:"inventory"`
-	EmptySource bool     `json:"empty_source,omitempty"`
-	Entries     []ID     `json:"entries"`
+	Source      Digest               `json:"source"`
+	Inventory   []Digest             `json:"inventory"`
+	EmptySource bool                 `json:"empty_source,omitempty"`
+	Entries     []ID                 `json:"entries"`
+	Skipped     []GalleryImportSkip  `json:"skipped,omitempty"`
+	Reused      []GalleryImportReuse `json:"reused,omitempty"`
 }
 
 func (*GalleryImport) eventPayload()        {}
 func (*GalleryImport) EventType() EventType { return "gallery.import" }
 
-// GallerySource identifies a list by its ordered inventory, independently of its locator.
-func GallerySource(inventory []Digest) Digest {
-	raw, _ := json.Marshal(inventory)
+// GalleryImportSkip records a non-import without pretending to have a file pin.
+// Its words are the legacy list's, kept as written: a path of only spaces is a
+// legal file name and must still be sealable, so none of them is required text.
+type GalleryImportSkip struct {
+	LegacyID string `json:"legacy_id"`
+	Path     string `json:"path"`
+	Title    string `json:"title"`
+	Reason   string `json:"reason"`
+}
+
+func (e GalleryImportSkip) validate(p string) error {
+	return oneOf(e.Reason, p+".reason", "file missing")
+}
+
+// GalleryImportReuse binds an inventory member to an already admitted file pin.
+// AddedAt is the legacy date, which need not equal the admitted entry's date.
+type GalleryImportReuse struct {
+	EntryID ID        `json:"entry_id"`
+	AddedAt time.Time `json:"added_at"`
+}
+
+// GallerySource covers all pinned identities and every recorded non-import.
+// With no skips its encoding stays identical to older sealed imports.
+func GallerySource(inventory []Digest, skipped ...GalleryImportSkip) Digest {
+	var raw []byte
+	if len(skipped) == 0 {
+		raw, _ = json.Marshal(inventory)
+	} else {
+		raw, _ = json.Marshal(struct {
+			Inventory []Digest            `json:"inventory"`
+			Skipped   []GalleryImportSkip `json:"skipped"`
+		}{inventory, skipped})
+	}
 	return HashBytes(raw)
 }
 

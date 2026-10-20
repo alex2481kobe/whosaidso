@@ -238,9 +238,14 @@ visual acceptance. --admit --reason TEXT uses the usual policy.
 packets, or --admit --reason TEXT. A final gallery.import packet seals the
 completed import. The old list stays in place and is never
 read again after that completion is admitted. list and ui read only the
-ledger. Already admitted import ids are skipped; missing
-files must be restored before import can pin them. Captured packets remain
-pending until admitted; retry admission instead of importing them twice.
+ledger. Already admitted import ids are skipped, and so is an entry whose
+file pin (content and locator) an entry added by hand already holds. An entry
+whose file is missing is not imported: the command prints it (legacy id, path,
+title) and the sealing gallery.import packet records it with the reason
+"file missing", so every entry is accounted for. Any other error fails the
+whole import. Re-running after a completed import captures nothing. Captured
+packets remain pending until admitted; retry admission instead of importing
+them twice.
 `, define: galleryVerb("import")},
 
 		{name: "home", args: "[PATH]", summary: "show or set the checkout the viewer opens for this project", detail: `Reads and writes always use the checkout you run them in; this changes
