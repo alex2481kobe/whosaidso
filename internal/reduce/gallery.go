@@ -72,9 +72,10 @@ func (s *state) galleryEvent(b model.Bundle, idx int, event model.TypedEvent) er
 				return fail("source", "gallery list already imported")
 			}
 		}
-		if e.Inventory == nil || model.GallerySource(e.Inventory) != e.Source || len(e.Inventory) != len(e.Entries) || e.EmptySource != (len(e.Inventory) == 0) {
+		if e.Inventory == nil || model.GallerySource(e.Inventory, e.Skipped...) != e.Source || len(e.Inventory) != len(e.Entries) || e.EmptySource != (len(e.Inventory) == 0 && len(e.Skipped) == 0) {
 			return fail("inventory", "completion must name the complete source inventory; an empty source must be explicit")
 		}
+		usedReuse := make([]bool, len(e.Reused))
 		seen := map[model.Digest]bool{}
 		for i, id := range e.Entries {
 			legacy := e.Inventory[i]
@@ -83,11 +84,31 @@ func (s *state) galleryEvent(b model.Bundle, idx int, event model.TypedEvent) er
 			}
 			seen[legacy] = true
 			entry, ok := s.galleryEntry(id)
-			if !ok || entry.Add.ImportID != string(legacy) {
+			if !ok {
 				return fail("entries", "import completion needs every imported entry admitted first")
 			}
-			if model.GalleryImportIdentity(entry.Add.File, entry.Add.AddedAt) != legacy {
-				return fail("entries", "import identity must match the entry's file and added time")
+			if entry.Add.ImportID == string(legacy) {
+				if model.GalleryImportIdentity(entry.Add.File, entry.Add.AddedAt) != legacy {
+					return fail("entries", "import identity must match the entry's file and added time")
+				}
+				continue
+			}
+			// An entry added by hand holds the legacy entry's file pin; the
+			// reuse supplies the legacy date the identity was made with.
+			found := false
+			for j, reuse := range e.Reused {
+				if reuse.EntryID == id && entry.Add.ImportID == "" && model.GalleryImportIdentity(entry.Add.File, reuse.AddedAt) == legacy {
+					usedReuse[j], found = true, true
+					break
+				}
+			}
+			if !found {
+				return fail("entries", "import completion needs every imported entry admitted first")
+			}
+		}
+		for _, used := range usedReuse {
+			if !used {
+				return fail("reused", "reused entry must be in the inventory")
 			}
 		}
 		return nil

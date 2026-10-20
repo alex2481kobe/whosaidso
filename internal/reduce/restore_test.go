@@ -137,7 +137,7 @@ func TestRestoreAtEverySplitEqualsReplay(t *testing.T) {
 
 // The golden ledger's image is pinned. A change that moves it must also move
 // snapshotFormat or the state's types, so older images are refused.
-const goldenImageSHA256 = "d94a2a811d8ba682d3fee6f73b7afd55943c4b0e1e813ffaa2253f6db7bf2c5a" // snapshot format /7 binds gallery imports to source inventories
+const goldenImageSHA256 = "c91953d8f71c65315af5ad866c21f59e75369cda4e4b23ad7e3310edd1f7662d" // snapshot format /7 binds gallery imports to source inventories, skips and reuses
 
 func TestGoldenImageIsPinned(t *testing.T) {
 	image := mustEncode(t, mustReplay(t, goldenLedger(t).bundles()))
