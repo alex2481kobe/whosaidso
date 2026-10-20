@@ -106,8 +106,8 @@ export async function renderHistory() {
 
   return el("div", "screen history-screen",
     act.result === "UNKNOWN" ? el("p", "notice", "UNKNOWN: " + act.reason) : null,
-    hero("history", "History", icon("history", "hero-icon"), ["A running log of everything that's happened in ", project(), "."], "Track changes, follow progress, and see the full story."),
-    el("div", "stats six", totalCard, ...groups.map((g) => stat(g, count(all, (r) => r.group === g))), stat(other, count(all, (r) => r.group === other))),
-    el("div", "panel filter-bar", el("label", "search", icon("search"), search), controls),
+    hero("Activity"),
+    el("details", "history-summary", el("summary", "", "Activity totals"), el("div", "stats six", totalCard, ...groups.map((g) => stat(g, count(all, (r) => r.group === g))), stat(other, count(all, (r) => r.group === other)))),
+    el("div", "filter-bar", el("label", "search", icon("search"), search), controls),
     el("div", "history-body", log, side));
 }
