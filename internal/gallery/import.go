@@ -23,6 +23,7 @@ type ImportCollapse struct {
 type ImportResult struct {
 	Events    []model.TypedEvent
 	Collapsed []ImportCollapse
+	Skipped   []model.GalleryImportSkip
 }
 
 func Import(p store.Project, by model.Actor, now time.Time) (ImportResult, error) {
@@ -51,6 +52,10 @@ func Import(p store.Project, by model.Actor, now time.Time) (ImportResult, error
 	first := map[model.Digest]int{}
 	for i, e := range old {
 		add, err := Prepare(p.Root, e.Path, e.Title, e.Note, by, nil, now)
+		if errors.Is(err, os.ErrNotExist) {
+			result.Skipped = append(result.Skipped, model.GalleryImportSkip{LegacyID: e.ID, Path: e.Path, Title: e.Title, Reason: "file missing"})
+			continue
+		}
 		if err != nil {
 			return ImportResult{}, err
 		}
@@ -65,7 +70,7 @@ func Import(p store.Project, by model.Actor, now time.Time) (ImportResult, error
 		prepared = append(prepared, add)
 		inventory = append(inventory, identity)
 	}
-	source := model.GallerySource(inventory)
+	source := model.GallerySource(inventory, result.Skipped...)
 	if state.Snapshot().GalleryImported(source) {
 		return result, nil
 	}
@@ -73,29 +78,41 @@ func Import(p store.Project, by model.Actor, now time.Time) (ImportResult, error
 	if err != nil {
 		return ImportResult{}, err
 	}
-	seen := map[string]bool{}
-	for _, e := range entries {
-		seen[e.Add.ImportID] = true
-	}
 	out := []model.TypedEvent{}
 	imported := []model.ID{}
+	reused := []model.GalleryImportReuse{}
 	for _, add := range prepared {
-		importID := add.ImportID
-		if seen[importID] {
-			for _, existing := range entries {
-				if existing.Add.ImportID == importID {
-					imported = append(imported, existing.Add.EntryID)
-					break
-				}
-			}
+		match, byPin := existingEntry(entries, add)
+		if match == nil {
+			out = append(out, &add)
+			imported = append(imported, add.EntryID)
 			continue
 		}
-		out = append(out, &add)
-		imported = append(imported, add.EntryID)
-		seen[importID] = true
+		imported = append(imported, match.Add.EntryID)
+		if byPin {
+			reused = append(reused, model.GalleryImportReuse{EntryID: match.Add.EntryID, AddedAt: add.AddedAt})
+		}
 	}
-	result.Events = append(out, &model.GalleryImport{Source: source, Inventory: inventory, EmptySource: len(inventory) == 0, Entries: imported})
+	result.Events = append(out, &model.GalleryImport{Source: source, Inventory: inventory, EmptySource: len(inventory) == 0 && len(result.Skipped) == 0, Entries: imported, Skipped: result.Skipped, Reused: reused})
 	return result, nil
+}
+
+// existingEntry finds what already holds a legacy entry: the entry an earlier
+// import made for the same identity, else an entry added by hand (no import id)
+// with the same file pin. Imported entries match by identity only, because the
+// same file listed under two dates is two legacy entries.
+func existingEntry(entries []reduce.GalleryEntry, add model.GalleryAdd) (match *reduce.GalleryEntry, byPin bool) {
+	for i := range entries {
+		if entries[i].Add.ImportID == add.ImportID {
+			return &entries[i], false
+		}
+	}
+	for i := range entries {
+		if entries[i].Add.ImportID == "" && entries[i].Add.File == add.File {
+			return &entries[i], true
+		}
+	}
+	return nil, false
 }
 
 func TaskRefs(p store.Project, ids []string) ([]model.RecordRef, error) {

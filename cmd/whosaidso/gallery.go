@@ -141,6 +141,9 @@ func galleryVerb(mode string) func(*flag.FlagSet) func(*call) error {
 					return err
 				}
 				events = result.Events
+				for _, skipped := range result.Skipped {
+					fmt.Fprintf(c.stderr, "skipped legacy entry %q path %q title %q: %s\n", skipped.LegacyID, skipped.Path, skipped.Title, skipped.Reason)
+				}
 				for _, merged := range result.Collapsed {
 					fmt.Fprintf(c.stderr, "collapsed legacy record %d %q into record %d %q\n", merged.Record, merged.LegacyID, merged.Into, merged.IntoLegacyID)
 				}

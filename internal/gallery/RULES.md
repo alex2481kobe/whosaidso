@@ -50,5 +50,13 @@ entry's import id bound to its inventory member. Empty completion
 requires an explicit empty-source declaration and the empty inventory's hash;
 nonempty sources cannot complete without every entry admitted. Retries read the
 list to identify its inventory; an admitted inventory is skipped.
-The old list and media remain in place. Missing media must be restored to import
-it; pending import packets should be admitted rather than recaptured.
+An entry whose media file is missing does not fail the import. It is listed in
+the seal (legacy id, path, title, reason `file missing`), and the seal's source
+hash covers that list; a list with nothing skipped hashes exactly as before. An
+entry whose file pin (hash, length and locator) an entry added by hand (no
+import id) already holds is not added again: the seal names that entry in
+place of a new one, with the legacy date its identity was made from. Imported
+entries match by identity only, so one file listed under two dates stays two
+entries. Any other error fails the import.
+The old list and media remain in place; pending import packets should be
+admitted rather than recaptured.
