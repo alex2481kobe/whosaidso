@@ -139,3 +139,46 @@ func TestGalleryImportRetryCapturesNothingWhenAReusedFileLaterVanishes(t *testin
 	}
 	importRetryCapturesNothing(t, root)
 }
+
+// Holding is per legacy entry (locator and legacy date), not per locator: an
+// entry listed later under the same locator and another date was never sealed,
+// so once its file is gone it is reported, while the sealed one stays held.
+func TestGalleryImportHoldsOnlyTheSealedDateOfASharedLocator(t *testing.T) {
+	root := importFixture(t, `[{"id":"one","path":"second.png","title":"One","added_at":"2026-01-02T00:00:00Z"}]`)
+	writeSecond(t, root)
+	importOnce(t, root)
+	if err := os.Remove(filepath.Join(root, "second.png")); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := store.GalleryFile("test/cli")
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := `[{"id":"one","path":"second.png","title":"One","added_at":"2026-01-02T00:00:00Z"},{"id":"two","path":"second.png","title":"Two","added_at":"2026-02-03T00:00:00Z"}]`
+	if err := os.WriteFile(legacy, []byte(list), 0600); err != nil {
+		t.Fatal(err)
+	}
+	importOnce(t, root)
+	seals := importSeals(t, root)
+	if len(seals) != 2 || len(seals[1].Skipped) != 1 || seals[1].Skipped[0].LegacyID != "two" {
+		t.Fatalf("only the never-sealed entry may be reported missing: %+v", seals)
+	}
+	if got := len(galleryTitles(t, root)); got != 1 {
+		t.Fatalf("a vanished file added entries: %d", got)
+	}
+}
+
+// A skip is part of the sealed source, so a sealed entry vanishing later does
+// not disturb it: the retry still captures nothing.
+func TestGalleryImportRetryCapturesNothingWhenASkipAndASealedFileCoexist(t *testing.T) {
+	root := importFixture(t, `[{"id":"a","path":"second.png","title":"A","added_at":"2026-01-01T00:00:00Z"},{"id":"c","path":"never.png","title":"C","added_at":"2026-01-02T00:00:00Z"}]`)
+	writeSecond(t, root)
+	importOnce(t, root)
+	if seals := importSeals(t, root); len(seals) != 1 || len(seals[0].Skipped) != 1 {
+		t.Fatalf("control: one skip sealed: %+v", seals)
+	}
+	if err := os.Remove(filepath.Join(root, "second.png")); err != nil {
+		t.Fatal(err)
+	}
+	importRetryCapturesNothing(t, root)
+}
