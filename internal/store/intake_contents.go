@@ -58,6 +58,12 @@ func encodeProjectID(id model.ProjectID) (string, error) {
 }
 
 func captureBlob(ctx context.Context, dir string, reader io.Reader, disk intakeIO) (CapturedBlob, error) {
+	return captureBlobWithRename(ctx, dir, reader, disk, renameNoReplace)
+}
+
+// Blob publication has its own boundary: disk.rename observes publication of
+// the complete packet, after every blob and directory has been flushed.
+func captureBlobWithRename(ctx context.Context, dir string, reader io.Reader, disk intakeIO, rename func(string, string) error) (CapturedBlob, error) {
 	var zero CapturedBlob
 	f, err := os.CreateTemp(dir, "blob-*.tmp")
 	if err != nil {
@@ -82,14 +88,27 @@ func captureBlob(ctx context.Context, dir string, reader io.Reader, disk intakeI
 	}
 	blob := CapturedBlob{SHA256: model.Digest(hex.EncodeToString(h.Sum(nil))), Length: uint64(n)}
 	// Duplicate bytes in one request share an identity and one immutable file.
-	// Only a name that already exists as a regular file of the same length is
-	// those bytes captured earlier, and only then is the fresh copy dropped;
+	// Only a regular file of the same length and SHA-256 is those bytes captured
+	// earlier, and only after streaming verification is the fresh copy dropped;
 	// any other failure, or anything else at the name, is not this blob.
 	final := filepath.Join(dir, string(blob.SHA256))
-	if err := renameNoReplace(path, final); err != nil {
+	if err := rename(path, final); err != nil {
 		info, statErr := os.Lstat(final)
 		if !errors.Is(err, fs.ErrExist) || statErr != nil || !info.Mode().IsRegular() || uint64(info.Size()) != blob.Length {
 			return zero, storeFault("io", path, err.Error())
+		}
+		existing, err := os.Open(final)
+		if err != nil {
+			return zero, storeFault("io", final, err.Error())
+		}
+		h.Reset()
+		n, readErr := io.Copy(h, intakeReader{ctx: ctx, reader: existing})
+		closeErr := existing.Close()
+		if readErr != nil || closeErr != nil {
+			return zero, storeFault("io", final, fmt.Sprintf("read: %v; close: %v", readErr, closeErr))
+		}
+		if uint64(n) != blob.Length || model.Digest(hex.EncodeToString(h.Sum(nil))) != blob.SHA256 {
+			return zero, storeFault("io", final, "existing blob bytes do not match their identity")
 		}
 		if err := os.Remove(path); err != nil {
 			return zero, storeFault("io", path, err.Error())
