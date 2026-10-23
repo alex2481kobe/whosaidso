@@ -1,9 +1,9 @@
 # Agents working on WhoSaidSo
 
 Any agent, any harness. Read CONTRIBUTING.md too; this file adds what an agent
-needs that a human contributor would pick up from review. How to use WhoSaidSo
-itself (capture, admit, run, handback, the views) is in `whosaidso help`, and
-only there.
+needs that a human contributor would pick up from review. Bare `whosaidso help`
+is the topic and verb index; `whosaidso help all` is the complete manual for
+capture, admit, run, handback, and the views.
 
 ## The build
 

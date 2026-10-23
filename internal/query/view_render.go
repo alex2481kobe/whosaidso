@@ -22,11 +22,20 @@ func RenderViewJSON(w io.Writer, answer ViewAnswer) error {
 
 // RenderViewBrief writes the concise reading. --json keeps full detail.
 func RenderViewBrief(w io.Writer, answer ViewAnswer) error {
+	return renderViewBrief(w, answer, false)
+}
+
+// RenderViewBriefWithIntakeDetails expands todo's verified packet summaries.
+func RenderViewBriefWithIntakeDetails(w io.Writer, answer ViewAnswer) error {
+	return renderViewBrief(w, answer, true)
+}
+
+func renderViewBrief(w io.Writer, answer ViewAnswer, intakeDetails bool) error {
 	var encoded bytes.Buffer
 	if err := RenderViewJSON(&encoded, answer); err != nil {
 		return err
 	}
-	text, _, err := ViewBriefOf(encoded.Bytes())
+	text, _, err := viewBriefOf(encoded.Bytes(), intakeDetails)
 	if err != nil {
 		return err
 	}
@@ -37,6 +46,10 @@ func RenderViewBrief(w io.Writer, answer ViewAnswer) error {
 // ViewBriefOf renders a view's brief from its JSON export and returns the facts
 // it shows, each with the path it was read from.
 func ViewBriefOf(exported []byte) (string, []BriefFact, error) {
+	return viewBriefOf(exported, false)
+}
+
+func viewBriefOf(exported []byte, intakeDetails bool) (string, []BriefFact, error) {
 	decoder := json.NewDecoder(bytes.NewReader(exported))
 	decoder.UseNumber()
 	var value any
@@ -48,7 +61,7 @@ func ViewBriefOf(exported []byte) (string, []BriefFact, error) {
 	briefHeader(b, a, a.at("view"))
 	switch a.at("view").text() {
 	case "todo":
-		briefTodo(b, a)
+		briefTodo(b, a, intakeDetails)
 	case "continue":
 		briefContinue(b, a)
 	case "show":
@@ -58,9 +71,34 @@ func ViewBriefOf(exported []byte) (string, []BriefFact, error) {
 		if len(a.at("reviews").items()) > 0 {
 			briefList(b, 0, "reviews", a.at("reviews"), briefReview)
 		}
+	case "packets":
+		if header := a.at("header"); header.ok() {
+			briefPacketHeader(b, 0, header)
+		} else if a.at("result").text() == "KNOWN" {
+			briefList(b, 0, "packets", a.at("packets"), briefPacketHeader)
+		}
 	}
 	b.line(0, "full detail: add --json")
 	return b.out.String(), b.facts, nil
+}
+
+func briefPacketHeader(b *briefWriter, indent int, p cur) {
+	parts := []any{"packet", p.at("command_id"), p.at("disposition"), "author"}
+	parts = append(parts, who(p.at("author"))...)
+	if writer := p.at("writer"); writer.ok() {
+		parts = append(parts, "written by")
+		parts = append(parts, who(writer)...)
+	}
+	parts = append(parts, "payload", p.at("payload", "state"))
+	if p.at("event_kinds", "state").text() == "known" {
+		parts = append(parts, "events", p.at("event_count", "value"))
+		for _, kind := range p.at("event_kinds", "value").items() {
+			parts = append(parts, kind)
+		}
+	} else {
+		parts = append(parts, prefix(p.at("payload", "reason")))
+	}
+	b.line(indent, parts...)
 }
 
 // either is a value that is a plain string, or an Unknown with its reason.
@@ -127,7 +165,7 @@ func briefTodoTask(b *briefWriter, indent int, t cur) {
 	}
 }
 
-func briefTodo(b *briefWriter, a cur) {
+func briefTodo(b *briefWriter, a cur, intakeDetails bool) {
 	if a.at("actor_filter").ok() {
 		b.line(0, "actor:", a.at("actor_filter"), "-", a.at("filter_note"))
 	}
@@ -152,13 +190,13 @@ func briefTodo(b *briefWriter, a cur) {
 		b.line(0, "limit: ready requested", o.at("requested"), "offered", o.at("offered"), "omitted", o.at("omitted"))
 	}
 	briefList(b, 0, "open decisions", a.at("open_decisions"), briefDetail)
-	briefIntake(b, "intake unreviewed", t.at("intake_unreviewed"), a.at("packets_not_accepted"), "pending")
-	briefIntake(b, "correction requested (whether a corrected packet answered it is not recorded)", t.at("intake_correction_requested"), a.at("packets_not_accepted"), "correction-requested")
+	briefIntake(b, "intake unreviewed", t.at("intake_unreviewed"), a.at("packets_not_accepted"), "pending", intakeDetails)
+	briefIntake(b, "correction requested (whether a corrected packet answered it is not recorded)", t.at("intake_correction_requested"), a.at("packets_not_accepted"), "correction-requested", intakeDetails)
 	if n := t.at("intake_elsewhere"); n.ok() {
 		b.line(0, "intake captured in other checkouts (admit each packet in one checkout only, normally where it was captured):", n)
 		for _, p := range a.at("packets_not_accepted").items() {
 			if p.at("disposition").text() == "captured-elsewhere" {
-				briefPacket(b, 1, p)
+				briefTodoPacket(b, 1, p, intakeDetails)
 				b.line(2, "captured in", p.at("captured_in"))
 			}
 		}
@@ -182,7 +220,7 @@ func briefSetAside(b *briefWriter, indent int, v cur) {
 
 // briefIntake lists the packets_not_accepted packets with one disposition, under
 // the total that counts them.
-func briefIntake(b *briefWriter, title string, total, list cur, disposition string) {
+func briefIntake(b *briefWriter, title string, total, list cur, disposition string, details bool) {
 	if total.string() == "0" {
 		b.line(0, title+": none")
 		return
@@ -190,7 +228,7 @@ func briefIntake(b *briefWriter, title string, total, list cur, disposition stri
 	b.line(0, title+":", total)
 	for _, p := range list.items() {
 		if p.at("disposition").text() == disposition {
-			briefPacket(b, 1, p)
+			briefTodoPacket(b, 1, p, details)
 		}
 	}
 }

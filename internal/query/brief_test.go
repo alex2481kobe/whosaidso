@@ -146,9 +146,9 @@ func TestBriefShowsReviewedIntakeWithItsDisposition(t *testing.T) {
 	capturePacket(t, p, 3)
 	text := assertViewHonest(t, viewAnswerOf(t, p, ViewRequest{View: "todo"}))
 	for _, want := range []string{"intake unreviewed 1 correction requested 1 rejected 1\n",
-		"\nintake unreviewed: 1\n  packet " + string(testID(1003)) + " pending\n    author author events 1 task.create\n",
-		"\ncorrection requested (whether a corrected packet answered it is not recorded): 1\n  packet " + string(testID(1004)) + " correction-requested\n",
-		"    reviewed correction-requested by reviewer\n",
+		"\nintake unreviewed: 1\n  packet " + string(testID(1003)) + " pending author author events 1 task.create\n",
+		"\ncorrection requested (whether a corrected packet answered it is not recorded): 1\n  packet " + string(testID(1004)) + " correction-requested author author events 1 task.create",
+		" reviewed by reviewer reason reviewed for this test\n",
 		"\nrejected intake: 1 (reviewed, nothing owed; whosaidso history lists the reviews)\n"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("intake brief must carry %q, got\n%s", want, text)
@@ -169,6 +169,40 @@ func TestBriefShowsReviewedIntakeWithItsDisposition(t *testing.T) {
 	if !found {
 		t.Fatalf("history must still list the rejected packet's review: %+v", history.Reviews)
 	}
+}
+
+// Default todo keeps each packet on one line while retaining its disposition,
+// author and event kinds. A large intake must not become a multi-line packet dump.
+func TestTodoPacketHeadersAreOneLine(t *testing.T) {
+	p := testProject(t)
+	capturePacket(t, p, 3)
+	text := assertViewHonest(t, viewAnswerOf(t, p, ViewRequest{View: "todo"}))
+	id := string(testID(1003))
+	if !strings.Contains(text, "packet "+id+" pending") || !strings.Contains(text, "author author") || !strings.Contains(text, "task.create") {
+		t.Fatalf("packet header lost actionable facts:\n%s", text)
+	}
+	if strings.Contains(text, "packet "+id+" pending\n    author") {
+		t.Fatalf("default todo expands packet details:\n%s", text)
+	}
+}
+
+func TestTodoPacketHeaderBytesOnSyntheticIntake(t *testing.T) {
+	p := testProject(t)
+	for i := 20; i < 220; i++ {
+		capturePacket(t, p, i)
+	}
+	answer := viewAnswerOf(t, p, ViewRequest{View: "todo"})
+	var oldText, compact bytes.Buffer
+	if err := RenderViewBriefWithIntakeDetails(&oldText, answer); err != nil {
+		t.Fatal(err)
+	}
+	if err := RenderViewBrief(&compact, answer); err != nil {
+		t.Fatal(err)
+	}
+	if compact.Len() >= oldText.Len() || strings.Count(compact.String(), "  packet ") != 200 {
+		t.Fatalf("headers did not reduce the complete synthetic intake: before %d after %d", oldText.Len(), compact.Len())
+	}
+	t.Logf("200 synthetic pending packets: old two-line text %d bytes; header text %d bytes", oldText.Len(), compact.Len())
 }
 
 // Authored text is cut at its first line and quoted when it holds anything a

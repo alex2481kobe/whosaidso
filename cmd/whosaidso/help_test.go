@@ -122,7 +122,7 @@ func TestHelpNamesOnlyWhatTheCLIHas(t *testing.T) {
 }
 
 func TestEveryVerbIsInHelpAndAnswersHelp(t *testing.T) {
-	guideText, _ := helpFor("")
+	guideText, _ := helpFor("all")
 	idx := index()
 	if !strings.HasPrefix(guideText, idx) || !strings.HasPrefix(idx, "TOPICS\n") {
 		t.Fatalf("whosaidso help must open with the keyword index:\n%s", guideText[:200])
@@ -161,12 +161,15 @@ func TestHelpForms(t *testing.T) {
 	if out, _, code := cliRun(t, dir, nil, ""); code != 0 || !strings.HasSuffix(out, "run `whosaidso help`.\n") || strings.Count(out, "\n") != 5 {
 		t.Fatalf("bare whosaidso must print a five-line summary ending with whosaidso help, got %d %q", code, out)
 	}
-	whole, _, code := cliRun(t, dir, nil, "", "help")
-	if code != 0 || !strings.HasPrefix(whole, "TOPICS\n") {
-		t.Fatalf("whosaidso help must print the whole guide, index first: %d", code)
+	indexText, _, code := cliRun(t, dir, nil, "", "help")
+	if code != 0 || !strings.HasPrefix(indexText, "TOPICS\n") || !strings.Contains(indexText, "whosaidso help all") || strings.Contains(indexText, "VERB REFERENCE") {
+		t.Fatalf("whosaidso help must print the index: %d", code)
 	}
-	if flagForm, _, _ := cliRun(t, dir, nil, "", "--help"); flagForm != whole {
-		t.Fatal("whosaidso --help must print the same guide")
+	if flagForm, _, _ := cliRun(t, dir, nil, "", "--help"); flagForm != indexText {
+		t.Fatal("whosaidso --help must print the same index")
+	}
+	if whole, _, code := cliRun(t, dir, nil, "", "help", "all"); code != 0 || !strings.Contains(whole, "VERB REFERENCE") {
+		t.Fatalf("whosaidso help all must print the complete guide: %d", code)
 	}
 	if out, _, code := cliRun(t, dir, nil, "", "help", "proof"); code != 0 || !strings.HasPrefix(out, "PROOF: ") || strings.Contains(out, "TOPICS") {
 		t.Fatalf("whosaidso help TOPIC must print one part, got %d %q", code, out)
@@ -182,6 +185,32 @@ func TestHelpForms(t *testing.T) {
 	if out, _, code := cliRun(t, dir, nil, "", "check", "--help"); code != 0 || strings.Count(out, "\nwhosaidso check ")+strings.Count(out[:16], "whosaidso check ") != 5 {
 		t.Fatalf("whosaidso check --help must print its five modes once each, got %d %q", code, out)
 	}
+}
+
+func TestBareHelpIsIndexAndAllIsCompleteGuide(t *testing.T) {
+	bare, ok := helpFor("")
+	if !ok || !strings.HasPrefix(bare, index()) || !strings.Contains(bare, "whosaidso help all") || strings.Contains(bare, "VERB REFERENCE") || strings.Contains(bare, topicHelp(guide[0])) {
+		t.Fatalf("bare help must be the keyword index and discovery line, got %q", bare)
+	}
+	all, ok := helpFor("all")
+	if !ok || !strings.Contains(all, "VERB REFERENCE") || !strings.Contains(all, topicHelp(guide[0])) || !strings.Contains(all, topicHelp(guide[1])) {
+		t.Fatalf("help all must carry the complete guide, got %q", all)
+	}
+	sections := strings.SplitN(bare, "VERBS\n", 2)
+	if len(sections) != 2 {
+		t.Fatal("index has no verb section")
+	}
+	for _, v := range registry {
+		if strings.Count(sections[1], "whosaidso help "+v.name+"\n") != 1 {
+			t.Fatalf("index must list verb %q once", v.name)
+		}
+	}
+	for _, topic := range guide {
+		if strings.Count(sections[0], "whosaidso help "+topic.name+"\n") != 1 {
+			t.Fatalf("index must list topic %q once", topic.name)
+		}
+	}
+	t.Logf("help on synthetic empty project: old full guide %d bytes; index %d bytes", len(all), len(bare))
 }
 
 // Someone who merged branches and sees a set-aside bundle in todo must find,
