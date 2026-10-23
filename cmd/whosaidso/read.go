@@ -41,6 +41,7 @@ func viewVerb(view string) func(*flag.FlagSet) func(*call) error {
 		var kind, actor string
 		var selfAdmitted selfAdmissionFlag
 		stale := false
+		intakeDetails := false
 		switch view {
 		case "todo", "continue":
 			fs.IntVar(&limit, "limit", 0, "cap optional results at `N`; blockers, closure and attention are never cut")
@@ -52,6 +53,7 @@ func viewVerb(view string) func(*flag.FlagSet) func(*call) error {
 		}
 		if view == "todo" {
 			fs.StringVar(&actor, "actor", "", "show work for actor `NAME` (next actor or live holder)")
+			fs.BoolVar(&intakeDetails, "intake-details", false, "expand verified packet summaries in text; --json includes complete packets")
 		}
 		return func(c *call) error {
 			request := query.ViewRequest{Actor: actor, View: view, Limit: limit, Kind: kind, SelfAdmitted: model.SelfAdmissionState(selfAdmitted)}
@@ -69,12 +71,12 @@ func viewVerb(view string) func(*flag.FlagSet) func(*call) error {
 			if err := query.CheckView(request); err != nil {
 				return usageError("whosaidso %s: %v", view, err)
 			}
-			return readView(c, request, stale, *jsonOutput)
+			return readView(c, request, stale, *jsonOutput, intakeDetails)
 		}
 	}
 }
 
-func readView(c *call, request query.ViewRequest, stale, jsonOutput bool) error {
+func readView(c *call, request query.ViewRequest, stale, jsonOutput, intakeDetails bool) error {
 	if err := c.ctx.Err(); err != nil {
 		return err
 	}
@@ -91,6 +93,9 @@ func readView(c *call, request query.ViewRequest, stale, jsonOutput bool) error 
 	}
 	if jsonOutput {
 		return query.RenderViewJSON(c.stdout, answer)
+	}
+	if intakeDetails {
+		return query.RenderViewBriefWithIntakeDetails(c.stdout, answer)
 	}
 	return query.RenderViewBrief(c.stdout, answer)
 }

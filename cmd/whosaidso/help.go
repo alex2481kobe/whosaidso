@@ -98,10 +98,12 @@ func topicHelp(t topic) string {
 	return strings.ToUpper(t.name) + ": " + t.summary + "\n\n" + t.text
 }
 
-// helpFor is `whosaidso help NAME`: the whole guide for no name; a topic, a
-// verb, or both when a topic shares a verb's name; every mode of a group.
+// helpFor selects the index, the whole guide, a topic, a verb or a group.
 func helpFor(name string) (string, bool) {
 	if name == "" {
+		return index() + "Full guide: whosaidso help all\n", true
+	}
+	if name == "all" {
 		return wholeGuide(), true
 	}
 	var parts []string

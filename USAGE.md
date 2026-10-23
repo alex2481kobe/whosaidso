@@ -16,8 +16,9 @@ go install github.com/alex2481kobe/whosaidso/cmd/whosaidso@latest
 That puts `whosaidso` in Go's bin folder (`$(go env GOPATH)/bin`); make sure it is on your `PATH`. From a
 checkout, `go build -o whosaidso ./cmd/whosaidso` does the same. There are no other dependencies.
 
-Then, in any project, `whosaidso help` is the whole manual and `whosaidso ui` opens a local, read-only viewer
-of the record.
+Then, in any project, `whosaidso help` is the topic and verb index,
+`whosaidso help all` is the complete manual, and `whosaidso ui` opens a local,
+read-only viewer of the record.
 
 ## The 60-second loop
 
@@ -136,6 +137,7 @@ The guide ships with the binary, so it cannot drift from the CLI:
 
 ```sh
 whosaidso help             # every topic and verb
+whosaidso help all         # complete manual
 whosaidso help loop        # capture, admit, run, handback, accept
 whosaidso help proof       # criterion first, the whole family, a verdict
 whosaidso help branches    # many agents, many machines: claiming, merging, check ledger

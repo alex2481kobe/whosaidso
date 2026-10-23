@@ -25,8 +25,8 @@ var registry []verb
 
 func init() {
 	registry = []verb{
-		{name: "help", args: "[TOPIC|VERB]", summary: "this guide, one topic, or one verb's usage",
-			detail: "Bare, prints the keyword index and the whole guide. With a topic or verb, prints that part.\n",
+		{name: "help", args: "[all|TOPIC|VERB]", summary: "keyword index; all for the guide; topic or verb for detail",
+			detail: "Bare, prints the keyword index. all prints the complete guide. A topic or verb prints that part.\n",
 			define: helpVerb},
 		{name: "todo", summary: "everything owed, in flight first", detail: `Sections: in flight (with each task's runs), awaiting acceptance (with its
 accepter, or anyone), blocked (typed reasons, who it waits on), ready (the
@@ -40,8 +40,11 @@ that checkout's path (admit each packet in one checkout only); attention,
 with a stale-claim note for each claim idle past stale_after. Each in-flight
 task lists the claims that hold it: attempt, holder, claimed_at,
 last_activity_at, and stale, judged at the time todo runs.
---json keeps every packet not accepted in packets_not_accepted, each with its
-disposition (pending, captured-elsewhere, correction-requested, rejected) and
+Default text gives one verified header per actionable intake packet;
+--intake-details expands those packet summaries. --json retains the complete
+verified packet representation for every packet not accepted.
+The packets_not_accepted field keeps each disposition (pending,
+captured-elsewhere, correction-requested, rejected) and
 captured_in when noted, and totals counts intake_unreviewed,
 intake_correction_requested, intake_rejected and intake_elsewhere.
 --actor NAME keeps tasks whose next_actor names NAME or whose live claim NAME
@@ -57,6 +60,13 @@ reasons, ties by record id (including awaiting acceptance); all its reasons
 are included. With no such task the note says so. No roster means no idle
 alarms. Nothing is assigned automatically.
 `, define: viewVerb("todo")},
+		{name: "packets", args: "[PACKET_ID]", summary: "verified packet headers, or one packet's payload", detail: `Bare packets lists bounded headers for local intake and packets named by
+reviews in this project. packets PACKET_ID returns one header and the complete
+verified local packet with --json. A reviewed packet absent from this machine
+has a null payload, explicit UNKNOWN availability and a watermarked UNKNOWN
+result. An ID here is a packet command ID, not a record ID. Intake is local to
+this machine; an absent header does not prove absence elsewhere.
+`, define: viewVerb("packets")},
 		{name: "continue", args: "RECORD_ID", summary: "resume any record: detail, closure, what is owed", detail: `Any kind of record. A task adds its progress, every attempt, every run and
 what is owed, item by item for a plan. Every kind gets every amendment since
 its creation, each with the fields it changed (a plan item removed at any

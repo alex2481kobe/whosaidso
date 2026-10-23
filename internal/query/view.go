@@ -18,7 +18,7 @@ import (
 
 type ViewRequest struct {
 	Actor        string                   // todo only: task next actor or live holder
-	View         string                   // todo, continue, show or history
+	View         string                   // todo, continue, show, history or packets
 	ID           model.ID                 // continue (required), show and history (optional)
 	Kind         string                   // show without ID only: task, claim, decision or instrument
 	Limit        int                      // todo and continue: the optional-result cap; 0 means none
@@ -38,8 +38,7 @@ type ViewHeader struct {
 	Reason    string          `json:"reason,omitempty"`
 }
 
-// ViewAnswer is one of *TodoAnswer, *ContinueAnswer, *ShowAnswer or
-// *HistoryAnswer. JSON and the brief both render the concrete answer.
+// ViewAnswer is a concrete read answer. JSON and the brief render it.
 type ViewAnswer interface{ Header() ViewHeader }
 
 func (h ViewHeader) Header() ViewHeader { return h }
@@ -71,9 +70,12 @@ func CheckView(r ViewRequest) error {
 	switch {
 	case r.Actor != "" && r.View != "todo":
 		return fmt.Errorf("the actor filter belongs only to todo")
-	case r.View != "todo" && r.View != "continue" && r.View != "show" && r.View != "history":
-		return fmt.Errorf("unknown view %q: todo, continue, show or history", r.View)
+	case r.View != "todo" && r.View != "continue" && r.View != "show" && r.View != "history" && r.View != "packets":
+		return fmt.Errorf("unknown view %q: todo, continue, show, history or packets", r.View)
 	case r.ID != "" && !model.ValidID(r.ID):
+		if r.View == "packets" {
+			return fmt.Errorf("%q is not a packet command ULID", r.ID)
+		}
 		return fmt.Errorf("%q is not a record ULID", r.ID)
 	case r.ID != "" && r.View == "todo":
 		return fmt.Errorf("todo takes no record ULID")
@@ -126,6 +128,9 @@ func watermarkOf(s reduce.Snapshot) Watermark {
 func view(project store.Project, r ViewRequest, source Source) (ViewAnswer, error) {
 	s := source.Snapshot()
 	h := ViewHeader{View: r.View, Project: project.ID, Watermark: watermarkOf(s), Result: "KNOWN"}
+	if r.View == "packets" {
+		return packetsView(project, s, h, r.ID)
+	}
 	var root reduce.Record
 	var intake *reduce.Source // r.ID names an admitted source, not a record
 	if r.ID != "" {
