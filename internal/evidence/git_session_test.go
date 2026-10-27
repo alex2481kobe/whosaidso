@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -164,7 +165,10 @@ func TestGitSessionRefusesCanceledQueriesAndFailedProcesses(t *testing.T) {
 	if _, err := session.Run(ctx, root, "cat-file", "-t", head); err == nil {
 		t.Fatal("canceled cached query succeeded")
 	}
-	if err := session.cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+	// The canceled context already kills the process. Killing it again races
+	// that: on Windows a process that has exited but is not yet waited for
+	// answers "Access is denied" instead of ErrProcessDone.
+	if err := session.cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) && runtime.GOOS != "windows" {
 		t.Fatal(err)
 	}
 	if err := session.Close(); err == nil {

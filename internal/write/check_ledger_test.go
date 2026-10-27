@@ -23,11 +23,9 @@ func ledgerFixture(t *testing.T) *admissionFixture {
 	if err := os.MkdirAll(filepath.Join(f.project.Root, f.project.ArtifactDir()), 0755); err != nil {
 		t.Fatal(err)
 	}
-	home := t.TempDir()
-	if err := os.Chmod(home, 0700); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("WHOSAIDSO_HOME", home)
+	// The store creates the home owner-only. A TempDir is not owner-only on
+	// Windows and a chmod cannot make it so.
+	t.Setenv("WHOSAIDSO_HOME", filepath.Join(t.TempDir(), "home"))
 	proofPut(t, f.project.Root, "whosaidso.toml", "id = 'test/admission'\nledger = '.whosaidso/events'\n")
 	identityGit(t, f.project.Root, "init", "-q")
 	identityGit(t, f.project.Root, "add", "whosaidso.toml")

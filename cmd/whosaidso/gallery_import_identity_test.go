@@ -7,6 +7,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -106,7 +107,14 @@ func TestGalleryImportBindsToTheActiveHandEntryNotARetractedOne(t *testing.T) {
 // holds a missing file with an odd path must still complete. A path made only
 // of spaces is a legal file name that a seal cannot carry.
 func TestGalleryImportCompletesWhenAMissingEntryHasAnUnusualPath(t *testing.T) {
-	root := importFixture(t, `[{"id":"ok","path":"present.png","title":"Present","added_at":"2026-01-01T00:00:00Z"},{"id":"odd","path":" ","title":"Odd","added_at":"2026-01-02T00:00:00Z"}]`)
+	odd := " "
+	if runtime.GOOS == "windows" {
+		// Windows drops trailing spaces from a name, so a path of spaces names the
+		// checkout directory itself and is never a missing file. A no-break space
+		// is the same kind of word and is a legal name there.
+		odd = "\u00a0"
+	}
+	root := importFixture(t, `[{"id":"ok","path":"present.png","title":"Present","added_at":"2026-01-01T00:00:00Z"},{"id":"odd","path":"`+odd+`","title":"Odd","added_at":"2026-01-02T00:00:00Z"}]`)
 	if _, errout, code := cliRun(t, root, nil, "contributor", "gallery", "import", "--admit", "--reason", "reviewed"); code != 0 {
 		t.Fatalf("import failed after admitting %v and before sealing: %s", galleryTitles(t, root), errout)
 	}
