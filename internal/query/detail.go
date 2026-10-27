@@ -71,13 +71,6 @@ func newDetailer(s reduce.Snapshot) *detailer {
 	return &detailer{s: s, sources: s.Sources(), supersessions: s.Supersessions(), corrections: s.Corrections()}
 }
 
-var kindLabel = map[model.Kind]func(reduce.Record) string{
-	model.Task:       func(r reduce.Record) string { return r.Task.Intent },
-	model.Claim:      func(r reduce.Record) string { return r.Claim.Assertion },
-	model.Decision:   func(r reduce.Record) string { return r.Decision.Question },
-	model.Instrument: func(r reduce.Record) string { return r.Instrument.QuestionAnswered },
-}
-
 // detail describes one exact revision. The attention it returns is the
 // instrument's (UNKNOWN validation, inactive trust); other kinds have none.
 func (d *detailer) detail(fact reduce.Record) (Detail, []Attention) {
@@ -87,8 +80,8 @@ func (d *detailer) detail(fact reduce.Record) (Detail, []Attention) {
 		Supersessions: supersessionsIn(d.supersessions, ref), Corrections: correctionsIn(d.corrections, ref),
 		Sources: sourcesIn(d.sources, id)}
 	v.Label = "UNKNOWN: no semantic text to label from"
-	if text, ok := kindLabel[fact.Kind]; ok {
-		v.Label = label(text(fact))
+	if text, ok := fact.SemanticText(); ok {
+		v.Label = label(text)
 	}
 	v.CurrentRevision, _ = s.CurrentRevision(id)
 	v.AdmittedBy, v.SelfAdmitted = admission(s, v.Author)

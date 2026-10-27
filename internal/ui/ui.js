@@ -1,23 +1,14 @@
-// The viewer's core: API calls, the header (project switcher and theme),
-// hash routing, the live poll of the todo answer, and the small helpers every screen
-// shares. Each screen lives in its own ui-*.js module; icons are in
-// ui-icons.js, shared screen parts in ui-parts.js. Everything shown is
-// read from the views' own JSON; the only writes are the Gallery's two
-// POSTs (send), which never reach a ledger.
-import { renderHome } from "./ui-home.js";
-import { renderRecords } from "./ui-records.js";
-import { renderDetail } from "./ui-detail.js";
-import { renderHistory } from "./ui-history.js";
-import { renderGallery } from "./ui-gallery.js";
+// Shared viewer data and DOM helpers live here. Chrome and routing belong to
+// ui-shell.js; each screen owns its rendering and bounded refresh.
 import { icon } from "./ui-icons.js";
-import { place } from "./ui-parts.js";
+import { startViewer } from "./ui-shell.js";
 
 export { icon };
 
-const main = document.getElementById("main");
+export const main = document.getElementById("main");
 // switches counts project changes and renders counts navigations: an answer
 // or a screen started before a newer one is dropped, never drawn over it.
-const state = { projects: [], project: "", mark: "", cache: new Map(), switches: 0, renders: 0 };
+export const state = { projects: [], project: "", mark: "", cache: new Map(), switches: 0, renders: 0 };
 
 // project is the id of the project on screen.
 export const project = () => state.project;
@@ -57,20 +48,13 @@ export function view(name, params = {}) {
 // times maps each ledger event to the time WhoSaidSo captured its packet, as
 // the bundle's review.admit records it; a review's own row takes the time of
 // the packets it reviewed. Unknown stays unknown.
-export async function times() {
-  const history = await view("history");
-  const captured = new Map();
-  for (const row of history.events) {
-    if (row.event.type === "review.admit") captured.set(row.origin.sequence, row.event.data.captured_at || {});
-  }
-  const at = new Map();
-  for (const row of history.events) {
-    const stamps = captured.get(row.origin.sequence) || {};
-    const packet = row.author?.packet || Object.keys(stamps)[0];
-    const stamp = stamps[packet];
-    at.set(`${row.origin.sequence}:${row.origin.event_index}`, stamp?.state === "known" ? new Date(stamp.value) : null);
-  }
-  return (origin) => (origin ? at.get(`${origin.sequence}:${origin.event_index}`) || null : null);
+export async function times(id) {
+  const [answer, history] = await Promise.all([api("/api/times", {project:project(), id}), view("history", {id})]);
+  if (!Number.isSafeInteger(answer.watermark?.sequence) || answer.watermark.sequence < 1 || !answer.watermark.head?.command_id || JSON.stringify(answer.watermark) !== JSON.stringify(history.watermark)) return () => null;
+  return origin => {
+    const at = answer.times[`${origin?.sequence}:${origin?.event_index}`];
+    return at?.state === "known" ? new Date(at.value) : null;
+  };
 }
 
 // fullTitle is a record's whole semantic text, the text its label is cut
@@ -83,8 +67,8 @@ export function fullTitle(record) {
 }
 
 // titles names every current record in full and every admitted source.
-export async function titles() {
-  const show = await view("show");
+export async function titles(id) {
+  const show = await view("show", id ? {id} : {});
   const names = new Map(show.records.map((r) => [r.ref.record_id, fullTitle(r)]));
   for (const s of show.sources || []) names.set(s.intake.source_id, sourceTitle(s));
   return names;
@@ -233,153 +217,5 @@ export function status(record) {
   return ["UNKNOWN", "muted"];
 }
 
-// ---- header: theme and projects
-const toggle = document.getElementById("theme-toggle");
-function setTheme(theme) {
-  document.documentElement.dataset.theme = theme;
-  toggle.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
-  toggle.setAttribute("aria-label", `Switch to ${theme === "dark" ? "light" : "dark"} mode`);
-  try { localStorage.setItem("whosaidso-theme", theme); } catch {}
-}
-function initTheme() {
-  let saved = null;
-  try { saved = localStorage.getItem("whosaidso-theme"); } catch {}
-  toggle.addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
-  setTheme(saved || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
-}
 
-function renderMenu() {
-  document.getElementById("project-name").textContent = state.project || "No project";
-  const menu = document.getElementById("project-menu");
-  menu.replaceChildren(...state.projects.map((p) => {
-    const row = el("button", "menu-row", p.id);
-    row.type = "button";
-    row.setAttribute("role", "option");
-    row.setAttribute("aria-selected", String(p.id === state.project));
-    row.disabled = !p.available;
-    row.addEventListener("click", () => { closeMenu(); select(p.id); });
-    return row;
-  }));
-}
-function closeMenu() {
-  document.getElementById("project-menu").hidden = true;
-  document.getElementById("project-button").setAttribute("aria-expanded", "false");
-}
-function initMenu() {
-  const button = document.getElementById("project-button");
-  button.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const menu = document.getElementById("project-menu");
-    menu.hidden = !menu.hidden;
-    button.setAttribute("aria-expanded", String(!menu.hidden));
-    if (!menu.hidden) {
-      place(menu, button);
-      api("/api/projects").then((list) => { state.projects = list.projects; renderMenu(); place(menu, button); }).catch(() => {});
-    }
-  });
-  document.addEventListener("click", closeMenu);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
-}
-async function select(id) {
-  state.switches++;
-  state.renders++;
-  state.project = id;
-  state.mark = "";
-  state.cache.clear();
-  try { sessionStorage.setItem("whosaidso-project", id); } catch {}
-  await check().catch(() => {});
-  location.hash = "#/";
-  route();
-}
-
-// ---- routing and the live poll
-async function route() {
-  const mine = ++state.renders;
-  const show = (node) => { if (mine === state.renders) main.replaceChildren(node); };
-  const [path, rest = ""] = location.hash.replace(/^#/, "").split("?");
-  const parts = path.split("/").filter(Boolean).map(decodeURIComponent);
-  const screen = parts[0] || "home";
-  for (const a of document.querySelectorAll("[data-nav]")) {
-    a.setAttribute("aria-selected", String(a.dataset.nav === (screen === "record" ? "records" : screen)));
-  }
-  renderMenu();
-  if (!state.project) {
-    show(el("p", "notice", "No WhoSaidSo project is registered on this machine."));
-    return;
-  }
-  try {
-    let node;
-    if (screen === "records") node = await renderRecords(new URLSearchParams(rest));
-    else if (screen === "record") node = await renderDetail(parts[1]);
-    else if (screen === "history") node = await renderHistory();
-    else if (screen === "gallery") node = await renderGallery();
-    else node = await renderHome(await view("todo"));
-    show(node);
-  } catch (error) {
-    show(el("p", "notice", "Could not read this project: " + error.message));
-  }
-}
-
-// markOf is what the screens are drawn from: the ledger watermark AND the
-// todo answer's owed counts and proposals. A captured packet changes the
-// proposals without moving the watermark, so the watermark alone would leave
-// Home showing a stale Proposals count.
-function markOf(todo) {
-  const w = todo.watermark;
-  const packets = (todo.packets_not_accepted || []).map((p) => `${p.command_id}:${p.disposition}`).sort();
-  return JSON.stringify([w ? `${w.sequence}:${w.head?.command_id || ""}` : "", todo.totals || {}, (todo.attention || []).length, packets]);
-}
-
-// check reads the selected project's todo answer; when its mark differs from
-// the one on screen it drops every cached answer, keeps this todo answer for
-// the next render, and says so.
-async function check() {
-  const asked = state.switches;
-  const todo = await api("/api/view", { project: state.project, view: "todo" });
-  const mark = markOf(todo);
-  // an answer asked before a project switch is dropped, even when the switch came back to the same project
-  if (asked !== state.switches || mark === state.mark) return false;
-  state.mark = mark;
-  state.cache.clear();
-  state.cache.set(JSON.stringify([state.project, state.mark, "todo", {}]), Promise.resolve(todo));
-  return true;
-}
-
-// poll re-renders only when the mark moved. It skips while the tab is hidden
-// and runs at once when the tab shows again; one read is in flight at a time.
-// A stopped viewer says so in the header.
-let polling = false;
-async function poll() {
-  const offline = document.getElementById("offline");
-  if (!state.project || polling || document.visibilityState === "hidden") return;
-  polling = true;
-  try {
-    const moved = await check();
-    offline.hidden = true;
-    if (moved) route();
-  } catch {
-    offline.hidden = false;
-  } finally {
-    polling = false;
-  }
-}
-
-// boot opens the project this tab last showed, else the one the command ran
-// in, else the first available one. The dropdown is the only switch.
-async function boot() {
-  initTheme();
-  initMenu();
-  const list = await api("/api/projects");
-  state.projects = list.projects;
-  let remembered = "";
-  try { remembered = sessionStorage.getItem("whosaidso-project") || ""; } catch {}
-  const usable = (id) => state.projects.some((p) => p.id === id && p.available);
-  state.project = usable(remembered) ? remembered : usable(list.current) ? list.current : state.projects.find((p) => p.available)?.id || "";
-  if (state.project) await check().catch(() => {});
-  window.addEventListener("hashchange", route);
-  await route();
-  setInterval(poll, 3000);
-  document.addEventListener("visibilitychange", poll);
-}
-
-boot().catch((error) => main.replaceChildren(el("p", "notice", "The viewer could not start: " + error.message)));
+startViewer().catch(error => main.replaceChildren(el("p", "notice", "The viewer could not start: " + error.message)));

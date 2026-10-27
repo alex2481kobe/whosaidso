@@ -62,15 +62,7 @@ func (s State) Bundles() ([]model.Bundle, error) {
 	}
 	out := make([]model.Bundle, 0, len(s.files))
 	for i := range s.files {
-		data, err := readBundle(filepath.Join(s.project.Ledger, s.files[i].name))
-		if err != nil {
-			return nil, storeFault("io", filepath.Join(s.project.Ledger, s.files[i].name), err.Error())
-		}
-		if sha256.Sum256(data) != s.files[i].hash {
-			return nil, storeFault("ledger-corrupt", filepath.Join(s.project.Ledger, s.files[i].name),
-				"the bundle changed after this read selected it")
-		}
-		b, err := decodeSelected(s.project, s.files, i, data)
+		b, err := s.selectedBundle(i)
 		if err != nil {
 			return nil, err
 		}

@@ -7,8 +7,10 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/alex2481kobe/whosaidso/internal/write"
@@ -16,6 +18,7 @@ import (
 
 func ledgerCheckVerb(fs *flag.FlagSet) func(*call) error {
 	jsonOutput := jsonFlag(fs)
+	against := fs.String("against-checkout", "", "compare problem classes with checkout `PATH` (base -> current head)")
 	return func(c *call) error {
 		if err := noPositionals(c, "check ledger"); err != nil {
 			return err
@@ -23,6 +26,36 @@ func ledgerCheckVerb(fs *flag.FlagSet) func(*call) error {
 		project, err := c.project()
 		if err != nil {
 			return err
+		}
+		if isSet(fs, "against-checkout") {
+			if *against == "" {
+				return usageError("--against-checkout needs PATH")
+			}
+			path := *against
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(c.cwd, path)
+			}
+			base, err := c.openProject(path)
+			if err != nil {
+				return err
+			}
+			comparison, err := write.CheckLedgerAgainst(c.ctx, base, project)
+			if err != nil {
+				return err
+			}
+			if *jsonOutput {
+				encoder := json.NewEncoder(c.stdout)
+				encoder.SetIndent("", "  ")
+				if err := encoder.Encode(comparison); err != nil {
+					return err
+				}
+			} else {
+				fmt.Fprint(c.stdout, ledgerComparisonText(comparison))
+			}
+			if !comparison.Allowed {
+				return errors.New(strings.Join(comparison.Refusals, "\n"))
+			}
+			return nil
 		}
 		a, err := write.CheckLedger(c.ctx, project)
 		if err != nil {
@@ -67,6 +100,7 @@ func ledgerText(a *write.LedgerCheck) string {
 	}
 	list("not committed at HEAD (git add and commit them)", a.NotCommitted)
 	list("git pins", a.GitPins)
+	ledgerPinLocationsText(&b, "", a.GitPinLocations)
 	aside := make([]string, len(a.SetAside))
 	for i, s := range a.SetAside {
 		aside[i] = fmt.Sprintf("sequence %d command %s: %s: %s", s.Sequence, s.CommandID, s.Code, s.Reason)
@@ -76,4 +110,20 @@ func ledgerText(a *write.LedgerCheck) string {
 		fmt.Fprintf(&b, "set-aside bundles resolved: %d\n", n)
 	}
 	return b.String()
+}
+
+func ledgerPinLocationsText(b *strings.Builder, prefix string, locations []write.GitPinLocation) {
+	for _, location := range locations {
+		fmt.Fprintf(b, "%spin locations %s:\n", prefix, location.Commit)
+		if location.Error != "" {
+			fmt.Fprintf(b, "  unmeasured: %s\n", location.Error)
+			continue
+		}
+		if len(location.Refs) == 0 {
+			fmt.Fprintln(b, "  no local or remote-tracking refs contain it")
+		}
+		for _, ref := range location.Refs {
+			fmt.Fprintf(b, "  %s\n", ref)
+		}
+	}
 }

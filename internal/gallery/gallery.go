@@ -128,12 +128,16 @@ func Capture(ctx context.Context, p store.Project, by model.Actor, event model.T
 	return store.WriteIntake(ctx, p, store.IntakeRequest{Author: by, Events: []model.Event{raw}})
 }
 
-func Entries(p store.Project) ([]reduce.GalleryEntry, error) {
+func gallerySnapshot(p store.Project) (reduce.Snapshot, error) {
 	state, err := store.Load(p)
 	if err != nil {
-		return nil, err
+		return reduce.Snapshot{}, err
 	}
-	snapshot, err := state.Folded()
+	return state.Folded()
+}
+
+func Entries(p store.Project) ([]reduce.GalleryEntry, error) {
+	snapshot, err := gallerySnapshot(p)
 	if err != nil {
 		return nil, err
 	}
@@ -150,18 +154,28 @@ func List(p store.Project) ([]Shown, error) {
 		if record.Retracted {
 			continue
 		}
-		e := localEntry(p, record)
-		kind, _ := Kind(e.Path)
-		status := "missing"
-		if pin, err := Pin(p.Root, e.Locator); err == nil {
-			status = "changed"
-			if pin.SameContent(record.Add.File) {
-				status = "present"
-			}
-		}
-		out = append(out, Shown{Entry: e, Kind: kind, Status: status})
+		out = append(out, observeEntry(p, record))
 	}
 	return out, nil
+}
+
+// observeEntry owns local file availability; selecting entries never grants
+// permission to serve their bytes, which are verified again on the open handle.
+func observeEntry(p store.Project, record reduce.GalleryEntry) Shown {
+	e := localEntry(p, record)
+	kind, _ := Kind(e.Locator)
+	pin, err := Pin(p.Root, e.Locator)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return Shown{Entry: e, Kind: kind, Status: "missing"}
+		}
+		return Shown{Entry: e, Kind: kind, Status: "unknown", StatusReason: textPreview(err.Error(), 240)}
+	}
+	status := "changed"
+	if pin.SameContent(record.Add.File) {
+		status = "present"
+	}
+	return Shown{Entry: e, Kind: kind, Status: status}
 }
 
 func Find(p store.Project, id string) (Entry, error) {

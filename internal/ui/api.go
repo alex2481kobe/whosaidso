@@ -33,6 +33,10 @@ func (h *handler) api(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/api/projects":
 		h.projects(w, r)
+	case "/api/times":
+		h.recordTimes(w, r)
+	case "/api/screen":
+		h.screen(w, r)
 	case "/api/view":
 		h.view(w, r)
 	default:
@@ -49,7 +53,9 @@ func (h *handler) projects(w http.ResponseWriter, r *http.Request) {
 	rows := []projectRow{}
 	for _, entry := range list {
 		row := projectRow{ID: entry.ID, Home: entry.Home, Reason: entry.Reason}
-		if entry.Reason == "" {
+		if entry.Reason == "" && r.URL.Query().Get("summary") == "0" {
+			row.Available = true
+		} else if entry.Reason == "" {
 			answer, err := h.cfg.View(r.Context(), h.opened(entry), query.ViewRequest{View: "todo"}, false)
 			if todo, ok := answer.(*query.TodoAnswer); err == nil && ok {
 				row.Available, row.Watermark, row.Totals = true, &todo.Watermark, &todo.Totals

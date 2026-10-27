@@ -21,6 +21,29 @@ func IntakeIDs(project Project) ([]model.ID, error) {
 	return ids, err
 }
 
+// IntakePacketPresent checks one named local packet without inspecting its
+// siblings. A selected read verifies its contents separately.
+func IntakePacketPresent(project Project, id model.ID) (bool, error) {
+	if !model.ValidID(id) {
+		return false, storeFault("invalid-field", "intake.command_id", "not a ULID")
+	}
+	inbox, err := IntakeDir(project)
+	if err != nil {
+		return false, err
+	}
+	for _, path := range []string{filepath.Dir(filepath.Dir(inbox)), filepath.Dir(inbox), inbox, filepath.Join(inbox, string(id))} {
+		if _, err := os.Lstat(path); os.IsNotExist(err) {
+			return false, nil
+		} else if err != nil {
+			return false, storeFault("io", path, err.Error())
+		}
+		if err := checkIntakePath(path, true); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
 // intakeIDs resolves the inbox and the ids a read covers: ids itself when it is
 // non-nil, otherwise every published packet. The inbox's ancestors must be real
 // owner-only directories; a missing inbox lists as empty only when no ids were named.

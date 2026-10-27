@@ -10,9 +10,12 @@ package ui
 import (
 	"errors"
 	"io"
+	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 
@@ -35,10 +38,15 @@ func RevealInFinder(path string) error {
 }
 
 func (h *handler) gallery(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
+	q, parseErr := url.ParseQuery(r.URL.RawQuery)
+	if parseErr != nil {
+		h.fail(w, http.StatusBadRequest, errText("invalid gallery query: "+parseErr.Error()))
+		return
+	}
 	for key, values := range q {
-		if (key != "project" && key != "id" && key != "cap") || len(values) != 1 {
-			h.fail(w, http.StatusBadRequest, errText("the gallery takes only project, id and a file's cap; files are reached by entry id, never by path"))
+		pagedKey := r.URL.Path == "/api/gallery" && q.Has("offset") && (key == "offset" || key == "search" || key == "kind" || key == "sort")
+		if (!pagedKey && key != "project" && key != "id" && key != "cap") || len(values) != 1 {
+			h.fail(w, http.StatusBadRequest, errText("gallery parameters name a project, entry or page filters; files are reached by entry id, never by path"))
 			return
 		}
 	}
@@ -56,24 +64,10 @@ func (h *handler) gallery(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) galleryAnswer(w http.ResponseWriter, r *http.Request, file store.Project, id string) {
 	if r.URL.Path == "/api/gallery" {
-		shown, err := gallery.List(file)
-		if err != nil {
-			h.fail(w, http.StatusInternalServerError, err)
-			return
-		}
-		// Each entry carries its file capability, which the page puts in the
-		// file's URL (keyed); the CLI's list has none.
-		type withCap struct {
-			gallery.Shown
-			Cap string `json:"cap"`
-		}
-		entries := make([]withCap, len(shown))
-		for i, e := range shown {
-			entries[i] = withCap{e, h.capability(r.URL.Query().Get("project"), e.ID)}
-		}
-		h.json(w, map[string]any{"entries": entries})
+		h.galleryList(w, r, file)
 		return
 	}
+
 	entry, err := gallery.Find(file, id)
 	if errors.Is(err, gallery.ErrNoEntry) {
 		h.fail(w, http.StatusNotFound, errText("no gallery entry "+id))
@@ -84,7 +78,9 @@ func (h *handler) galleryAnswer(w http.ResponseWriter, r *http.Request, file sto
 		return
 	}
 	switch r.URL.Path {
-	case "/api/gallery/file":
+	case "/api/gallery/thumb":
+		h.serveThumbnail(w, r, file, entry)
+	case "/api/gallery/file", "/api/gallery/download":
 		h.serveEntry(w, r, file.Root, entry)
 	case "/api/gallery/remove":
 		ref, err := gallery.Capture(r.Context(), file, h.cfg.CaptureActor, &model.GalleryRetract{EntryID: model.ID(id)})
@@ -140,6 +136,11 @@ func (h *handler) serveEntry(w http.ResponseWriter, r *http.Request, checkout st
 		h.fail(w, http.StatusInternalServerError, err)
 		return
 	}
+	if r.URL.Path == "/api/gallery/download" {
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filepath.Base(entry.Path)}))
+		http.ServeContent(w, r, "", info.ModTime(), f)
+		return
+	}
 	w.Header().Set("Content-Type", mediaType)
 	if kind != gallery.Text {
 		http.ServeContent(w, r, "", info.ModTime(), f)
@@ -149,4 +150,20 @@ func (h *handler) serveEntry(w http.ResponseWriter, r *http.Request, checkout st
 		w.Header().Set("X-WhoSaidSo-Truncated", strconv.Itoa(maxText))
 	}
 	_, _ = io.Copy(w, io.LimitReader(f, maxText))
+}
+
+func (h *handler) serveThumbnail(w http.ResponseWriter, r *http.Request, p store.Project, entry gallery.Entry) {
+	f, err := gallery.Open(p.Root, entry.Locator)
+	if err != nil {
+		h.fail(w, http.StatusNotFound, err)
+		return
+	}
+	defer f.Close()
+	b, err := gallery.Thumbnail(p, f, model.GalleryFile{SHA256: entry.SHA256, Length: entry.Length})
+	if err != nil {
+		h.fail(w, http.StatusConflict, err)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	_, _ = w.Write(b)
 }

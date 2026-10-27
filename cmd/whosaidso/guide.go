@@ -58,12 +58,25 @@ reads from a captured source, usually the owner's message captured as a
 source.intake: whosaidso help sources).
 Look records up with whosaidso show --json ID.
 `},
-	{"views", "the four reads: todo, continue, show, history", `  whosaidso todo                   everything owed, in flight first
+	{"views", "ledger reads and verified packet inventory", `  whosaidso todo                   everything owed, in flight first
+	  whosaidso packets [PACKET_ID]    verified headers or one packet
   whosaidso continue RECORD_ID     resume any record (a plan: its items)
   whosaidso show [RECORD_ID]       one record; bare: summary and every record
   whosaidso history [RECORD_ID]    admitted events in order, and reviews
 A source's source_id reads with show and history too; bare show lists sources.
 whosaidso ui shows the same four answers in a browser, read-only.
+packets uses packet command IDs. Its inventory has headers without event
+bodies; --json on one ID returns the verified packet or null and explicit
+payload availability. Intake is local, so a missing ID here proves no global
+absence. A stdlib consumer must check exit status and availability:
+  import json, subprocess
+  r = subprocess.run(["whosaidso", "packets", packet_id, "--json"],
+                     check=True, capture_output=True, text=True)
+  answer = json.loads(r.stdout)
+  if answer["header"] and answer["header"]["payload"]["state"] == "known":
+      events = answer["packet"]["events"]
+  else:
+      reason = answer["reason"]
 Asked to show the owner a file (an image, video, log), run
 whosaidso gallery add PATH --title "short title" --note "what to look at";
 admit its packet and it appears in the viewer's Gallery as a ledger record.
@@ -75,6 +88,8 @@ error). The default text is the brief: one short block per record, every
 value read from the --json export at a fixed path, long text cut at its
 first line or 72 characters and marked with …. Never quote a brief as the
 whole record; --json is the complete answer, with snake_case keys.
+todo shows one line per actionable packet; --intake-details expands its
+packet summaries, and --json keeps the full verified packet bodies.
 --limit N cuts only optional results (ready tasks, context refs) and says
 how many; blockers, closure, corrections and attention are never cut.
 show --kind task|claim|decision|instrument keeps one kind; instruments come

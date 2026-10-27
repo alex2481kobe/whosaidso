@@ -17,3 +17,5 @@ coverage.*
 # WhoSaidSo's disposable snapshot cache, rebuilt from the ledger whenever it is
 # missing, stale or damaged. Never a record.
 .whosaidso/cache/
+
+out/

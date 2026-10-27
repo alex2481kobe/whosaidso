@@ -196,6 +196,35 @@ func authorPieces(a cur) []any {
 	return pieces
 }
 
+func briefTodoPacket(b *briefWriter, indent int, p cur, details bool) {
+	if details {
+		briefPacket(b, indent, p)
+		return
+	}
+	parts := []any{"packet", p.at("command_id"), p.at("disposition")}
+	if u := p.at("unavailable"); u.ok() {
+		parts = append(parts, "bytes", u.at("state"), prefix(u.at("reason")))
+	} else {
+		parts = append(parts, "author")
+		parts = append(parts, who(p.at("packet", "author"))...)
+		parts = append(parts, "events", count(p.at("packet", "events")))
+		seen := map[string]bool{}
+		for _, event := range p.at("packet", "events").items() {
+			kind := event.at("type")
+			if !seen[kind.text()] {
+				seen[kind.text()] = true
+				parts = append(parts, kind)
+			}
+		}
+	}
+	if r := p.at("review"); r.ok() {
+		parts = append(parts, "reviewed by")
+		parts = append(parts, who(r.at("actor"))...)
+		parts = append(parts, "reason", prefix(r.at("reason")))
+	}
+	b.line(indent, parts...)
+}
+
 // briefPacket shows a pending packet's disposition first: a reviewed packet
 // stays listed with the outcome that reviewed it.
 func briefPacket(b *briefWriter, indent int, p cur) {

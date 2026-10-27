@@ -297,7 +297,7 @@ func TestPacketReadWaitsOutASharingViolationOnItsDirectory(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 		release()
 	}()
-	if _, got, _, err := readIntakePacket(p, dir); err != nil || got != ref {
+	if _, got, _, err := readIntakePacket(p, dir, 0); err != nil || got != ref {
 		t.Fatalf("a handle released within the bound must not fail the packet read: %+v, %v", got, err)
 	}
 }
@@ -319,7 +319,7 @@ func TestPacketReadReturnsAccessDeniedAtOnce(t *testing.T) {
 		t.Skipf("this account lists the directory anyway (%v); no access denied can occur here", err)
 	}
 	start := time.Now()
-	_, _, _, err = readIntakePacket(p, dir)
+	_, _, _, err = readIntakePacket(p, dir, 0)
 	requireFault(t, err, "io")
 	var schedule time.Duration
 	for _, d := range sharingRetries {

@@ -176,25 +176,37 @@ func (r *Resolver) gitBlob(ctx context.Context, pin model.GitPin) ([]byte, error
 		return nil, fault("invalid-field", "artifact.git.object_format",
 			fmt.Sprintf("reference declares %s, the repository uses %s", pin.ObjectFormat, got))
 	}
-	kind, err := run(ctx, r.Root, "cat-file", "-t", pin.Commit)
-	if err != nil {
-		return nil, fault("unavailable", "artifact.git.commit", "commit not found in this repository: "+pin.Commit)
-	}
-	if got := strings.TrimSpace(string(kind)); got != "commit" {
-		return nil, fault("invalid-field", "artifact.git.commit", "pinned object is a "+got+", not a commit")
+	if err := RequireGitCommit(ctx, run, r.Root, pin.Commit); err != nil {
+		return nil, err
 	}
 	// Every authored path is relative to the whosaidso root, which may sit below the
 	// repository's top level. "<commit>:<path>" is read from the top level;
 	// "<commit>:./<path>" is read from the directory git runs in, the root. With
 	// ".." refused by relativePath, the lookup cannot leave the root's subtree.
 	spec := pin.Commit + ":./" + pin.Path
-	kind, err = run(ctx, r.Root, "cat-file", "-t", spec)
+	kind, err := run(ctx, r.Root, "cat-file", "-t", spec)
 	if err != nil {
+		if errors.Is(err, errGitBatch) {
+			return nil, fault("unavailable", "artifact.git.path", "pinned path could not be read: "+err.Error())
+		}
 		return nil, fault("unavailable", "artifact.git.path",
 			"path does not exist at the pinned commit: "+pin.Path)
 	}
 	if got := strings.TrimSpace(string(kind)); got != "blob" {
 		return nil, fault("invalid-field", "artifact.git.path", "pinned path is a "+got+", not a file")
+	}
+	// Check size before either runner materializes a blob. Checking len after
+	// reading it cannot protect the process from an oversized ledger pin.
+	declared, err := run(ctx, r.Root, "cat-file", "-s", spec)
+	if err != nil {
+		return nil, fault("unavailable", "artifact.git", "blob size could not be read: "+err.Error())
+	}
+	size, err := strconv.ParseInt(strings.TrimSpace(string(declared)), 10, 64)
+	if err != nil || size < 0 {
+		return nil, fault("unavailable", "artifact.git", "invalid blob size")
+	}
+	if size > r.maxBytes() {
+		return nil, fault("unavailable", "artifact.git", fmt.Sprintf("%d bytes exceeds the resolver limit of %d", size, r.maxBytes()))
 	}
 	b, err := run(ctx, r.Root, "cat-file", "blob", spec)
 	if err != nil {
@@ -207,12 +219,37 @@ func (r *Resolver) gitBlob(ctx context.Context, pin model.GitPin) ([]byte, error
 	return b, nil
 }
 
+// RequireGitCommit observes the object type and owns commit refusal diagnostics.
+func RequireGitCommit(ctx context.Context, run GitRunner, root, commit string) error {
+	kind, err := run(ctx, root, "cat-file", "-t", commit)
+	if err != nil {
+		return fault("unavailable", "artifact.git.commit", "commit not found in this repository: "+commit)
+	}
+	if got := strings.TrimSpace(string(kind)); got != "commit" {
+		return fault("invalid-field", "artifact.git.commit", "pinned object is a "+got+", not a commit")
+	}
+	return nil
+}
+
 // ExecGit runs git in dir and returns its stdout bytes unchanged.
 func ExecGit(ctx context.Context, dir string, args ...string) ([]byte, error) {
+	cmd := gitCommand(ctx, dir, args...)
+	out, err := cmd.Output()
+	if err != nil {
+		var exit *exec.ExitError
+		var diagnostic string
+		if errors.As(err, &exit) {
+			diagnostic = strings.TrimSpace(string(exit.Stderr))
+		}
+		return nil, fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, diagnostic)
+	}
+	return out, nil
+}
+
+// gitCommand applies the same noninteractive, local-only environment to single
+// queries and the invocation's batch process.
+func gitCommand(ctx context.Context, dir string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
-	var out, errs bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &errs
 	// Configuration must not change what the object database answers, and
 	// nothing here may sit waiting on a credential prompt.
 	cmd.Env = append(os.Environ(),
@@ -220,11 +257,9 @@ func ExecGit(ctx context.Context, dir string, args ...string) ([]byte, error) {
 		"GIT_CONFIG_GLOBAL="+os.DevNull,
 		"GIT_TERMINAL_PROMPT=0",
 		"GIT_OPTIONAL_LOCKS=0",
+		"GIT_NO_LAZY_FETCH=1",
 	)
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("git %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(errs.String()))
-	}
-	return out.Bytes(), nil
+	return cmd
 }
 
 type lfsPointer struct {

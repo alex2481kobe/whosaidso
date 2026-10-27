@@ -7,14 +7,13 @@
 // sources. A task reads from continue; dates are when WhoSaidSo captured the
 // events (times()).
 import { el, facts, item, section, copyButton, openButton, view, times, titles, actorName, status, stamp, when, titleCase, fullTitle, icon, project } from "./ui.js";
-import { hero } from "./ui-parts.js";
 import { kinds } from "./ui-icons.js";
 import { renderClaim, renderDecision, renderInstrument, renderSource } from "./ui-kinds.js";
 
 // origin is the screen a record was opened from, so Back returns there: Home,
 // Records (with its query) or History. Moving from record to record keeps
 // it; a record opened directly goes back to Records.
-const origins = [[/^#\/records/, "records"], [/^#\/history/, "history"], [/^(#\/?)?$/, "home"]];
+const origins = [[/^#\/gallery/, "gallery"], [/^#\/records/, "records"], [/^#\/history/, "history"], [/^#\/home/, "home"], [/^(#\/?)?$/, "gallery"]];
 let origin = ["#/records", "records"];
 window.addEventListener("hashchange", (e) => {
   const from = new URL(e.oldURL).hash;
@@ -32,13 +31,15 @@ export function frame({ id, kind, title, tone, statusLabel, chip, details }, ...
   const shown = sections.filter(Boolean);
   const grid = el("div", "sections", shown);
   grid.style.setProperty("--cols", String(shown.length === 4 ? 2 : Math.min(3, Math.max(1, shown.length))));
-  const row = facts([["Status", [el("span", "tone-text " + tone, statusLabel), chip?.[0]]], ...details], "facts details");
-  row.append(el("div", "details-end", copyButton("Copy id", id)));
-  const k = kinds[kind] || kinds.task;
+  const primary = details.filter(([label]) => ["Next actor", "Progress", "Outcome"].includes(label));
+  const secondary = details.filter(([label]) => !["Next actor", "Progress", "Outcome"].includes(label));
+  const row = facts([["Status", [el("span", "tone-text " + tone, statusLabel), chip?.[0]]], ...primary], "facts details");
+  // The heading holds three lines; a longer subject is given whole under the status row.
+  const subject = title.length > 80 || title.includes("\n") ? el("p", "detail-subject", title) : null;
+  const metadata = el("details", "record-metadata", el("summary", "", "Record details"), facts(secondary), copyButton("Copy id", id));
   return el("div", "screen detail",
-    hero("detail", k.one, el("span", "tile tone-tint " + k.tone, icon(k.icon)), [`One ${k.one.toLowerCase()} in `, project(), "."], "What the ledger records about it."),
-    el("section", "panel detail-head", back, el("h2", "detail-title", title), row, chip?.[1]),
-    grid);
+    el("header", "detail-head", back, el("h1", "detail-title", title), row, subject, chip?.[1], metadata), grid);
+
 }
 
 // panel is a titled section holding labelled facts rather than a list.
@@ -87,11 +88,11 @@ export function changes(answer, at, names, proofs = []) {
       facts([["Approved by", actorName(p.admission.judgment.actor)], ["Reason", p.admission.judgment.reason], ["Changed paths", list(cc.changed_paths)]]))]);
   }
   rows.sort((a, b) => a[0].sequence - b[0].sequence || a[0].event_index - b[0].event_index);
-  return section("Changes over time", rows.map((r) => r[1]));
+  return rows.length ? section("Changes over time", rows.map((r) => r[1])) : null;
 }
 
 export async function renderDetail(id) {
-  const [at, names, history, answer] = await Promise.all([times(), titles(), view("history", { id }), view("continue", { id })]);
+  const [at, names, history, answer] = await Promise.all([times(id), titles(id), view("history", { id }), view("continue", { id })]);
   if (answer.result === "UNKNOWN") {
     const shown = await view("show", { id });
     if (shown.sources?.length) return renderSource(shown.sources[0], history, at, names);
@@ -118,8 +119,8 @@ function criteria(root) {
 }
 
 function attempts(root, at) {
-  const rows = root.task.attempts.map((a, i) => item(`Attempt ${i + 1} by ${actorName(a.actor)}`, a.terminal ? titleCase(a.terminal.outcome) : "In progress",
-    facts([["Started", stamp(at(a.started))], ["Handed back", a.terminal && stamp(at(a.terminal.origin))], ["Outcome", a.terminal?.outcome],
+  const rows = root.task.attempts.map((a, i) => item(`Attempt ${i + 1} by ${actorName(a.actor)}`, a.terminal ? "Reported " + titleCase(a.terminal.outcome).toLowerCase() : "In progress",
+    facts([["Started", stamp(at(a.started))], ["Handed back", a.terminal && stamp(at(a.terminal.origin))], ["Reported outcome", a.terminal?.outcome],
       ["Reason", a.terminal?.reason], ["Next action", a.terminal?.next_action]]), a.terminal ? "" : "blue"));
   const closure = root.task.closure;
   if (closure) rows.push(item(`Closed by ${actorName(closure.closer?.actor)}`, titleCase(closure.outcome), facts([["Closed", stamp(at(closure.origin))], ["Outcome", closure.outcome]])));
@@ -157,10 +158,13 @@ function renderTask({ id, root, answer, at, names, dates }) {
   const items = answer.owed.items || [];
   const plan = (root.fact.task.prerequisites || []).length > 0;
   return frame({ id, kind: "task", title: fullTitle(root), tone, statusLabel: label, details: [["Subject", root.fact.task.subject],
-    ["Next actor", answer.owed.next_actor ? actorName(answer.owed.next_actor) : ""],
-    ["Author", actorName(root.author?.actor)], ["Approved by", actorName(root.admitted_by)],
+    ["Next actor", root.task.status === "CLOSED" ? "None, task closed" : actorName(answer.owed.next_actor)],
+    ["Author", actorName(root.author?.actor)], ["Record admitted by", actorName(root.admitted_by)],
     ["Progress", plan ? `${items.filter((i) => i.satisfied === "TRUE").length} of ${items.length} met` : ""],
-    ["Created", stamp(dates[0])], ["Updated", stamp(dates[1])]] },
+    ["Created", stamp(dates[0])], ["Updated", stamp(dates[1])],
+    ["Outcome", root.task.closure?.outcome || ""],
+    ["Acceptance", root.task.closure ? "Closed with recorded outcome: " + root.task.closure.outcome : "Not accepted yet. An agent’s reported success is not approval."],
+    ["How acceptance is recorded", "Record admission adds a record to the ledger. Result acceptance is recorded by an admitted close. Each acceptance criterion needs its own recorded witness; otherwise its status remains UNKNOWN."]] },
   blocked(answer, names), plan ? planItems(answer) : null, criteria(root), attempts(root, at),
   attention(answer, ["task-blocked-owed"]), changes(answer, at, names));
 }

@@ -15,7 +15,9 @@ package write
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -28,21 +30,30 @@ import (
 // LedgerCheck is the finding. Clean is true only when the ledger replayed
 // and every problem list is empty; resolved set-asides are listed, not owed.
 type LedgerCheck struct {
-	Commit       string            `json:"commit"`
-	Bundles      int               `json:"bundles"`
-	Clean        bool              `json:"clean"`
-	ReplayError  string            `json:"replay_error,omitempty"`
-	NotCommitted []string          `json:"not_committed,omitempty"`
-	Artifacts    string            `json:"artifacts_missing,omitempty"`
-	GitPins      []string          `json:"git_pins,omitempty"`
-	SetAside     []reduce.SetAside `json:"set_aside,omitempty"`
-	Resolved     []reduce.SetAside `json:"set_aside_resolved,omitempty"`
+	Commit          string                 `json:"commit"`
+	Bundles         int                    `json:"bundles"`
+	Clean           bool                   `json:"clean"`
+	ReplayError     string                 `json:"replay_error,omitempty"`
+	NotCommitted    []string               `json:"not_committed,omitempty"`
+	Artifacts       string                 `json:"artifacts_missing,omitempty"`
+	GitPins         []string               `json:"git_pins,omitempty"`
+	SetAside        []reduce.SetAside      `json:"set_aside,omitempty"`
+	Resolved        []reduce.SetAside      `json:"set_aside_resolved,omitempty"`
+	Classes         map[string]LedgerClass `json:"classes"`
+	GitPinLocations []GitPinLocation       `json:"git_pin_locations,omitempty"`
+	CheckError      string                 `json:"check_error,omitempty"`
 }
 
 // CheckLedger checks project's ledger at its checkout's HEAD.
-func CheckLedger(ctx context.Context, project store.Project) (*LedgerCheck, error) {
+func CheckLedger(ctx context.Context, project store.Project) (answer *LedgerCheck, checkErr error) {
+	session := evidence.NewGitSession(ctx, project.Root)
+	defer func() {
+		if err := session.Close(); err != nil && checkErr == nil {
+			answer, checkErr = nil, err
+		}
+	}()
 	git := func(args ...string) (string, error) {
-		b, err := evidence.ExecGit(ctx, project.Root, args...)
+		b, err := session.Run(ctx, project.Root, args...)
 		return strings.TrimSpace(string(b)), err
 	}
 	top, err := git("rev-parse", "--show-toplevel")
@@ -56,10 +67,12 @@ func CheckLedger(ctx context.Context, project store.Project) (*LedgerCheck, erro
 	if err != nil {
 		return nil, fmt.Errorf("the checkout has no commit: %w", err)
 	}
-	a := &LedgerCheck{Commit: head}
+	a := &LedgerCheck{Commit: head, Classes: unmeasuredLedgerClasses()}
+	a.Classes["replay_error"] = measuredLedgerClass(nil)
 	state, err := store.Replayed(project)
 	if err != nil {
 		a.ReplayError = err.Error()
+		a.Classes["replay_error"] = measuredLedgerClass([]string{a.ReplayError})
 		return a, nil
 	}
 	bundles, err := state.Bundles()
@@ -68,7 +81,7 @@ func CheckLedger(ctx context.Context, project store.Project) (*LedgerCheck, erro
 	}
 	a.Bundles = len(bundles)
 	ledgerDir, artifactDir := relTo(top, project.Ledger), relTo(top, filepath.Join(project.Root, project.ArtifactDir()))
-	tracked, err := git("-C", top, "ls-tree", "-r", "--name-only", "HEAD", "--", ledgerDir, artifactDir)
+	tracked, err := git("-C", top, "ls-tree", "-r", "--name-only", head, "--", ledgerDir, artifactDir)
 	if err != nil {
 		return nil, err
 	}
@@ -81,12 +94,22 @@ func CheckLedger(ctx context.Context, project store.Project) (*LedgerCheck, erro
 			a.NotCommitted = append(a.NotCommitted, what+" "+path)
 		}
 	}
-	if err := HomeHoldsKeptArtifacts(ctx, project, state); err != nil {
+	problems, err := keptArtifactProblems(ctx, project, state)
+	if err != nil {
+		return nil, err
+	}
+	if err := keptArtifactsError(project, problems); err != nil {
 		a.Artifacts = err.Error()
 	}
+	var missing []string
+	for _, p := range problems {
+		missing = append(missing, string(p.digest))
+	}
+	a.Classes["artifacts_missing"] = measuredLedgerClass(missing)
+	var pinProblems []string
 	snapshot := state.Snapshot()
-	resolver := evidence.NewResolverAt(project.Root, project.ArtifactDir())
 	seen := map[string]bool{}
+	located := map[string]bool{}
 	for _, b := range bundles {
 		name, err := model.BundleName(b.Sequence, b.CommandID)
 		if err != nil {
@@ -112,22 +135,52 @@ func CheckLedger(ctx context.Context, project store.Project) (*LedgerCheck, erro
 				seen[ref.Git.Commit+":"+ref.Git.Path] = true
 				pin := fmt.Sprintf("%s:%s cited by bundle %d event %d (%s)", ref.Git.Commit, ref.Git.Path, b.Sequence, i, raw.Type)
 				gitOnly := model.ArtifactRef{Kind: "git", Selector: model.Selector{Kind: "whole"}, Git: ref.Git}
-				if _, err := resolver.Resolve(ctx, gitOnly); err != nil {
-					a.GitPins = append(a.GitPins, pin+": does not resolve: "+err.Error())
-				} else if _, err := git("merge-base", "--is-ancestor", ref.Git.Commit, head); err != nil {
-					a.GitPins = append(a.GitPins, pin+": HEAD cannot reach it (squashed, rebased or on an unmerged branch)")
+				resolveErr, batchErr := resolveLedgerPin(ctx, project, gitOnly)
+				if batchErr != nil {
+					a.CheckError = "git pin resolution UNKNOWN: " + batchErr.Error()
+				}
+				if resolveErr != nil {
+					a.GitPins = append(a.GitPins, pin+": UNKNOWN: does not resolve: "+resolveErr.Error())
+					pinProblems = append(pinProblems, ref.Git.Commit+":"+ref.Git.Path)
+				}
+				// A missing path still has a locatable commit. Missing or non-commit
+				// objects cannot establish reachability, so do not invent locations.
+				commitErr := evidence.RequireGitCommit(ctx, session.Run, project.Root, ref.Git.Commit)
+				if commitErr == nil {
+					if _, err := git("merge-base", "--is-ancestor", ref.Git.Commit, head); err != nil {
+						var exit *exec.ExitError
+						if !errors.As(err, &exit) || exit.ExitCode() != 1 || len(exit.Stderr) != 0 {
+							a.CheckError = fmt.Sprintf("git pin ancestry unmeasured: %v", err)
+							continue
+						}
+						if resolveErr == nil {
+							a.GitPins = append(a.GitPins, pin+": HEAD cannot reach it (squashed, rebased or on an unmerged branch)")
+							pinProblems = append(pinProblems, ref.Git.Commit+":"+ref.Git.Path)
+						}
+						if !located[ref.Git.Commit] {
+							located[ref.Git.Commit] = true
+							a.GitPinLocations = append(a.GitPinLocations, ledgerPinLocation(ctx, session, project.Root, ref.Git.Commit))
+						}
+					}
 				}
 			}
 		}
 	}
+	var asides []string
 	for _, v := range snapshot.SetAside() {
 		if v.Resolved != nil {
 			a.Resolved = append(a.Resolved, v)
 		} else {
 			a.SetAside = append(a.SetAside, v)
+			asides = append(asides, fmt.Sprintf("%d:%s", v.Sequence, v.CommandID))
 		}
 	}
-	a.Clean = a.Artifacts == "" && len(a.NotCommitted) == 0 && len(a.GitPins) == 0 && len(a.SetAside) == 0
+	a.Classes["set_asides"] = measuredLedgerClass(asides)
+	if a.CheckError == "" {
+		a.Classes["git_pins"] = measuredLedgerClass(pinProblems)
+	}
+	a.Classes["not_committed"] = measuredLedgerClass(a.NotCommitted)
+	a.Clean = a.CheckError == "" && a.Artifacts == "" && len(a.NotCommitted) == 0 && len(a.GitPins) == 0 && len(a.SetAside) == 0
 	return a, nil
 }
 

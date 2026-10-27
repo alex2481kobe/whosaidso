@@ -192,7 +192,7 @@ func writeIntake(ctx context.Context, project Project, request IntakeRequest, di
 }
 
 func retryIntake(project Project, dir string, digest model.Digest, disk intakeIO) (model.PacketRef, error) {
-	p, ref, blobs, err := readIntakePacket(project, dir)
+	p, ref, blobs, err := readIntakePacket(project, dir, 0)
 	if err != nil {
 		return model.PacketRef{}, err
 	}

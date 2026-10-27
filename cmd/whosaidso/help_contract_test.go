@@ -22,7 +22,7 @@ import (
 )
 
 func TestHelpContractExamplesAreWhatTheCodeReads(t *testing.T) {
-	whole, _ := helpFor("")
+	whole, _ := helpFor("all")
 
 	var config []string
 	for _, line := range strings.Split(whole, "\n") {

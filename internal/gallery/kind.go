@@ -14,8 +14,9 @@ import (
 // Shown combines the admitted entry with a local availability observation.
 type Shown struct {
 	Entry
-	Kind   string `json:"kind"`
-	Status string `json:"status"`
+	Kind         string `json:"kind"`
+	Status       string `json:"status"`
+	StatusReason string `json:"status_reason,omitempty"`
 }
 
 // Preview kinds.
