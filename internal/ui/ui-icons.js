@@ -5,6 +5,8 @@ const NS = "http://www.w3.org/2000/svg";
 
 // Line icons on a 24-unit grid, drawn with the current text colour.
 const paths = {
+  download: "M12 3v12M7 10l5 5 5-5M4 17v4h16v-4",
+  trash: "M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7",
   progress: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2",
   back: "M9 10l-5 5 5 5M4 15h11a5 5 0 0 0 0-10h-3",
   blocked: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM5.6 5.6l12.8 12.8",

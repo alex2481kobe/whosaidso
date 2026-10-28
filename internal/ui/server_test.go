@@ -217,7 +217,7 @@ func TestStaticFilesAreServedWithTheirTypes(t *testing.T) {
 			t.Errorf("%s: %d %q, want 200 %q with its embedded bytes", path, got, header.Get("Content-Type"), kind)
 		}
 	}
-	if len(staticFiles) != 17 {
+	if len(staticFiles) != 18 {
 		t.Fatalf("every embedded file but the page is served: %d paths", len(staticFiles))
 	}
 	got, header, body := do(t, host, probe{"GET", "/", host, "", enter(t, host, token)})

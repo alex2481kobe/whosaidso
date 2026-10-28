@@ -9,7 +9,7 @@ const body=new Node('body'),ids=new Map();
 const doc=new Node('document');Object.assign(doc,{body,visibilityState:'visible',documentElement:new Node('html'),activeElement:null});
 const create=tag=>{const n=new Node(tag);n.onFocus=node=>{doc.activeElement=node;};return n;};
 doc.createElement=create;doc.createElementNS=(_,tag)=>create(tag);doc.createTextNode=text=>new Node('#text',text);
-doc.getElementById=id=>{if(!ids.has(id)){const n=create(id==='project-menu'?'div':'button');n.id=id;n.hidden=id==='project-menu';body.append(n);ids.set(id,n);}return ids.get(id);};
+doc.getElementById=id=>{if(!ids.has(id)){const n=create(id==='main'?'main':id==='project-button'||id==='theme-toggle'?'button':'div');n.id=id;n.hidden=id==='project-menu';body.append(n);ids.set(id,n);}return ids.get(id);};
 doc.querySelector=s=>body.querySelector(s);doc.querySelectorAll=s=>body.querySelectorAll(s);
 const win=new Node('window');Object.assign(win,{scrollY:0,scrollTo(){}});
 const timers=new Map(),intervals=new Map();let serial=0;
@@ -18,9 +18,11 @@ const entry=i=>({id:String(i).padStart(26,'0'),title:'Artifact '+i,kind:'image',
 const entries=Array.from({length:60},(_,i)=>entry(i));entries[3].status='unknown';entries[3].status_reason='not compared in list';entries[4].status='missing';entries[4].path='';entries[5].kind='text';entries[5].path='shot-5.txt';entries[6].kind='video';entries[6].path='shot-6.mp4';entries[7].kind='';entries[7].path='shot-7.pdf';
 const gallery=offset=>({entries:entries.slice(offset,offset+24),offset,total:60,previous:offset?Math.max(0,offset-24):null,next:offset+24<60?offset+24:null,task_titles:{}});
 hold=new Promise(resolve=>{release=resolve;});
-const fetch=async raw=>{
+const fetch=async (raw,options={})=>{
   const url=new URL(raw,'http://viewer');requests.push(url);
   if(url.pathname==='/api/gallery/file' && url.searchParams.get('id')===entries[5].id)return textFail?{ok:false,status:503,statusText:'Unavailable'}:{ok:true,headers:{get(){return null;}},text:async()=> 'synthetic text'};
+  if(url.pathname==='/api/gallery/reveal')return {ok:true,json:async()=>({revealed:url.searchParams.get('id')})};
+  if(url.pathname==='/api/gallery/remove'){const id=url.searchParams.get('id');entries.splice(entries.findIndex(e=>e.id===id),1);return {ok:true,json:async()=>({removed:id})};}
   if(url.pathname==='/api/projects')return {ok:true,json:async()=>({current:'test/viewer',projects:[{id:'test/viewer',available:true}]})};
   if(url.pathname==='/api/gallery'){
     if(hold){await hold;hold=null;}
@@ -65,13 +67,21 @@ visible(cards.firstChild);visible(cards.children[5]);await settle();
 assert.equal(cards.children[1].querySelector('img').src,undefined,'only visible thumbnails start');
 assert.equal(cards.firstChild.querySelector('img').fetchPriority,'high','visible images have priority');
 const textPreview=cards.children[5].querySelector('pre');assert.ok(textPreview.textContent.includes('Could not read file'));assert.ok(textPreview.querySelector('button'),'failed text previews have a retry action');textFail=false;textPreview.querySelector('button').fire('click');await settle();assert.equal(textPreview.textContent,'synthetic text');
-assert.equal(cards.children[7].querySelector('.artifact-save').disabled,true,'unsupported types must not offer a failing save action');
+assert.ok(cards.children[7].querySelector('a').href.includes('/download?'),'all pinned types can download');
+const byLabel=(node,label)=>flatten(node).find(n=>n.getAttribute('aria-label')===label);
+const actions=cards.firstChild.querySelector('.gallery-actions');
+assert.deepEqual(actions.children.map(n=>n.getAttribute('aria-label')),['Reveal in file manager','Copy path','Download','Delete']);
+assert.ok(actions.children.every(n=>n.textContent===''),'file actions are icon only');
+assert.equal(cards.firstChild.querySelector('.artifact-title-button').querySelector('svg'),null,'title is text only');
 const first=cards.firstChild,img=first.querySelector('img');
 assert.ok(img.src.startsWith('/api/gallery/thumb?'),'cards must request thumbnails');
 assert.ok(!requests.some(u=>u.pathname==='/api/view'),'startup must not fetch full todo/show');
 img.fire('error');assert.equal(img.hidden,true);const retry=find('button','Retry preview');assert.ok(retry&&!retry.hidden,'failed previews have a retry action');
 retry.fire('click');assert.equal(img.hidden,false);assert.equal(retry.hidden,true);img.fire('load');assert.equal(first.querySelector('.gallery-load-status').textContent,'');
 const title=first.querySelector('.artifact-title-button');title.fire('click');await settle();
+assert.equal(body.querySelector('.artifact-dialog'),null,'title reveals instead of opening details');
+assert.ok(requests.some(u=>u.pathname==='/api/gallery/reveal'),'title reveals the file');
+first.querySelector('.artifact-preview').fire('click');await settle();
 let dialog=body.querySelector('.artifact-dialog');assert.ok(dialog?.open);
 assert.ok(dialog.querySelector('img').src.startsWith('/api/gallery/file?'),'inspector requests the full original');
 assert.equal(find('button','Previous artifact').disabled,true);
@@ -85,14 +95,17 @@ find('button','Next artifact').fire('click');assert.equal(find('button','Copy pa
 dialog.fire('keydown',{key:'ArrowLeft'});dialog.fire('keydown',{key:'ArrowLeft'});
 const save=dialog.querySelector('.artifact-save');assert.ok(save.href.startsWith('/api/gallery/download?'));assert.equal(save.textContent,'Save original');
 find('button','Copy path').fire('click');await settle();assert.equal(copied,'shot-1.png','copy path is platform neutral');
-dialog.close();assert.equal(title.focusArgs?.preventScroll,true,'closing preserves scroll');
-cards.children[6].querySelector('.artifact-title-button').fire('click');const videoDialog=body.querySelector('.artifact-dialog'),video=videoDialog.querySelector('video');assert.ok(video?.loaded,'video loads only when opened');videoDialog.close();assert.equal(video.paused,true,'closing inspection stops playback');
+dialog.close();assert.equal(first.querySelector('.artifact-preview').focusArgs?.preventScroll,true,'closing preserves scroll');
+cards.children[6].querySelector('.artifact-preview').fire('click');const videoDialog=body.querySelector('.artifact-dialog'),video=videoDialog.querySelector('video');assert.ok(video?.loaded,'video loads only when opened');videoDialog.close();assert.equal(video.paused,true,'closing inspection stops playback');
 await tick();assert.equal(cards.firstChild,first,'unchanged polls preserve media nodes');
 fail=true;await tick();assert.ok(body.textContent.includes('fixture refresh failure'),'refresh failure must be visible');fail=false;
 let late;delayGallery=new Promise(resolve=>{late=resolve;});await tick();
-find('button','Next').fire('click');await settle();assert.equal(cards.children.length,24);assert.equal(cards.firstChild.querySelector('.artifact-title-button').textContent,'Artifact 24');
-late();await settle();assert.equal(cards.firstChild.querySelector('.artifact-title-button').textContent,'Artifact 24','a late poll cannot overwrite navigation');
-cards.firstChild.querySelector('.artifact-title-button').fire('click');
+visible(body.querySelector('.gallery-sentinel'));await settle();assert.equal(cards.children.length,48,'near-bottom loads the next batch');assert.equal(cards.children[24].querySelector('.artifact-title-button').textContent,'Artifact 24');
+late();await settle();assert.equal(cards.children.length,48,'a late poll cannot overwrite the appended batch');
+assert.equal(find('button','Next'),undefined,'gallery has no page controls');
+assert.ok(!body.textContent.includes('of 60'),'gallery has no page counts');
+byLabel(cards.firstChild,'Delete').fire('click');await settle();assert.equal(cards.children.length,47,'admitted delete removes the card immediately');assert.equal(cards.firstChild.querySelector('.artifact-title-button').textContent,'Artifact 1');
+cards.firstChild.querySelector('.artifact-preview').fire('click');
 for(const screen of ['home','records','history']){location.hash='#/'+screen;win.fire('hashchange',{oldURL:'http://viewer/#/gallery'});await settle();assert.ok(body.querySelector('.browser-screen'),screen+' mounts bounded screen');
  if(screen==='home'){assert.equal(body.querySelector('.artifact-dialog'),null,'routing closes the inspector');find('button','Load work status totals').fire('click');await settle();const full=requests.filter(u=>u.searchParams.get('status_counts')==='1').length;assert.equal(full,1,'status totals load on explicit request');await tick();assert.equal(requests.filter(u=>u.searchParams.get('status_counts')==='1').length,full,'polls must not recompute unrequested totals');}
 }

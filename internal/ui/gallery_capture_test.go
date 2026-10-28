@@ -1,13 +1,13 @@
-// Gallery retraction capture preserves its configured author and remains
-// pending until independently admitted; media and read endpoints are separate.
+// Viewer deletion records and admits a retraction as its configured actor.
+// Strict admission policy still refuses self-admission and leaves media intact.
 package ui
 
 import (
 	"context"
 	"crypto/rand"
-	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,7 +18,7 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/write"
 )
 
-func TestGalleryRemovalCanBeAdmittedUnderStrictPolicy(t *testing.T) {
+func TestStrictPolicyRefusesViewerSelfAdmissionAndAllowsIndependentReview(t *testing.T) {
 	home := t.TempDir()
 	if err := testaccess.MakePrivate(home); err != nil {
 		t.Fatal(err)
@@ -35,13 +35,26 @@ func TestGalleryRemovalCanBeAdmittedUnderStrictPolicy(t *testing.T) {
 	session := enter(t, host, token)
 	id, path := shown(t, root, "clip.mp4", []byte("video"))
 	status, _, body := ask(t, host, "POST", "/api/gallery/remove?project=team%2Fok&id="+id, "http://"+host, session)
-	var receipt struct {
-		Captured model.ID `json:"captured"`
+	if status != 409 || !strings.Contains(string(body), "self-admission") {
+		t.Fatalf("strict refusal: %d %s", status, body)
 	}
-	if err := json.Unmarshal(body, &receipt); err != nil || status != 200 || !model.ValidID(receipt.Captured) {
-		t.Fatalf("capture: %d %s %v", status, body, err)
+	pending, err := store.ReadIntake(p, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	packets, err := store.ReadIntake(p, []model.ID{receipt.Captured})
+	var captured model.ID
+	for _, packet := range pending {
+		if len(packet.Events) == 1 && packet.Events[0].Type == "gallery.retract" {
+			if captured != "" {
+				t.Fatal("duplicate retraction capture")
+			}
+			captured = packet.CommandID
+		}
+	}
+	if !model.ValidID(captured) {
+		t.Fatal("missing retraction capture")
+	}
+	packets, err := store.ReadIntake(p, []model.ID{captured})
 	if err != nil || len(packets) != 1 || packets[0].Author.ID != "contributor" {
 		t.Fatalf("viewer lost its actor: %+v %v", packets, err)
 	}
@@ -53,7 +66,7 @@ func TestGalleryRemovalCanBeAdmittedUnderStrictPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = write.Admit(context.Background(), p, write.AdmitRequest{CommandID: command, PacketIDs: []model.ID{receipt.Captured}, Admitter: model.Actor{ID: "reviewer"}, Outcome: "accepted", Reason: "retraction reviewed"})
+	_, err = write.Admit(context.Background(), p, write.AdmitRequest{CommandID: command, PacketIDs: []model.ID{captured}, Admitter: model.Actor{ID: "reviewer"}, Outcome: "accepted", Reason: "retraction reviewed"})
 	if err != nil {
 		t.Fatalf("independent admission of viewer retraction failed: %v", err)
 	}
@@ -63,5 +76,56 @@ func TestGalleryRemovalCanBeAdmittedUnderStrictPolicy(t *testing.T) {
 	}
 	if data, err := os.ReadFile(path); err != nil || string(data) != "video" {
 		t.Fatalf("retraction touched media: %s %v", data, err)
+	}
+}
+
+func TestViewerDeletionAdmitsAttributedRetractionAndRetainsTheFile(t *testing.T) {
+	world := &stubWorld{captureActor: model.Actor{ID: "contributor"}}
+	host, session, root := galleryUI(t, world)
+	id, path := shown(t, root, "kept.png", []byte("source bytes"))
+	original := fileURL(t, host, session, id)
+	code, _, body := ask(t, host, "POST", "/api/gallery/remove?project=team%2Fok&id="+id, "http://"+host, session)
+	if code != 200 || !strings.Contains(string(body), `"removed":"`+id+`"`) {
+		t.Fatalf("delete: %d %s", code, body)
+	}
+	p := galleryProject(t, root)
+	state, err := store.Replayed(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := state.Snapshot().Gallery()
+	if len(entries) != 1 || !entries[0].Retracted {
+		t.Fatalf("not retracted: %+v", entries)
+	}
+	bundles, err := state.Bundles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := bundles[len(bundles)-1]
+	event, err := model.DecodeEvent(last.Events[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := event.(*model.GalleryRetract); !ok || last.Admitter.ID != "contributor" {
+		t.Fatal("delete did not admit the owner's retraction")
+	}
+	review, err := model.DecodeEvent(last.Events[len(last.Events)-1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt := review.(*model.ReviewAdmit)
+	if len(receipt.Authors) != 1 {
+		t.Fatal("missing author")
+	}
+	for _, author := range receipt.Authors {
+		if author.ID != "contributor" {
+			t.Fatal("retraction changed author")
+		}
+	}
+	if data, err := os.ReadFile(path); err != nil || string(data) != "source bytes" {
+		t.Fatalf("delete touched source: %q %v", data, err)
+	}
+	if code, _, _ := ask(t, host, "GET", original, "", session); code != 404 {
+		t.Fatalf("old capability opened retracted entry: %d", code)
 	}
 }

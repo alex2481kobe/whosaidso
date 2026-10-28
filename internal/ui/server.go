@@ -1,11 +1,11 @@
-// Package ui serves `whosaidso ui`: a local, short-lived, read-only viewer.
+// Package ui serves `whosaidso ui`: a local, short-lived viewer.
 //
 // This file holds the server and its guards: a random loopback port, a
 // single-use launch token exchanged for a session cookie, Host and Origin
 // checks, GET only but for the gallery's two POSTs, and the embedded static
 // files. The JSON it serves is api.go's and gallery.go's; what the page does
-// with it is ui.js's. Nothing in the package writes to a
-// ledger. Remove captures a gallery retraction in intake for later admission.
+// with it is ui.js's. Delete captures and admits only a gallery retraction;
+// it never changes the media file.
 package ui
 
 import (
@@ -27,7 +27,7 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
-//go:embed index.html ui.css ui-screens.css ui-gallery.css ui.js ui-icons.js ui-parts.js ui-detail.js ui-kinds.js ui-gallery.js ui-gallery-media.js ui-gallery-inspect.js ui-browser.js ui-shell.js favicon-32.png favicon-180.png owl.png
+//go:embed index.html ui.css ui-screens.css ui-gallery.css ui.js ui-icons.js ui-parts.js ui-detail.js ui-kinds.js ui-gallery.js ui-gallery-media.js ui-gallery-actions.js ui-gallery-inspect.js ui-browser.js ui-shell.js favicon-32.png favicon-180.png owl.png
 var files embed.FS
 
 // staticFiles maps each served path to its embedded file and media type.
@@ -42,6 +42,7 @@ var staticFiles = map[string][2]string{
 	"/ui-kinds.js":           {"ui-kinds.js", "text/javascript; charset=utf-8"},
 	"/ui-icons.js":           {"ui-icons.js", "text/javascript; charset=utf-8"},
 	"/ui-parts.js":           {"ui-parts.js", "text/javascript; charset=utf-8"},
+	"/ui-gallery-actions.js": {"ui-gallery-actions.js", "text/javascript; charset=utf-8"},
 	"/ui-gallery-media.js":   {"ui-gallery-media.js", "text/javascript; charset=utf-8"},
 	"/ui-gallery-inspect.js": {"ui-gallery-inspect.js", "text/javascript; charset=utf-8"},
 	"/ui-shell.js":           {"ui-shell.js", "text/javascript; charset=utf-8"},

@@ -4,10 +4,11 @@ package ui
 // the two POSTs, Reveal in Finder and Remove from gallery. A file is reached
 // only through its entry id; no request names a path, and a request that
 // tries is refused before anything is opened. Which files preview, and as
-// what type, is internal/gallery's table. Remove captures a retraction packet;
-// admission, through the CLI, publishes it. The media file is never changed.
+// what type, is internal/gallery's table. Delete captures and admits a retraction through the normal admission gate,
+// attributed to the configured viewer actor. The media file is never changed.
 
 import (
+	"crypto/rand"
 	"errors"
 	"io"
 	"mime"
@@ -18,10 +19,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"time"
 
 	"github.com/alex2481kobe/whosaidso/internal/gallery"
 	"github.com/alex2481kobe/whosaidso/internal/model"
 	"github.com/alex2481kobe/whosaidso/internal/store"
+	"github.com/alex2481kobe/whosaidso/internal/write"
 )
 
 // maxText is how much of a text file the viewer shows: enough to debug by,
@@ -93,7 +96,15 @@ func (h *handler) galleryAnswer(w http.ResponseWriter, r *http.Request, file sto
 			h.fail(w, http.StatusInternalServerError, err)
 			return
 		}
-		h.json(w, map[string]string{"captured": string(ref.CommandID)})
+		command, err := model.NewID(time.Now(), rand.Reader)
+		if err == nil {
+			_, err = write.Admit(r.Context(), file, write.AdmitRequest{CommandID: command, PacketIDs: []model.ID{ref.CommandID}, Admitter: h.cfg.CaptureActor, Outcome: "accepted", Reason: "Viewer requested removal from gallery; media file retained"})
+		}
+		if err != nil {
+			h.fail(w, http.StatusConflict, errText("Retraction captured as "+string(ref.CommandID)+" but not admitted: "+err.Error()))
+			return
+		}
+		h.json(w, map[string]string{"captured": string(ref.CommandID), "removed": id})
 	case "/api/gallery/reveal":
 		if info, err := os.Stat(entry.Path); err != nil || !info.Mode().IsRegular() {
 			h.fail(w, http.StatusNotFound, errText("missing: "+entry.Path))
@@ -117,7 +128,7 @@ func (h *handler) galleryAnswer(w http.ResponseWriter, r *http.Request, file sto
 // not served at all.
 func (h *handler) serveEntry(w http.ResponseWriter, r *http.Request, checkout string, entry gallery.Entry) {
 	kind, mediaType := gallery.Kind(entry.Locator)
-	if kind == gallery.None {
+	if kind == gallery.None && r.URL.Path != "/api/gallery/download" {
 		h.fail(w, http.StatusUnsupportedMediaType, errText("no preview for this file type"))
 		return
 	}
@@ -142,6 +153,7 @@ func (h *handler) serveEntry(w http.ResponseWriter, r *http.Request, checkout st
 		return
 	}
 	if r.URL.Path == "/api/gallery/download" {
+		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filepath.Base(entry.Path)}))
 		http.ServeContent(w, r, "", info.ModTime(), f)
 		return

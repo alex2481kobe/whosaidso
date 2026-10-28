@@ -188,8 +188,8 @@ func TestGalleryPostsNeedThisOriginAndTheSession(t *testing.T) {
 	if got, _, _ := ask(t, host, "POST", "/api/gallery/remove?project=team%2Fok&id="+id, own, session); got != 200 {
 		t.Fatalf("remove control: %d", got)
 	}
-	if entries, _ := gallery.List(galleryProject(t, file)); len(entries) != 1 {
-		t.Fatalf("capture must leave the entry until admission: %v", entries)
+	if entries, _ := gallery.List(galleryProject(t, file)); len(entries) != 0 {
+		t.Fatalf("admitted retraction must remove the entry: %v", entries)
 	}
 	if b, err := os.ReadFile(path); err != nil || string(b) != "png" {
 		t.Fatalf("remove touched the file: %q %v", b, err)

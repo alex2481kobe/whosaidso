@@ -32,8 +32,10 @@ before adding, approving or closing a visual task, refusing changed or unavailab
 bytes. Gallery list and the viewer report local availability separately from the
 historical verdict. Later file edits do not rewrite an admitted close. The viewer
 verifies the opened file before serving a preview and refuses changed content.
-Viewer retractions use --actor or WHOSAIDSO_ACTOR and remain pending until
-admitted, including under the strict self-admission policy.
+Viewer deletion captures and admits a retraction as --actor or WHOSAIDSO_ACTOR.
+It never removes the media file. The normal self-admission policy still applies:
+a strict project refuses the admission, reports the pending packet, and keeps
+the entry visible until an independent actor admits the retraction.
 Actor names and visual judgments are assertions, not authentication or automated
 proof of what a person actually inspected.
 

@@ -142,3 +142,8 @@
 @media(max-width:700px){.browser-row{grid-template-columns:1fr 1fr;}.browser-row .row-title{grid-column:1/-1;}.browser-row>span{overflow-wrap:anywhere;}}
 
 .gallery-text .button {pointer-events:auto;white-space:normal;margin-top:12px;}
+
+/* Cards expose only a title and one row of file actions. */
+.gallery-actions {display:flex;gap:8px;align-items:center;}
+.icon-button {display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;flex:none;}
+.gallery-sentinel {height:1px;flex:none;}

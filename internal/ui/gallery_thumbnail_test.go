@@ -131,7 +131,7 @@ func TestThumbnailCapabilitiesAndDecodeBudgets(t *testing.T) {
 	}
 }
 
-func TestSaveOriginalUsesAnAuthenticatedAttachmentOnEveryPlatform(t *testing.T) {
+func TestDownloadUsesAnAuthenticatedAttachmentOnEveryPlatform(t *testing.T) {
 	host, session, root := galleryUI(t, &stubWorld{})
 	id, _ := shown(t, root, "screen.png", []byte("pinned original"))
 	url := strings.Replace(fileURL(t, host, session, id), "/file?", "/download?", 1)
@@ -141,5 +141,19 @@ func TestSaveOriginalUsesAnAuthenticatedAttachmentOnEveryPlatform(t *testing.T) 
 	}
 	if code, _, _ := ask(t, host, "GET", strings.Split(url, "&cap=")[0], "", sess{cookie: session.cookie}); code != 403 {
 		t.Fatalf("unauthenticated download: %d", code)
+	}
+}
+
+func TestDownloadAcceptsPinnedFilesWithoutPreviewingThem(t *testing.T) {
+	host, session, root := galleryUI(t, &stubWorld{})
+	id, _ := shown(t, root, "document.html", []byte("<script>synthetic</script>"))
+	original := fileURL(t, host, session, id)
+	if code, _, _ := ask(t, host, "GET", original, "", session); code != 415 {
+		t.Fatalf("unsafe preview: %d", code)
+	}
+	download := strings.Replace(original, "/file?", "/download?", 1)
+	code, headers, body := ask(t, host, "GET", download, "", session)
+	if code != 200 || headers.Get("Content-Type") != "application/octet-stream" || headers.Get("Content-Disposition") != "attachment; filename=document.html" || string(body) != "<script>synthetic</script>" {
+		t.Fatalf("attachment: %d %v %q", code, headers, body)
 	}
 }

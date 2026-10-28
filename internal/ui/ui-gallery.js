@@ -1,131 +1,110 @@
-// Gallery presentation: artwork and titles, with provenance in artifact details.
-// File availability never implies approval. Mutations retain the original server contract.
-import { el, api, apiURL, send, project, stamp, icon, link } from "./ui.js";
+// Gallery batches append near the scroll boundary. Filters reset the stream;
+// unchanged polls preserve media nodes. File actions and inspection live apart.
+import { el, api, project, icon } from "./ui.js";
 import { dropdown } from "./ui-parts.js";
-import { action, preview, fileURL, saveOriginal } from "./ui-gallery-media.js";
+import { preview, fileURL } from "./ui-gallery-media.js";
+import { galleryActions, titleButton, iconAction } from "./ui-gallery-actions.js";
 import { inspect } from "./ui-gallery-inspect.js";
 let renderEpoch = 0;
-const state = { project: "", search: "", kind: "", sort: "recent", offset: 0 };
+const state = { project: "", search: "", kind: "", sort: "recent" };
 const kinds = [["", "All types"], ["image", "Images"], ["video", "Videos"], ["text", "Text"], ["other", "Other"]];
 const sorts = [["recent", "Newest first"], ["oldest", "Oldest first"], ["title", "Title A–Z"], ["kind", "Kind"]];
 
-function card(entry, titles, sequence) {
-  const src = fileURL(entry);
-  const media = preview(entry, entry.kind === "image" ? fileURL(entry, "thumb") : src);
+function card(entry, removed, sequence) {
+  const said = el("p", "gallery-said"); said.setAttribute("role", "status");
+  const media = preview(entry, fileURL(entry, entry.kind === "image" ? "thumb" : "file"));
   const stage = el("div", "artifact-preview", media);
-  const open = trigger => inspect(entry, trigger, titles(), sequence());
-  stage.tabIndex = 0;
-  stage.setAttribute("role", "button");
+  const open = () => inspect(entry, stage, new Map(), sequence(), removed);
+  stage.tabIndex = 0; stage.setAttribute("role", "button");
   stage.setAttribute("aria-label", "Open " + entry.title);
-  stage.addEventListener("click", e => { if (!e.target.closest("button")) open(stage); });
-  stage.addEventListener("keydown", e => { if (e.target === stage && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); open(stage); } });
+  stage.addEventListener("click", e => { if (!e.target.closest("button")) open(); });
+  stage.addEventListener("keydown", e => { if (e.target === stage && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); open(); } });
   if (entry.kind === "text") media.removeAttribute("tabindex");
-  const title = action("open", entry.title, () => open(title), "artifact-title-button");
-  title.setAttribute("aria-label", "Open " + entry.title + " details");
-  const node = el("article", "gallery-card", stage, el("div", "gallery-card-body", el("h2", "gallery-title", title), saveOriginal(entry)));
+  const node = el("article", "gallery-card", stage, el("div", "gallery-card-body",
+    el("h2", "gallery-title", titleButton(entry, said)), galleryActions(entry, said, removed), said));
   node.dataset.kind = entry.kind || "other";
   return node;
 }
-// The server filters the complete gallery, then observes only one page. Polls
-// retain unchanged media and cannot overwrite a newer search or page request.
 export async function renderGallery() {
-  const epoch = ++renderEpoch;
-  const shown = project();
+  const epoch = ++renderEpoch, shown = project();
   const active = () => epoch === renderEpoch && project() === shown;
-  if (state.project !== shown) Object.assign(state, {project:shown, search:"", kind:"", offset:0});
-  const params = () => ({project:shown, offset:state.offset, search:state.search, kind:state.kind, sort:state.sort});
-  let answer = await api("/api/gallery", params());
+  if (state.project !== shown) Object.assign(state, {project:shown, search:"", kind:""});
+  const params = offset => ({project:shown, offset, search:state.search, kind:state.kind, sort:state.sort});
+  let answer = await api("/api/gallery", params(0));
   if (!active()) return el("div");
-  let taskTitles = new Map();
-  const empty = el("div", "gallery-empty", icon("file"), el("h2", "", "No artifacts here"),
-    el("p", "", "Try another filter, or ask your agent to add a file to the gallery."));
-  const cards = el("div", "gallery-cards");
-  const tools = el("div", "gallery-tools");
-  const said = el("p", "gallery-said");
-  said.setAttribute("role", "status");
-  const range = el("span", "gallery-footnote");
-  const previous = action("back", "Previous", () => { if (answer.previous != null) refresh(answer.previous); });
-  const next = action("arrow", "Next", () => { if (answer.next != null) refresh(answer.next); });
-  const pager = el("nav", "gallery-tools", previous, range, next);
-  pager.setAttribute("aria-label", "Gallery pages");
+  const cards = el("div", "gallery-cards"), tools = el("div", "gallery-tools");
+  const empty = el("p", "gallery-empty", "No files match these filters.");
+  const said = el("p", "gallery-said"); said.setAttribute("role", "status");
+  const sentinel = el("div", "gallery-sentinel");
+  const retry = iconAction("refresh", "Retry loading files", () => refresh(nextOffset)); retry.hidden = true;
   const drawn = new Map();
-  const draw = (page) => {
-    answer = page;
-    state.offset = page.offset;
-    taskTitles = new Map(Object.entries(page.task_titles || {}));
-    const nodes = page.entries.map(entry => {
-      const sig = JSON.stringify(entry), old = drawn.get(entry.id);
-      if (old?.sig === sig) return old.node;
-      const node = card(entry, () => taskTitles, () => answer.entries);
-      drawn.set(entry.id, {sig, node});
-      return node;
-    });
-    const keep = new Set(nodes);
-    for (const child of [...cards.children]) if (!keep.has(child)) child.remove();
-    const live = new Set(page.entries.map(entry => entry.id));
-    for (const id of drawn.keys()) if (!live.has(id)) drawn.delete(id);
-    let at = cards.firstChild;
-    for (const node of nodes) {
-      if (node === at) at = at.nextSibling;
-      else cards.insertBefore(node, at);
-    }
-    empty.hidden = page.entries.length > 0;
-    previous.disabled = page.previous == null;
-    next.disabled = page.next == null;
-    range.textContent = page.total ? `${page.offset + 1}–${page.offset + page.entries.length} of ${page.total}` : "0 files";
+  let nextOffset = answer.next, firstSignature = "", generation = 0, busy = false, polling = false, current, debounce;
+  const signature = page => JSON.stringify(page.entries);
+  const removed = id => {
+    drawn.get(id)?.node.remove(); drawn.delete(id);
+    if (nextOffset != null) nextOffset = Math.max(0, nextOffset - 1);
+    empty.hidden = drawn.size > 0;
+    firstSignature = JSON.stringify([...drawn.values()].slice(0, 24).map(v => v.entry));
   };
-  let generation = 0, busy = false, current = null, debounce = null;
-  async function refresh(offset = state.offset) {
-    if (!active()) return;
-    state.offset = offset;
+  const draw = (page, reset) => {
+    answer = page; nextOffset = page.next;
+    if (reset) {
+      firstSignature = signature(page);
+      const keep = new Set(page.entries.map(entry => entry.id));
+      for (const [id, old] of drawn) if (!keep.has(id)) {old.node.remove(); drawn.delete(id);}
+    }
+    for (const entry of page.entries) {
+      const sig = JSON.stringify(entry), old = drawn.get(entry.id);
+      if (!reset && old?.sig === sig) continue;
+      const node = old?.sig === sig ? old.node : card(entry, removed, () => [...drawn.values()].map(v => v.entry));
+      if (old && node !== old.node) old.node.remove();
+      drawn.set(entry.id, {sig, node, entry});
+      cards.append(node);
+    }
+    empty.hidden = drawn.size > 0;
+    sentinel.hidden = nextOffset == null;
+  };
+  async function refresh(offset = 0, poll = false) {
+    if (!active() || offset == null || (busy && poll)) return;
     const mine = ++generation;
-    current?.abort();
-    const stop = new AbortController();
-    current = stop;
-    busy = true;
+    current?.abort(); const stop = new AbortController(); current = stop; busy = true; polling = poll;
     const limit = setTimeout(() => stop.abort(), 10000);
     try {
-      const page = await api("/api/gallery", params(), stop.signal);
+      const page = await api("/api/gallery", params(offset), stop.signal);
       if (!active() || mine !== generation || !cards.isConnected) return;
-      draw(page);
-      said.textContent = "";
+      if (!poll || signature(page) !== firstSignature) draw(page, offset === 0);
+      said.textContent = ""; retry.hidden = true;
     } catch (error) {
-      if (active() && mine === generation && cards.isConnected)
-        said.textContent = error.name === "AbortError" ? "Gallery refresh timed out. Retry or wait for the next refresh." : error.message;
+      if (active() && mine === generation && cards.isConnected) {said.textContent = error.message; retry.hidden = false;}
     } finally {
       clearTimeout(limit);
-      if (mine === generation) { busy = false; current = null; }
+      if (mine === generation) {busy = false; current = null;}
     }
   }
-  const reload = () => {
-    generation++;
-    current?.abort();
-    clearTimeout(debounce);
-    busy = true;
-    state.offset = 0;
+  const change = values => {
+    if (!active()) return;
+    Object.assign(state, values); generation++; current?.abort(); clearTimeout(debounce); busy = true;
     debounce = setTimeout(() => refresh(0), 250);
   };
-  const change = values => { if (!active()) return; Object.assign(state, values); reload(); };
   const paint = () => tools.replaceChildren(
-    dropdown({prefix:"", options:kinds, value:state.kind, onPick:value => { change({kind:value}); paint(); }}),
-    dropdown({glyph:"sort", prefix:"", options:sorts, value:state.sort, onPick:value => { change({sort:value}); paint(); }}));
+    dropdown({options:kinds, value:state.kind, onPick:kind => {change({kind}); paint();}}),
+    dropdown({glyph:"sort", options:sorts, value:state.sort, onPick:sort => {change({sort}); paint();}}));
   const search = el("input", "search-input");
-  Object.assign(search, {type:"search", placeholder:"Search artifacts…", value:state.search, spellcheck:false});
-  search.setAttribute("aria-label", "Search artifacts");
-  search.addEventListener("input", () => { change({search:search.value.trim()}); });
-  paint();
-  draw(answer);
+  Object.assign(search, {type:"search", placeholder:"Search files…", value:state.search, spellcheck:false});
+  search.setAttribute("aria-label", "Search files");
+  search.addEventListener("input", () => change({search:search.value.trim()}));
+  paint(); draw(answer, true);
+  const observer = new IntersectionObserver(entries => {
+    if ((!busy || polling) && entries.some(entry => entry.isIntersecting)) refresh(nextOffset);
+  }, {root:document.getElementById("main"), rootMargin:"400px"});
+  observer.observe(sentinel);
   const timer = setInterval(() => {
     if (!active() || !cards.isConnected) {
-      generation++;
-      current?.abort();
-      clearTimeout(debounce);
-      clearInterval(timer);
-      return;
+      generation++; current?.abort(); clearTimeout(debounce); clearInterval(timer); observer.disconnect(); return;
     }
-    if (!busy && document.visibilityState !== "hidden") refresh();
+    if (!busy && document.visibilityState !== "hidden") refresh(0, true);
   }, 3000);
-  return el("div", "screen gallery-screen", el("header", "gallery-heading", el("h1", "", "Gallery")),
+  return el("div", "screen gallery-screen", el("h1", "", "Gallery"),
     el("div", "gallery-toolbar", el("div", "gallery-search-tools", el("label", "search", icon("search"), search), tools)),
-    said, cards, empty, pager);
+    said, cards, empty, sentinel, retry);
 }
