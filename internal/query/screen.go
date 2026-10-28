@@ -22,6 +22,7 @@ type ScreenRequest struct {
 	StatusCounts                     bool
 }
 type ScreenRow struct {
+	Group       string   `json:"group,omitempty"`
 	ID          model.ID `json:"id,omitempty"`
 	Title       string   `json:"title"`
 	Kind        string   `json:"kind"`
@@ -87,6 +88,9 @@ func ReadScreenFrom(p store.Project, r ScreenRequest, source Source) (*ScreenAns
 		a.Note = "Ledger watermark only"
 		return a, nil
 	}
+	if r.View == "home" {
+		return overview(s, r, a), nil
+	}
 	rows := []ScreenRow{}
 	search := strings.ToLower(strings.TrimSpace(r.Search))
 	if r.View == "history" {
@@ -126,30 +130,7 @@ func ReadScreenFrom(p store.Project, r ScreenRequest, source Source) (*ScreenAns
 			}
 		}
 	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		if r.Sort == "title" && rows[i].sortTitle != rows[j].sortTitle {
-			return rows[i].sortTitle < rows[j].sortTitle
-		}
-		if r.Sort == "kind" && rows[i].Kind != rows[j].Kind {
-			return rows[i].Kind < rows[j].Kind
-		}
-		if rows[i].Sequence == rows[j].Sequence {
-			if rows[i].order != rows[j].order {
-				if r.Sort == "oldest" {
-					return rows[i].order < rows[j].order
-				}
-				return rows[i].order > rows[j].order
-			}
-			if r.Sort == "oldest" {
-				return rows[i].ID < rows[j].ID
-			}
-			return rows[i].ID > rows[j].ID
-		}
-		if r.Sort == "oldest" {
-			return rows[i].Sequence < rows[j].Sequence
-		}
-		return rows[i].Sequence > rows[j].Sequence
-	})
+	sortScreenRows(rows, r.Sort)
 	end := a.bounds(len(rows), r.Offset)
 	a.Rows = append(a.Rows, rows[a.Offset:end]...)
 	for i := range a.Rows {
@@ -198,4 +179,31 @@ func fillScreenStatus(s reduce.Snapshot, row *ScreenRow) {
 		row.searchActor = actorName(*fact.NextActor)
 		row.Actor = screenPreview(row.searchActor)
 	}
+}
+
+func sortScreenRows(rows []ScreenRow, sortBy string) {
+	sort.SliceStable(rows, func(i, j int) bool {
+		if sortBy == "title" && rows[i].sortTitle != rows[j].sortTitle {
+			return rows[i].sortTitle < rows[j].sortTitle
+		}
+		if sortBy == "kind" && rows[i].Kind != rows[j].Kind {
+			return rows[i].Kind < rows[j].Kind
+		}
+		if rows[i].Sequence == rows[j].Sequence {
+			if rows[i].order != rows[j].order {
+				if sortBy == "oldest" {
+					return rows[i].order < rows[j].order
+				}
+				return rows[i].order > rows[j].order
+			}
+			if sortBy == "oldest" {
+				return rows[i].ID < rows[j].ID
+			}
+			return rows[i].ID > rows[j].ID
+		}
+		if sortBy == "oldest" {
+			return rows[i].Sequence < rows[j].Sequence
+		}
+		return rows[i].Sequence > rows[j].Sequence
+	})
 }

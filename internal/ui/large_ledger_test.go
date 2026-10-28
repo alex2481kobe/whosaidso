@@ -130,7 +130,7 @@ func TestLargeLedgerScreensAndFirstImages(t *testing.T) {
 			Rows  []json.RawMessage
 			Total int
 		}
-		if err := json.Unmarshal(body, &page); code != 200 || err != nil || len(page.Rows) != 24 || len(body) > 40000 {
+		if err := json.Unmarshal(body, &page); code != 200 || err != nil || (screen.name != "Overview" && len(page.Rows) != 24 || screen.name == "Overview" && len(page.Rows) != 0) || len(body) > 40000 {
 			t.Fatalf("%s: %d %d bytes %v", screen.name, code, len(body), err)
 		}
 		t.Logf("%s warm: %s, %d rows, %d total, %d bytes", screen.name, elapsed, len(page.Rows), page.Total, len(body))

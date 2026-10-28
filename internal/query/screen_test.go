@@ -79,7 +79,7 @@ func TestScreenPagesBoundTextAndSearchBeyondTheFirstPage(t *testing.T) {
 	}
 	for _, view := range []string{"home", "history"} {
 		a := read(ScreenRequest{View: view})
-		if len(a.Rows) > 24 || (view == "home" && a.Total < 55) || (view == "history" && a.Counts["events"] < 55) {
+		if len(a.Rows) > 24 || (view == "home" && (a.Total != 0 || a.Counts["READY"] != 55)) || (view == "history" && a.Counts["events"] < 55) {
 			t.Fatalf("unbounded %s: %+v", view, a)
 		}
 	}

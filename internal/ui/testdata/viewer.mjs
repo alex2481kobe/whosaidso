@@ -33,9 +33,11 @@ const fetch=async (raw,options={})=>{
   if(url.pathname==='/api/screen' && url.searchParams.get('screen')==='status')return {ok:true,json:async()=>({watermark:{sequence:recordSequence,head:{command_id:String(recordSequence).padStart(26,'0')}}})};
   if(url.pathname==='/api/view' && url.searchParams.get('id'))return {ok:true,json:async()=>url.searchParams.get('view')==='history'?{events:[],watermark:{sequence:recordSequence,head:{command_id:String(recordSequence).padStart(26,'0')}}}:{result:'UNKNOWN',reason:'synthetic absent record',records:[],sources:[]}};
   if(url.pathname==='/api/screen') {
-    const allowed=new Set(['project','screen','offset','search','kind','status','sort','status_counts']);
+    const allowed=new Set(['project','screen','offset','search','kind','status','sort','status_counts','under']);
     for(const key of url.searchParams.keys()) if(!allowed.has(key)) return {ok:false,status:400,json:async()=>({error:{message:'invalid screen parameter '+key}})};
   }
+  if(url.pathname==='/api/screen' && url.searchParams.get('screen')==='tasks')return {ok:true,json:async()=>({rows:[{id:entries[0].id,title:'Parent task',kind:'TASK',status:'BLOCKED',actor:'worker',nested:3}],counts:{open:4},offset:0,total:1,previous:null,next:null})};
+  if(url.pathname==='/api/screen' && url.searchParams.get('screen')==='home')return {ok:true,json:async()=>({rows:[{id:entries[0].id,title:'Task in flight',kind:'TASK',status:'IN FLIGHT',actor:'worker',group:'in_flight'},{id:entries[1].id,title:'Choose delivery',kind:'DECISION',status:'OPEN',actor:'owner',group:'awaiting_decision'}],counts:{READY:10,BLOCKED:2,'IN FLIGHT':1},offset:0,total:2,previous:null,next:null})};
   if(url.pathname==='/api/screen')return {ok:true,json:async()=>({rows:[{id:entries[0].id,title:'Task preview',kind:'TASK',status:'READY',actor:'contributor'}],counts:{records:60,READY:60},offset:0,total:60,previous:null,next:24,note:'One page'})};
   if(url.pathname==='/api/times')return {ok:true,json:async()=>({watermark:{sequence:timeSequence,head:{command_id:String(timeSequence).padStart(26,'0')}},times:{'1:0':{state:'known',value:'2026-01-01T00:00:00Z'}}})};
   throw Error('unexpected request '+raw);
@@ -119,9 +121,18 @@ byLabel(cards.firstChild,'Delete').fire('click');await settle();assert.equal(car
 cards.firstChild.querySelector('.artifact-preview').fire('click');
 byLabel(body.querySelector('.artifact-dialog'),'Delete').fire('click');await settle();assert.equal(body.querySelector('.artifact-dialog'),null,'item deletion closes its view');assert.equal(cards.children.length,46,'item deletion removes the matching card');
 cards.firstChild.querySelector('.artifact-preview').fire('click');
-for(const screen of ['home','tasks','records','history']){location.hash='#/'+screen;win.fire('hashchange',{oldURL:'http://viewer/#/gallery'});await settle();assert.ok(body.querySelector('.browser-screen'),screen+' mounts bounded screen');
+for(const screen of ['home','tasks','records','history']){location.hash='#/'+screen;win.fire('hashchange',{oldURL:'http://viewer/#/gallery'});await settle();assert.ok(body.querySelector(screen==='home'?'.overview-screen':'.browser-screen'),screen+' mounts bounded screen');
  if(screen==='tasks'||screen==='records'){const request=requests.filter(u=>u.pathname==='/api/screen').at(-1);assert.equal(request.searchParams.get('kind'),screen==='tasks'?'TASK':'','task and record routes select distinct bounded lists');}
- if(screen==='home'){assert.equal(body.querySelector('.artifact-dialog'),null,'routing closes the inspector');find('button','Load work status totals').fire('click');await settle();const full=requests.filter(u=>u.searchParams.get('status_counts')==='1').length;assert.equal(full,1,'status totals load on explicit request');await tick();assert.equal(requests.filter(u=>u.searchParams.get('status_counts')==='1').length,full,'polls must not recompute unrequested totals');}
+
+ if(screen==='home'){
+  assert.equal(body.querySelector('.artifact-dialog'),null,'routing closes the inspector');
+  assert.equal(body.querySelectorAll('h2').length,2,'overview has only flight and decision panels');
+  assert.ok(body.textContent.includes('worker')&&body.textContent.includes('Choose delivery'),'owner sees holders and decisions');
+  assert.equal(body.querySelector('.search-input'),null,'overview has no record browser');
+  assert.ok(!body.textContent.includes('Load work status totals'),'counts are ready at first paint');
+  await tick();
+  assert.ok(!requests.some(u=>u.searchParams.get('status_counts')==='1'),'overview needs no second totals read');
+ }
 }
 assert.ok(!requests.some(u=>u.pathname==='/api/view'),'other screens must not fetch bulk models');
 assert.ok(requests.filter(u=>u.pathname==='/api/screen').length>=3);

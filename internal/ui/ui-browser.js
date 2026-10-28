@@ -29,7 +29,7 @@ export async function renderBrowser(screen, params = new URLSearchParams()) {
   const note = el("p", "muted browser-note");
   const tools = el("div", "gallery-tools");
   let generation = 0, busy = false, pending;
- const workStatus = button("Load work status totals", () => { said.textContent="Loading work status…"; refresh(state.offset,true); });
+
   function draw(answer) {
     if (JSON.stringify(answer.watermark) === JSON.stringify(page.watermark)) answer.counts = {...page.counts, ...answer.counts};
     page = answer; state.offset = page.offset;
@@ -75,5 +75,5 @@ export async function renderBrowser(screen, params = new URLSearchParams()) {
   }, 3000);
   return el("div", "screen browser-screen", el("h1", "", (screen === "records" ? requestedKind === "TASK" ? "Tasks" : "Records" : {home:"Overview", history:"Activity"}[screen])),
     el("div", "gallery-toolbar", el("label", "search", icon("search"), search), tools),
-    counts, screen === "home" ? workStatus : null, said, rows, el("nav", "gallery-tools", previous, range, next), note);
+    counts, said, rows, el("nav", "gallery-tools", previous, range, next), note);
 }

@@ -2,6 +2,7 @@
 // Each screen owns its bounded refresh, and late routes cannot replace a newer one.
 import { main, state, el, project, api, icon } from "./ui.js";
 import { place } from "./ui-parts.js";
+import { renderOverview } from "./ui-overview.js";
 import { renderBrowser } from "./ui-browser.js";
 import { renderDetail } from "./ui-detail.js";
 import { renderGallery } from "./ui-gallery.js";
@@ -165,7 +166,7 @@ async function route() {
     }
     else if (screen === "history") node = await renderBrowser("history");
     else if (screen === "gallery") node = await renderGallery();
-    else node = await renderBrowser("home");
+    else node = await renderOverview();
     show(node);
   } catch (error) {
     show(el("p", "notice", "Could not read this project: " + error.message));
