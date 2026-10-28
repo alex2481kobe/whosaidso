@@ -16,7 +16,7 @@ const timers=new Map(),intervals=new Map();let serial=0;
 const requests=[];let hold,release,delayGallery=null,fail=false,copied='',recordSequence=1,timeSequence=1,textFail=true,refuseDelete=false;
 const entry=i=>({id:String(i).padStart(26,'0'),title:'Artifact '+i,kind:'image',status:'present',path:'shot-'+i+'.png',sha256:'a'.repeat(64),length:20000,added_at:'2026-01-01T00:00:00Z',tasks:[],cap:'fixture',verdict:'unreviewed'});
 const entries=Array.from({length:60},(_,i)=>entry(i));entries[3].status='unknown';entries[3].status_reason='not compared in list';entries[4].status='missing';entries[4].path='';entries[4].status_reason='open unavailable-file: no such file or directory';entries[5].kind='text';entries[5].path='shot-5.txt';entries[6].kind='video';entries[6].path='shot-6.mp4';entries[7].kind='';entries[7].path='shot-7.pdf';
-const gallery=offset=>({revision:entries.map(e=>e.id).join('|'),entries:entries.slice(offset,offset+24),offset,total:entries.length,previous:offset?Math.max(0,offset-24):null,next:offset+24<entries.length?offset+24:null,task_titles:{}});
+const gallery=(offset,kind='')=>{const selected=kind?entries.filter(e=>(e.kind||'other')===kind):entries;return {revision:entries.map(e=>e.id).join('|'),entries:selected.slice(offset,offset+24),offset,total:selected.length,next:offset+24<selected.length?offset+24:null,task_titles:{}};};
 hold=new Promise(resolve=>{release=resolve;});
 const fetch=async (raw,options={})=>{
   const url=new URL(raw,'http://viewer');requests.push(url);
@@ -28,7 +28,7 @@ const fetch=async (raw,options={})=>{
     if(hold){await hold;hold=null;}
     if(delayGallery){const pending=delayGallery;delayGallery=null;await pending;}
     if(fail)return {ok:false,status:500,json:async()=>({error:{message:'fixture refresh failure'}})};
-    return {ok:true,json:async()=>gallery(Number(url.searchParams.get('offset')))};
+    return {ok:true,json:async()=>gallery(Number(url.searchParams.get('offset')),url.searchParams.get('kind'))};
   }
   if(url.pathname==='/api/screen' && url.searchParams.get('screen')==='status')return {ok:true,json:async()=>({watermark:{sequence:recordSequence,head:{command_id:String(recordSequence).padStart(26,'0')}}})};
   if(url.pathname==='/api/view' && url.searchParams.get('id'))return {ok:true,json:async()=>url.searchParams.get('view')==='history'?{events:[],watermark:{sequence:recordSequence,head:{command_id:String(recordSequence).padStart(26,'0')}}}:{result:'UNKNOWN',reason:'synthetic absent record',records:[],sources:[]}};
@@ -38,7 +38,8 @@ const fetch=async (raw,options={})=>{
   }
   if(url.pathname==='/api/screen' && url.searchParams.get('screen')==='tasks'){
     const offset=Number(url.searchParams.get('offset')||0);
-    return {ok:true,json:async()=>({rows:Array.from({length:Math.min(24,30-offset)},(_,j)=>({id:String(offset+j).padStart(26,'0'),title:offset+j===0?'Parent task':'Task '+(offset+j),kind:'TASK',status:null,actor:null,nested:offset+j===0?3:0})),counts:{open:30},offset,total:30,next:offset===0?24:null,watermark:{sequence:1}})};
+    if(url.searchParams.get('under')===String(999).padStart(26,'0'))return {ok:true,json:async()=>({result:'UNKNOWN',reason:'Task unavailable at this watermark',rows:[],counts:{open:30},next:null})};
+    return {ok:true,json:async()=>({rows:Array.from({length:Math.min(24,30-offset)},(_,j)=>({id:String(offset+j).padStart(26,'0'),title:offset+j===0?'Parent task':'Task '+(offset+j),kind:'TASK',status:null,actor:null,nested:offset+j===0?3:null})),counts:{open:30},offset,total:30,next:offset===0?24:null,watermark:{sequence:1}})};
   }
   if(url.pathname==='/api/screen' && url.searchParams.get('screen')==='home')return {ok:true,json:async()=>({rows:[{id:entries[0].id,title:'Task in flight',kind:'TASK',status:'IN FLIGHT',actor:'worker',group:'in_flight'},{id:entries[1].id,title:'Choose delivery',kind:'DECISION',status:'OPEN',actor:'owner',group:'awaiting_decision'}],counts:{READY:10,BLOCKED:2,'IN FLIGHT':1},offset:0,total:2,previous:null,next:null})};
   if(url.pathname==='/api/screen') {
@@ -120,15 +121,15 @@ visible(body.querySelector('.gallery-sentinel'));await settle();assert.equal(car
 const sentinelObserver=[...observers].find(o=>o.nodes.has(body.querySelector('.gallery-sentinel')));assert.ok(sentinelObserver.options.rootMargin==='1800px','stream loads two screens ahead');
 const remote=entries[40];entries.splice(40,1);byLabel(body,'Refresh').fire('click');await settle();assert.equal(cards.children.length,24,'explicit refresh resets changed membership');
 visible(body.querySelector('.gallery-sentinel'));await settle();assert.equal(cards.children.length,48);assert.ok(![...cards.children].some(n=>n.querySelector('.artifact-title-button').textContent===remote.title),'refresh removes remote retractions');
-let finishBatch;delayGallery=new Promise(resolve=>{finishBatch=resolve;});visible(body.querySelector('.gallery-sentinel'));await settle();entries.splice(55,1);finishBatch();await settle();assert.equal(cards.children.length,24,'a changed revision restarts the stream rather than mixing prefixes');
-visible(body.querySelector('.gallery-sentinel'));await settle();assert.equal(cards.children.length,48);
+const prefixFirst=cards.firstChild;scroller.scrollTop=321;theme.focus();let finishBatch;delayGallery=new Promise(resolve=>{finishBatch=resolve;});visible(body.querySelector('.gallery-sentinel'));await settle();entries.splice(55,1);finishBatch();await settle();assert.equal(cards.children.length,48,'a changed revision cannot mix prefixes or replace the existing stream');assert.equal(cards.firstChild,prefixFirst,'concurrent writes preserve existing nodes');assert.equal(scroller.scrollTop,321,'concurrent writes preserve scrollbar drag');assert.equal(doc.activeElement,theme,'concurrent writes preserve focus');assert.ok(body.textContent.includes('New changes available'),'changed data offers explicit refresh');
+byLabel(body,'Refresh').fire('click');await settle();assert.equal(cards.children.length,24);visible(body.querySelector('.gallery-sentinel'));await settle();assert.equal(cards.children.length,48);
 refuseDelete=true;const refused=cards.firstChild;byLabel(refused,'Delete').fire('click');await settle();assert.ok(refused.textContent.includes('Review required')&&refused.className.split(' ').includes('has-error'),'refused deletion appears on the clicked card');assert.equal(refused.querySelector('.action-error').getAttribute('role'),'alert');refuseDelete=false;
 byLabel(cards.firstChild,'Delete').fire('click');await settle();assert.equal(cards.children.length,47,'admitted delete removes the card immediately');assert.equal(cards.firstChild.querySelector('.artifact-title-button').textContent,'Artifact 1');
 cards.firstChild.querySelector('.artifact-preview').fire('click');
 byLabel(body.querySelector('.artifact-dialog'),'Delete').fire('click');await settle();assert.equal(body.querySelector('.artifact-dialog'),null,'item deletion closes its view');assert.equal(cards.children.length,46,'item deletion removes the matching card');
 cards.firstChild.querySelector('.artifact-preview').fire('click');
 for(const screen of ['home','tasks','records','history']){location.hash='#/'+screen;win.fire('hashchange',{oldURL:'http://viewer/#/gallery'});await settle();assert.ok(body.querySelector(screen==='home'?'.overview-screen':'.browser-screen'),screen+' mounts bounded screen');assert.equal(theme.parentElement.className,'page-header','theme shares page title row');assert.ok(!/null|undefined/.test(doc.getElementById('main').textContent),screen+' omits absent values');assert.equal(find('button','Next'),undefined,'no screen uses a pager');
- if(screen==='tasks'||screen==='records'){const request=requests.filter(u=>u.pathname==='/api/screen').at(-1);assert.equal(request.searchParams.get('screen'),screen==='tasks'?'tasks':'records','task and record routes select distinct bounded lists'); if(screen==='tasks'){const parent=find('a','Parent task');assert.equal(parent.href,'#/tasks?under='+String(0).padStart(26,'0'),'clicking a parent drills into prerequisites');assert.ok(body.textContent.includes('3 open nested'),'parent shows nested count');}}
+ if(screen==='tasks'||screen==='records'){const request=requests.filter(u=>u.pathname==='/api/screen').at(-1);assert.equal(request.searchParams.get('screen'),screen==='tasks'?'tasks':'records','task and record routes select distinct bounded lists'); if(screen==='tasks'){const parent=find('a','Parent task');assert.equal(parent.href,'#/tasks?under='+String(0).padStart(26,'0'),'clicking a parent drills into prerequisites');assert.ok(body.textContent.includes('3 open nested'),'parent shows nested count');assert.ok(!body.textContent.includes('0 open nested'),'an absent count is not rounded to zero');}}
  if(screen!=='home'){
   const list=body.querySelector('.browser-rows'),firstRow=list.firstChild;scroller.scrollTop=222;theme.focus();
   visible(body.querySelector('.gallery-sentinel'));await settle();assert.equal(list.firstChild,firstRow,screen+' append preserves first node');assert.equal(scroller.scrollTop,222,screen+' append preserves scroll');assert.equal(doc.activeElement,theme,screen+' append preserves focus');assert.ok(list.children.length>24,screen+' scroll loads another batch');
@@ -154,4 +155,11 @@ const reads=requests.filter(u=>u.pathname==='/api/view').length;recordSequence++
 assert.ok(requests.filter(u=>u.pathname==='/api/view').every(u=>u.searchParams.get('id')),'detail must never load unscoped views');
 assert.ok(!body.textContent.includes('Reveal in Finder'),'file action labels work on every platform');
 for(const n of flatten(body).filter(n=>n.tagName==='PATH'))assert.notEqual(n.attrs.d,'undefined','every icon exists');
+location.hash='#/gallery';win.fire('hashchange',{oldURL:'http://viewer/#/record/example'});await settle();
+find('button','All types').fire('click');find('button','Videos').fire('click');
+for(const [id,timer] of [...timers])if(timer.ms===250){timers.delete(id);timer.fn();}await settle();
+assert.ok(flatten(body).find(n=>n.matches('.select')&&n.textContent==='Videos'),'selected gallery filter stays visible');assert.equal(requests.filter(u=>u.pathname==='/api/gallery').at(-1).searchParams.get('kind'),'video');assert.equal(body.querySelector('.gallery-cards').children.length,1,'the selected gallery kind is requested');
+location.hash='#/records';win.fire('hashchange',{oldURL:'http://viewer/#/gallery'});await settle();find('button','All kinds').fire('click');find('button','Claims').fire('click');
+for(const [id,timer] of [...timers])if(timer.ms===250){timers.delete(id);timer.fn();}await settle();assert.ok(flatten(body).find(n=>n.matches('.select')&&n.textContent==='Claims'),'selected record filter stays visible');assert.equal(requests.filter(u=>u.pathname==='/api/screen').at(-1).searchParams.get('kind'),'CLAIM');
+location.hash='#/tasks?under='+String(999).padStart(26,'0');win.fire('hashchange',{oldURL:'http://viewer/#/records'});await settle();assert.ok(body.textContent.includes('Task unavailable at this watermark'),'unknown task navigation retains its reason');assert.ok(!body.textContent.includes('No entries match'),'unknown navigation is not an empty filter result');
 console.log('PASS: bounded startup, prompt switcher, thumbnails/originals, media recovery, explicit refresh and stable appends, keyboard/swipe inspection, save/copy actions, all bounded project screens');

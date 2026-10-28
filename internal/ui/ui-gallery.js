@@ -41,8 +41,9 @@ export async function renderGallery() {
     }
     empty.hidden=drawn.size>0;
   }});
-  const change = values => {Object.assign(state,values);stream.invalidate();clearTimeout(pending);pending=setTimeout(()=>stream.reset(),250);};
-  tools.append(dropdown({options:kinds,value:state.kind,onPick:kind=>change({kind})}),dropdown({glyph:"sort",options:sorts,value:state.sort,onPick:sort=>change({sort})}),stream.refresh);
+  const change = values => {Object.assign(state,values);paint();stream.invalidate();clearTimeout(pending);pending=setTimeout(()=>stream.reset(),250);};
+  const paint = () => tools.replaceChildren(dropdown({options:kinds,value:state.kind,onPick:kind=>change({kind})}),dropdown({glyph:"sort",options:sorts,value:state.sort,onPick:sort=>change({sort})}),stream.refresh);
+  paint();
   const search=el("input","search-input");Object.assign(search,{type:"search",placeholder:"Search files…",value:state.search});search.setAttribute("aria-label","Search files");
   search.addEventListener("input",()=>change({search:search.value.trim()}));
   return el("div","screen gallery-screen",el("h1","","Gallery"),el("div","gallery-toolbar",el("div","gallery-search-tools",el("label","search",icon("search"),search),tools)),cards,empty,stream.sentinel,stream.error);

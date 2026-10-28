@@ -19,7 +19,11 @@ export function scrollBatches({first, request, draw, active, stamp = page => pag
     try {
       const page = await request(offset, stop.signal);
       if (!active() || mine !== generation || !sentinel.isConnected) return;
-      if (!reset && stamp(page) !== revision) { busy = false; await load(0, true); return; }
+      if (!reset && stamp(page) !== revision) {
+        next=null; sentinel.hidden=true;
+        error.hidden=false; error.textContent="New changes available. Use Refresh to continue.";
+        return;
+      }
       apply(page, reset); observer.disconnect(); observer.observe(sentinel); error.hidden = true; error.textContent = "";
     } catch (failure) {
       if (active() && mine === generation) {error.hidden = false; error.textContent = "Could not load files or records. Use Refresh to try again.";}

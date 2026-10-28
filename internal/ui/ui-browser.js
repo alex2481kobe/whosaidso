@@ -25,16 +25,21 @@ export async function renderBrowser(screen, params = new URLSearchParams()) {
       const key=r.id || `${r.sequence}:${r.title}`;if (drawn.has(key)) continue;drawn.add(key);
       const title=r.id ? link(r.id,r.title || r.id,"row-title") : el("span","row-title",r.title || r.kind);
       if (screen==="tasks" && r.nested>0) title.href="#/tasks?under="+encodeURIComponent(r.id);
-      rows.append(el("div","row-line browser-row",title,el("span","muted",screen==="tasks" ? `${r.nested ?? 0} open nested` : happened[r.kind] || r.kind),el("span","",r.status ?? "—"),el("span","muted",r.actor ?? "—")));
+      rows.append(el("div","row-line browser-row",title,el("span","muted",screen==="tasks" ? (r.nested == null ? "—" : `${r.nested} open nested`) : happened[r.kind] || r.kind),el("span","",r.status ?? "—"),el("span","muted",r.actor ?? "—")));
     }
+    empty.textContent=page.result === "UNKNOWN" ? (page.reason || "Task unavailable at this ledger position.") : "No entries match these filters.";
     empty.hidden=drawn.size>0;rows.hidden=!drawn.size;note.textContent=page.note ?? "";
     counts.replaceChildren(...Object.entries(page.counts || {}).filter(([,n])=>n!=null).map(([name,n])=>el("span","muted",`${name}: ${n}`)));
     if (screen==="tasks") {const top=el("a","link","Top-level tasks");top.href="#/tasks";nesting.replaceChildren(top,...(page.parent ? [link(page.parent.id,page.parent.title)] : []));}
   }});
-  const change=values=>{Object.assign(state,values);stream.invalidate();clearTimeout(pending);pending=setTimeout(()=>stream.reset(),250);};
+  const change=values=>{Object.assign(state,values);paint();stream.invalidate();clearTimeout(pending);pending=setTimeout(()=>stream.reset(),250);};
+  const paint=()=>{
+    tools.replaceChildren();
   const options=screen==="tasks" ? [["","All open statuses"],["READY","Ready"],["BLOCKED","Blocked"],["IN FLIGHT","In flight"]] : kinds;
   if (screen!=="history") tools.append(dropdown({options,value:screen==="tasks" ? state.status : state.kind,onPick:value=>change(screen==="tasks" ? {status:value} : {kind:value})}));
   tools.append(dropdown({glyph:"sort",options:screen==="history" ? sorts.slice(0,2) : sorts,value:state.sort,onPick:sort=>change({sort})}),stream.refresh);
+  };
+  paint();
   const search=el("input","search-input");Object.assign(search,{type:"search",placeholder:screen==="tasks" ? "Search these tasks…" : "Search the whole ledger…"});search.setAttribute("aria-label","Search "+screen);search.addEventListener("input",()=>change({search:search.value.trim()}));
   return el("div","screen browser-screen",el("h1","",screen==="tasks" ? "Tasks" : screen==="history" ? "Activity" : "Records"),el("div","gallery-toolbar",el("label","search",icon("search"),search),tools),screen==="tasks" ? nesting : null,counts,rows,empty,stream.sentinel,stream.error,note);
 }
