@@ -135,8 +135,9 @@ for(const screen of ['home','tasks','records','history']){location.hash='#/'+scr
   assert.equal(lines.length,1,screen+' has exactly one shared counts line');assert.equal(body.querySelector('.browser-counts'),null,screen+' has no per-screen counts element');
   assert.ok(items.length>0&&items.every(t=>/^[A-Z][a-z ]+ \d+$/.test(t)),screen+' counts are sentence case "Label 12": '+items);
   assert.ok(lines[0].querySelectorAll('.counts-num').length===items.length&&lines[0].querySelectorAll('.counts-label').length===items.length,screen+' counts set the number apart from the label');
-  assert.ok(lines[0].parentElement.className.split(' ').includes('browser-screen'),screen+' counts line sits in the shared screen layout');
-  assert.ok(lines[0].parentElement.children[lines[0].parentElement.children.indexOf(lines[0])-1].className.split(' ').includes('gallery-toolbar'),screen+' counts line follows the toolbar');
+  assert.ok((screen==='home'?lines[0].parentElement.parentElement:lines[0].parentElement).className.split(' ').includes('browser-screen'),screen+' counts line sits in the shared screen layout');
+  if(screen!=='home')assert.ok(lines[0].parentElement.children[lines[0].parentElement.children.indexOf(lines[0])-1].className.split(' ').includes('gallery-toolbar'),screen+' counts line follows the toolbar');
+  if(screen==='home'){assert.equal(body.querySelector('.gallery-toolbar'),null,'overview has no toolbar row that holds only refresh');assert.ok(lines[0].parentElement.children.some(c=>c.attrs['aria-label']==='Refresh'),'overview refresh shares the counts line row');}
   const sections=body.querySelectorAll('.browser-rows');assert.ok(sections.length>0&&sections.every(c=>c.className.split(' ').includes('card')&&c.querySelectorAll('.browser-row').every(r=>r.className.split(' ').includes('row-line')&&r.children.length===4)),screen+' lists use the shared card and four-cell row');
   if(screen==='home'){for(const want of ['Ready 10','Blocked 2','In flight 1'])assert.ok(items.includes(want),'overview counts '+want);assert.equal(sections.length,2,'overview sections are shared cards');assert.ok(sections.every(c=>c.firstChild.tagName==='H2'),'overview section heading is inside the card');}
   if(screen==='records')assert.deepEqual(items,['Records 60']);

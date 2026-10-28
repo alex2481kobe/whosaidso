@@ -22,5 +22,5 @@ export async function renderOverview() {
     }
     fillCounts(counts,page.counts);
   }});
-  return el("div","screen browser-screen overview-screen",el("h1","","Overview"),el("div","gallery-toolbar",el("div","gallery-tools",stream.refresh)),counts,panels.in_flight,panels.awaiting_decision,stream.sentinel,stream.error);
+  return el("div","screen browser-screen overview-screen",el("h1","","Overview"),el("div","counts-row",counts,stream.refresh),panels.in_flight,panels.awaiting_decision,stream.sentinel,stream.error);
 }

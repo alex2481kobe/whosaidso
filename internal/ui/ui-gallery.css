@@ -43,6 +43,7 @@
 .gallery-footnote {font-size:13px;color:var(--muted);}
 .browser-screen {display:flex;flex-direction:column;gap:20px;}
 .counts-line {display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;font-size:13px;}
+.counts-row {display:flex;align-items:center;justify-content:space-between;gap:12px;}
 .counts-label {color:var(--muted);}
 .counts-num {color:var(--text);font-weight:650;}
 .browser-rows {padding:12px;}
