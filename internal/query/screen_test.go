@@ -174,3 +174,11 @@ func screenProject(t *testing.T) store.Project {
 	}
 	return p
 }
+
+func TestActionScreensRefuseUnsupportedFilters(t *testing.T) {
+	for _, request := range []ScreenRequest{{View: "home", Search: "needle"}, {View: "home", Kind: "TASK"}, {View: "home", Sort: "title"}, {View: "tasks", Kind: "CLAIM"}, {View: "tasks", StatusCounts: true}} {
+		if CheckScreen(request) == nil {
+			t.Fatalf("filter was silently ignored: %+v", request)
+		}
+	}
+}

@@ -42,3 +42,24 @@ func TestOverviewShowsOnlyOwnerActionsAndOpenStatusCounts(t *testing.T) {
 		t.Fatal("closed task shown")
 	}
 }
+
+func TestOverviewKeepsBothActionQueuesOnTheFirstPage(t *testing.T) {
+	p := screenProject(t)
+	events := []model.TypedEvent{}
+	for i := 1; i <= 30; i++ {
+		events = append(events, testTask(i), &model.TaskStart{Task: testRef(i, 1), AttemptID: testID(100 + i), Actor: model.Actor{ID: "worker"}})
+	}
+	events = append(events, &model.DecisionOpen{ID: testID(900), Provenance: prov("reviewer"), Spec: decisionSpec()})
+	appendEvents(t, p, 1000, events...)
+	page, err := ReadScreen(p, ScreenRequest{View: "home"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	groups := map[string]bool{}
+	for _, row := range page.Rows {
+		groups[row.Group] = true
+	}
+	if len(page.Rows) != 24 || page.Total != 31 || !groups["in_flight"] || !groups["awaiting_decision"] {
+		t.Fatalf("one queue hid the other: %+v", page)
+	}
+}

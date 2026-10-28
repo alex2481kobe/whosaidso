@@ -12,7 +12,7 @@ import (
 func overview(s reduce.Snapshot, r ScreenRequest, a *ScreenAnswer) *ScreenAnswer {
 	a.Note = ""
 	a.Counts = map[string]int{"READY": 0, "BLOCKED": 0, "IN FLIGHT": 0}
-	rows := []ScreenRow{}
+	groups := map[string][]ScreenRow{"in_flight": {}, "awaiting_decision": {}}
 	for _, head := range s.RecordHeads() {
 		if head.Kind != model.Task && head.Kind != model.Decision {
 			continue
@@ -45,7 +45,17 @@ func overview(s reduce.Snapshot, r ScreenRequest, a *ScreenAnswer) *ScreenAnswer
 		if r.Status != "" && r.Status != row.Status {
 			continue
 		}
-		rows = append(rows, row)
+		groups[group] = append(groups[group], row)
+	}
+	// Interleave the queues so either kind of action remains visible on the
+	// first page even when the other queue contains many older identities.
+	rows := []ScreenRow{}
+	for i := 0; i < max(len(groups["in_flight"]), len(groups["awaiting_decision"])); i++ {
+		for _, group := range []string{"in_flight", "awaiting_decision"} {
+			if i < len(groups[group]) {
+				rows = append(rows, groups[group][i])
+			}
+		}
 	}
 	end := a.bounds(len(rows), r.Offset)
 	a.Rows = append(a.Rows, rows[a.Offset:end]...)

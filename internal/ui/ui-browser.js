@@ -74,7 +74,7 @@ export async function renderBrowser(screen, params = new URLSearchParams()) {
     paintTools(); pending = setTimeout(() => refresh(0), 250);
   }
   const search = el("input", "search-input");
-  Object.assign(search, {type:"search", placeholder:"Search the whole ledger…", value:state.search, spellcheck:false});
+  Object.assign(search, {type:"search", placeholder:screen === "tasks" ? "Search these tasks…" : "Search the whole ledger…", value:state.search, spellcheck:false});
   search.setAttribute("aria-label", "Search " + screen);
   search.addEventListener("input", () => change({search:search.value.trim()}));
   draw(page); paintTools();

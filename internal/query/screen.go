@@ -51,6 +51,12 @@ func CheckScreen(r ScreenRequest) error {
 	if r.View != "home" && r.View != "records" && r.View != "history" && r.View != "status" && r.View != "tasks" {
 		return fmt.Errorf("screen must be home, tasks, records, history or status")
 	}
+	if r.View == "home" && (r.Search != "" || r.Kind != "" || r.Sort != "") {
+		return fmt.Errorf("overview has no search, kind or sort filters")
+	}
+	if r.View == "tasks" && (r.Kind != "" || r.StatusCounts) {
+		return fmt.Errorf("task navigation has no kind or status-count filter")
+	}
 	if r.Under != "" && (r.View != "tasks" || !model.ValidID(r.Under)) {
 		return fmt.Errorf("under requires a task screen and task ULID")
 	}
