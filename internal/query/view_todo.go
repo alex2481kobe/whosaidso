@@ -83,10 +83,9 @@ type TodoTotals struct {
 // currentRecords is every current revision, in the snapshot's record order.
 func currentRecords(s reduce.Snapshot) []reduce.Record {
 	out := []reduce.Record{}
-	for _, r := range s.Records() {
-		if rev, _ := s.CurrentRevision(reduce.Ident{Project: r.Key.Project, ID: r.Key.ID}); r.Key.Revision == rev {
-			out = append(out, r)
-		}
+	for _, head := range s.RecordHeads() {
+		r, _ := s.Current(reduce.Ident{Project: head.Key.Project, ID: head.Key.ID})
+		out = append(out, r)
 	}
 	return out
 }
@@ -118,7 +117,11 @@ func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHea
 	owed := []Attention{}
 	staleClaims := 0
 	flying := map[reduce.Ident]int{}
-	for _, fact := range currentRecords(s) {
+	for _, head := range s.RecordHeads() {
+		if head.Kind != model.Task && head.Kind != model.Decision {
+			continue
+		}
+		fact, _ := s.Current(reduce.Ident{Project: head.Key.Project, ID: head.Key.ID})
 		if fact.Kind == model.Decision {
 			if v, _ := d.detail(fact); v.Decision != nil && v.Decision.Status == reduce.StatusOpen {
 				a.OpenDecisions = append(a.OpenDecisions, v)

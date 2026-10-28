@@ -2,7 +2,10 @@
 // list screens. Status comes from the same predicates as complete projections.
 package reduce
 
-import "github.com/alex2481kobe/whosaidso/internal/model"
+import (
+	"github.com/alex2481kobe/whosaidso/internal/model"
+	"sort"
+)
 
 type RecordHead struct {
 	Key    RecordKey
@@ -29,12 +32,12 @@ func headOf(r Record) RecordHead {
 
 func (s Snapshot) RecordHeads() []RecordHead {
 	st := s.inner()
-	out := []RecordHead{}
-	for _, r := range st.recordsSorted() {
-		if st.current[Ident{Project: r.Key.Project, ID: r.Key.ID}] == r.Key.Revision {
-			out = append(out, headOf(r))
-		}
+	out := make([]RecordHead, 0, len(st.current))
+	for id, revision := range st.current {
+		r := st.records[RecordKey{Project: id.Project, ID: id.ID, Revision: revision}]
+		out = append(out, headOf(r))
 	}
+	sort.Slice(out, func(i, j int) bool { return lessRecordKey(out[i].Key, out[j].Key) })
 	return out
 }
 func (s Snapshot) RecordSummary(id Ident) (RecordSummary, bool) {
