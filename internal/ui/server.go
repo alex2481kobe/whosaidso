@@ -21,35 +21,36 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alex2481kobe/whosaidso/internal/gallery"
 	"github.com/alex2481kobe/whosaidso/internal/model"
 	"github.com/alex2481kobe/whosaidso/internal/query"
 	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
-//go:embed index.html ui.css ui-screens.css ui-gallery.css ui.js ui-icons.js ui-parts.js ui-derive.js ui-home.js ui-records.js ui-detail.js ui-kinds.js ui-history.js ui-gallery.js favicon-32.png favicon-180.png owl.png
+//go:embed index.html ui.css ui-screens.css ui-gallery.css ui.js ui-icons.js ui-parts.js ui-detail.js ui-kinds.js ui-gallery.js ui-gallery-media.js ui-gallery-inspect.js ui-browser.js ui-shell.js favicon-32.png favicon-180.png owl.png
 var files embed.FS
 
 // staticFiles maps each served path to its embedded file and media type.
 // Only "/" serves the page, and only to the session; any path outside this
 // table and the API paths is not found.
 var staticFiles = map[string][2]string{
-	"/ui.css":          {"ui.css", "text/css; charset=utf-8"},
-	"/ui-screens.css":  {"ui-screens.css", "text/css; charset=utf-8"},
-	"/ui-gallery.css":  {"ui-gallery.css", "text/css; charset=utf-8"},
-	"/ui.js":           {"ui.js", "text/javascript; charset=utf-8"},
-	"/ui-home.js":      {"ui-home.js", "text/javascript; charset=utf-8"},
-	"/ui-records.js":   {"ui-records.js", "text/javascript; charset=utf-8"},
-	"/ui-detail.js":    {"ui-detail.js", "text/javascript; charset=utf-8"},
-	"/ui-kinds.js":     {"ui-kinds.js", "text/javascript; charset=utf-8"},
-	"/ui-history.js":   {"ui-history.js", "text/javascript; charset=utf-8"},
-	"/ui-icons.js":     {"ui-icons.js", "text/javascript; charset=utf-8"},
-	"/ui-parts.js":     {"ui-parts.js", "text/javascript; charset=utf-8"},
-	"/ui-derive.js":    {"ui-derive.js", "text/javascript; charset=utf-8"},
-	"/ui-gallery.js":   {"ui-gallery.js", "text/javascript; charset=utf-8"},
-	"/owl.png":         {"owl.png", "image/png"},
-	"/favicon-32.png":  {"favicon-32.png", "image/png"},
-	"/favicon-180.png": {"favicon-180.png", "image/png"},
-	"/favicon.ico":     {"favicon-32.png", "image/png"},
+	"/ui.css":                {"ui.css", "text/css; charset=utf-8"},
+	"/ui-screens.css":        {"ui-screens.css", "text/css; charset=utf-8"},
+	"/ui-gallery.css":        {"ui-gallery.css", "text/css; charset=utf-8"},
+	"/ui.js":                 {"ui.js", "text/javascript; charset=utf-8"},
+	"/ui-detail.js":          {"ui-detail.js", "text/javascript; charset=utf-8"},
+	"/ui-kinds.js":           {"ui-kinds.js", "text/javascript; charset=utf-8"},
+	"/ui-icons.js":           {"ui-icons.js", "text/javascript; charset=utf-8"},
+	"/ui-parts.js":           {"ui-parts.js", "text/javascript; charset=utf-8"},
+	"/ui-gallery-media.js":   {"ui-gallery-media.js", "text/javascript; charset=utf-8"},
+	"/ui-gallery-inspect.js": {"ui-gallery-inspect.js", "text/javascript; charset=utf-8"},
+	"/ui-shell.js":           {"ui-shell.js", "text/javascript; charset=utf-8"},
+	"/ui-browser.js":         {"ui-browser.js", "text/javascript; charset=utf-8"},
+	"/ui-gallery.js":         {"ui-gallery.js", "text/javascript; charset=utf-8"},
+	"/owl.png":               {"owl.png", "image/png"},
+	"/favicon-32.png":        {"favicon-32.png", "image/png"},
+	"/favicon-180.png":       {"favicon-180.png", "image/png"},
+	"/favicon.ico":           {"favicon-32.png", "image/png"},
 }
 
 // Viewer answers one view for one project exactly as the CLI's read verbs
@@ -71,15 +72,16 @@ type Config struct {
 }
 
 type handler struct {
-	cfg     Config
-	host    string
-	origin  string
-	token   string // the launch token, good for one exchange
-	session string // the session cookie's value, issued by that exchange
-	key     string // the page's own secret, issued by that exchange, never in a cookie
-	cookie  string // the cookie's name, one per port: cookies ignore ports
-	mu      sync.Mutex
-	spent   bool
+	observations gallery.Observer
+	cfg          Config
+	host         string
+	origin       string
+	token        string // the launch token, good for one exchange
+	session      string // the session cookie's value, issued by that exchange
+	key          string // the page's own secret, issued by that exchange, never in a cookie
+	cookie       string // the cookie's name, one per port: cookies ignore ports
+	mu           sync.Mutex
+	spent        bool
 }
 
 // Listen opens the viewer on a random 127.0.0.1 port. The server runs only
@@ -141,7 +143,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.serveFile(w, "index.html", "text/html; charset=utf-8")
-	case path == "/api/projects" || path == "/api/view" || path == "/api/gallery" || path == "/api/gallery/file" || posts[path]:
+	case path == "/api/projects" || path == "/api/view" || path == "/api/screen" || path == "/api/times" || path == "/api/gallery" || path == "/api/gallery/file" || path == "/api/gallery/thumb" || path == "/api/gallery/download" || posts[path]:
 		if !h.inSession(r) || !h.keyed(r) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
@@ -179,7 +181,7 @@ func (h *handler) exchange(w http.ResponseWriter, r *http.Request) {
 // in its X-WhoSaidSo-Key header, or, for a gallery file, which media tags
 // fetch and cannot add a header to, that entry's capability in the query.
 func (h *handler) keyed(r *http.Request) bool {
-	if r.URL.Path == "/api/gallery/file" {
+	if r.URL.Path == "/api/gallery/file" || r.URL.Path == "/api/gallery/thumb" || r.URL.Path == "/api/gallery/download" {
 		q := r.URL.Query()
 		return same(q.Get("cap"), h.capability(q.Get("project"), q.Get("id")))
 	}

@@ -25,8 +25,8 @@ var registry []verb
 
 func init() {
 	registry = []verb{
-		{name: "help", args: "[TOPIC|VERB]", summary: "this guide, one topic, or one verb's usage",
-			detail: "Bare, prints the keyword index and the whole guide. With a topic or verb, prints that part.\n",
+		{name: "help", args: "[all|TOPIC|VERB]", summary: "keyword index; all for the guide; topic or verb for detail",
+			detail: "Bare, prints the keyword index. all prints the complete guide. A topic or verb prints that part.\n",
 			define: helpVerb},
 		{name: "todo", summary: "everything owed, in flight first", detail: `Sections: in flight (with each task's runs), awaiting acceptance (with its
 accepter, or anyone), blocked (typed reasons, who it waits on), ready (the
@@ -40,8 +40,11 @@ that checkout's path (admit each packet in one checkout only); attention,
 with a stale-claim note for each claim idle past stale_after. Each in-flight
 task lists the claims that hold it: attempt, holder, claimed_at,
 last_activity_at, and stale, judged at the time todo runs.
---json keeps every packet not accepted in packets_not_accepted, each with its
-disposition (pending, captured-elsewhere, correction-requested, rejected) and
+Default text gives one verified header per actionable intake packet;
+--intake-details expands those packet summaries. --json retains the complete
+verified packet representation for every packet not accepted.
+The packets_not_accepted field keeps each disposition (pending,
+captured-elsewhere, correction-requested, rejected) and
 captured_in when noted, and totals counts intake_unreviewed,
 intake_correction_requested, intake_rejected and intake_elsewhere.
 --actor NAME keeps tasks whose next_actor names NAME or whose live claim NAME
@@ -57,6 +60,13 @@ reasons, ties by record id (including awaiting acceptance); all its reasons
 are included. With no such task the note says so. No roster means no idle
 alarms. Nothing is assigned automatically.
 `, define: viewVerb("todo")},
+		{name: "packets", args: "[PACKET_ID]", summary: "verified packet headers, or one packet's payload", detail: `Bare packets lists bounded headers for local intake and packets named by
+reviews in this project. packets PACKET_ID returns one header and the complete
+verified local packet with --json. A reviewed packet absent from this machine
+has a null payload, explicit UNKNOWN availability and a watermarked UNKNOWN
+result. An ID here is a packet command ID, not a record ID. Intake is local to
+this machine; an absent header does not prove absence elsewhere.
+`, define: viewVerb("packets")},
 		{name: "continue", args: "RECORD_ID", summary: "resume any record: detail, closure, what is owed", detail: `Any kind of record. A task adds its progress, every attempt, every run and
 what is owed, item by item for a plan. Every kind gets every amendment since
 its creation, each with the fields it changed (a plan item removed at any
@@ -161,6 +171,25 @@ artifacts whose bytes the store lacks; git pins that do not resolve or that
 HEAD cannot reach (a squash or rebase orphans them); set-aside bundles no
 setaside.resolve has dealt with. A shallow repository is refused; deepen it
 with git fetch --unshallow. Exit 0 clean, 1 problems. Writes nothing.
+JSON preserves the existing fields and adds classes: set_asides, git_pins,
+replay_error, artifacts_missing, not_committed. Each has state (measured or
+unmeasured), count (only when measured), and identities (when nonempty).
+Artifacts count distinct missing content digests; git pins use commit:path;
+set-asides use sequence:command_id; not_committed uses kind and repository-relative
+path; replay_error uses the replay diagnostic. Replay failure leaves the
+other classes unmeasured, never zero. If a checkout check cannot run, its
+comparison side has check_error and all classes unmeasured.
+--against-checkout PATH checks PATH (base) and this checkout (head), printing
+per-class base -> head counts and added/resolved identities, even with equal
+counts. JSON returns base/head checks, classes with base/head measurements
+and added/resolved lists, allowed, and refusals. Exit 0 only if every class
+was measured on both sides and no count increased; otherwise exit 1 with
+refused: <class> increased: a -> b or refused: <class> unmeasured at base|head.
+Both checkouts must declare the same project.
+Unreachable pins additionally report git_pin_locations: commit, refs (local
+branches and remote-tracking refs containing it), and error if the ref query
+could not be measured. Empty refs means none contain it. No fetch is run;
+these locations do not remove the pin from git_pins or make the check clean.
 `, define: ledgerCheckVerb},
 		{name: "check disposal", summary: "list what an artifact.dispose must record", detail: `Prints the support_loss targets an artifact.dispose of exactly this identity
 must record at this watermark, and the admitted events citing it. Give --git
@@ -238,9 +267,14 @@ visual acceptance. --admit --reason TEXT uses the usual policy.
 packets, or --admit --reason TEXT. A final gallery.import packet seals the
 completed import. The old list stays in place and is never
 read again after that completion is admitted. list and ui read only the
-ledger. Already admitted import ids are skipped; missing
-files must be restored before import can pin them. Captured packets remain
-pending until admitted; retry admission instead of importing them twice.
+ledger. Already admitted import ids are skipped, and so is an entry whose
+file pin (content and locator) an entry added by hand already holds. An entry
+whose file is missing is not imported: the command prints it (legacy id, path,
+title) and the sealing gallery.import packet records it with the reason
+"file missing", so every entry is accounted for. Any other error fails the
+whole import. Re-running after a completed import captures nothing. Captured
+packets remain pending until admitted; retry admission instead of importing
+them twice.
 `, define: galleryVerb("import")},
 
 		{name: "home", args: "[PATH]", summary: "show or set the checkout the viewer opens for this project", detail: `Reads and writes always use the checkout you run them in; this changes

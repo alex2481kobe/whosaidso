@@ -76,6 +76,7 @@ var templateEnumFields = map[templateField][]string{
 	{reflect.TypeOf(model.GitPin{}), "ObjectFormat"}:                {"sha1", "sha256"},
 	{reflect.TypeOf(model.GitHead{}), "ObjectFormat"}:               {"sha1", "sha256"},
 	{reflect.TypeOf(model.ProofAdmit{}), "Verdict"}:                 {"supports", "refutes"},
+	{reflect.TypeOf(model.GalleryImportSkip{}), "Reason"}:           {"file missing"},
 }
 
 // templateFieldUnions narrow a union at one field to the members the model

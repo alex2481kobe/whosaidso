@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -212,6 +213,19 @@ func ReadIntake(project Project, ids []model.ID) ([]model.Packet, error) {
 // ReadVerifiedIntake is ReadIntake keeping what verification already computed,
 // so an admission never reopens or rehashes a packet it has just verified.
 func ReadVerifiedIntake(project Project, ids []model.ID) ([]VerifiedPacket, error) {
+	return readVerifiedIntake(project, ids, 0)
+}
+
+// ReadVerifiedIntakeBounded verifies named packets with a per-packet byte cap
+// across packet.json and blobs. It refuses before hashing an oversized blob.
+func ReadVerifiedIntakeBounded(project Project, ids []model.ID, maxBytes int64) ([]VerifiedPacket, error) {
+	if maxBytes <= 0 || maxBytes == math.MaxInt64 {
+		return nil, storeFault("invalid-field", "max_bytes", "read budget must be positive and below the maximum int64")
+	}
+	return readVerifiedIntake(project, ids, maxBytes)
+}
+
+func readVerifiedIntake(project Project, ids []model.ID, maxBytes int64) ([]VerifiedPacket, error) {
 	inbox, ids, err := intakeIDs(project, ids)
 	if err != nil {
 		return nil, err
@@ -221,7 +235,7 @@ func ReadVerifiedIntake(project Project, ids []model.ID) ([]VerifiedPacket, erro
 		if !model.ValidID(id) {
 			return nil, storeFault("invalid-field", "intake.command_id", "not a ULID")
 		}
-		p, ref, blobs, err := readIntakePacket(project, filepath.Join(inbox, string(id)))
+		p, ref, blobs, err := readIntakePacket(project, filepath.Join(inbox, string(id)), maxBytes)
 		if err != nil {
 			return nil, err
 		}
@@ -230,7 +244,7 @@ func ReadVerifiedIntake(project Project, ids []model.ID) ([]VerifiedPacket, erro
 	return packets, nil
 }
 
-func readIntakePacket(project Project, dir string) (model.Packet, model.PacketRef, []CapturedBlob, error) {
+func readIntakePacket(project Project, dir string, maxBytes int64) (model.Packet, model.PacketRef, []CapturedBlob, error) {
 	var p model.Packet
 	var ref model.PacketRef
 	if err := checkIntakePath(dir, true); err != nil {
@@ -254,10 +268,27 @@ func readIntakePacket(project Project, dir string) (model.Packet, model.PacketRe
 	if err := checkIntakePath(path, false); err != nil {
 		return p, ref, nil, err
 	}
-	data, err := os.ReadFile(path)
+	var data []byte
+	if maxBytes > 0 {
+		f, openErr := os.Open(path)
+		if openErr != nil {
+			return p, ref, nil, storeFault("io", path, openErr.Error())
+		}
+		data, err = io.ReadAll(io.LimitReader(f, maxBytes+1))
+		closeErr := f.Close()
+		if err == nil {
+			err = closeErr
+		}
+		if err == nil && int64(len(data)) > maxBytes {
+			return p, ref, nil, storeFault("intake-read-limit", path, fmt.Sprintf("packet exceeds %d-byte read budget", maxBytes))
+		}
+	} else {
+		data, err = os.ReadFile(path)
+	}
 	if err != nil {
 		return p, ref, nil, storeFault("io", path, err.Error())
 	}
+	remaining := maxBytes - int64(len(data))
 	p, err = model.DecodePacket(data)
 	if err != nil {
 		return p, ref, nil, storeFault("intake-corrupt", path, err.Error())
@@ -286,11 +317,34 @@ func readIntakePacket(project Project, dir string) (model.Packet, model.PacketRe
 		if err != nil {
 			return p, ref, nil, storeFault("io", path, err.Error())
 		}
+		if maxBytes > 0 {
+			info, statErr := f.Stat()
+			if statErr != nil {
+				f.Close()
+				return p, ref, nil, storeFault("io", path, statErr.Error())
+			}
+			if info.Size() > remaining {
+				f.Close()
+				return p, ref, nil, storeFault("intake-read-limit", path, fmt.Sprintf("packet exceeds %d-byte read budget", maxBytes))
+			}
+		}
 		h := sha256.New()
-		n, readErr := io.Copy(h, f)
+		var n int64
+		var readErr error
+		if maxBytes > 0 {
+			n, readErr = io.Copy(h, io.LimitReader(f, remaining+1))
+		} else {
+			n, readErr = io.Copy(h, f)
+		}
 		closeErr := f.Close()
 		if readErr != nil || closeErr != nil {
 			return p, ref, nil, storeFault("io", path, fmt.Sprintf("read: %v; close: %v", readErr, closeErr))
+		}
+		if maxBytes > 0 {
+			if n > remaining {
+				return p, ref, nil, storeFault("intake-read-limit", path, fmt.Sprintf("packet exceeds %d-byte read budget", maxBytes))
+			}
+			remaining -= n
 		}
 		if hex.EncodeToString(h.Sum(nil)) != entry.Name() {
 			return p, ref, nil, storeFault("intake-corrupt", path, "blob bytes do not match their identity")

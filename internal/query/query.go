@@ -93,19 +93,37 @@ type Packet struct {
 	CapturedIn string `json:"captured_in,omitempty"`
 }
 
-// pending projects the visible intake against this answer's reviews. Every
-// packet the answer presents (pending, or reviewed but not accepted) is fully
-// verified, blobs included. A packet the ledger accepted is dropped from the
-// answer; a read only checks that its packet.json still hashes to the digest
-// its review recorded (store.ReviewedPacketDigest) and leaves its blobs to
-// admission, which verified them before the review existed.
+// pending projects the todo-visible intake against this answer's reviews.
 func pending(project store.Project, s reduce.Snapshot) ([]Packet, error) {
-	ids, err := store.IntakeIDs(project)
-	if err != nil {
-		return nil, err
+	return intakePackets(project, s, false, "")
+}
+
+// intakePackets projects local intake and ledger reviews. Presented packets
+// are fully verified, blobs included. Todo drops accepted packets after
+// checking their reviewed packet.json digest; inventory includes and fully
+// verifies them.
+func intakePackets(project store.Project, s reduce.Snapshot, includeAccepted bool, selected model.ID) ([]Packet, error) {
+	var ids []model.ID
+	if selected != "" {
+		present, err := store.IntakePacketPresent(project, selected)
+		if err != nil {
+			return nil, err
+		}
+		if present {
+			ids = []model.ID{selected}
+		}
+	} else {
+		var err error
+		ids, err = store.IntakeIDs(project)
+		if err != nil {
+			return nil, err
+		}
 	}
 	byID := map[model.ID]Packet{}
 	for _, id := range ids {
+		if selected != "" && id != selected {
+			continue
+		}
 		byID[id] = Packet{CommandID: id, Disposition: "pending"}
 	}
 	// Review events are the admitted facts, even without envelope packet refs
@@ -113,6 +131,9 @@ func pending(project store.Project, s reduce.Snapshot) ([]Packet, error) {
 	// first mismatch reported is the one a walk of the prefix would report.
 	for _, review := range s.ReviewsInLedgerOrder() {
 		ref := review.Packet
+		if selected != "" && ref.CommandID != selected {
+			continue
+		}
 		p, present := byID[ref.CommandID]
 		if present && p.Unavailable == nil {
 			digest, err := store.ReviewedPacketDigest(project, ref.CommandID)
@@ -123,7 +144,7 @@ func pending(project store.Project, s reduce.Snapshot) ([]Packet, error) {
 				return nil, fmt.Errorf("intake %s no longer matches its reviewed bytes", ref.CommandID)
 			}
 		}
-		if review.Outcome == "accepted" {
+		if review.Outcome == "accepted" && !includeAccepted {
 			delete(byID, ref.CommandID)
 			continue
 		}
@@ -153,7 +174,13 @@ func pending(project store.Project, s reduce.Snapshot) ([]Packet, error) {
 	if len(presented) == 0 {
 		return out, nil
 	}
-	verified, err := store.ReadVerifiedIntake(project, presented)
+	var verified []store.VerifiedPacket
+	var err error
+	if selected != "" {
+		verified, err = store.ReadVerifiedIntakeBounded(project, presented, selectedPacketReadBudget)
+	} else {
+		verified, err = store.ReadVerifiedIntake(project, presented)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -162,10 +189,20 @@ func pending(project store.Project, s reduce.Snapshot) ([]Packet, error) {
 		if out[i].Unavailable != nil {
 			continue
 		}
-		out[i].Packet = &verified[next].Packet
+		if err := attachVerifiedPacket(&out[i], verified[next]); err != nil {
+			return nil, err
+		}
 		next++
 	}
 	return out, nil
+}
+
+func attachVerifiedPacket(packet *Packet, verified store.VerifiedPacket) error {
+	if packet.Review != nil && verified.Ref != packet.Review.Packet {
+		return fmt.Errorf("intake %s no longer matches its reviewed bytes", packet.CommandID)
+	}
+	packet.Packet = &verified.Packet
+	return nil
 }
 
 // placeOrigin names the checkout that captured a pending packet, and marks it

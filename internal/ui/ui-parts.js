@@ -1,66 +1,13 @@
-// The parts every screen is built from: the hero (the greeting or title on
-// the left; the owl on its rock with the light mountains, foliage and clouds
-// and a handwritten line on the right), stat cards with sparklines, panel
-// heads, rounded-rectangle chips and the custom dropdown menu. Screens
-// decide what goes in them; nothing here reads the ledger.
+// The parts every screen is built from: the hero (a screen's title), stat
+// cards with sparklines, panel heads, rounded-rectangle chips and the custom
+// dropdown menu. Screens decide what goes in them; nothing here reads the
+// ledger.
 import { el } from "./ui.js";
 import { icon, svg } from "./ui-icons.js";
 
-// The handwritten lines beside the owl; each screen starts at its own line
-// and the choice moves on by one every day.
-const lines = [
-  ["Clear records,", "brighter progress."], ["Same facts.", "Brighter progress."], ["Every change", "tells a bigger story."],
-  ["Test, prove,", "optimize, repeat."], ["Simple, efficient,", "reliable."],
-];
-const screens = { home: 0, records: 1, history: 2, detail: 3 };
-export function caption(screen) {
-  const day = Math.floor((Date.now() - new Date().getTimezoneOffset() * 6e4) / 864e5);
-  return lines[((screens[screen] || 0) + day) % lines.length];
-}
-
-// cloud is one soft cloud whose flat base starts at x, y.
-const cloud = (x, y, s) => svg("path", { class: "cloud", d: `M${x} ${y}h${36 * s}a${7 * s} ${7 * s} 0 0 0-${6 * s}-${9 * s}a${10 * s} ${10 * s} 0 0 0-${18 * s}-${3 * s}a${8 * s} ${8 * s} 0 0 0-${12 * s} ${12 * s}z` });
-// tuft is a small clump of light foliage at the foot of the hills.
-const tuft = (x, y, s) => svg("path", { class: "tuft", d: `M${x} ${y}q${-2 * s} ${-8 * s} ${-7 * s} ${-12 * s}M${x} ${y}q${-1 * s} ${-10 * s} ${1 * s} ${-16 * s}M${x} ${y}q${3 * s} ${-7 * s} ${8 * s} ${-11 * s}M${x + 5 * s} ${y}q${2 * s} ${-5 * s} ${6 * s} ${-7 * s}` });
-// sprig is a stem with leaves beside the rock; flip mirrors it.
-function sprig(x, y, h, flip) {
-  const leaf = (lx, ly, angle, size) => svg("path", { class: "leaf", transform: `translate(${lx} ${ly}) rotate(${angle}) scale(${size})`, d: "M0 0c5-2 9-7 9-13c-5 2-9 7-9 13z" });
-  const f = flip ? -1 : 1;
-  return svg("g", {}, svg("path", { class: "stem", d: `M${x} ${y}q${-3 * f} ${-h / 2} ${2 * f} ${-h}` }),
-    leaf(x + 1 * f, y - h * 0.3, flip ? -70 : 10, 1.05), leaf(x - 1 * f, y - h * 0.5, flip ? 20 : -100, 0.95),
-    leaf(x + 1 * f, y - h * 0.72, flip ? -60 : 0, 0.85), leaf(x, y - h * 0.9, flip ? 30 : -110, 0.7));
-}
-
-// scenery is the drawing behind the owl: far and near hills fading into the
-// page, clouds, light foliage, two sprigs and the rock the owl stands on.
-function scenery() {
-  const fade = svg("linearGradient", { id: "hero-fade", x1: 0, y1: 0, x2: 0, y2: 1 },
-    svg("stop", { offset: 0, class: "fade-top" }), svg("stop", { offset: 0.45, class: "fade-top" }), svg("stop", { offset: 1, class: "fade-bottom" }));
-  const fadeNear = svg("linearGradient", { id: "hero-fade-near", x1: 0, y1: 0, x2: 0, y2: 1 },
-    svg("stop", { offset: 0, class: "fade-near" }), svg("stop", { offset: 0.55, class: "fade-near" }), svg("stop", { offset: 1, class: "fade-bottom" }));
-  return svg("svg", { class: "scenery", viewBox: "0 0 860 150", preserveAspectRatio: "xMaxYMax meet", "aria-hidden": "true" },
-    svg("defs", {}, fade, fadeNear),
-    svg("path", { class: "hill far", fill: "url(#hero-fade)", d: "M0 150C60 138 110 128 150 126C185 124 205 128 230 136L230 150z" }),
-    svg("path", { class: "hill", fill: "url(#hero-fade)", d: "M90 150C150 128 190 92 240 70C268 58 290 54 312 60C352 72 392 104 450 120C520 138 640 134 860 140L860 150z" }),
-    svg("path", { class: "hill near", fill: "url(#hero-fade-near)", d: "M360 150C430 126 480 88 548 78C600 71 640 88 690 106C745 124 810 130 860 132L860 150z" }),
-    cloud(262, 48, 0.9), cloud(372, 76, 0.75), cloud(700, 44, 0.8), cloud(810, 60, 0.7),
-    tuft(96, 148, 1), tuft(232, 146, 0.9), tuft(262, 148, 0.7), tuft(606, 148, 0.8), tuft(790, 146, 1.1),
-    sprig(418, 146, 42, false), sprig(560, 146, 50, true),
-    svg("path", { class: "rock", d: "M408 150C412 133 432 120 462 116C492 112 522 116 542 126C556 133 564 142 568 150z" }),
-    svg("path", { class: "rock-top", d: "M428 131C443 121 471 116 500 117C521 118 536 123 546 130C520 125 470 124 428 131z" }),
-    svg("image", { href: "/owl.png", x: 458, y: 21, width: 60, height: 97 }));
-}
-
-// hero is a screen's top band. lead is [before, bold, after]; mark is an
-// emoji or an icon shown after the title.
-export function hero(screen, title, mark, lead, sub) {
-  const [one, two] = caption(screen);
-  return el("section", "hero",
-    el("div", "hero-text",
-      el("h1", "", el("span", "", title), mark ? el("span", "hero-mark", mark) : null),
-      el("p", "hero-lead", lead[0], el("strong", "", lead[1]), lead[2] || ""),
-      sub ? el("p", "hero-sub", sub) : null),
-    el("div", "hero-art", scenery(), el("p", "hero-caption", el("span", "", one), el("span", "", two))));
+// hero is a screen's title.
+export function hero(title) {
+  return el("header", "hero", el("h1", "", title));
 }
 
 // sparkline draws counts per day as a line, with a soft area when asked.

@@ -273,8 +273,7 @@ func TestProjectsListsAnUnavailableHomeWithItsReason(t *testing.T) {
 // no picture but the owl and the favicons, all served from this package.
 // A file that brings any of them back fails here.
 func TestPageKeepsTheOwnersDesignRules(t *testing.T) {
-	page := []string{"index.html", "ui.css", "ui-screens.css", "ui.js", "ui-icons.js", "ui-parts.js", "ui-derive.js",
-		"ui-home.js", "ui-records.js", "ui-detail.js", "ui-kinds.js", "ui-history.js", "ui-gallery.js", "ui-gallery.css"}
+	page := []string{"index.html", "ui.css", "ui-screens.css", "ui.js", "ui-icons.js", "ui-parts.js", "ui-shell.js", "ui-browser.js", "ui-detail.js", "ui-kinds.js", "ui-gallery-media.js", "ui-gallery-inspect.js", "ui-gallery.js", "ui-gallery.css"}
 	images := regexp.MustCompile(`/[A-Za-z0-9_-]+\.(png|jpe?g|gif|webp|svg)\b`)
 	radius := regexp.MustCompile(`border-radius:\s*(\d+)px`)
 	capsules := 0

@@ -45,6 +45,105 @@ func readJSON[T any](t *testing.T, data []byte) T {
 	return answer
 }
 
+func TestTodoIntakeDetailsKeepsJSONAndExpandsText(t *testing.T) {
+	root, data := cliFixture(t)
+	if _, errs, code := cliRun(t, root, data, "author", "capture", "--command-id", string(cliID(3)), "--events", "-"); code != 0 {
+		t.Fatalf("capture control: %d %s", code, errs)
+	}
+	brief, _, code := cliRun(t, root, nil, "", "todo")
+	details, _, detailedCode := cliRun(t, root, nil, "", "todo", "--intake-details")
+	plainJSON, _, jsonCode := cliRun(t, root, nil, "", "todo", "--json")
+	detailJSON, _, detailJSONCode := cliRun(t, root, nil, "", "todo", "--intake-details", "--json")
+	if code != 0 || detailedCode != 0 || jsonCode != 0 || detailJSONCode != 0 ||
+		!strings.Contains(brief, "packet "+string(cliID(3))+" pending author author") ||
+		strings.Contains(brief, "pending\n    author") || !strings.Contains(details, "pending\n    author author events") ||
+		plainJSON != detailJSON || !strings.Contains(plainJSON, `"events"`) {
+		t.Fatalf("text detail and JSON contract: status %d/%d/%d/%d, brief %q, detail %q", code, detailedCode, jsonCode, detailJSONCode, brief, details)
+	}
+}
+
+func TestPacketsInventoryAndSelectedPayload(t *testing.T) {
+	root, data := cliFixture(t)
+	if _, errs, code := cliRun(t, root, data, "author", "capture", "--command-id", string(cliID(3)), "--events", "-"); code != 0 {
+		t.Fatalf("capture control: %d %s", code, errs)
+	}
+	list, errs, code := cliRun(t, root, nil, "", "packets", "--json")
+	if code != 0 {
+		t.Fatalf("packets inventory should succeed: %d %s", code, errs)
+	}
+	var inventory struct {
+		Packets []struct {
+			CommandID model.ID               `json:"command_id"`
+			Payload   struct{ State string } `json:"payload"`
+		} `json:"packets"`
+	}
+	if err := json.Unmarshal([]byte(list), &inventory); err != nil || len(inventory.Packets) != 1 ||
+		inventory.Packets[0].CommandID != cliID(3) || inventory.Packets[0].Payload.State != "known" ||
+		strings.Contains(list, `"events": [`) {
+		t.Fatalf("inventory must contain one verified header without event bodies: %v %s", err, list)
+	}
+	selected, errs, code := cliRun(t, root, nil, "", "packets", string(cliID(3)), "--json")
+	var one struct {
+		Header *struct {
+			CommandID model.ID `json:"command_id"`
+		} `json:"header"`
+		Packet *model.Packet `json:"packet"`
+	}
+	if err := json.Unmarshal([]byte(selected), &one); code != 0 || err != nil || one.Header == nil || one.Header.CommandID != cliID(3) || one.Packet == nil || len(one.Packet.Events) != 1 {
+		t.Fatalf("selected packet must include header and verified payload: %d %s %s", code, errs, selected)
+	}
+}
+
+func TestPacketsMalformedAndTamperedReadsNeverLookSuccessful(t *testing.T) {
+	root, data := cliFixture(t)
+	if _, errs, code := cliRun(t, root, data, "author", "capture", "--command-id", string(cliID(3)), "--events", "-"); code != 0 {
+		t.Fatalf("capture control: %d %s", code, errs)
+	}
+	if out, _, code := cliRun(t, root, nil, "", "packets", "bad-id", "--json"); code != 2 || !strings.Contains(out, `"error"`) || strings.Contains(out, `"result": "KNOWN"`) {
+		t.Fatalf("malformed packet ID must be a usage error: %d %s", code, out)
+	}
+	if out, _, code := cliRun(t, root, nil, "", "packets", string(cliID(99)), "--json"); code != 0 || !strings.Contains(out, `"result": "UNKNOWN"`) || !strings.Contains(out, `"packet": null`) {
+		t.Fatalf("absent local packet must be an explicit unknown: %d %s", code, out)
+	}
+	config := filepath.Join(root, "whosaidso.toml")
+	original, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config, []byte("id = \"other/project\"\nledger = \".whosaidso/events\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if out, _, code := cliRun(t, root, nil, "", "packets", string(cliID(3)), "--json"); code != 0 || !strings.Contains(out, `"result": "UNKNOWN"`) {
+		t.Fatalf("another project's local inventory must not claim this packet: %d %s", code, out)
+	}
+	if err := os.WriteFile(config, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	p, err := store.Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inbox, err := store.IntakeDir(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packetPath := filepath.Join(inbox, string(cliID(3)), "packet.json")
+	old, err := os.ReadFile(packetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := bytes.ReplaceAll(old, []byte(`: "author"`), []byte(`: "forger"`))
+	if bytes.Equal(changed, old) {
+		t.Fatal("control tamper did not change packet author")
+	}
+	if err := os.WriteFile(packetPath, changed, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if out, _, code := cliRun(t, root, nil, "", "packets", "--json"); code == 0 || !strings.Contains(out, `"error"`) || strings.Contains(out, `"result": "KNOWN"`) {
+		t.Fatalf("tampered packet must not print inventory success: %d %s", code, out)
+	}
+}
+
 func TestFreshProcessesExplainAdmittedWhoSaidSoConstructionTaskAndSource(t *testing.T) {
 	root, initial := cliFixture(t)
 	var events []model.Event

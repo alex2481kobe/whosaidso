@@ -48,8 +48,8 @@
 .row-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .row-main { flex: 1 1 auto; min-width: 0; height: 42px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 8px; white-space: nowrap; }
 a.row-main:hover { background: var(--hover-fill); }
-.row-title { flex: 0 1 auto; min-width: 50%; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; font-weight: 500; }
-.row-meta { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; margin-left: auto; color: var(--muted); font-size: 12.5px; }
+.row-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; font-weight: 500; }
+.row-meta { flex: 0 0 auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; margin-left: auto; color: var(--muted); font-size: 12.5px; }
 .row-meta > span + span { margin-left: 12px; }
 .row.more-rows { height: 42px; padding: 0 12px; display: flex; align-items: center; color: var(--muted); font-size: 12.5px; }
 .why, .chip-flag { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; max-width: 40%; padding: 3px 8px; border: 0; border-radius: 6px; background: var(--surface-2); color: var(--muted); font-size: 12px; white-space: nowrap; cursor: pointer; }
@@ -68,11 +68,6 @@ a.row-main:hover { background: var(--hover-fill); }
 .metric-label, .metric-note { font-size: 12.5px; overflow-wrap: break-word; }
 .metric-label { color: var(--muted); }
 .metric-note { margin-top: 4px; }
-.summary-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0 16px 16px; padding: 8px 16px 8px 12px; background: var(--foot); border-radius: 12px; font-size: 13.5px; }
-.summary-owl { flex: 0 0 auto; width: 26px; height: 42px; }
-.summary-foot p { flex: 1 1 12em; min-width: 0; }
-.summary-foot strong { font-weight: 680; }
-.summary-tag { margin-left: auto; color: var(--muted); font-size: 12.5px; text-align: right; }
 
 /* records: the search beside the kind tabs (wrapping below it when narrow);
    the sidebar beside the listing, or a Filters disclosure above it when narrow */
@@ -203,21 +198,16 @@ a.row-main:hover { background: var(--hover-fill); }
    name may wrap too), and the hero drops its art so nothing crowds the title */
 @media (max-width: 900px) {
   .topbar { flex-basis: auto; flex-wrap: wrap; row-gap: 8px; padding: 8px 16px; }
-  .header-start { flex: 1 1 auto; gap: 14px; }
   .project { flex: 0 1 auto; }
   .project-button { height: auto; min-height: 38px; padding-top: 6px; padding-bottom: 6px; white-space: normal; overflow-wrap: anywhere; text-align: left; }
-  .header-end { gap: 12px; margin-left: auto; }
   .theme-label { display: none; }
   .hero { min-height: 0; padding-top: 18px; }
-  .hero-art { display: none; }
-  .hero-text { max-width: 100%; }
 }
 /* phones: panel controls go on the row under the panel title, the tabs and
    theme switch take the header's second row, and a stat card's icon sits
    above its number so the label keeps the card's whole width */
 @media (max-width: 600px) {
   .head-end { flex-basis: 100%; margin-left: 32px; }
-  .header-end { flex: 1 1 100%; justify-content: space-between; margin-left: 0; }
   .stat-top { flex-direction: column; align-items: flex-start; gap: 8px; }
 }
 @media (max-width: 900px), (max-height: 600px) {
@@ -251,3 +241,72 @@ a.row-main:hover { background: var(--hover-fill); }
 @media (prefers-reduced-motion: reduce) { .theme-toggle span, .icon, .button { transition: none; } }
 /* the smallest phones: one stat card per row, so no note is cut off */
 @media (max-width: 380px) { .stats.six { grid-template-columns: minmax(0, 1fr); } }
+
+/* Compact editorial hierarchy over the original record and detail layouts. */
+.records-top .search {max-width:330px;}
+.records-body {gap:18px;}
+.side-holder {flex-basis:190px;}
+.side {padding:16px 12px;box-shadow:none;}
+.side-head {font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);}
+.side-row {font-size:11px;min-height:35px;}
+.side h4 {font-size:10px;}
+.kind-tabs .chip {font-size:11px;padding:0 12px;}
+.table th {font-size:10px;font-weight:500;color:var(--muted);}
+.table td {font-size:12px;padding-top:20px;padding-bottom:20px;}
+.table .title-cell {font-weight:500;}
+.table tbody tr:hover {background:color-mix(in srgb,var(--blue) 5%,transparent);}
+.records.table .author,.records.table .self,.records.table .updated {font-size:10px;}
+.detail .hero h1 {font-size:28px;}
+.item-head {font-size:12px;}
+.item-value {font-size:11px;}
+@media(min-width:1441px){.records-body {grid-template-columns:190px minmax(0,1fr);}}
+@media(max-width:1180px){.records-body {grid-template-columns:minmax(0,1fr);}.side-holder{min-width:0;}.kind-tabs{gap:5px;}.kind-tabs .chip{padding:0 9px;}}
+/* Task scanning: who moves next and why, rather than redundant metadata. */
+.records-quick {display:flex;gap:12px;align-items:center;}
+.table.records th {font-size:12px;}
+.table.records td {font-size:14px;white-space:normal;line-height:1.5;}
+.table.records .title-cell {white-space:normal;}
+.record-title-link {display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--text);font-weight:550;}
+.record-title-link:hover {color:var(--blue);text-decoration:underline;}
+.table.records .waiting-reason,.table.records .updated {font-size:12px;}
+.side-row,.kind-tabs .chip,.item-head,.item-value {font-size:13px;}
+.record-card-meta,.record-card-reason {font-size:13px;color:var(--muted);line-height:1.5;}
+.acceptance-explanation {font-size:14px;line-height:1.6;}
+.detail .hero {display:none;}
+.detail-head {padding-top:22px;}
+@media(max-width:700px){.table.records td{overflow-wrap:anywhere;}.records-quick{justify-content:space-between;}.records-quick .filters-toggle{width:auto;}.table.records .waiting-reason{max-width:100%;}}
+@media(max-width:900px),(max-height:600px){.records-table .table.records td{font-size:14px;}.records-table .table.records td.title-cell{font-size:16px;}.records-table .next-actor::before{content:"Next: ";color:var(--muted);}.records-table .waiting-reason{flex:1 1 100%;color:var(--muted);}}
+
+.acceptance-help {margin-top:14px;font-size:13px;}.acceptance-help summary {cursor:pointer;color:var(--blue);}.acceptance-help p{margin-top:10px;}
+
+@media(max-width:1440px){.records-body{grid-template-columns:minmax(0,1fr);grid-template-rows:none;}.records .side-holder{contain:none;}.records .filters-toggle{display:inline-flex;}.records-body:not(.filters-open) .side-holder{display:none;}}
+/* Flat sections preserve hierarchy without repeated container cards. */
+.hero {min-height:0;padding:0;}
+.records-controls {display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:0 0 14px;flex-wrap:wrap;}
+.records-controls>span {margin-right:auto;font-size:13px;}
+.listing {display:flex;flex-direction:column;min-width:0;}
+.record-blocker {display:block;font-size:13px;font-weight:400;color:var(--red);margin-top:5px;}
+.detail-head {display:flex;flex-direction:column;gap:16px;padding:0;}
+.detail-title {font-size:22px;line-height:1.3;white-space:normal;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+.detail-subject {white-space:pre-line;overflow-wrap:anywhere;font-size:14px;line-height:1.6;color:var(--muted);}
+.record-metadata {font-size:13px;}
+.record-metadata summary,.overview-summary summary {cursor:pointer;color:var(--muted);padding:8px 0;}
+.record-metadata>.facts {margin:12px 0;}
+.sections {grid-template-columns:1fr;gap:24px;}
+.sections>.panel {border:0;border-radius:0;background:none;box-shadow:none;backdrop-filter:none;}
+.sections>.panel>h2 {padding:0;flex-basis:auto;min-height:36px;border-bottom:1px solid var(--line);font-size:15px;}
+.sections .panel-body {padding:8px 0;max-height:none;overflow:visible;}
+.sections .item-head {padding-left:0;}
+.sections .panel-body>.facts {padding:8px 0;}
+.overview-filters {display:flex;gap:8px;flex-wrap:wrap;}
+.overview-list {min-height:0;}
+.overview-list .rows {padding:0;}
+.overview-list-head {display:flex;justify-content:flex-end;padding-bottom:10px;}
+.overview-summary {border-top:1px solid var(--line);padding-top:12px;font-size:13px;}
+.overview-summary .facts {margin-top:12px;}
+@media(max-width:900px){.listing{height:auto;min-height:400px;}.detail-title{font-size:20px;}}
+.history-summary {font-size:13px;}
+.history-summary>summary {cursor:pointer;color:var(--muted);}
+.history-summary .stats {margin-top:16px;}
+/* On a phone an overview row stacks: the title on its own line, who and when under it, and the reason under that. */
+@media(max-width:700px){.row-main{flex:1 1 100%;height:auto;min-height:42px;flex-wrap:wrap;gap:2px 12px;padding:8px 12px;}.row-title{flex:1 1 100%;}.row-meta{max-width:100%;margin-left:0;}.row-line{flex-wrap:wrap;}.row-line>.why{margin:0 0 8px 12px;max-width:calc(100% - 24px);}}
