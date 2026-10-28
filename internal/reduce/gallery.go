@@ -20,12 +20,15 @@ type GalleryEntry struct {
 	Note          string           `json:"note,omitempty"`
 }
 
-func (s *state) galleryEntries() []GalleryEntry {
+func (s *state) galleryEntries(id model.ID) []GalleryEntry {
 	out := []GalleryEntry{}
 	positions := map[model.ID]int{}
-	for _, o := range s.log.all {
+	for _, o := range s.log.gallery {
 		switch e := s.events[o].(type) {
 		case *model.GalleryAdd:
+			if id != "" && e.EntryID != id {
+				continue
+			}
 			positions[e.EntryID] = len(out)
 			out = append(out, GalleryEntry{Add: *e, Origin: o, AddedAt: e.AddedAt.UTC(), Verdict: "unreviewed", Actor: model.Actor{UnknownReason: "no admitted verdict"}})
 		case *model.GalleryRetract:
@@ -51,10 +54,17 @@ func (s *state) galleryEntries() []GalleryEntry {
 	return out
 }
 
-func (s Snapshot) Gallery() []GalleryEntry { return deepCopySlice(s.inner().galleryEntries()) }
+func (s Snapshot) Gallery() []GalleryEntry { return deepCopySlice(s.inner().galleryEntries("")) }
+
+// GalleryEntry reads one entry, including its retraction and latest verdict.
+// Unrelated gallery payloads are never copied across the snapshot boundary.
+func (s Snapshot) GalleryEntry(id model.ID) (GalleryEntry, bool) {
+	entry, ok := s.inner().galleryEntry(id)
+	return deepCopy(entry), ok
+}
 
 func (s *state) galleryEntry(id model.ID) (GalleryEntry, bool) {
-	for _, e := range s.galleryEntries() {
+	for _, e := range s.galleryEntries(id) {
 		if e.Add.EntryID == id {
 			return e, true
 		}
@@ -120,7 +130,7 @@ func (s *state) galleryEvent(b model.Bundle, idx int, event model.TypedEvent) er
 			if string(model.GalleryImportIdentity(e.File, e.AddedAt)) != e.ImportID {
 				return fail("import_id", "import identity must match the entry's file and added time")
 			}
-			for _, old := range s.galleryEntries() {
+			for _, old := range s.galleryEntries("") {
 				if old.Add.ImportID == e.ImportID {
 					return fail("import_id", "legacy entry already imported")
 				}

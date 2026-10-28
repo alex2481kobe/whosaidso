@@ -179,21 +179,20 @@ func observeEntry(p store.Project, record reduce.GalleryEntry) Shown {
 }
 
 func Find(p store.Project, id string) (Entry, error) {
-	entries, err := Entries(p)
+	snapshot, err := gallerySnapshot(p)
 	if err != nil {
 		return Entry{}, err
 	}
-	return FindEntry(p, entries, id)
+	return FindEntry(p, snapshot, id)
 }
 
-// FindEntry resolves an id only within the supplied validated gallery.
-func FindEntry(p store.Project, entries []reduce.GalleryEntry, id string) (Entry, error) {
-	for _, e := range entries {
-		if string(e.Add.EntryID) == id && !e.Retracted {
-			return localEntry(p, e), nil
-		}
+// FindEntry resolves an id only within the supplied validated snapshot.
+func FindEntry(p store.Project, snapshot reduce.Snapshot, id string) (Entry, error) {
+	entry, ok := snapshot.GalleryEntry(model.ID(id))
+	if !ok || entry.Retracted {
+		return Entry{}, ErrNoEntry
 	}
-	return Entry{}, ErrNoEntry
+	return localEntry(p, entry), nil
 }
 
 func localEntry(p store.Project, record reduce.GalleryEntry) Entry {

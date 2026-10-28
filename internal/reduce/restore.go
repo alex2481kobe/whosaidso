@@ -28,7 +28,8 @@ import (
 // pre-migration ledger is refused and rebuilt (and the old ledger refused)
 // rather than answering from old events. /4 carries the ledger's lineage (its
 // chain structure) in place of a bare command index, and its set-aside bundles.
-const snapshotFormat = "whosaidso-snapshot/7"
+// Format /8 also persists the gallery event index; older disposable images rebuild.
+const snapshotFormat = "whosaidso-snapshot/8"
 
 // persisted names every state field an image carries, in encoding order. The
 // transient ones (the candidate inventory and a dry run's refusal collector)
@@ -41,7 +42,7 @@ func (s *state) persisted() []persistedField {
 		{"invocations", &s.invocations}, {"criteria", &s.criteria}, {"reviews", &s.reviews},
 		{"eventPackets", &s.eventPackets}, {"sources", &s.sources}, {"setAside", &s.setAside},
 		{"events", &s.events},
-		{"log.all", &s.log.all}, {"log.losses", &s.log.losses}, {"log.proofs", &s.log.proofs},
+		{"log.all", &s.log.all}, {"log.gallery", &s.log.gallery}, {"log.losses", &s.log.losses}, {"log.proofs", &s.log.proofs},
 		{"log.decisionDisposals", &s.log.decisionDisposals}, {"log.supersessions", &s.log.supersessions},
 		{"log.corrections", &s.log.corrections}, {"log.withdrawals", &s.log.withdrawals},
 		{"log.disposals", &s.log.disposals},

@@ -65,7 +65,7 @@ func (h *handler) galleryAnswer(w http.ResponseWriter, r *http.Request, file sto
 		h.fail(w, http.StatusInternalServerError, err)
 		return
 	}
-	entry, err := gallery.FindEntry(file, source.Snapshot().Gallery(), id)
+	entry, err := gallery.FindEntry(file, source.Snapshot(), id)
 	if errors.Is(err, gallery.ErrNoEntry) {
 		h.fail(w, http.StatusNotFound, errText("no gallery entry "+id))
 		return

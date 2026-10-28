@@ -56,6 +56,7 @@ func (s SupportFacts) Current() Truth {
 // exactly its own prefix, including events already applied from a bundle that
 // is still being applied. The typed lists are subsequences of all.
 type eventLog struct {
+	gallery           []Origin
 	all               []Origin
 	losses            []Origin // correction, trust.withdraw, supersede, artifact.dispose
 	proofs            []Origin
@@ -69,6 +70,8 @@ type eventLog struct {
 func (l *eventLog) add(o Origin, e model.TypedEvent) {
 	l.all = append(l.all, o)
 	switch e.(type) {
+	case *model.GalleryAdd, *model.GalleryRetract, *model.GalleryApprove, *model.GalleryReject:
+		l.gallery = append(l.gallery, o)
 	case *model.ProofAdmit:
 		l.proofs = append(l.proofs, o)
 	case *model.DecisionDispose:
@@ -94,6 +97,7 @@ func (l *eventLog) add(o Origin, e model.TypedEvent) {
 func (l eventLog) fork() eventLog {
 	clip := func(o []Origin) []Origin { return o[:len(o):len(o)] }
 	return eventLog{
+		gallery:           clip(l.gallery),
 		all:               clip(l.all),
 		losses:            clip(l.losses),
 		proofs:            clip(l.proofs),

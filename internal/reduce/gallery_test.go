@@ -11,11 +11,15 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
-func galleryFact(t *testing.T, l *ledgerBuilder, by model.Actor, e model.TypedEvent) model.Bundle {
+func galleryFact(t *testing.T, l *ledgerBuilder, by model.Actor, events ...model.TypedEvent) model.Bundle {
 	t.Helper()
 	packet := newID(fmt.Sprintf("GP%d", l.seq+1+l.names))
-	review := &model.ReviewAdmit{Outcome: "accepted", Actor: model.Actor{ID: "coordinator"}, Reason: "fixture reviewed", Packets: []model.PacketRef{{CommandID: packet, Digest: newDigest(string(packet))}}, EventPackets: []model.ID{packet}, Authors: map[model.ID]model.Actor{packet: by}, CapturedAt: map[model.ID]model.Availability[time.Time]{packet: knownAt(baseTime)}}
-	return l.add(t, e, review)
+	carried := make([]model.ID, len(events))
+	for i := range carried {
+		carried[i] = packet
+	}
+	review := &model.ReviewAdmit{Outcome: "accepted", Actor: model.Actor{ID: "coordinator"}, Reason: "fixture reviewed", Packets: []model.PacketRef{{CommandID: packet, Digest: newDigest(string(packet))}}, EventPackets: carried, Authors: map[model.ID]model.Actor{packet: by}, CapturedAt: map[model.ID]model.Availability[time.Time]{packet: knownAt(baseTime)}}
+	return l.add(t, append(events, review)...)
 }
 
 func galleryLedger(t *testing.T) (*ledgerBuilder, *model.GalleryAdd, *model.GalleryRequire) {
