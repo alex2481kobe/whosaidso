@@ -4,9 +4,12 @@ use std::path::Path;
 
 const MAX_OPEN_GOALS: usize = 100;
 const MAX_GOALS: usize = 200;
+const MAX_PHASES: usize = 50;
 
 pub fn check(root: &Path) -> Result<(), String> {
+    if prune::journal_path(root)?.exists() { println!("warning: unfinished prune; run whosaidso prune"); }
     let mut s = load(root)?;
+    if s.phases.len() > MAX_PHASES { s.errors.push(format!("phases cap {MAX_PHASES}: count {}; retire a phase by deleting its file", s.phases.len())); }
     if s.goals.len() > MAX_GOALS { s.errors.push(format!("total goals cap {MAX_GOALS}: count {}", s.goals.len())); }
     if s.goals.len() > MAX_OPEN_GOALS {
         let count = state::states(root, &s)?.iter().filter(|g| g.state != State::Done).count();

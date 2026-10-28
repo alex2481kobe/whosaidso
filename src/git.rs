@@ -24,3 +24,22 @@ pub fn root(dir: &Path) -> Result<std::path::PathBuf, String> {
     let root = String::from_utf8(bytes).map_err(|_| "git repository root is not UTF-8".to_string())?;
     Ok(std::path::PathBuf::from(root))
 }
+
+pub fn main_tip(root: &Path) -> Result<String, String> {
+    run(root, &["rev-parse", "--verify", "refs/heads/main"]).map(|s| s.trim().to_owned()).map_err(|_| "no local branch main".into())
+}
+pub fn local_revision(root: &Path, revision: &str) -> Result<String, String> {
+    let end = revision.find(['~', '^']).unwrap_or(revision.len());
+    let (name, suffix) = revision.split_at(end);
+    if !suffix.bytes().all(|b| b.is_ascii_digit() || b == b'~' || b == b'^') { return Err("gate: expected a local revision".into()); }
+    let base = if name == "main" || name == "refs/heads/main" { main_tip(root)? }
+        else if name == "HEAD" || (name.len() == 40 && name.bytes().all(|b| b.is_ascii_hexdigit())) { name.to_owned() }
+        else {
+            let branch = name.strip_prefix("refs/heads/").unwrap_or(name);
+            let tag = name.strip_prefix("refs/tags/").unwrap_or(name);
+            run(root, &["rev-parse", "--verify", &format!("refs/heads/{branch}")])
+                .or_else(|_| run(root, &["rev-parse", "--verify", &format!("refs/tags/{tag}")]))
+                .map_err(|_| "gate: expected a local branch, tag or commit".to_string())?.trim().to_owned()
+        };
+    run(root, &["rev-parse", "--verify", &format!("{base}{suffix}^{{commit}}")]).map(|s| s.trim().to_owned())
+}

@@ -38,31 +38,31 @@ fn images_and_gallery() {
     git(&root, &["add", ".whosaidso"]); git(&root, &["commit", "-m", "records"]); git(&root, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
     let png: [u8; 67] = [137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,8,6,0,0,0,31,21,196,137,0,0,0,10,73,68,65,84,120,156,99,0,1,0,0,5,0,1,13,10,45,180,0,0,0,0,73,69,78,68,174,66,96,130];
     fs::write(root.join("shot.png"), png).unwrap();
-    assert!(cli(&root, &["show-image", "envelope", "shot.png", "Cabin from above, roof and gutters done"]).contains("show-image: envelope"));
-    let images = records.join("images");
+    assert!(cli(&root, &["media", "envelope", "shot.png", "Cabin from above, roof and gutters done"]).contains("media: envelope"));
+    let images = records.join("media");
     let first = fs::read_dir(&images).unwrap().next().unwrap().unwrap().path();
     let mut image: serde_json::Value = serde_json::from_slice(&fs::read(&first).unwrap()).unwrap();
     let blob = root.join(".git/whosaidso/blobs").join(format!("{}.png", image["media_sha256"].as_str().unwrap()));
     assert!(blob.is_file());
     for title in ["2026-10-27 12:30", "cabin_01 aerial", "renders/cabin aerial view", "house aerial.png", "cabin 09cc2d59ab aerial", "short"] {
-        assert!(cli(&root, &["show-image", "envelope", "shot.png", title]).contains("show-image: envelope"));
+        assert!(cli(&root, &["media", "envelope", "shot.png", title]).contains("media: envelope"));
     }
     for path in fs::read_dir(&images).unwrap().map(|e| e.unwrap().path()) { if path != first { fs::remove_file(path).unwrap(); } }
-    bad(&root, &["show-image", "envelope", "shot.png", " "], "length");
+    bad(&root, &["media", "envelope", "shot.png", " "], "length");
     let long_title = "z".repeat(81);
-    bad(&root, &["show-image", "envelope", "shot.png", &long_title], "length");
-    bad(&root, &["show-image", "nowhere", "shot.png", "A proper descriptive image"], "unknown goal");
-    bad(&root, &["show-image", "envelope", "missing.png", "A proper descriptive image"], "missing.png");
+    bad(&root, &["media", "envelope", "shot.png", &long_title], "length");
+    bad(&root, &["media", "nowhere", "shot.png", "A proper descriptive image"], "unknown goal");
+    bad(&root, &["media", "envelope", "missing.png", "A proper descriptive image"], "missing.png");
     image["ran_at"] = 1.into(); fs::remove_file(first).unwrap(); image_record(&images, &image);
     image["shows"] = "The newest view & roof".into(); image["ran_at"] = 2.into(); image_record(&images, &image);
     let output = cli(&root, &["view"]); let html = fs::read_to_string(output.trim()).unwrap();
-    assert!(html.contains("<h3>The newest view &amp; roof</h3>")); assert!(html.contains("1 older")); assert!(html.contains("Goal &lt;one&gt;")); assert!(html.contains("12:00 AM UTC"));
+    assert!(html.contains("<h3>The newest view &amp; roof</h3>")); assert_eq!(html.matches("<article>").count(), 2); assert!(html.contains("Goal &lt;one&gt;")); assert!(html.contains("12:00 AM UTC"));
     fs::remove_file(blob).unwrap();
-    let output = cli(&root, &["view"]); assert!(fs::read_to_string(output.trim()).unwrap().contains("image not on this machine"));
-    let output = cli(&root, &["check"]); assert!(output.contains("warning: image: missing media") && output.contains("check: ok"));
+    let output = cli(&root, &["view"]); assert!(fs::read_to_string(output.trim()).unwrap().contains("media not on this machine"));
+    let output = cli(&root, &["check"]); assert!(output.contains("warning: media: missing media") && output.contains("check: ok"));
     let mut outside = image.clone(); outside["media_sha256"] = "../../outside".into(); let path = image_record(&images, &outside);
-    bad(&root, &["check"], "image: bad media sha256"); fs::remove_file(path).unwrap();
+    bad(&root, &["check"], "media: bad media sha256"); fs::remove_file(path).unwrap();
     image["goal"] = "nowhere".into(); image_record(&images, &image);
-    bad(&root, &["check"], "image: unknown goal nowhere");
+    bad(&root, &["check"], "media: unknown goal nowhere");
     fs::remove_dir_all(root).unwrap();
 }

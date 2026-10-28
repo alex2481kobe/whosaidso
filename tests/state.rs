@@ -64,7 +64,7 @@ fn goal_states_and_content_addressed_proofs() {
     git(&proj, &root, &["add", ".whosaidso"]);
     git(&proj, &root, &["commit", "-m", "records", "-m", "Goal: none"]);
     git(&proj, &root, &["push", "-u", "origin", "main"]);
-    git(&proj, &root, &["worktree", "add", "--detach", "../lane", "origin/main"]);
+    git(&proj, &root, &["worktree", "add", "-b", "g-envelope", "../lane", "main"]);
     let lane = root.join("lane");
     assert!(cli(&lane, &root, &["start", "envelope"]).contains("envelope"));
     write(&lane.join("lane.txt"), "lane\n");

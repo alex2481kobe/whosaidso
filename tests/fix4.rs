@@ -85,7 +85,7 @@ fn proofs_precise_references_records_and_includers_are_honest() {
     write(&root, ".whosaidso/goals/g.json", String::from_utf8_lossy(goal).replace("\"check\":\"test\"", "\"check\":\"missing\""));
     let out = run(&root, env!("CARGO_BIN_EXE_whosaidso"), &["check"]);
     assert_eq!(out.status.code(), Some(1), "3: {out:?}");
-    assert!(String::from_utf8_lossy(&out.stdout).lines().any(|l| l == "goal g: unknown instrument missing"), "3: {out:?}");
+    assert!(String::from_utf8_lossy(&out.stdout).lines().any(|l| l == "missing instrument file .whosaidso/instruments/missing.json"), "3: {out:?}");
     assert_eq!(cli(&root, &["find", "kind:goal", "validatorneedle"]), "find: no indexed match\n", "3: evict previously valid row");
     write(&root, ".whosaidso/goals/g.json", goal);
     assert!(cli(&root, &["check"]).contains("check: ok"));

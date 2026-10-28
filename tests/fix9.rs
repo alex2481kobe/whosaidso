@@ -1,3 +1,4 @@
+mod common;
 // Concurrency and interrupted publications through the real binary in one isolated project.
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -63,45 +64,45 @@ fn prune_and_publication_survive_races_and_interruptions() {
     let interrupted = command(&root, "sh", &["-c", "ulimit -c 0; ulimit -f 1; exec \"$1\" ask g \"$2\"", "sh", exe, &"x".repeat(20000)]).output().unwrap();
     assert!(!interrupted.status.success());
     assert!(paths(&r.join("asks")).iter().any(|p| p.file_name().unwrap().to_string_lossy().starts_with(".tmp-")), "reproduce interrupted ask");
-    write(&r.join("cache/shot.png"), vec![9; 20000]);
-    let interrupted = command(&root, "sh", &["-c", "ulimit -c 0; ulimit -f 1; exec \"$1\" show-image g .whosaidso/cache/shot.png interrupted", "sh", exe]).output().unwrap();
-    assert!(!interrupted.status.success()); assert!(!blobs.join(format!("{}.png", hash(&vec![9; 20000]))).exists());
+    write(&r.join("cache/shot.png"), common::png(vec![9; 20000]));
+    let interrupted = command(&root, "sh", &["-c", "ulimit -c 0; ulimit -f 1; exec \"$1\" media g .whosaidso/cache/shot.png interrupted", "sh", exe]).output().unwrap();
+    assert!(!interrupted.status.success()); assert!(!blobs.join(format!("{}.png", hash(&common::png(vec![9; 20000])))).exists());
     cli(&root, &["prune"]);
     assert!(!snapshot(&r).keys().chain(snapshot(&blobs).keys()).any(|p| p.file_name().unwrap().to_string_lossy().starts_with(".tmp-")), "prune collects interrupted records and blobs"); commit(&root);
-    write(&r.join("cache/shot.png"), vec![0; 8 * 1024 * 1024 + 1]);
-    failure(command(&root, exe, &["show-image", "g", ".whosaidso/cache/shot.png", "oversized"]).output().unwrap(), "8 MiB");
-    assert!(paths(&r.join("images")).is_empty());
+    write(&r.join("cache/shot.png"), vec![0; 64 * 1024 * 1024 + 1]);
+    failure(command(&root, exe, &["media", "g", ".whosaidso/cache/shot.png", "oversized"]).output().unwrap(), "64 MiB");
+    assert!(paths(&r.join("media")).is_empty());
     // Sparse files exercise the actual quota without allocating a GiB of payload.
-    let full = blobs.join(format!("{}.png", "f".repeat(64))); fs::File::create(&full).unwrap().set_len(1024 * 1024 * 1024 - 3).unwrap();
-    write(&r.join("cache/shot.png"), "four");
-    failure(command(&root, exe, &["show-image", "g", ".whosaidso/cache/shot.png", "full"]).output().unwrap(), "prune");
-    assert!(paths(&r.join("images")).is_empty());
-    fs::File::options().write(true).open(&full).unwrap().set_len(1024 * 1024 * 1024 - 4).unwrap();
-    write(&r.join("cache/other.png"), "else");
-    let first = command(&root, exe, &["show-image", "g", ".whosaidso/cache/shot.png", "quota race"]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
-    let second = command(&root, exe, &["show-image", "g", ".whosaidso/cache/other.png", "quota race"]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let full = blobs.join(format!("{}.png", "f".repeat(64))); fs::File::create(&full).unwrap().set_len(4 * 1024 * 1024 * 1024 - 3).unwrap();
+    write(&r.join("cache/shot.png"), common::png("four"));
+    failure(command(&root, exe, &["media", "g", ".whosaidso/cache/shot.png", "full"]).output().unwrap(), "prune");
+    assert!(paths(&r.join("media")).is_empty());
+    fs::File::options().write(true).open(&full).unwrap().set_len(4 * 1024 * 1024 * 1024 - 71).unwrap();
+    write(&r.join("cache/other.png"), common::png("else"));
+    let first = command(&root, exe, &["media", "g", ".whosaidso/cache/shot.png", "quota race"]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let second = command(&root, exe, &["media", "g", ".whosaidso/cache/other.png", "quota race"]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
     let (a, b) = (first.wait_with_output().unwrap(), second.wait_with_output().unwrap());
     assert_ne!(a.status.success(), b.status.success(), "concurrent publishers cannot exceed the quota");
     failure(if a.status.success() { b } else { a }, "prune");
-    for p in paths(&r.join("images")) { fs::remove_file(p).unwrap(); }
+    for p in paths(&r.join("media")) { fs::remove_file(p).unwrap(); }
     for p in paths(&blobs) { if p.extension().is_some_and(|e| e == "png") { fs::remove_file(p).unwrap(); } }
-    write(&r.join("cache/shot.png"), vec![0; 8 * 1024 * 1024]);
-    assert!(cli(&root, &["show-image", "g", ".whosaidso/cache/shot.png", "at cap"]).starts_with("show-image:"));
-    for p in paths(&r.join("images")) { fs::remove_file(p).unwrap(); }
+    write(&r.join("cache/shot.png"), common::png(vec![0; 64 * 1024 * 1024]));
+    assert!(cli(&root, &["media", "g", ".whosaidso/cache/shot.png", "at cap"]).starts_with("media:"));
+    for p in paths(&r.join("media")) { fs::remove_file(p).unwrap(); }
     let head = git(&root, &["rev-parse", "HEAD"]).trim().to_owned(); let mut images = Vec::new();
     for n in 0..9 {
-        let bytes = vec![n; 32 + n as usize * 100]; let sha = hash(&bytes); write(&blobs.join(format!("{sha}.png")), bytes);
-        let v = json!({"goal":"g","shows":format!("image-{n}"),"media_sha256":sha,"ext":"png","commit":head,"ran_at":42 + n % 3});
-        images.push(((v["ran_at"].as_i64().unwrap(), addressed(&r.join("images"), &v)), v["shows"].as_str().unwrap().to_owned()));
+        let bytes = common::png(vec![n; 32 + n as usize * 100]); let sha = hash(&bytes); let byte_size = bytes.len(); write(&blobs.join(format!("{sha}.png")), bytes);
+        let v = json!({"goal":"g","shows":format!("image-{n}"),"media_sha256":sha,"ext":"png","byte_size":byte_size,"commit":head,"ran_at":42 + n % 3});
+        images.push(((v["ran_at"].as_i64().unwrap(), addressed(&r.join("media"), &v)), v["shows"].as_str().unwrap().to_owned()));
         addressed(&r.join("asks"), &json!({"goal":"g","said":format!("ask-{n}"),"commit":head,"ran_at":42 + n % 3}));
     }
     images.sort_by(|a,b| b.0.cmp(&a.0));
-    assert!(cli(&root, &["show", "g"]).contains(&format!("image: {}", images[0].1)), "image ties use hash");
+    assert!(cli(&root, &["show", "g"]).contains(&format!("media: {}", images[0].1)), "image ties use hash");
     cli(&root, &["view"]); let page = fs::read_to_string(r.join("cache/view/gallery.html")).unwrap();
     let positions: Vec<_> = images.iter().map(|(_, title)| page.find(title).unwrap()).collect(); assert!(positions.windows(2).all(|w| w[0] < w[1]));
     commit(&root); let shown = cli(&root, &["show", "g"]); cli(&root, &["prune"]);
     assert_eq!(cli(&root, &["show", "g"]), shown, "prune preserves exact show output");
-    let mut kept: Vec<_> = images.iter().take(5).map(|((_, p), _)| p.clone()).collect(); kept.sort(); assert_eq!(paths(&r.join("images")), kept); commit(&root);
+    let mut kept: Vec<_> = images.iter().take(100).map(|((_, p), _)| p.clone()).collect(); kept.sort(); assert_eq!(paths(&r.join("media")), kept); commit(&root);
     git(&root, &["update-ref", "refs/remotes/origin/main", "HEAD"]); cli(&root, &["prune"]); assert!(cli(&root, &["check"]).contains("check: ok"));
     fs::remove_dir_all(root).unwrap();
 }

@@ -1,5 +1,5 @@
 // Concise record details; state and phase rollups come from their shared modules.
-use crate::{goals, record::{self, Proof}, state};
+use crate::{git, goals, record::{self, Proof}, state};
 use std::path::Path;
 
 pub fn time(seconds: i64) -> String {
@@ -23,8 +23,16 @@ pub fn show(root: &Path, id: &str) -> Result<(), String> {
         lines.push(format!("branches: {}", current.active_branches.join(", ")));
         let asks = record::asks(&store, id);
         for ask in asks.iter().take(5) { lines.push(format!("ask: {}", ask.said)); }
-        if let Some(p) = current.proof.map(|i| &store.proofs[i]) { lines.push(format!("proof: {}", proof(p))); }
-        if let Some(i) = record::newest_image(&store, id) { lines.push(format!("image: {}", i.shows)); }
+        let revisions = git::run(root, &["rev-list", &git::main_tip(root)?])?;
+        let commits = revisions.lines().collect();
+        let mut pending = vec![goal.check.as_str()]; let mut seen = std::collections::HashSet::new();
+        while let Some(id) = pending.pop() {
+            if !seen.insert(id) { continue; }
+            if let Some(p) = state::newest_proof(&store, &commits, &goal.id, id) { lines.push(format!("proof: {} · {id}", proof(p))); }
+            else { lines.push(format!("instrument: {id} · no eligible proof")); }
+            if let Some(i) = store.instruments.iter().find(|i| i.id == id) { pending.extend(i.gaps.iter().rev().map(|g| g.covered_by.as_str())); }
+        }
+        if let Some(i) = record::newest_media(&store, id) { lines.push(format!("media: {}", i.shows)); }
         for child in goals::children(&store.goals, id) {
             if let Some(s) = states.iter().find(|s| s.id == child.id) { lines.push(format!("{} {}  {}", goals::label(s.state), child.id, child.title)); }
         }

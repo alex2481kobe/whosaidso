@@ -27,25 +27,31 @@ fn run() -> Result<(), String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
     let root = git::root(&cwd)?;
-    match args.as_slice() {
-        [cmd] if cmd == "check" => check::check(&root),
-        [cmd] if cmd == "install-hooks" => hooks::install(&root),
-        [cmd, id] if cmd == "start" => hooks::start(&root, &cwd, id),
-        [cmd] if cmd == "gate" => gate::gate(&root, "origin/main"),
-        [cmd, base] if cmd == "gate" => gate::gate(&root, base),
-        [cmd, id, words @ ..] if cmd == "ask" => ask::ask(&root, id, words),
-        [cmd, id] if cmd == "show" => show::show(&root, id),
-        [cmd] if cmd == "goals" => goals::goals(&root),
-        [cmd, id] if cmd == "prove" => prove::prove(&root, id),
-        [cmd] if cmd == "prune" => prune::prune(&root),
-        [cmd] if cmd == "tools" => tools::tools(&root),
-        [cmd, goal, path, shows] if cmd == "show-image" => gallery::show(&root, &cwd, goal, path, shows),
-        [cmd] if cmd == "view" => page::view(&root),
-        [cmd, words @ ..] if cmd == "grep" => text::grep(&root, words),
-        [cmd, words @ ..] if cmd == "find" => find::find(&root, words),
-        [cmd, sub, file] if cmd == "code" && sub == "import-scip" => code::import_scip(&root, &cwd.join(file)),
-        [cmd, sub, value] if cmd == "code" && ["defs", "refs", "deps", "includers"].contains(&sub.as_str()) => code::query(&root, sub, value),
-        _ => Err("usage: whosaidso check | install-hooks | start <goal-id> | gate [<base>] | goals | prove <goal-id> | prune | tools | show-image <goal-id> <image> <title> | view | grep <text...> [--in <path-or-prefix>]... | find <words> [--limit N] | code defs|refs <name> | code deps|includers <path>".into()),
+    macro_rules! commands {
+        ($($usage:literal, $pattern:pat $(if $guard:expr)? => $action:expr);+ $(;)?) => {
+            match args.as_slice() {
+                $($pattern $(if $guard)? => $action,)+
+                _ => Err(format!("usage: whosaidso {}", [$($usage),+].join(" | "))),
+            }
+        };
+    }
+    commands! {
+        "check", [cmd] if cmd == "check" => check::check(&root);
+        "install-hooks", [cmd] if cmd == "install-hooks" => hooks::install(&root);
+        "start <goal-id>", [cmd, id] if cmd == "start" => hooks::start(&root, &cwd, id);
+        "gate [<base>]", [cmd, rest @ ..] if cmd == "gate" && rest.len() <= 1 => gate::gate(&root, rest.first().map_or("main", String::as_str));
+        "ask <goal-id> <words...>", [cmd, id, words @ ..] if cmd == "ask" => ask::ask(&root, id, words);
+        "show <id>", [cmd, id] if cmd == "show" => show::show(&root, id);
+        "goals", [cmd] if cmd == "goals" => goals::goals(&root);
+        "prove <goal-id>", [cmd, id] if cmd == "prove" => prove::prove(&root, id);
+        "prune", [cmd] if cmd == "prune" => prune::prune(&root);
+        "tools", [cmd] if cmd == "tools" => tools::tools(&root);
+        "media <goal-id> <file> <title>", [cmd, goal, path, shows] if cmd == "media" => gallery::show(&root, &cwd, goal, path, shows);
+        "view", [cmd] if cmd == "view" => page::view(&root);
+        "grep <text...> [--in <path-or-prefix>]...", [cmd, words @ ..] if cmd == "grep" => text::grep(&root, words);
+        "find <words...> [--limit N]", [cmd, words @ ..] if cmd == "find" => find::find(&root, words);
+        "code import-scip <file>", [cmd, sub, file] if cmd == "code" && sub == "import-scip" => code::import_scip(&root, &cwd.join(file));
+        "code defs|refs <name> / code deps|includers <path>", [cmd, sub, value] if cmd == "code" && ["defs", "refs", "deps", "includers"].contains(&sub.as_str()) => code::query(&root, sub, value);
     }
 }
 fn main() {

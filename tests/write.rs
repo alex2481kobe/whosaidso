@@ -1,3 +1,4 @@
+mod common;
 // Record publication and proof behavior in an isolated project.
 use sha2::{Digest, Sha256};
 use std::{fs, path::{Path, PathBuf}, process::{Command, Output}, thread, time::{Duration, SystemTime, UNIX_EPOCH}};
@@ -42,16 +43,16 @@ fn records_are_published_and_proofs_describe_the_run() {
     assert_eq!(proof["output_tail"], "diagnostic");
     assert_eq!(proof["output_sha256"], hex(&Sha256::digest(b"diagnostic")));
     fs::remove_dir_all(&proofs).unwrap();
-    write(&root.join("photo.png"), b"image bytes");
-    assert!(cli(&root, &["show-image", "g", "photo.png", "A clear image title"]).contains("show-image: g"));
-    let images = records.join("images");
+    write(&root.join("photo.png"), &common::png(b"image bytes"));
+    assert!(cli(&root, &["media", "g", "photo.png", "A clear image title"]).contains("media: g"));
+    let images = records.join("media");
     fs::remove_dir_all(&images).unwrap();
     fs::remove_dir_all(root.join(".git/whosaidso/blobs")).unwrap();
-    let failed = run(&root, "sh", &["-c", "ulimit -c 0; ulimit -f 0; exec \"$1\" show-image g photo.png 'A clear image title'", "sh", env!("CARGO_BIN_EXE_whosaidso")]);
+    let failed = run(&root, "sh", &["-c", "ulimit -c 0; ulimit -f 0; exec \"$1\" media g photo.png 'A clear image title'", "sh", env!("CARGO_BIN_EXE_whosaidso")]);
     assert!(!failed.status.success());
     assert!(!root.join(".git/whosaidso/blobs").read_dir().unwrap().any(|e| e.unwrap().path().extension().is_some_and(|x| x == "png")));
     assert!(cli(&root, &["check"]).contains("check: ok"));
-    assert!(cli(&root, &["show-image", "g", "photo.png", "A clear image title"]).contains("show-image: g"));
+    assert!(cli(&root, &["media", "g", "photo.png", "A clear image title"]).contains("media: g"));
 
     let image = record(&images);
     write(&images.join(".tmp-ongoing"), b"{");
@@ -61,14 +62,14 @@ fn records_are_published_and_proofs_describe_the_run() {
     write(&blob, b"replaced");
     let out = run(&root, env!("CARGO_BIN_EXE_whosaidso"), &["check"]);
     assert!(!out.status.success() && String::from_utf8_lossy(&out.stdout).contains("media sha256 mismatch"));
-    assert!(cli(&root, &["show-image", "g", "photo.png", "A clear image title"]).contains("show-image: g"));
-    assert_eq!(fs::read(&blob).unwrap(), b"image bytes");
+    assert!(cli(&root, &["media", "g", "photo.png", "A clear image title"]).contains("media: g"));
+    assert_eq!(fs::read(&blob).unwrap(), common::png(b"image bytes"));
     fs::remove_file(root.join("photo.png")).unwrap();
-    fs::remove_file(blob).unwrap(); assert!(cli(&root, &["check"]).contains("warning: image: missing media"));
+    fs::remove_file(blob).unwrap(); assert!(cli(&root, &["check"]).contains("warning: media: missing media"));
     let mut invalid = image.clone(); invalid["commit"] = "not-a-commit".into();
     let bad_image = addressed(&images, &invalid);
     let out = run(&root, env!("CARGO_BIN_EXE_whosaidso"), &["check"]);
-    assert!(!out.status.success() && String::from_utf8_lossy(&out.stdout).contains("image: invalid commit"));
+    assert!(!out.status.success() && String::from_utf8_lossy(&out.stdout).contains("media: invalid commit"));
     fs::remove_file(bad_image).unwrap();
     write(&instrument, br#"{"run":["head","-c","52428800","/dev/zero"],"answers":"works"}"#);
     git(&root, &["add", ".whosaidso/instruments"]); git(&root, &["commit", "-m", "large output instrument"]);

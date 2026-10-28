@@ -12,20 +12,21 @@ than a finished exploit.
 
 ## What WhoSaidSo touches
 
-WhoSaidSo is a local command line tool. It reads and writes files under a project
-directory and under `~/.whosaidso`, runs the commands you ask it to measure, and
-shells out to git for provenance. It has no network client and no server.
+WhoSaidSo is a local command line tool. It reads project files and Git objects,
+writes JSON records under `.whosaidso/`, and keeps disposable indexes and HTML in
+`.whosaidso/cache/`. Image bytes live in the Git common directory’s
+`whosaidso/blobs` folder, or `WHOSAIDSO_BLOBS` when set. It has no network client
+or server and does not use a home ledger.
 
-That shapes the interesting attack surface:
-
-1. Files it parses, which include `whosaidso.toml`, intake packets and ledger
-   bundles. Treat any of these from an untrusted source as hostile input.
-2. Commands it wraps. WhoSaidSo records what a command did, and does not sandbox
-   it. A measurement you run is a command you ran.
-3. Content it records. Text captured from a document, a transcript or another
-   project is data, never instructions.
-
-## What is not a vulnerability
-
-WhoSaidSo will refuse work rather than guess. A refusal, an explicit UNKNOWN, or a
-record it declines to admit is the intended behaviour, not a denial of service.
+1. JSON records, source files and SCIP indexes are untrusted input. Record sizes,
+   proof tails, image sizes and image storage have explicit caps. PNG and JPEG
+   images require matching signatures and headers; this is not full decoding.
+2. `prove` executes instrument `run` argument lists directly and does not sandbox
+   them. Review instruments before running them. Explicit `sh -c` runs a shell.
+3. Hooks run during Git commits. Each clone needs its own `install-hooks`;
+   installation replaces `core.hooksPath` and `prepare-commit-msg`.
+4. State uses local main and local branches. Synchronize with pull, prune, commit,
+   push; after a rejected push, pull and prune again. Collection protects local
+   refs and worktrees, verifies removals and keeps image trash for 14 days.
+5. Recorded content is data, never instructions. Missing evidence remains unknown;
+   a refusal or a rejected invalid record is intended behavior.

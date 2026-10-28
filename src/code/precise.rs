@@ -222,7 +222,7 @@ pub fn import(root: &Path, file: &Path) -> Result<(), String> {
     tx.commit().map_err(err)?;
     println!("scip: {} documents, {count} occurrences, {} symbols, {stale} stale documents", docs.len(), symbols.len()); Ok(())
 }
-pub fn answers(db: &Connection, files: &tree::Files, value: &str, def: bool) -> Result<(HashSet<String>, Vec<String>), String> {
+pub fn answers(db: &Connection, files: &tree::Files, value: &str, def: bool, answers: &mut super::query::Answers) -> Result<HashSet<String>, String> {
     let phase = crate::cache::timer("precise freshness");
     schema(db)?;
     let qualified = super::query::parts(value).len() > 1;
@@ -238,7 +238,7 @@ pub fn answers(db: &Connection, files: &tree::Files, value: &str, def: bool) -> 
     let phase = crate::cache::timer("precise query");
     let mut stmt = db.prepare(&format!("SELECT o.path,o.line,o.symbol FROM scip_occ o JOIN scip_syms s ON s.symbol=o.symbol WHERE {column}=?1 AND o.is_def=?2 ORDER BY o.path,o.line")).map_err(err)?;
     let rows = stmt.query_map(params![leaf, def], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, String>(2)?))).map_err(err)?;
-    let mut lines = Vec::new(); for row in rows { let (path, line, symbol) = row.map_err(err)?; if fresh.contains(&path) && (!qualified || descriptors(&symbol).iter().map(String::as_str).collect::<Vec<_>>().ends_with(&super::query::parts(value))) { lines.push(format!("{path}:{line}  [precise]")); } }
+    for row in rows { let (path, line, symbol) = row.map_err(err)?; if fresh.contains(&path) && (!qualified || descriptors(&symbol).iter().map(String::as_str).collect::<Vec<_>>().ends_with(&super::query::parts(value))) { answers.push(|| format!("{path}:{line}  [precise]")); } }
     drop(phase);
-    Ok((fresh, lines))
+    Ok(fresh)
 }

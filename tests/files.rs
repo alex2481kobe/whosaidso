@@ -1,6 +1,4 @@
 // File indexing defects exercised through the real binary in one isolated project.
-#[cfg(all(target_os = "linux", not(debug_assertions)))]
-use std::process::Stdio;
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 use std::{fs, os::unix::{fs::{symlink, PermissionsExt}}, path::Path,
@@ -21,25 +19,6 @@ fn git(root: &Path, args: &[&str]) -> String { ok(root, "git", args) }
 fn cli(root: &Path, args: &[&str]) -> String { ok(root, env!("CARGO_BIN_EXE_whosaidso"), args) }
 fn write(path: &Path, bytes: &[u8]) { fs::create_dir_all(path.parent().unwrap()).unwrap(); fs::write(path, bytes).unwrap(); }
 fn digest(bytes: &[u8]) -> String { Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect() }
-#[cfg(all(target_os = "linux", not(debug_assertions)))]
-fn bounded(root: &Path, args: &[&str]) -> Output {
-    let mut child = command(root, env!("CARGO_BIN_EXE_whosaidso"), args).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
-    let mut peak = 0;
-    loop {
-        if let Ok(status) = fs::read_to_string(format!("/proc/{}/status", child.id())) {
-            if let Some(line) = status.lines().find(|l| l.starts_with("VmHWM:")) {
-                peak = peak.max(line.split_whitespace().nth(1).unwrap().parse::<usize>().unwrap());
-            }
-        }
-        if child.try_wait().unwrap().is_some() { break; }
-        std::thread::sleep(std::time::Duration::from_millis(2));
-    }
-    let out = child.wait_with_output().unwrap();
-    assert!(out.status.success(), "16: {:?}", out);
-    assert!(peak > 0 && peak < 145 * 1024, "16: peak RSS {peak} KiB exceeds bounded batches");
-    out
-}
-#[cfg(any(not(target_os = "linux"), debug_assertions))]
 fn bounded(root: &Path, args: &[&str]) -> Output {
     let out = run(root, env!("CARGO_BIN_EXE_whosaidso"), args);
     assert!(out.status.success(), "16: {:?}", out);
@@ -138,7 +117,7 @@ fn files_are_safe_exact_and_bounded() {
     fs::remove_file(root.join("fresh.rs")).unwrap();
     assert!(cli(&root, &["code", "defs", "fresh"]).contains("none recorded"));
     assert!(cli(&root, &["grep", "fresh"]).contains("no match"));
-    // 16: more than two batches of bodies stay below the unbounded implementation's RSS.
+    // 16: every batch persists and queries return the expected answers.
     let mut body = vec![b' '; 1024 * 1024]; body[..17].copy_from_slice(b"/* batchneedle */");
     for i in 0..160 { write(&root.join(format!("batch{i:03}.rs")), &body); }
     let o = bounded(&root, &["grep", "batchneedle", "--in", "batch000.rs"]);

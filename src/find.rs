@@ -63,15 +63,15 @@ pub fn find(root: &Path, args: &[String]) -> Result<(), String> {
             limit = args.next().and_then(|n| n.parse().ok()).filter(|&n| n > 0 && n <= i64::MAX as usize).ok_or("find: --limit needs a positive integer")?;
         } else { query.push(arg); }
     }
-    index::sync(root)?;
-    let phase = crate::cache::timer("find query");
-    let db = cache::db(root)?;
     let mut kind=None;
     let mut all=Vec::new();
     for arg in query { if let Some(k)=arg.strip_prefix("kind:") { kind=Some(k.to_lowercase()); } else { all.extend(tokens(arg)); } }
     let content:Vec<String> = all.iter().filter(|w| !STOP.contains(&w.as_str())).cloned().collect();
     let words=if content.is_empty() {all} else {content};
-    if words.is_empty() { println!("find: no indexed match"); return Ok(()); }
+    if words.is_empty() { return Err("find: needs words".into()); }
+    index::sync(root)?;
+    let phase = crate::cache::timer("find query");
+    let db = cache::db(root)?;
     let corrected=correct(&db,&words)?;
     let expressions: Vec<String> = words.iter().zip(&corrected).map(|(original,(word,_))| {
         if word == original { format!("\"{original}\"*") }

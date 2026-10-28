@@ -1,3 +1,4 @@
+mod common;
 // Recoverable collection and direct instrument execution in one isolated Git project.
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -57,28 +58,25 @@ fn prune_recovers_and_instruments_execute_exact_arguments() {
     let before = cli(&root, &["goals"]); assert!(before.contains("failing g"));
     #[cfg(debug_assertions)]
     for hook in ["WHOSAIDSO_PRUNE_HOOK", "WHOSAIDSO_PRUNE_DELETE_HOOK"] {
-        let old: Vec<_> = paths(&proofs).iter().map(|p| (p.clone(), fs::read(p).unwrap())).collect();
         let action = format!("git -c user.name=Test -c user.email=test@example.com -c init.defaultBranch=main update-ref refs/remotes/origin/main {older}~1");
-        failure(command(&root, exe, &["prune"]).env(hook, action).output().unwrap(), "refs changed during prune; nothing was removed; run it again");
-        for (p, bytes) in old { assert_eq!(fs::read(p).unwrap(), bytes, "rollback restores exact HEAD record bytes"); }
-        assert!(cli(&root, &["goals"]).contains("done    g"));
-        git(&root, &["update-ref", "refs/remotes/origin/main", "HEAD"]); assert_eq!(cli(&root, &["goals"]), before);
+        success(command(&root, exe, &["prune"]).env(hook, action).output().unwrap());
+        assert_eq!(cli(&root, &["goals"]), before, "fetch cannot change local goal state"); commit(&root);
     }
     assert!(git(&root, &["show", &format!("{older}:.whosaidso/instruments/test.json")]).contains("run"));
     cli(&root, &["prune"]); assert_eq!(cli(&root, &["goals"]), before); assert_eq!(paths(&proofs).len(), 1); commit(&root);
     let original = fs::read(&instrument).unwrap(); let mut changed = value(&instrument); changed["answers"] = "edited".into(); write(&instrument, changed.to_string()); commit(&root);
     assert!(cli(&root, &["goals"]).contains("open    g"), "instrument bytes are derived from each proof commit");
     write(&instrument, &original); assert!(cli(&root, &["goals"]).contains("open    g"), "working edits cannot revive an instrument that differs at HEAD"); write(&instrument, changed.to_string());
-    write(&r.join("cache/shot.png"), b"evidence"); cli(&root, &["show-image", "g", ".whosaidso/cache/shot.png", "held evidence"]); commit(&root);
-    let image = paths(&r.join("images")).pop().unwrap(); let image_bytes = fs::read(&image).unwrap();
+    write(&r.join("cache/shot.png"), &common::png(b"evidence")); cli(&root, &["media", "g", ".whosaidso/cache/shot.png", "held evidence"]); commit(&root);
+    let image = paths(&r.join("media")).pop().unwrap(); let image_bytes = fs::read(&image).unwrap();
     let held = git(&root, &["rev-parse", "HEAD"]).trim().to_owned();
     fs::remove_file(&image).unwrap(); commit(&root); git(&root, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
-    let blobs = root.join(".git/whosaidso/blobs"); let name = format!("{}.png", hash(b"evidence")); let blob = blobs.join(&name); let trash = blobs.join("trash").join(&name); age(&blob, 15);
+    let blobs = root.join(".git/whosaidso/blobs"); let name = format!("{}.png", hash(&common::png(b"evidence"))); let blob = blobs.join(&name); let trash = blobs.join("trash").join(&name); age(&blob, 15);
     #[cfg(debug_assertions)] {
         let old = paths(&proofs);
         let hook = format!("test -f .git/whosaidso/blobs/trash/{name} && git -c user.name=Test -c user.email=test@example.com -c init.defaultBranch=main tag revived {held}");
         failure(command(&root, exe, &["prune"]).env("WHOSAIDSO_PRUNE_HOOK", hook).output().unwrap(), "nothing was removed");
-        assert_eq!(fs::read(&blob).unwrap(), b"evidence"); assert!(!trash.exists()); assert_eq!(paths(&proofs), old);
+        assert_eq!(fs::read(&blob).unwrap(), common::png(b"evidence")); assert!(!trash.exists()); assert_eq!(paths(&proofs), old);
         git(&root, &["tag", "-d", "revived"]);
     }
     cli(&root, &["prune"]); assert!(!blob.exists() && trash.is_file(), "collection renames blobs into trash");
@@ -89,9 +87,9 @@ fn prune_recovers_and_instruments_execute_exact_arguments() {
     fs::remove_file(&image).unwrap(); git(&root, &["tag", "held", &held]); cli(&root, &["prune"]);
     assert!(blob.is_file() && !trash.exists(), "referenced trash is restored");
     git(&root, &["tag", "-d", "held"]); age(&blob, 15); cli(&root, &["prune"]); assert!(trash.is_file());
-    cli(&root, &["show-image", "g", &format!(".git/whosaidso/blobs/trash/{name}"), "read from trash"]);
-    assert_eq!(fs::read(&blob).unwrap(), b"evidence");
-    for p in paths(&r.join("images")) { fs::remove_file(p).unwrap(); }
+    cli(&root, &["media", "g", &format!(".git/whosaidso/blobs/trash/{name}"), "read from trash"]);
+    assert_eq!(fs::read(&blob).unwrap(), common::png(b"evidence"));
+    for p in paths(&r.join("media")) { fs::remove_file(p).unwrap(); }
     age(&blob, 15); cli(&root, &["prune"]); assert!(trash.is_file());
     age(&trash, 13); cli(&root, &["prune"]); assert!(trash.is_file(), "trash stays for 14 days");
     #[cfg(debug_assertions)] {

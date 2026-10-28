@@ -37,9 +37,9 @@ fn states_ignore_invalid_records_and_follow_coverage() {
     let fail = addressed(&r.join("proofs"), proof("c", "fail", 1, 1)); assert!(cli(&root, &["goals"]).contains("failing g")); fs::remove_file(fail).unwrap();
     addressed(&r.join("proofs"), proof("c", "pass", 0, 1)); assert!(cli(&root, &["goals"]).contains("done    g"));
     let ask = addressed(&r.join("asks"), serde_json::json!({"goal":"g","said":"","ran_at":1,"commit":sha}));
-    let image = addressed(&r.join("images"), serde_json::json!({"goal":"g","shows":"A valid image title","media_sha256":"../bad","ext":"png","commit":sha,"ran_at":1}));
-    assert!(!cli(&root, &["show", "g"]).contains("image:")); cli(&root, &["view"]);
-    let check = run(&root, env!("CARGO_BIN_EXE_whosaidso"), &["check"]); let errors = String::from_utf8_lossy(&check.stdout); assert!(!check.status.success() && errors.contains("ask: empty said") && errors.contains("image: bad media sha256"));
+    let image = addressed(&r.join("media"), serde_json::json!({"goal":"g","shows":"A valid image title","media_sha256":"../bad","ext":"png","byte_size":0,"commit":sha,"ran_at":1}));
+    assert!(!cli(&root, &["show", "g"]).contains("media:")); cli(&root, &["view"]);
+    let check = run(&root, env!("CARGO_BIN_EXE_whosaidso"), &["check"]); let errors = String::from_utf8_lossy(&check.stdout); assert!(!check.status.success() && errors.contains("ask: empty said") && errors.contains("media: bad media sha256"));
     fs::remove_file(ask).unwrap(); fs::remove_file(image).unwrap();
     let bad = addressed(&r.join("proofs"), proof("a", "fail", 0, 2));
     let check = run(&root, env!("CARGO_BIN_EXE_whosaidso"), &["check"]); assert!(!check.status.success() && String::from_utf8_lossy(&check.stdout).contains("unknown field `result`"));
@@ -53,7 +53,7 @@ fn states_ignore_invalid_records_and_follow_coverage() {
     for command in ["goals", "view"] {
         let o = Command::new(env!("CARGO_BIN_EXE_whosaidso")).arg(command).current_dir(&root).env("HOME", &root).env("GIT_CONFIG_NOSYSTEM", "1").env("GIT_TRACE_FILE", &trace).env("PATH", format!("{}:/usr/bin:/bin", bin.display())).output().unwrap();
         assert!(o.status.success()); let calls = fs::read_to_string(&trace).unwrap();
-        assert_eq!(calls.lines().filter(|l| l.starts_with("rev-list origin/main")).count(), 1, "{calls}");
+        assert_eq!(calls.lines().filter(|l| l.starts_with("rev-list ")).count(), 1, "{calls}");
         assert!(!calls.contains("merge-base")); fs::remove_file(&trace).unwrap();
     }
 

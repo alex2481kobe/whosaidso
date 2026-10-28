@@ -1,6 +1,6 @@
 // Record schemas, validation and loading; all consumers share the valid store.
 use serde::{Deserialize, Serialize};
-use crate::{blob, gallery::Image, git, publish, title, tree};
+use crate::{blob, gallery::Media, git, publish, title, tree};
 use sha2::{Digest, Sha256};
 use std::{collections::{HashMap, HashSet}, fs, io::Read, path::{Path, PathBuf}};
 pub const MAX_RECORD_BYTES: u64 = 64 * 1024;
@@ -36,7 +36,7 @@ pub struct Store {
     pub proofs: Vec<Proof>,
     pub proof_hashes: HashMap<String, String>,
     pub asks: Vec<Ask>,
-    pub images: Vec<Image>,
+    pub media: Vec<Media>,
     pub errors: Vec<String>,
     pub warnings: Vec<String>,
     pub records: Vec<(PathBuf, serde_json::Value)>,
@@ -53,7 +53,7 @@ pub fn load(root: &Path) -> Result<Store, String> {
 pub fn kind(path: &Path) -> &str { path.parent().and_then(Path::file_name).and_then(|s| s.to_str()).unwrap_or("").trim_end_matches('s') }
 pub fn read(root: &Path) -> Result<Store, String> {
     let mut store = Store::default();
-    for folder in ["phases", "goals", "instruments", "proofs", "asks", "images"] {
+    for folder in ["phases", "goals", "instruments", "proofs", "asks", "media"] {
         if let Err(e) = publish::record_dir(root, folder) { store.errors.push(e); continue; }
         let entries = match fs::read_dir(root.join(".whosaidso").join(folder)) {
             Ok(entries) => entries, Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
@@ -100,11 +100,11 @@ pub fn read(root: &Path) -> Result<Store, String> {
                     }
                     Err(e) => store.errors.push(format!("{label}: {e}")),
                 },
-                "images" => match image(root, name, &bytes) {
-                    Ok((image, present)) => {
-                        if !present { store.warnings.push(format!("warning: image: missing media {}", image.media_sha256)); }
-                        store.records.push((path.clone(), serde_json::to_value(&image).map_err(|e| e.to_string())?));
-                        store.images.push(image);
+                "media" => match media(root, name, &bytes) {
+                    Ok((media, present)) => {
+                        if !present { store.warnings.push(format!("warning: media: missing media {}", media.media_sha256)); }
+                        store.records.push((path.clone(), serde_json::to_value(&media).map_err(|e| e.to_string())?));
+                        store.media.push(media);
                     }
                     Err(e) => store.errors.push(format!("{label}: {e}")),
                 },
@@ -128,27 +128,27 @@ pub fn read(root: &Path) -> Result<Store, String> {
     }
     Ok(store)
 }
-pub fn image(root: &Path, name: &str, bytes: &[u8]) -> Result<(Image, bool), String> {
-    let mut image: Image = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
-    if name != sha256_hex(bytes) { return Err("image filename does not match sha256".into()); }
-    if let Some(reason) = title::title_problem(&image.shows) { return Err(format!("image: bad title {reason}")); }
-    if !commit(&image.commit) { return Err("image: invalid commit".into()); }
-    image.sha = name.into();
-    let present = blob::verify(root, &image.media_sha256, &image.ext).map_err(|e| format!("image: {e}"))?;
-    Ok((image, present))
+pub fn media(root: &Path, name: &str, bytes: &[u8]) -> Result<(Media, bool), String> {
+    let mut media: Media = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
+    if name != sha256_hex(bytes) { return Err("media filename does not match sha256".into()); }
+    if let Some(reason) = title::title_problem(&media.shows) { return Err(format!("media: bad title {reason}")); }
+    if !commit(&media.commit) { return Err("media: invalid commit".into()); }
+    media.sha = name.into();
+    let present = blob::verify(root, &media.media_sha256, &media.ext, media.byte_size).map_err(|e| format!("media: {e}"))?;
+    Ok((media, present))
 }
 fn hex(value: &str, len: usize) -> bool { value.len() == len && value.bytes().all(|b| b.is_ascii_hexdigit()) }
 fn commit(value: &str) -> bool { hex(value, 40) && !value.bytes().any(|b| b.is_ascii_uppercase()) }
 pub fn asks<'a>(store: &'a Store, goal: &str) -> Vec<&'a Ask> {
     publish::newest(store.asks.iter().filter(|a| a.goal == goal).map(|a| (a, a.ran_at, a.sha.as_str())))
 }
-pub fn images<'a>(store: &'a Store, goal: &str) -> Vec<&'a Image> {
-    publish::newest(store.images.iter().filter(|i| i.goal == goal).map(|i| (i, i.ran_at, i.sha.as_str())))
+fn media_for_goal<'a>(store: &'a Store, goal: &str) -> Vec<&'a Media> {
+    publish::newest(store.media.iter().filter(|i| i.goal == goal).map(|i| (i, i.ran_at, i.sha.as_str())))
 }
-pub fn newest_image<'a>(store: &'a Store, goal: &str) -> Option<&'a Image> { images(store, goal).first().copied() }
-
+pub fn newest_media<'a>(store: &'a Store, goal: &str) -> Option<&'a Media> { media_for_goal(store, goal).first().copied() }
 fn validate(root: &Path, s: &mut Store) {
-    // Remove invalid dependencies to a fixed point, so no consumer can revive them.
+    // Report the root cause once while removing dependent records to a fixed point.
+    let mut rejected = HashSet::new();
     loop {
         let mut bad = HashSet::new();
         let phases: HashSet<_> = s.phases.iter().map(|p| &p.id).collect();
@@ -170,9 +170,9 @@ fn validate(root: &Path, s: &mut Store) {
         for g in &s.goals {
             let before = s.errors.len();
             if g.id == "none" { s.errors.push("reserved goal id none".into()); }
-            if !phases.contains(&g.broader) && !goals.contains_key(&g.broader) { s.errors.push(format!("goal {}: unknown broader {}", g.id, g.broader)); }
+            if !phases.contains(&g.broader) && !goals.contains_key(&g.broader) { if !rejected.contains(&g.broader) { s.errors.push(format!("goal {}: unknown broader {}", g.id, g.broader)); } bad.insert(g.id.clone()); }
             if g.done_when.trim().is_empty() { s.errors.push(format!("goal {}: empty done_when", g.id)); }
-            if !instruments.contains_key(g.check.as_str()) { s.errors.push(format!("goal {}: unknown instrument {}", g.id, g.check)); }
+            if !instruments.contains_key(g.check.as_str()) { if rejected.insert(g.check.clone()) { s.errors.push(format!("missing instrument file .whosaidso/instruments/{}.json", g.check)); } bad.insert(g.id.clone()); }
             let mut seen = HashSet::new(); let mut current = g;
             while seen.insert(&current.id) {
                 if phases.contains(&current.broader) { break; }
@@ -195,7 +195,7 @@ fn validate(root: &Path, s: &mut Store) {
                 if gap.why.is_empty() { s.errors.push(format!("gap without why {}", i.id)); }
                 if gap.covered_by.is_empty() { s.errors.push(format!("gap without covered_by {}", i.id)); }
                 else if gap.covered_by == i.id { s.errors.push(format!("gap covered by itself {}", i.id)); }
-                else if !instruments.contains_key(gap.covered_by.as_str()) { s.errors.push(format!("gap covered by unknown {} {}", i.id, gap.covered_by)); }
+                else if !instruments.contains_key(gap.covered_by.as_str()) { if rejected.insert(gap.covered_by.clone()) { s.errors.push(format!("missing instrument file .whosaidso/instruments/{}.json", gap.covered_by)); } bad.insert(i.id.clone()); }
             }
             let mut pending = vec![i.id.as_str()]; let mut seen = HashSet::new();
             while let Some(id) = pending.pop() {
@@ -210,21 +210,24 @@ fn validate(root: &Path, s: &mut Store) {
             if s.errors.len() != before { bad.insert(i.id.clone()); }
         }
         if bad.is_empty() { break; }
+        rejected.extend(bad.iter().cloned());
         s.phases.retain(|p| !bad.contains(&p.id)); s.goals.retain(|g| !bad.contains(&g.id)); s.instruments.retain(|i| !bad.contains(&i.id));
     }
-    let phases: HashSet<_> = s.phases.iter().map(|p| p.id.as_str()).collect();
-    let goals: HashSet<_> = s.goals.iter().map(|g| g.id.as_str()).collect();
+    let phases: HashSet<_> = s.phases.iter().map(|p| p.id.as_str()).collect(); let goals: HashSet<_> = s.goals.iter().map(|g| g.id.as_str()).collect();
     let instruments: HashSet<_> = s.instruments.iter().map(|i| i.id.as_str()).collect();
-    s.asks.retain(|a| { if goals.contains(a.goal.as_str()) { true } else { s.errors.push(format!("ask: unknown goal {}", a.goal)); false } });
+    s.asks.retain(|a| { if goals.contains(a.goal.as_str()) { true } else { if !rejected.contains(&a.goal) { s.errors.push(format!("ask: unknown goal {}", a.goal)); } false } });
     let mut hashes = HashMap::new();
     for id in s.proofs.iter().map(|p| p.instrument.as_str()).collect::<HashSet<_>>() {
         let head = git::run_bytes(root, &["show", &format!("HEAD:.whosaidso/instruments/{id}.json")]).ok().map(|b| sha256_hex(&b));
         if s.instrument_hashes.get(id) != head.as_ref() { s.instrument_hashes.remove(id); }
     }
     s.proofs.retain(|p| {
+        if rejected.contains(&p.goal) || rejected.contains(&p.instrument) { return false; }
         let before = s.errors.len();
         if !goals.contains(p.goal.as_str()) { s.errors.push(format!("proof: unknown goal {}", p.goal)); }
-        if !instruments.contains(p.instrument.as_str()) { s.errors.push(format!("proof: unknown instrument {}", p.instrument)); }
+        if !instruments.contains(p.instrument.as_str()) {
+            if rejected.insert(p.instrument.clone()) { s.errors.push(format!("missing instrument file .whosaidso/instruments/{}.json", p.instrument)); }
+            return false; }
         let hash = hashes.entry((p.commit.clone(), p.instrument.clone())).or_insert_with(|| {
             git::run_bytes(root, &["show", &format!("{}:.whosaidso/instruments/{}.json", p.commit, p.instrument)]).ok().map(|b| sha256_hex(&b))
         });
@@ -232,7 +235,7 @@ fn validate(root: &Path, s: &mut Store) {
         else { s.errors.push(format!("proof {}: missing instrument at {}", p.sha, p.commit)); }
         s.errors.len() == before
     });
-    s.images.retain(|i| { if goals.contains(i.goal.as_str()) { true } else { s.errors.push(format!("image: unknown goal {}", i.goal)); false } });
+    s.media.retain(|i| { if goals.contains(i.goal.as_str()) { true } else { if !rejected.contains(&i.goal) { s.errors.push(format!("media: unknown goal {}", i.goal)); } false } });
     let proofs: HashSet<_> = s.proofs.iter().map(|p| p.sha.as_str()).collect();
     s.records.retain(|(path, v)| {
         let text = |k: &str| v[k].as_str().unwrap_or("");

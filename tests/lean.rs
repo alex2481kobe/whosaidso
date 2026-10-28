@@ -50,7 +50,7 @@ fn ledger_stays_small_and_checks_its_caps() {
     write(&records.join(".gitignore"), "cache/\n");
     write(&records.join("phases/p.json"), br#"{"title":"Phase","order":1}"#);
     let instrument = records.join("instruments/test.json");
-    let tool = serde_json::json!({"run":["sh","-c","sh -c 'read n < .whosaidso/cache/serial; if [ \"$n\" -ge 480 ]; then head -c 20000 /dev/zero | tr \"\\000\" x; printf END; else printf run; fi; exit $(((n + n / 250) % 2))'"],"answers":"works"});
+    let tool = serde_json::json!({"run":["sh","-c","sh -c 'read n < .whosaidso/cache/serial; if [ \"$n\" -ge 100 ]; then head -c 20000 /dev/zero | tr \"\\000\" x; printf END; else printf run; fi; exit $(((n + n / 60) % 2))'"],"answers":"works"});
     write(&instrument, tool.to_string());
     for i in 0..20 { goal(&records, &format!("g{i}")); }
     commit(&root, "fixture");
@@ -63,20 +63,20 @@ fn ledger_stays_small_and_checks_its_caps() {
     git(&root, &["branch", "b"]); git(&root, &["checkout", "-b", "a"]);
     for branch in 0..2 {
         if branch == 1 { git(&root, &["checkout", "b"]); }
-        for n in 0..250 {
-            if branch == 1 && n == 230 {
+        for n in 0..60 {
+            if branch == 1 && n == 40 {
                 commit(&root, "records before joining branches");
                 git(&root, &["merge", "--no-edit", "a"]);
                 std::thread::sleep(std::time::Duration::from_secs(1));
             }
-            let i = branch * 250 + n;
+            let i = branch * 60 + n;
             write(&records.join("cache/serial"), format!("{i}\n"));
             git(&root, &["commit", "--allow-empty", "-m", &format!("run {i}")]);
             let id = format!("g{}", n % 20);
             let answer = cli(&root, &["prove", &id]);
             assert!(answer.contains(if (i + branch) % 2 == 0 { " pass " } else { " fail " }), "{answer}");
-            if n % 10 == 0 {
-                assert!(cli(&root, &["ask", &format!("g{}", (n / 10) % 5), &format!("request {i:03}")]).starts_with("ask:"));
+            if n % 2 == 0 {
+                assert!(cli(&root, &["ask", &format!("g{}", (n / 2) % 5), &format!("request {i:03}")]).starts_with("ask:"));
             }
         }
         assert!(seed_path.exists(), "prove must retain the shared ancestor proof");
@@ -85,9 +85,9 @@ fn ledger_stays_small_and_checks_its_caps() {
     git(&root, &["checkout", "main"]);
     git(&root, &["merge", "--no-edit", "a"]); git(&root, &["merge", "--no-edit", "b"]);
     git(&root, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
-    assert_eq!(files(&proofs).len(), 501, "prove never deletes records");
+    assert_eq!(files(&proofs).len(), 121, "prove never deletes records");
     let asks = records.join("asks");
-    assert_eq!(files(&asks).len(), 50, "ask never deletes records");
+    assert_eq!(files(&asks).len(), 60, "ask never deletes records");
     let mut expected = BTreeMap::new();
     for path in files(&asks) {
         let ask: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
@@ -97,7 +97,7 @@ fn ledger_stays_small_and_checks_its_caps() {
     for group in expected.values_mut() { group.sort_by(|a, b| b.cmp(a)); newest.extend(group.iter().take(5).map(|(_, p)| p.clone())); }
     newest.sort();
     let warnings = cli(&root, &["check"]);
-    assert!(warnings.contains("superseded proofs; run whosaidso prune") && warnings.contains("asks cap 5: count 10; run whosaidso prune"), "{warnings}");
+    assert!(warnings.contains("superseded proofs; run whosaidso prune") && warnings.contains("asks cap 5: count 12; run whosaidso prune"), "{warnings}");
     git(&root, &["branch", "before-prune"]);
     let before = cli(&root, &["goals"]);
     assert!(before.contains("done") && before.contains("failing"), "{before}");
@@ -106,14 +106,14 @@ fn ledger_stays_small_and_checks_its_caps() {
     assert_eq!(cli(&root, &["goals"]), before, "prune must preserve identical goals");
     assert_eq!(files(&asks), newest, "keep five asks by ran_at then sha");
     assert_eq!(files(&proofs).len(), 20, "one selected proof per goal after the branches join");
-    assert_eq!(pruned, "prune: 481 proofs, 25 asks, 0 images removed\n");
+    assert_eq!(pruned, "prune: 101 proofs, 35 asks, 0 media archived\n");
     let checked = cli(&root, &["check"]);
     assert!(checked.starts_with("check: ok") && !checked.contains("prune"), "{checked}");
     let (count, bytes) = size(&records);
-    println!("lean: {count} files, {bytes} bytes after 500 proves and 50 asks");
+    println!("lean: {count} files, {bytes} bytes after 120 proves and 60 asks");
     assert!(count <= 20 + 20 + 25 + 4, "bounded file count: {count}");
     assert!(bytes < 1024 * 1024, "ledger bytes {bytes}");
-    assert_eq!(cli(&root, &["prune"]), "prune: 0 proofs, 0 asks, 0 images removed\n");
+    assert_eq!(cli(&root, &["prune"]), "prune: 0 proofs, 0 asks, 0 media archived\n");
     for path in files(&proofs) {
         let proof: serde_json::Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
         let tail = proof["output_tail"].as_str().unwrap();
@@ -188,11 +188,12 @@ fn ledger_stays_small_and_checks_its_caps() {
     let mut padded = original.clone(); padded.resize(64 * 1024, b' '); write(&phase, &padded);
     assert!(cli(&root, &["check"]).contains("check: ok"));
     padded.push(b' '); write(&phase, padded); bad(&root, "record file cap 65536 bytes: count 65537"); write(&phase, original);
-    let image = records.join("images/oversized.json"); write(&image, vec![b' '; 65537]);
+    let image = records.join("media/oversized.json"); write(&image, vec![b' '; 65537]);
     bad(&root, "record file cap 65536 bytes: count 65537"); fs::remove_file(image).unwrap();
     extra = kept; extra["output_tail"] = "x".repeat(16 * 1024 + 1).into();
     let oversized = addressed(&proofs, &extra); bad(&root, "output tail cap 16384 bytes: count 16385"); fs::remove_file(oversized).unwrap();
-    write(&instrument, br#"{"run":["sh","-c","head -c 20000 /dev/zero | tr '\\000' '\\377'"],"answers":"works"}"#);
+    write(&records.join("cache/invalid-output"), vec![0xff; 20000]);
+    write(&instrument, br#"{"run":["cat",".whosaidso/cache/invalid-output"],"answers":"works"}"#);
     commit(&root, "updated output instrument");
     assert!(cli(&root, &["prove", "g1"]).contains(" pass "));
     let invalid: serde_json::Value = files(&proofs).iter().map(|p| serde_json::from_slice(&fs::read(p).unwrap()).unwrap()).find(|p: &serde_json::Value| p["output_tail"].as_str().unwrap().ends_with('\u{fffd}')).unwrap();

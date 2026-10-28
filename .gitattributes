@@ -1,8 +1,5 @@
-# Every text file is checked out with LF on every platform. Git for Windows
-# converts to CRLF by default, which would make gofmt, the golden files and
-# every byte-exact fixture disagree with the repository.
+# Keep source and documentation line endings consistent on every platform.
 * text=auto eol=lf
 
-# A ledger is hashed byte for byte. Any line-ending conversion changes the
-# digests that bundles and packets pin, so Git must never touch its bytes.
+# Content-addressed JSON filenames hash exact bytes; preserve record bytes.
 .whosaidso/** -text

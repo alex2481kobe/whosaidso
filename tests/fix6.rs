@@ -1,3 +1,4 @@
+mod common;
 // Evidence retention and shared validation through one isolated project.
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -35,7 +36,7 @@ fn proof(_root: &Path, instrument: &str, commit: &str, at: i64, result: &str) ->
 fn prune_preserves_evidence_and_all_readers_share_validation() {
     let home = std::env::temp_dir().join(format!("fix6-{}-{}", std::process::id(), SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
     fs::create_dir_all(&home).unwrap(); git(&home, &["init", "--bare", "origin.git"]); git(&home, &["clone", "origin.git", "project"]);
-    let root = home.join("project"); let r = root.join(".whosaidso"); let proofs = r.join("proofs"); let images = r.join("images");
+    let root = home.join("project"); let r = root.join(".whosaidso"); let proofs = r.join("proofs"); let images = r.join("media");
     write(&r.join(".gitignore"), "cache/\n");
     write(&r.join("phases/p.json"), br#"{"title":"Phase","order":1}"#);
     let goal = br#"{"title":"validationneedle","done_when":"done","check":"test","broader":"p"}"#;
@@ -65,11 +66,11 @@ fn prune_preserves_evidence_and_all_readers_share_validation() {
     let mut tied = proof(&root, "test", &work, at + 1, "pass"); tied["output_tail"] = "tied evidence".into(); let tie = addressed(&proofs, &tied);
     tied["output_tail"] = "another tied proof".into(); let unknown = addressed(&proofs, &tied);
     commit(&root, "branch proofs"); git(&root, &["checkout", "main"]); git(&root, &["merge", "--no-ff", "--no-edit", "worker"]);
-    let before_origin = cli(&root, &["goals"]); assert!(before_origin.contains("failing g"));
+    let before_origin = cli(&root, &["goals"]); assert!(before_origin.contains("done    g"));
     git(&root, &["update-ref", "refs/remotes/origin/main", "HEAD"]); let before_head = cli(&root, &["goals"]); assert!(before_head.contains("done    g"));
     git(&root, &["update-ref", "refs/remotes/origin/main", &origin]);
     cli(&root, &["prune"]); assert_eq!(cli(&root, &["goals"]), before_origin, "origin selection survives");
-    assert!(!fail.exists() && pass.exists() && tie.exists() && unknown.exists(), "keep all selected time ties");
+    assert!(!fail.exists()); assert_eq!([pass, tie, unknown].iter().filter(|p| p.exists()).count(), 1, "time ties select the greatest hash");
     commit(&root, "prune landing"); git(&root, &["push"]); assert_eq!(cli(&root, &["goals"]), before_head, "HEAD selection survives push");
     // Both local-only and remote-only divergent commits retain their proofs.
     let mut held = Vec::new();
@@ -81,7 +82,7 @@ fn prune_preserves_evidence_and_all_readers_share_validation() {
         if name == "remote-held" { git(&root, &["update-ref", "refs/remotes/origin/held", &sha]); git(&root, &["branch", "-D", name]); }
     }
     commit(&root, "held proofs");
-    cli(&root, &["prune"]); assert!(held.iter().all(|p| p.exists()), "unlanded refs protect proofs");
+    cli(&root, &["prune"]); assert!(held[0].exists() && !held[1].exists() && held[2].exists(), "only local refs protect proofs");
     git(&root, &["tag", "-d", "held"]); git(&root, &["branch", "-D", "local-held"]); git(&root, &["update-ref", "-d", "refs/remotes/origin/held"]);
     let missing = addressed(&proofs, &proof(&root, "test", &"0".repeat(40), at, "pass"));
     commit(&root, "missing proof");
@@ -97,17 +98,17 @@ fn prune_preserves_evidence_and_all_readers_share_validation() {
     // Eight old MiB blobs reduce to five; recent writes survive collection.
     let blobs = root.join(".git/whosaidso/blobs");
     for n in 0..8 {
-        write(&r.join("cache/shot.png"), vec![n; 1024 * 1024]);
-        assert!(cli(&root, &["show-image", "g", ".whosaidso/cache/shot.png", &format!("viewnumber{n}beautiful")]).contains("show-image: g"));
+        write(&r.join("cache/shot.png"), common::png(vec![n; 1024 * 1024]));
+        assert!(cli(&root, &["media", "g", ".whosaidso/cache/shot.png", &format!("viewnumber{n}beautiful")]).contains("media: g"));
     }
     assert!(paths(&images).iter().all(|p| value(p)["ran_at"].as_i64().unwrap() >= before), "image ran_at uses nanoseconds");
     for path in paths(&blobs) { age(&path); }
     commit(&root, "image records");
     assert_eq!(paths(&blobs).len(), 8); cli(&root, &["prune"]);
-    assert_eq!(paths(&images).len(), 5); commit(&root, "image cap"); cli(&root, &["prune"]); assert_eq!(paths(&blobs).len(), 5);
-    assert_eq!(paths(&blobs).iter().map(|p| fs::metadata(p).unwrap().len()).sum::<u64>(), 5 * 1024 * 1024);
-    fs::remove_dir_all(r.join("cache")).unwrap(); assert_eq!(paths(&blobs).len(), 5);
-    commit(&root, "images"); git(&root, &["push"]); git(&root, &["branch", "protect-images"]);
+    assert_eq!(paths(&images).len(), 8); commit(&root, "image cap"); cli(&root, &["prune"]); assert_eq!(paths(&blobs).len(), 8);
+    assert_eq!(paths(&blobs).iter().map(|p| fs::metadata(p).unwrap().len()).sum::<u64>(), 8 * 1024 * 1024);
+    fs::remove_dir_all(r.join("cache")).unwrap(); assert_eq!(paths(&blobs).len(), 8);
+    commit(&root, "media"); git(&root, &["push"]); git(&root, &["branch", "protect-images"]);
     let protected = paths(&images).pop().unwrap(); let image = value(&protected);
     let blob = blobs.join(format!("{}.png", image["media_sha256"].as_str().unwrap()));
     fs::remove_file(&protected).unwrap(); commit(&root, "remove image"); git(&root, &["push"]); cli(&root, &["prune"]); assert!(blob.exists(), "other ref protects blob");
@@ -116,18 +117,18 @@ fn prune_preserves_evidence_and_all_readers_share_validation() {
     let shared_image = value(&paths(&images)[0]); let shared_blob = blobs.join(format!("{}.png", shared_image["media_sha256"].as_str().unwrap()));
     let linked_check = cli(&linked, &["check"]);
     assert!(linked_check.contains("check: ok") && !linked_check.contains("missing media") && shared_blob.exists(), "worktree uses common blob directory: {linked_check}");
-    git(&home, &["clone", "project", "clone"]); assert!(cli(&home.join("clone"), &["check"]).contains("warning: image: missing media"), "clone has its own store");
+    git(&home, &["clone", "project", "clone"]); assert!(cli(&home.join("clone"), &["check"]).contains("warning: media: missing media"), "clone has its own store");
     let shared = home.join("shared"); let orphan = shared.join(format!("{}.png", "0".repeat(64))); write(&orphan, "shared bytes");
     let out = success(command(&root, env!("CARGO_BIN_EXE_whosaidso"), &["prune"]).env("WHOSAIDSO_BLOBS", &shared).output().unwrap());
     assert!(out.contains("blob collection skipped") && orphan.exists());
     // A corrupt image is rejected by every consumer, including warm search caches and prune.
     let image_path = paths(&images)[0].clone(); let image = value(&image_path); let title = image["shows"].as_str().unwrap();
-    assert!(cli(&root, &["find", "kind:image", title]).contains(title)); assert!(cli(&root, &["grep", title]).contains(title));
+    assert!(cli(&root, &["find", "kind:media", title]).contains(title)); assert!(cli(&root, &["grep", title]).contains(title));
     let corrupt = blobs.join(format!("{}.png", image["media_sha256"].as_str().unwrap())); write(&corrupt, "corrupt");
     let mut invalid = Vec::new();
     for n in 10..17 { let mut i = image.clone(); i["ran_at"] = n.into(); invalid.push(addressed(&images, &i)); }
     bad(&root, &["check"], "media sha256 mismatch");
-    assert!(cli(&root, &["find", "kind:image", title]).contains("no indexed match")); assert!(cli(&root, &["grep", title]).contains("no match"));
+    assert!(cli(&root, &["find", "kind:media", title]).contains("no indexed match")); assert!(cli(&root, &["grep", title]).contains("no match"));
     assert!(!cli(&root, &["show", "g"]).contains(title)); cli(&root, &["view"]);
     assert!(!fs::read_to_string(r.join("cache/view/gallery.html")).unwrap().contains(title));
     commit(&root, "rejected images");
@@ -135,10 +136,10 @@ fn prune_preserves_evidence_and_all_readers_share_validation() {
     for p in invalid { fs::remove_file(p).unwrap(); } commit(&root, "remove rejected extras"); age(&corrupt); cli(&root, &["prune"]);
     assert!(!corrupt.exists(), "old rejected images move to trash");
     let trashed = blobs.join("trash").join(corrupt.file_name().unwrap()); age(&trashed); cli(&root, &["prune"]); assert!(!trashed.exists());
-    assert!(cli(&root, &["check"]).contains("warning: image: missing media"));
+    assert!(cli(&root, &["check"]).contains("warning: media: missing media"));
     assert!(cli(&root, &["find", "validationneedle"]).contains("goal g")); assert!(cli(&root, &["grep", "validationneedle"]).contains("goals/g.json"));
     write(&r.join("goals/g.json"), String::from_utf8_lossy(goal).replace("\"check\":\"test\"", "\"check\":\"missing\""));
-    bad(&root, &["check"], "unknown instrument missing"); bad(&root, &["show", "g"], "no record g");
+    bad(&root, &["check"], "missing instrument file .whosaidso/instruments/missing.json"); bad(&root, &["show", "g"], "no record g");
     assert!(cli(&root, &["find", "kind:goal", "validationneedle"]).contains("no indexed match")); assert!(cli(&root, &["grep", "validationneedle"]).contains("no match"));
     assert!(!cli(&root, &["goals"]).contains("validationneedle")); cli(&root, &["view"]);
     for page in ["gallery", "progress"] { assert!(!fs::read_to_string(r.join(format!("cache/view/{page}.html"))).unwrap().contains("validationneedle")); }

@@ -1,3 +1,4 @@
+mod common;
 // Final evidence and format regressions through the real binary in one isolated project.
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -35,7 +36,7 @@ fn proof_commits_publication_collection_and_format_are_exact() {
     let home = std::env::temp_dir().join(format!("fix7-{}-{}", std::process::id(), SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
     let root = home.join("project"); fs::create_dir_all(&root).unwrap(); git(&root, &["init"]);
     let r = root.join(".whosaidso"); let instrument = r.join("instruments/test.json");
-    write(&r.join(".gitignore"), "cache/\n"); write(&r.join("cache/shot.png"), b"image bytes");
+    write(&r.join(".gitignore"), "cache/\n"); write(&r.join("cache/shot.png"), &common::png(b"image bytes"));
     for n in 1..=6 { write(&r.join(format!("phases/p{n}.json")), json!({"title":format!("Phase {n}"),"order":n}).to_string()); }
     let goal = br#"{"title":"Goal","done_when":"done","check":"test","broader":"p1"}"#;
     write(&r.join("goals/g.json"), goal); write(&instrument, br#"{"run":["false"],"answers":"works"}"#); commit(&root);
@@ -56,7 +57,7 @@ fn proof_commits_publication_collection_and_format_are_exact() {
     write(&r.join("goals/g.json"), goal);
     let blobs = root.join(".git/whosaidso/blobs"); let marker = r.join("cache/ran");
     let outside = home.join("outside"); fs::create_dir_all(&outside).unwrap();
-    for (folder, args) in [("proofs", vec!["prove", "g"]), ("asks", vec!["ask", "g", "request"]), ("images", vec!["show-image", "g", ".whosaidso/cache/shot.png", "x"])] {
+    for (folder, args) in [("proofs", vec!["prove", "g"]), ("asks", vec!["ask", "g", "request"]), ("media", vec!["media", "g", ".whosaidso/cache/shot.png", "x"])] {
         let dir = r.join(folder); if dir.exists() { fs::remove_dir_all(&dir).unwrap(); }
         for linked in [true, false] {
             if linked { symlink(&outside, &dir).unwrap(); } else { fs::write(&dir, b"sentinel").unwrap(); }
@@ -69,7 +70,7 @@ fn proof_commits_publication_collection_and_format_are_exact() {
     let saved = home.join("records"); fs::rename(&r, &saved).unwrap();
     for linked in [true, false] {
         if linked { symlink(&saved, &r).unwrap(); } else { fs::write(&r, b"sentinel").unwrap(); }
-        for args in [vec!["prove", "g"], vec!["ask", "g", "request"], vec!["show-image", "g", "missing.png", "x"]] {
+        for args in [vec!["prove", "g"], vec!["ask", "g", "request"], vec!["media", "g", "missing.png", "x"]] {
             bad(&root, &args, "record path is a symlink or not a directory");
         }
         assert!(!saved.join("cache/ran").exists() && !blobs.exists()); fs::remove_file(&r).unwrap();
@@ -77,36 +78,36 @@ fn proof_commits_publication_collection_and_format_are_exact() {
     fs::rename(saved, &r).unwrap();
     assert!(cli(&root, &["prove", "g"]).contains(" pass "));
     assert!(cli(&root, &["ask", "g", "request"]).contains("ask: g"));
-    assert!(cli(&root, &["show-image", "g", ".whosaidso/cache/shot.png", "2026_10/28.png deadbeef"]).contains("show-image: g"));
-    for folder in ["proofs", "asks", "images"] {
+    assert!(cli(&root, &["media", "g", ".whosaidso/cache/shot.png", "2026_10/28.png deadbeef"]).contains("media: g"));
+    for folder in ["proofs", "asks", "media"] {
         let path = paths(&r.join(folder)).pop().unwrap(); let v = value(&path);
         assert!(v.get("kind").is_none() && v.get("id").is_none());
         assert_eq!(path.file_stem().unwrap().to_str().unwrap(), hash(&fs::read(&path).unwrap()));
     }
     assert!(cli(&root, &["check"]).contains("check: ok")); assert!(cli(&root, &["goals"]).contains("done    g"));
     proof["commit"] = current.into(); proof["output_tail"] = "".into();
-    for folder in ["proofs", "asks", "images"] { fs::remove_dir_all(r.join(folder)).unwrap(); }
-    let image = json!({"goal":"g","shows":"x","media_sha256":hash(b"image bytes"),"ext":"png","commit":proof["commit"],"ran_at":1});
+    for folder in ["proofs", "asks", "media"] { fs::remove_dir_all(r.join(folder)).unwrap(); }
+    let image = json!({"goal":"g","shows":"x","media_sha256":hash(&common::png(b"image bytes")),"ext":"png","byte_size":common::png(b"image bytes").len(),"commit":proof["commit"],"ran_at":1});
     for n in 1..=8 {
         proof["ran_at"] = n.into(); addressed(&proofs, &proof);
         addressed(&r.join("asks"), &json!({"goal":"g","said":"request","ran_at":n,"commit":proof["commit"]}));
-        let mut i = image.clone(); i["ran_at"] = n.into(); addressed(&r.join("images"), &i);
+        let mut i = image.clone(); i["ran_at"] = n.into(); addressed(&r.join("media"), &i);
     }
     commit(&root); let historical = paths(&proofs).pop().unwrap();
     fs::remove_file(r.join("goals/g.json")).unwrap(); commit(&root);
     bad(&root, &["check"], "unknown goal g");
     write(&r.join("goals/g.json"), goal); // An uncommitted restoration does not change HEAD.
     bad(&root, &["prune"], "commit or stash"); fs::remove_file(r.join("goals/g.json")).unwrap();
-    assert_eq!(cli(&root, &["prune"]), "prune: 8 proofs, 8 asks, 8 images removed\n");
-    for folder in ["proofs", "asks", "images"] { assert!(paths(&r.join(folder)).is_empty(), "deleted goal: {folder}"); }
+    assert_eq!(cli(&root, &["prune"]), "prune: 8 proofs, 8 asks, 8 media archived\n");
+    for folder in ["proofs", "asks", "media"] { assert!(paths(&r.join(folder)).is_empty(), "deleted goal: {folder}"); }
     assert!(cli(&root, &["check"]).contains("check: ok"));
     let path = historical.strip_prefix(&root).unwrap().to_str().unwrap();
     assert!(git(&root, &["show", &format!("HEAD~1:{path}")]).contains("output_sha256"), "history retains committed proofs");
     write(&r.join("goals/g.json"), goal); write(&instrument, br#"{"run":["sh","-c","printf ran > .whosaidso/cache/ran"],"answers":"works"}"#); commit(&root);
     for p in paths(&blobs) { fs::remove_file(p).unwrap(); }
-    let reused = blobs.join(format!("{}.png", hash(b"image bytes"))); write(&reused, b"image bytes"); age(&reused, 15);
-    cli(&root, &["show-image", "g", ".whosaidso/cache/shot.png", "x"]);
-    for p in paths(&r.join("images")) { fs::remove_file(p).unwrap(); }
+    let reused = blobs.join(format!("{}.png", hash(&common::png(b"image bytes")))); write(&reused, &common::png(b"image bytes")); age(&reused, 15);
+    cli(&root, &["media", "g", ".whosaidso/cache/shot.png", "x"]);
+    for p in paths(&r.join("media")) { fs::remove_file(p).unwrap(); }
     cli(&root, &["prune"]); assert!(reused.exists(), "republishing refreshes old blob's grace period");
     let recent = blobs.join(format!("{}.png", hash(b"recent"))); write(&recent, b"recent"); age(&recent, 13);
     let orphan = blobs.join(format!("{}.png", hash(b"orphan"))); write(&orphan, b"orphan"); age(&orphan, 15);
@@ -114,9 +115,9 @@ fn proof_commits_publication_collection_and_format_are_exact() {
     // Branch and annotated tag tips deliberately retain old blobs.
     for tag in [false, true] {
         git(&root, &["checkout", "-b", "held"]);
-        write(&r.join("cache/shot.png"), if tag { "tag" } else { "branch" });
-        cli(&root, &["show-image", "g", ".whosaidso/cache/shot.png", "x"]);
-        let path = paths(&r.join("images")).pop().unwrap(); let i = value(&path);
+        write(&r.join("cache/shot.png"), common::png(if tag { "tag" } else { "branch" }));
+        cli(&root, &["media", "g", ".whosaidso/cache/shot.png", "x"]);
+        let path = paths(&r.join("media")).pop().unwrap(); let i = value(&path);
         let blob = blobs.join(format!("{}.png", i["media_sha256"].as_str().unwrap())); age(&blob, 15); commit(&root);
         if tag { git(&root, &["tag", "-a", "held-tag", "-m", "held"]); }
         git(&root, &["checkout", "main"]); git(&root, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
@@ -126,12 +127,12 @@ fn proof_commits_publication_collection_and_format_are_exact() {
         cli(&root, &["prune"]); assert!(!blob.exists(), "released ref allows collection");
     }
     git(&root, &["worktree", "add", "--detach", "../linked tree", "HEAD"]); let linked = home.join("linked tree");
-    write(&linked.join(".whosaidso/cache/shot.png"), b"detached");
-    cli(&linked, &["show-image", "g", ".whosaidso/cache/shot.png", "x"]);
-    let path = paths(&linked.join(".whosaidso/images")).pop().unwrap(); let i = value(&path);
+    write(&linked.join(".whosaidso/cache/shot.png"), &common::png(b"detached"));
+    cli(&linked, &["media", "g", ".whosaidso/cache/shot.png", "x"]);
+    let path = paths(&linked.join(".whosaidso/media")).pop().unwrap(); let i = value(&path);
     let blob = blobs.join(format!("{}.png", i["media_sha256"].as_str().unwrap())); age(&blob, 15);
     cli(&root, &["prune"]); assert!(blob.exists(), "other worktree's uncommitted record protects blob");
-    git(&linked, &["add", ".whosaidso/images"]); git(&linked, &["commit", "-m", "detached image"]); fs::remove_file(&path).unwrap();
+    git(&linked, &["add", ".whosaidso/media"]); git(&linked, &["commit", "-m", "detached image"]); fs::remove_file(&path).unwrap();
     cli(&root, &["prune"]); assert!(blob.exists(), "detached HEAD protects blob despite working-tree deletion");
     git(&root, &["worktree", "remove", "--force", "../linked tree"]);
     cli(&root, &["prune"]); assert!(!blob.exists()); assert!(recent.exists());

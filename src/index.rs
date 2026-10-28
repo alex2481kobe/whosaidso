@@ -97,7 +97,7 @@ pub fn sync(root: &Path) -> Result<(), String> {
     }
     drop(phase);
     let phase = crate::cache::timer("sync history");
-    let head = git::run(root, &["rev-parse", "--verify", "refs/remotes/origin/main"]).ok().map(|s| s.trim().to_owned());
+    let head = git::run(root, &["rev-parse", "--verify", "refs/heads/main"]).ok().map(|s| s.trim().to_owned());
     let old = stamp(&tx, "git:main")?;
     let ancestor = match (&old, &head) {
         (Some(old), Some(head)) if old != head => git::run(root, &["merge-base", "--is-ancestor", old, head]).is_ok(),

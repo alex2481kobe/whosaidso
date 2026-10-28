@@ -1,0 +1,119 @@
+#[path = "common/command.rs"] mod commands;
+use commands::command;
+// Local state, bounded answers, refusals and collector crashes in one isolated project.
+mod common;
+use serde_json::json;
+use sha2::{Digest, Sha256};
+use std::{fs, os::unix::fs::PermissionsExt, path::{Path, PathBuf}, process::Output, time::{SystemTime, UNIX_EPOCH}};
+fn success(out: Output) -> String { assert!(out.status.success(), "{out:?}"); String::from_utf8(out.stdout).unwrap() }
+fn git(root: &Path, args: &[&str]) -> String { success(command(root, "git", args).output().unwrap()) }
+fn cli(root: &Path, args: &[&str]) -> String { success(command(root, env!("CARGO_BIN_EXE_whosaidso"), args).output().unwrap()) }
+fn bad(root: &Path, args: &[&str], reason: &str) -> String {
+    let out = command(root, env!("CARGO_BIN_EXE_whosaidso"), args).output().unwrap(); assert_eq!(out.status.code(), Some(1), "{out:?}");
+    let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr)); assert!(text.contains(reason), "{text}"); text
+}
+fn write(path: &Path, bytes: impl AsRef<[u8]>) { fs::create_dir_all(path.parent().unwrap()).unwrap(); fs::write(path, bytes).unwrap(); }
+fn commit(root: &Path) { git(root, &["add", "."]); git(root, &["commit", "--allow-empty", "-m", "fixture"]); }
+fn hash(bytes: &[u8]) -> String { Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect() }
+fn addressed(dir: &Path, v: serde_json::Value) -> PathBuf { let b = serde_json::to_vec(&v).unwrap(); let p = dir.join(format!("{}.json", hash(&b))); write(&p, b); p }
+fn paths(dir: &Path) -> Vec<PathBuf> { fs::read_dir(dir).map(|d| d.map(|e| e.unwrap().path()).collect()).unwrap_or_default() }
+#[test]
+fn local_refs_retention_and_new_user_failures() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/e2e-tmp").join(format!("fix11-{}-{}", std::process::id(), SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+    fs::create_dir_all(&root).unwrap(); git(&root, &["init"]);
+    let r = root.join(".whosaidso"); let exe = env!("CARGO_BIN_EXE_whosaidso");
+    write(&r.join(".gitignore"), "cache/\n"); write(&r.join("phases/p.json"), json!({"title":"Phase","order":0}).to_string());
+    write(&r.join("goals/g.json"), json!({"title":"Goal","done_when":"done","check":"test","broader":"p"}).to_string());
+    write(&r.join("instruments/test.json"), json!({"run":["true"],"answers":"works","gaps":[{"what":"cover","why":"required","covered_by":"cover"}]}).to_string());
+    write(&r.join("instruments/cover.json"), json!({"run":["false"],"answers":"cover"}).to_string()); commit(&root);
+    bad(&root, &["start", "g"], "run whosaidso install-hooks");
+    cli(&root, &["install-hooks"]); cli(&root, &["start", "g"]); commit(&root);
+    assert!(git(&root, &["log", "-1", "--format=%B"]).contains("Goal: g"));
+    let clone = root.join(".whosaidso/cache/clone"); git(&root, &["clone", "--quiet", ".", clone.to_str().unwrap()]);
+    bad(&clone, &["start", "g"], "run whosaidso install-hooks");
+    bad(&root, &["find"], "needs words"); bad(&root, &["find", "kind:goal"], "needs words");
+    let usage = bad(&root, &[], "usage:");
+    for cmd in ["check", "install-hooks", "start", "gate", "ask", "show", "goals", "prove", "prune", "tools", "media", "view", "grep", "find", "code import-scip", "defs", "refs", "deps", "includers"] { assert!(usage.contains(cmd), "{cmd}: {usage}"); }
+    // Every dispatch entry must remain in the generated usage table.
+    let source = include_str!("../src/main.rs"); let table = source.split("    commands! {").nth(1).unwrap().split("\n    }").next().unwrap();
+    for row in table.lines().filter(|l| l.contains("=>")) { let spelling = row.trim().split('"').nth(1).unwrap(); assert!(usage.contains(spelling), "{spelling}"); }
+    for n in 1..=50 { write(&r.join(format!("phases/p{n}.json")), json!({"title":"Phase","order":n}).to_string()); }
+    bad(&root, &["check"], "phases cap 50: count 51"); fs::remove_file(r.join("phases/p50.json")).unwrap();
+    assert!(cli(&root, &["check"]).contains("50 phases"));
+    for n in 1..50 { fs::remove_file(r.join(format!("phases/p{n}.json"))).unwrap(); } commit(&root);
+    write(&r.join("cache/bad.png"), b"not an image"); bad(&root, &["media", "g", ".whosaidso/cache/bad.png", "bad"], "signature and header");
+    for bytes in [b"\x89PNG\r\n\x1a\n".to_vec(), b"\xff\xd8\xff\xe0\x00\x02".to_vec(), common::png(b"x").into_iter().take(24).collect()] {
+        write(&r.join("cache/bad.png"), bytes); bad(&root, &["media", "g", ".whosaidso/cache/bad.png", "bad"], "signature and header");
+    }
+    let png = common::png(b"valid"); write(&r.join("cache/good.png"), &png); cli(&root, &["media", "g", ".whosaidso/cache/good.png", "valid"]);
+    let jpeg = b"\xff\xd8\xff\xc0\x00\x0b\x08\x00\x01\x00\x01\x01\x01\x11\x00\xff\xd9";
+    write(&r.join("cache/good.jpg"), jpeg); cli(&root, &["media", "g", ".whosaidso/cache/good.jpg", "jpeg"]);
+    let head = git(&root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let bytes = b"invalid stored image"; write(&root.join(format!(".git/whosaidso/blobs/{}.png", hash(bytes))), bytes);
+    let invalid = addressed(&r.join("media"), json!({"goal":"g","shows":"bad","media_sha256":hash(bytes),"ext":"png","byte_size":bytes.len(),"commit":head,"ran_at":0}));
+    bad(&root, &["check"], "signature and header"); fs::remove_file(invalid).unwrap(); commit(&root);
+    cli(&root, &["prove", "g"]); commit(&root);
+    let shown = cli(&root, &["show", "g"]); assert!(shown.contains("state: failing") && shown.lines().any(|l| l.starts_with("proof: fail") && l.ends_with("cover")), "{shown}");
+    fs::remove_file(r.join("instruments/cover.json")).unwrap();
+    let missing = bad(&root, &["check"], "missing instrument file .whosaidso/instruments/cover.json");
+    assert_eq!(missing.lines().count(), 1, "one root cause: {missing}");
+    write(&r.join("instruments/cover.json"), json!({"run":["false"],"answers":"cover"}).to_string());
+    write(&r.join("instruments/old.json"), json!({"run":["true","old"],"answers":"old"}).to_string()); commit(&root);
+    let at = git(&root, &["rev-parse", "HEAD"]).trim().to_owned(); let mut old = Vec::new();
+    for n in 0..4 { old.push(addressed(&r.join("proofs"), json!({"goal":"g","instrument":"old","commit":at,"exit_code":0,"output_sha256":"0".repeat(64),"output_tail":"","ran_at":n}))); }
+    fs::remove_file(r.join("instruments/old.json")).unwrap();
+    assert_eq!(bad(&root, &["check"], "missing instrument file .whosaidso/instruments/old.json").lines().count(), 1, "proof-only missing instruments report once");
+    for p in old { fs::remove_file(p).unwrap(); } commit(&root);
+    // Remote advances and rewinds never alter any local state consumer.
+    let before = cli(&root, &["goals"]); git(&root, &["update-ref", "refs/remotes/origin/main", &head]);
+    assert_eq!(cli(&root, &["goals"]), before); assert_eq!(cli(&root, &["show", "g"]), shown); cli(&root, &["view"]); assert!(cli(&root, &["gate"]).contains("ok"));
+    bad(&root, &["gate", "origin/main"], "local branch");
+    git(&root, &["tag", "-a", "local-base", "-m", "base", "main"]);
+    for base in ["local-base", "refs/tags/local-base"] { assert!(cli(&root, &["gate", base]).contains("gate: ok")); }
+    git(&root, &["tag", "-d", "local-base"]);
+    git(&root, &["checkout", "-b", "feature"]); write(&root.join("work"), "work"); commit(&root);
+    let feature = git(&root, &["rev-parse", "HEAD"]).trim().to_owned();
+    for n in 0..20 { addressed(&r.join("proofs"), json!({"goal":"g","instrument":"test","commit":feature,"exit_code":n%2,"output_sha256":"0".repeat(64),"output_tail":"repeated","ran_at":n})); }
+    commit(&root); git(&root, &["checkout", "main"]); git(&root, &["merge", "--squash", "feature"]); commit(&root);
+    cli(&root, &["prune"]);
+    let repeated: Vec<_> = paths(&r.join("proofs")).into_iter().map(|p| serde_json::from_slice::<serde_json::Value>(&fs::read(p).unwrap()).unwrap()).filter(|v| v["commit"] == feature).collect();
+    assert_eq!(repeated.len(), 1); assert_eq!(repeated[0]["ran_at"], 19); assert_eq!(cli(&root, &["goals"]), before); commit(&root);
+    git(&root, &["branch", "-m", "other"]);
+    for args in [vec!["goals"], vec!["show", "g"], vec!["view"], vec!["gate"], vec!["prune"]] { bad(&root, &args, "no local branch main"); }
+    git(&root, &["branch", "-m", "main"]);
+    // Trace every git request to prove no consumer consults remote-tracking refs.
+    let real = success(command(&root, "sh", &["-c", "command -v git"]).output().unwrap()); let bin = r.join("cache/bin");
+    write(&bin.join("git"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FIX11_TRACE\"\nexec \"$FIX11_GIT\" -c user.name=Test -c user.email=test@example.com -c init.defaultBranch=main \"$@\"\n");
+    fs::set_permissions(bin.join("git"), fs::Permissions::from_mode(0o755)).unwrap(); let trace = r.join("cache/trace");
+    for args in [vec!["goals"], vec!["show", "g"], vec!["view"], vec!["gate"], vec!["prune"]] {
+        success(command(&root, exe, &args).env("PATH", format!("{}:{}", bin.display(), std::env::var("PATH").unwrap())).env("FIX11_TRACE", &trace).env("FIX11_GIT", real.trim()).output().unwrap());
+    }
+    let calls = fs::read_to_string(trace).unwrap(); assert!(!calls.contains("remotes") && !calls.contains("--all"), "{calls}");
+    #[cfg(debug_assertions)] for hook in ["WHOSAIDSO_PRUNE_TOUCH_HOOK", "WHOSAIDSO_PRUNE_TRASH_HOOK", "WHOSAIDSO_PRUNE_HOOK", "WHOSAIDSO_PRUNE_DELETE_HOOK"] {
+        let bytes = common::png(hook); let name = format!("{}.png", hash(&bytes)); let blob = root.join(".git/whosaidso/blobs").join(&name); write(&blob, &bytes);
+        fs::File::open(&blob).unwrap().set_times(fs::FileTimes::new().set_modified(SystemTime::now() - std::time::Duration::from_secs(15 * 86400))).unwrap();
+        let out = command(&root, exe, &["prune"]).env(hook, "kill -KILL $PPID").output().unwrap();
+        use std::os::unix::process::ExitStatusExt; assert_eq!(out.status.signal(), Some(9));
+        let trash = blob.parent().unwrap().join("trash").join(&name); let kept = if blob.exists() { &blob } else { &trash };
+        assert_eq!(fs::read(kept).unwrap(), bytes); assert!(fs::metadata(kept).unwrap().modified().unwrap().elapsed().unwrap() < std::time::Duration::from_secs(60));
+        cli(&root, &["prune"]); assert!(blob.exists() || trash.exists(), "SIGKILL keeps bytes");
+    }
+    // Warm cache rows isolate answer buffering from parsing, with 400,000 matching definitions.
+    write(&root.join("many.rs"), "fn repeated() {}\n"); commit(&root); cli(&root, &["code", "defs", "repeated"]);
+    let db = rusqlite::Connection::open(r.join("cache/index.db")).unwrap();
+    db.execute_batch("CREATE INDEX fix11_defs_order ON defs(name,path,line); CREATE INDEX fix11_calls_order ON calls(callee,path,line);
+        WITH RECURSIVE n(i) AS (VALUES(2) UNION ALL SELECT i+1 FROM n WHERE i<400000) INSERT INTO defs SELECT 'many.rs','repeated','fn',i,'repeated' FROM n;
+        INSERT INTO calls SELECT path,name,line,'caller',qualified FROM defs;
+        INSERT INTO includes SELECT path,'target.h',line FROM defs;").unwrap(); drop(db);
+    for args in ["defs repeated", "refs repeated", "deps many.rs", "includers target.h"] {
+        let script = format!("ulimit -v 45000; exec \"$1\" code {args}");
+        let answer = success(command(&root, "sh", &["-c", &script, "sh", exe]).output().unwrap());
+        assert_eq!(answer.lines().count(), 21); assert!(answer.ends_with("shown 20 of 400000\n"), "{answer}");
+    }
+    // Precise answers use the same bounded collector.
+    let db = rusqlite::Connection::open(r.join("cache/index.db")).unwrap();
+    db.execute_batch("INSERT INTO scip_docs SELECT path,blob FROM files WHERE path='many.rs'; INSERT INTO scip_syms VALUES ('scip-test pkg project 1 repeated().','repeated','repeated'); INSERT INTO scip_occ SELECT path,'scip-test pkg project 1 repeated().',line,1 FROM defs;").unwrap(); drop(db);
+    let answer = success(command(&root, "sh", &["-c", "ulimit -v 45000; exec \"$1\" code defs repeated", "sh", exe]).output().unwrap());
+    assert_eq!(answer.lines().count(), 21); assert!(answer.ends_with("shown 20 of 400000\n")); assert!(answer.lines().take(20).all(|l| l.ends_with("[precise]")));
+    fs::remove_dir_all(root).unwrap();
+}

@@ -1,3 +1,4 @@
+mod common;
 // Round-four regressions through the real binary in one isolated project.
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -105,40 +106,40 @@ fn prune_state_order_caps_and_blob_publication() {
     // Keep the lock scenario small; these goals have already exercised the cap.
     for p in paths(&r.join("goals")) { if p != goal { fs::remove_file(p).unwrap(); } }
     fs::remove_dir_all(r.join("proofs")).unwrap(); commit(&root); push(&root);
-    write(&r.join("cache/shot.png"), "race bytes");
+    write(&r.join("cache/shot.png"), common::png("race bytes"));
     let lock = fs::File::options().create(true).truncate(false).read(true).write(true).open(blobs.join(".lock")).unwrap(); lock.lock().unwrap();
     let exe = env!("CARGO_BIN_EXE_whosaidso");
-    let mut writer = command(&root, exe, &["show-image", "g", ".whosaidso/cache/shot.png", "race"]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let mut writer = command(&root, exe, &["media", "g", ".whosaidso/cache/shot.png", "race"]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
     std::thread::sleep(Duration::from_millis(200)); assert!(writer.try_wait().unwrap().is_none(), "exclusive collector excludes writers");
-    assert!(!blobs.join(format!("{}.png", hash(b"race bytes"))).exists()); drop(lock); success(writer.wait_with_output().unwrap());
-    for p in paths(&r.join("images")) { fs::remove_file(p).unwrap(); }
+    assert!(!blobs.join(format!("{}.png", hash(&common::png("race bytes")))).exists()); drop(lock); success(writer.wait_with_output().unwrap());
+    for p in paths(&r.join("media")) { fs::remove_file(p).unwrap(); }
     // Pause after the bytes are renamed but before the image record is published.
     let real_git = success(command(&root, "sh", &["-c", "command -v git"]).output().unwrap());
     let bin = r.join("cache/bin"); let ready = r.join("cache/ready"); let go = r.join("cache/go");
     write(&bin.join("git"), b"#!/bin/sh\nif [ \"$1 $2 $3\" = 'rev-parse HEAD ' ]; then : > .whosaidso/cache/ready; while [ ! -f .whosaidso/cache/go ]; do sleep 0.01; done; fi\nexec \"$FIX8_GIT\" -c user.name=Test -c user.email=test@example.com -c init.defaultBranch=main \"$@\"\n");
     fs::set_permissions(bin.join("git"), fs::Permissions::from_mode(0o755)).unwrap();
-    let writer = command(&root, exe, &["show-image", "g", ".whosaidso/cache/shot.png", "race"])
+    let writer = command(&root, exe, &["media", "g", ".whosaidso/cache/shot.png", "race"])
         .env("FIX8_GIT", real_git.trim()).env("PATH", format!("{}:{}", bin.display(), std::env::var("PATH").unwrap())).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
-    wait(&ready); write(&blobs.join(".tmp-interrupted"), "partial"); let blob = blobs.join(format!("{}.png", hash(b"race bytes"))); age(&blob);
+    wait(&ready); write(&blobs.join(".tmp-interrupted"), "partial"); let blob = blobs.join(format!("{}.png", hash(&common::png("race bytes")))); age(&blob);
     let mut collector = command(&root, exe, &["prune"]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
     std::thread::sleep(Duration::from_millis(200)); let blocked = collector.try_wait().unwrap().is_none();
     let partial = blobs.join(".tmp-interrupted").exists(); write(&go, "go"); success(writer.wait_with_output().unwrap());
     let collected = collector.wait_with_output().unwrap(); assert_eq!(collected.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&collected.stderr).contains("commit or stash")); commit(&root); cli(&root, &["prune"]);
     assert!(blocked && partial, "publisher holds shared lock through record publication");
-    assert_eq!(fs::read(&blob).unwrap(), b"race bytes"); assert!(!blobs.join(".tmp-interrupted").exists());
+    assert_eq!(fs::read(&blob).unwrap(), common::png("race bytes")); assert!(!blobs.join(".tmp-interrupted").exists());
     assert!(cli(&root, &["check"]).contains("check: ok")); commit(&root); push(&root);
     // Stop collection during its ref snapshot: its exclusive lock must still exclude publication.
     fs::remove_file(&ready).unwrap(); fs::remove_file(&go).unwrap();
     write(&bin.join("git"), b"#!/bin/sh\nif [ \"$1\" = for-each-ref ]; then : > .whosaidso/cache/ready; while [ ! -f .whosaidso/cache/go ]; do sleep 0.01; done; fi\nexec \"$FIX8_GIT\" -c user.name=Test -c user.email=test@example.com -c init.defaultBranch=main \"$@\"\n");
     let collector = command(&root, exe, &["prune"]).env("FIX8_GIT", real_git.trim()).env("PATH", format!("{}:{}", bin.display(), std::env::var("PATH").unwrap())).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
-    wait(&ready); write(&r.join("cache/shot.png"), "snapshot bytes");
-    let mut writer = command(&root, exe, &["show-image", "g", ".whosaidso/cache/shot.png", "snapshot"]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    wait(&ready); write(&r.join("cache/shot.png"), common::png("snapshot bytes"));
+    let mut writer = command(&root, exe, &["media", "g", ".whosaidso/cache/shot.png", "snapshot"]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
     std::thread::sleep(Duration::from_millis(200)); let blocked = writer.try_wait().unwrap().is_none();
-    let absent = !blobs.join(format!("{}.png", hash(b"snapshot bytes"))).exists(); write(&go, "go"); success(collector.wait_with_output().unwrap()); success(writer.wait_with_output().unwrap());
+    let absent = !blobs.join(format!("{}.png", hash(&common::png("snapshot bytes")))).exists(); write(&go, "go"); success(collector.wait_with_output().unwrap()); success(writer.wait_with_output().unwrap());
     assert!(blocked && absent, "collection locks its whole snapshot");
     let shared = fs::File::open(blobs.join(".lock")).unwrap(); shared.lock_shared().unwrap();
-    let mut writer = command(&root, exe, &["show-image", "g", ".whosaidso/cache/shot.png", "shared"]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let mut writer = command(&root, exe, &["media", "g", ".whosaidso/cache/shot.png", "shared"]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
     let start = Instant::now(); while writer.try_wait().unwrap().is_none() && start.elapsed() < Duration::from_secs(2) { std::thread::sleep(Duration::from_millis(10)); }
     let concurrent = writer.try_wait().unwrap().is_some(); drop(shared); success(writer.wait_with_output().unwrap()); assert!(concurrent, "publishers share the lock");
     cli(&root, &["prove", "g"]);

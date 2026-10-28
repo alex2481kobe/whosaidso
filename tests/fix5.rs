@@ -1,3 +1,4 @@
+mod common;
 // Release fixes through the real binary in one isolated Git project.
 use sha2::{Digest, Sha256};
 use std::{fs, path::{Path, PathBuf}, process::{Command, Output}, time::{SystemTime, UNIX_EPOCH}};
@@ -91,31 +92,31 @@ fn release_records_are_bound_bounded_and_durable() {
     assert_eq!(paths(&proofs).len(), 1); assert!(!records.join("cache/last").exists()); fs::remove_file(root.join("dirty")).unwrap();
     write(&cover, br#"{"run":["sh","-c","true # cover"],"answers":"coverage","gaps":[{"what":"nested","why":"required","covered_by":"last"}]}"#); commit(&root);
     assert_eq!(cli(&root, &["prove", "g"]).lines().count(), 3); assert!(cli(&root, &["goals"]).contains("done    g"));
-    let media = records.join("cache/shot.png"); write(&media, vec![b'x'; 20000]);
+    let media = records.join("cache/shot.png"); write(&media, common::png(vec![b'x'; 20000]));
     let blobs = records.join("cache/external blobs"); fs::create_dir_all(&blobs).unwrap();
-    let sha = hash(&vec![b'x'; 20000]); let blob = blobs.join(format!("{sha}.png"));
+    let sha = hash(&common::png(vec![b'x'; 20000])); let blob = blobs.join(format!("{sha}.png"));
     write(&blob, "interrupted destination"); write(&blobs.join(".tmp-interrupted"), "partial");
-    let args = ["show-image", "g", ".whosaidso/cache/shot.png", "A clear image title"];
+    let args = ["media", "g", ".whosaidso/cache/shot.png", "A clear image title"];
     success(command(&root, env!("CARGO_BIN_EXE_whosaidso"), &args).env("WHOSAIDSO_BLOBS", &blobs).output().unwrap());
-    assert_eq!(fs::read(&blob).unwrap(), vec![b'x'; 20000]);
-    let image: serde_json::Value = serde_json::from_slice(&fs::read(paths(&records.join("images")).pop().unwrap()).unwrap()).unwrap();
+    assert_eq!(fs::read(&blob).unwrap(), common::png(vec![b'x'; 20000]));
+    let image: serde_json::Value = serde_json::from_slice(&fs::read(paths(&records.join("media")).pop().unwrap()).unwrap()).unwrap();
     assert!(image.get("machine").is_none());
     assert!(success(command(&root, env!("CARGO_BIN_EXE_whosaidso"), &["check"]).env("WHOSAIDSO_BLOBS", &blobs).output().unwrap()).contains("check: ok"));
     fs::remove_file(&blob).unwrap();
-    let out = command(&root, "sh", &["-c", "ulimit -c 0; ulimit -f 1; exec \"$1\" show-image g .whosaidso/cache/shot.png 'A clear image title'", "sh", env!("CARGO_BIN_EXE_whosaidso")]).env("WHOSAIDSO_BLOBS", &blobs).output().unwrap();
+    let out = command(&root, "sh", &["-c", "ulimit -c 0; ulimit -f 1; exec \"$1\" media g .whosaidso/cache/shot.png 'A clear image title'", "sh", env!("CARGO_BIN_EXE_whosaidso")]).env("WHOSAIDSO_BLOBS", &blobs).output().unwrap();
     assert!(!out.status.success()); assert!(!blob.exists(), "interrupted write never publishes partial bytes");
     success(command(&root, env!("CARGO_BIN_EXE_whosaidso"), &args).env("WHOSAIDSO_BLOBS", &blobs).output().unwrap()); assert_eq!(fs::read(&blob).unwrap().len(), 20000);
     cli(&root, &args); let durable = root.join(".git/whosaidso/blobs").join(format!("{sha}.png")); assert!(durable.exists());
     fs::remove_dir_all(records.join("cache")).unwrap(); assert_eq!(fs::read(durable).unwrap().len(), 20000);
-    for n in 1..=7 { let mut image = image.clone(); image["ran_at"] = n.into(); addressed(&records.join("images"), &image); }
+    for n in 1..=7 { let mut image = image.clone(); image["ran_at"] = n.into(); addressed(&records.join("media"), &image); }
     for n in 1..=7 { let ask = serde_json::json!({"goal":"g","said":format!("ask {n}"),"ran_at":n,"commit":proof["commit"]}); addressed(&records.join("asks"), &ask); }
     let newest = |kind: &str, field: &str| {
         let mut items: Vec<_> = paths(&records.join(kind)).into_iter().map(|p| { let v: serde_json::Value = serde_json::from_slice(&fs::read(&p).unwrap()).unwrap(); (v[field].as_i64().unwrap(), p) }).collect();
-        items.sort_by(|a,b| b.cmp(a)); let mut kept: Vec<_> = items.into_iter().take(5).map(|(_, p)| p).collect(); kept.sort(); kept
+        items.sort_by(|a,b| b.cmp(a)); let mut kept: Vec<_> = items.into_iter().take(if kind == "media" { 100 } else { 5 }).map(|(_, p)| p).collect(); kept.sort(); kept
     };
-    let images = newest("images", "ran_at"); let asks = newest("asks", "ran_at"); commit(&root);
+    let images = newest("media", "ran_at"); let asks = newest("asks", "ran_at"); commit(&root);
     let before = cli(&root, &["goals"]); cli(&root, &["prune"]); assert_eq!(cli(&root, &["goals"]), before);
-    let mut kept = paths(&records.join("images")); kept.sort(); assert_eq!(kept, images);
+    let mut kept = paths(&records.join("media")); kept.sort(); assert_eq!(kept, images);
     let mut kept = paths(&records.join("asks")); kept.sort(); assert_eq!(kept, asks);
     for args in [&["sync"][..], &["grep-index"], &["code", "index"]] { bad(&root, args, "usage:"); }
     git(&root, &["checkout", "-b", "worker"]); bad(&root, &["prune"], "run on main");

@@ -37,9 +37,11 @@ fn proofs_and_images_must_support_the_claims() {
     write(&records.join("goals/goal.json"), br#"{"title":"Goal","done_when":"done","check":"test","broader":"p1"}"#);
     write(&records.join("instruments/test.json"), br#"{"run":["true"],"answers":"works"}"#);
     git(&root, &home, &["add", ".whosaidso"]); git(&root, &home, &["commit", "-m", "initial"]);
+    git(&root, &home, &["branch", "-m", "feature"]);
     let no_main = run(&root, &home, env!("CARGO_BIN_EXE_whosaidso"), &["goals"]);
     let no_view = run(&root, &home, env!("CARGO_BIN_EXE_whosaidso"), &["view"]);
     assert!(!no_main.status.success() && !no_view.status.success()); assert_eq!(no_main.stderr, no_view.stderr);
+    git(&root, &home, &["branch", "-m", "main"]);
     git(&root, &home, &["push", "-u", "origin", "main"]);
     write(&root.join("untracked"), b"dirty");
     bad(&root, &home, &["prove", "goal"], "prove: commit or stash your changes first");
@@ -73,14 +75,14 @@ fn proofs_and_images_must_support_the_claims() {
     let shown = cli(&root, &home, &["show", "goal"]); assert!(shown.contains(&landed[..7]), "{shown}");
     cli(&root, &home, &["view"]);
     let progress = fs::read_to_string(records.join("cache/view/progress.html")).unwrap(); assert!(progress.contains(&landed[..7]));
-    let image = serde_json::json!({"goal":"goal","shows":"A valid image title","media_sha256":"../../etc/passwd","ext":"png","commit":landed,"ran_at":3});
-    let path = addressed(&records.join("images"), &image);
+    let image = serde_json::json!({"goal":"goal","shows":"A valid image title","media_sha256":"../../etc/passwd","ext":"png","byte_size":0,"commit":landed,"ran_at":3});
+    let path = addressed(&records.join("media"), &image);
     write(&records.join("etc/passwd.png"), b"outside");
-    cli(&root, &home, &["view"]); bad(&root, &home, &["check"], "image: bad media sha256 ../../etc/passwd");
+    cli(&root, &home, &["view"]); bad(&root, &home, &["check"], "media: bad media sha256 ../../etc/passwd");
     fs::remove_file(path).unwrap();
     let mut invalid_ext = image.clone(); invalid_ext["media_sha256"] = "0".repeat(64).into(); invalid_ext["ext"] = "../bad".into();
-    addressed(&records.join("images"), &invalid_ext);
-    cli(&root, &home, &["view"]); bad(&root, &home, &["check"], "image: bad media type ../bad");
+    addressed(&records.join("media"), &invalid_ext);
+    cli(&root, &home, &["view"]); bad(&root, &home, &["check"], "media: bad media type ../bad");
     for name in ["gallery.html", "progress.html"] { assert!(!fs::read_to_string(records.join("cache/view").join(name)).unwrap().contains("../../etc/passwd")); }
     fs::remove_dir_all(home).unwrap();
 }

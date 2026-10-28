@@ -20,7 +20,7 @@ fn sync(root: &Path) -> Result<Counts, String> {
     let valid: HashSet<_> = record::load(root)?.records.into_iter().map(|(path, _)| path).collect();
     let files = tree::files_in(root, |path| {
         let mut parts = path.split('/');
-        if parts.next() == Some(".whosaidso") && matches!(parts.next(), Some("phases" | "goals" | "instruments" | "proofs" | "asks" | "images")) {
+        if parts.next() == Some(".whosaidso") && matches!(parts.next(), Some("phases" | "goals" | "instruments" | "proofs" | "asks" | "media")) {
             valid.contains(&root.join(path))
         } else { true }
     })?;

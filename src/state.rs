@@ -1,4 +1,4 @@
-// Goal states derived from remote history and recorded proofs.
+// Goal states derived from local history and recorded proofs.
 use crate::{git, record::{Proof, Store}};
 use std::{collections::{HashMap, HashSet}, path::Path, time::{SystemTime, UNIX_EPOCH}};
 
@@ -20,21 +20,22 @@ pub fn newest_proof<'a>(store: &'a Store, commits: &HashSet<&str>, goal: &str, i
     store.proofs.iter().filter(|p| p.goal == goal && p.instrument == instrument && store.instrument_hashes.get(instrument).is_some_and(|hash| store.proof_hashes.get(&p.sha) == Some(hash)) && commits.contains(p.commit.as_str()))
         .max_by(|a, b| (a.ran_at, &a.sha).cmp(&(b.ran_at, &b.sha)))
 }
-fn stale(root: &Path, proof: &Proof, goal: &str, format: &str) -> Result<bool, String> {
-    let later = work_log(root, &["log", "origin/main", "--not", &proof.commit, "--no-merges", format])?;
+fn stale(root: &Path, proof: &Proof, goal: &str, format: &str, main: &str) -> Result<bool, String> {
+    let later = work_log(root, &["log", main, "--not", &proof.commit, "--no-merges", format])?;
     Ok(trailers(&later).any(|g| g == goal))
 }
 pub fn states(root: &Path, store: &Store) -> Result<Vec<GoalState>, String> {
     let format = "--format=%H%x09%(trailers:key=Goal,valueonly,separator=%x2C)";
-    let revisions = git::run(root, &["rev-list", "origin/main"])?;
+    let tip = git::main_tip(root)?;
+    let revisions = git::run(root, &["rev-list", &tip])?;
     if store.goals.is_empty() { return Ok(Vec::new()); }
     let commits: HashSet<_> = revisions.lines().collect();
-    let main = work_log(root, &["log", "origin/main", "--no-merges", format])?;
-    let refs = git::run(root, &["for-each-ref", "--format=%(refname)", "refs/remotes/origin"])?;
+    let main = work_log(root, &["log", &tip, "--no-merges", format])?;
+    let refs = git::run(root, &["for-each-ref", "--format=%(refname)", "refs/heads"])?;
     let now = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| e.to_string())?.as_secs() as i64;
     let mut branches: HashMap<String, Vec<(String, bool)>> = HashMap::new();
-    for reference in refs.lines().filter(|r| *r != "refs/remotes/origin/main" && *r != "refs/remotes/origin/HEAD") {
-        let range = format!("origin/main...{reference}");
+    for reference in refs.lines().filter(|r| *r != "refs/heads/main") {
+        let range = format!("{tip}...{reference}");
         let log = work_log(root, &["log", "--no-merges", "--cherry-pick", "--right-only", "--format=%H%x09%ct%x09%(trailers:key=Goal,valueonly,separator=%x2C)", &range])?;
         let mut newest: HashMap<&str, i64> = HashMap::new();
         for line in log.lines() {
@@ -45,7 +46,7 @@ pub fn states(root: &Path, store: &Store) -> Result<Vec<GoalState>, String> {
             }
         }
         for (goal, time) in newest {
-            branches.entry(goal.to_owned()).or_default().push((reference.trim_start_matches("refs/remotes/origin/").to_owned(), now - time < 72 * 3600));
+            branches.entry(goal.to_owned()).or_default().push((reference.trim_start_matches("refs/heads/").to_owned(), now - time < 72 * 3600));
         }
     }
     let mut result = Vec::new();
@@ -55,7 +56,7 @@ pub fn states(root: &Path, store: &Store) -> Result<Vec<GoalState>, String> {
         let mut state = None;
         if let Some(proof) = proof {
             state = Some(if proof.exit_code != 0 { State::Failing } else {
-                if stale(root, proof, &goal.id, format)? { State::Stale } else { State::Done }
+                if stale(root, proof, &goal.id, format, &tip)? { State::Stale } else { State::Done }
             });
         }
         if state != Some(State::Failing) {
@@ -68,7 +69,7 @@ pub fn states(root: &Path, store: &Store) -> Result<Vec<GoalState>, String> {
                         pending.push(&gap.covered_by);
                         let covered = match newest_proof(store, &commits, &goal.id, &gap.covered_by) {
                             Some(p) if p.exit_code != 0 => Some(State::Failing),
-                            Some(p) if !stale(root, p, &goal.id, format)? => Some(State::Done),
+                            Some(p) if !stale(root, p, &goal.id, format, &tip)? => Some(State::Done),
                             _ => None,
                         };
                         if covered == Some(State::Failing) { state = Some(State::Failing); break; }

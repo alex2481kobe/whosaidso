@@ -93,15 +93,15 @@ fn reviewed_proofs_records_history_and_cache() {
     assert!(cli(&root, &["check"]).contains("check: ok"));
 
     // 3: Missing, rewound and fast-forwarded main tips each define the visible history.
-    git(&root, &["update-ref", "refs/remotes/origin/main", &b]);
+    git(&root, &["update-ref", "refs/heads/main", &b]);
     assert!(cli(&root, &["find", "kind:commit", "spectraltamarind"]).contains("spectraltamarind"));
-    git(&root, &["update-ref", "-d", "refs/remotes/origin/main"]);
+    git(&root, &["update-ref", "-d", "refs/heads/main"]);
     assert!(cli(&root, &["find", "kind:commit", "spectraltamarind"]).contains("no indexed match"), "3: removed main");
-    git(&root, &["update-ref", "refs/remotes/origin/main", &b]);
+    git(&root, &["update-ref", "refs/heads/main", &b]);
     assert!(cli(&root, &["find", "kind:commit", "spectraltamarind"]).contains("spectraltamarind"));
-    git(&root, &["update-ref", "refs/remotes/origin/main", &a]);
+    git(&root, &["update-ref", "refs/heads/main", &a]);
     assert!(cli(&root, &["find", "kind:commit", "spectraltamarind"]).contains("no indexed match"), "3: rewound main");
-    git(&root, &["update-ref", "refs/remotes/origin/main", &b]);
+    git(&root, &["update-ref", "refs/heads/main", &b]);
     assert!(cli(&root, &["find", "kind:commit", "spectraltamarind"]).contains("spectraltamarind"));
     assert!(cli(&root, &["find", "kind:commit", "baseline"]).contains("baseline"));
 

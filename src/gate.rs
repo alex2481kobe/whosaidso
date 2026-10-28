@@ -2,6 +2,7 @@
 use crate::{git, record};
 use std::path::Path;
 pub fn gate(root: &Path, base: &str) -> Result<(), String> {
+    let base = git::local_revision(root, base)?;
     let store = record::load(root)?;
     let range = format!("{base}..HEAD");
     let log = git::run(

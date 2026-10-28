@@ -13,6 +13,11 @@ pub fn install(root: &Path) -> Result<(), String> {
     Ok(())
 }
 pub fn start(root: &Path, cwd: &Path, id: &str) -> Result<(), String> {
+    let hook = git::run(root, &["rev-parse", "--git-path", "hooks/prepare-commit-msg"])?;
+    let installed = root.join(hook.trim());
+    if !fs::read(&installed).is_ok_and(|b| b == HOOK.as_bytes()) || !fs::metadata(&installed).is_ok_and(|m| m.permissions().mode() & 0o111 != 0) {
+        return Err("start: run whosaidso install-hooks in this clone".into());
+    }
     let store = record::load(root)?;
     if id != "none" && !store.goals.iter().any(|g| g.id == id) {
         return Err(format!("unknown goal {id}"));

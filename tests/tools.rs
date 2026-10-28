@@ -56,7 +56,7 @@ fn tools_resolve_and_gaps_have_coverage() {
     for (gap, expected) in [
         (r#"[{"what":"latency","why":"","covered_by":"unit-tests"}]"#, "gap without why perf-harness"),
         (r#"[{"what":"latency","why":"reason","covered_by":""}]"#, "gap without covered_by perf-harness"),
-        (r#"[{"what":"latency","why":"reason","covered_by":"missing"}]"#, "gap covered by unknown perf-harness missing"),
+        (r#"[{"what":"latency","why":"reason","covered_by":"missing"}]"#, "missing instrument file .whosaidso/instruments/missing.json"),
         (r#"[{"what":"latency","why":"reason","covered_by":"perf-harness"}]"#, "gap covered by itself perf-harness"),
     ] {
         instrument(&perf, "tools/perf.sh", gap);
