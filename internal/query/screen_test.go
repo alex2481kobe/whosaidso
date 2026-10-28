@@ -180,5 +180,8 @@ func TestActionScreensRefuseUnsupportedFilters(t *testing.T) {
 		if CheckScreen(request) == nil {
 			t.Fatalf("filter was silently ignored: %+v", request)
 		}
+		if _, err := ReadScreenFrom(store.Project{ID: projectID}, request, store.State{}); err == nil {
+			t.Fatalf("provided-prefix read silently ignored a filter: %+v", request)
+		}
 	}
 }

@@ -39,6 +39,12 @@ func TestLargeLedgerCommands(t *testing.T) {
 		t.Fatalf("warm screen %d: %s", code, body)
 	}
 	measureLarge(t, "Overview warm", time.Since(start), 200*time.Millisecond)
+	start = time.Now()
+	code, _, body = ask(t, host, "GET", "/api/screen?project=team%2Fok&screen=status", "", session)
+	if code != 200 {
+		t.Fatalf("status: %d %s", code, body)
+	}
+	measureLarge(t, "status warm", time.Since(start), time.Second)
 	// A fresh Reader stands for a new viewer process using its persistent index.
 	start = time.Now()
 	var reader store.Reader
