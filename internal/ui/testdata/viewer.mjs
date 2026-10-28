@@ -130,6 +130,18 @@ byLabel(body.querySelector('.artifact-dialog'),'Delete').fire('click');await set
 cards.firstChild.querySelector('.artifact-preview').fire('click');
 for(const screen of ['home','tasks','records','history']){location.hash='#/'+screen;win.fire('hashchange',{oldURL:'http://viewer/#/gallery'});await settle();assert.ok(body.querySelector(screen==='home'?'.overview-screen':'.browser-screen'),screen+' mounts bounded screen');assert.equal(theme.parentElement.className,'page-header','theme shares page title row');assert.ok(!/null|undefined/.test(doc.getElementById('main').textContent),screen+' omits absent values');assert.equal(find('button','Next'),undefined,'no screen uses a pager');
  if(screen==='tasks'||screen==='records'){const request=requests.filter(u=>u.pathname==='/api/screen').at(-1);assert.equal(request.searchParams.get('screen'),screen==='tasks'?'tasks':'records','task and record routes select distinct bounded lists'); if(screen==='tasks'){const parent=find('a','Parent task');assert.equal(parent.href,'#/tasks?under='+String(0).padStart(26,'0'),'clicking a parent drills into prerequisites');assert.ok(body.textContent.includes('3 open nested'),'parent shows nested count');assert.ok(!body.textContent.includes('0 open nested'),'an absent count is not rounded to zero');}}
+ if(screen!=='history'){
+  const lines=body.querySelectorAll('.counts-line'),items=body.querySelectorAll('.counts-item').map(n=>n.textContent);
+  assert.equal(lines.length,1,screen+' has exactly one shared counts line');assert.equal(body.querySelector('.browser-counts'),null,screen+' has no per-screen counts element');
+  assert.ok(items.length>0&&items.every(t=>/^[A-Z][a-z ]+ \d+$/.test(t)),screen+' counts are sentence case "Label 12": '+items);
+  assert.ok(lines[0].querySelectorAll('.counts-num').length===items.length&&lines[0].querySelectorAll('.counts-label').length===items.length,screen+' counts set the number apart from the label');
+  assert.ok(lines[0].parentElement.className.split(' ').includes('browser-screen'),screen+' counts line sits in the shared screen layout');
+  assert.ok(lines[0].parentElement.children[lines[0].parentElement.children.indexOf(lines[0])-1].className.split(' ').includes('gallery-toolbar'),screen+' counts line follows the toolbar');
+  const sections=body.querySelectorAll('.browser-rows');assert.ok(sections.length>0&&sections.every(c=>c.className.split(' ').includes('card')&&c.querySelectorAll('.browser-row').every(r=>r.className.split(' ').includes('row-line')&&r.children.length===4)),screen+' lists use the shared card and four-cell row');
+  if(screen==='home'){for(const want of ['Ready 10','Blocked 2','In flight 1'])assert.ok(items.includes(want),'overview counts '+want);assert.equal(sections.length,2,'overview sections are shared cards');assert.ok(sections.every(c=>c.firstChild.tagName==='H2'),'overview section heading is inside the card');}
+  if(screen==='records')assert.deepEqual(items,['Records 60']);
+  if(screen==='tasks'){assert.deepEqual(items,['Open 30']);assert.equal(lines[0].firstChild.textContent,'Top-level tasks','top-level link leads the counts line');assert.ok(flatten(body).filter(n=>n.textContent==='Top-level tasks'&&n.tagName==='A').every(n=>n.closest('.counts-line')),'no loose top-level line');}
+ }
  if(screen!=='home'){
   const list=body.querySelector('.browser-rows'),firstRow=list.firstChild;scroller.scrollTop=222;theme.focus();
   visible(body.querySelector('.gallery-sentinel'));await settle();assert.equal(list.firstChild,firstRow,screen+' append preserves first node');assert.equal(scroller.scrollTop,222,screen+' append preserves scroll');assert.equal(doc.activeElement,theme,screen+' append preserves focus');assert.ok(list.children.length>24,screen+' scroll loads another batch');

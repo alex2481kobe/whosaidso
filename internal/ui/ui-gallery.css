@@ -42,8 +42,11 @@
 .artifact-dialog-actions {padding:12px 20px;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);}
 .gallery-footnote {font-size:13px;color:var(--muted);}
 .browser-screen {display:flex;flex-direction:column;gap:20px;}
-.browser-counts {display:flex;flex-wrap:wrap;align-items:center;gap:16px;font-size:13px;}
+.counts-line {display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;font-size:13px;}
+.counts-label {color:var(--muted);}
+.counts-num {color:var(--text);font-weight:650;}
 .browser-rows {padding:12px;}
+.browser-rows>h2 {padding:6px 6px 8px;font-size:15px;font-weight:650;}
 .browser-row {display:grid;grid-template-columns:minmax(120px,1fr) 120px 180px 140px;gap:12px;padding:14px 6px;border-bottom:1px solid var(--line);font-size:13px;}
 .browser-row:last-child {border-bottom:0;}
 .browser-note {font-size:13px;line-height:1.6;}
