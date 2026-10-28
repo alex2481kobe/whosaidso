@@ -1,6 +1,6 @@
 package main
 
-// This file holds the ui verb: it starts internal/ui's read-only viewer on a
+// This file holds the ui verb: it starts internal/ui's viewer on a
 // loopback port for as long as the command runs, prints its URL and opens
 // the browser. The server, its guards and the page live in internal/ui; the
 // views it serves are the read verbs' own (answerView in read.go).
@@ -94,7 +94,7 @@ func uiVerb(fs *flag.FlagSet) func(*call) error {
 // this machine's registry and, inside a checkout, that checkout, exactly as
 // every read verb run in cwd opens it.
 func uiConfig(cwd string) ui.Config {
-	cfg := ui.Config{View: answerView, Projects: store.Registered, Reveal: ui.RevealInFinder}
+	cfg := ui.Config{View: answerView, Projects: store.Registered, Reveal: ui.RevealFile}
 	if project, err := store.Discover(cwd); err == nil {
 		cfg.Invoked = &project
 	}
@@ -104,14 +104,36 @@ func uiConfig(cwd string) ui.Config {
 // openBrowser asks the desktop to open url; when it cannot, the printed URL
 // is the way in.
 func openBrowser(url string, c *call) {
-	command := "xdg-open"
-	if runtime.GOOS == "darwin" {
-		command = "open"
-	}
-	cmd := exec.Command(command, url)
+	cmd := browserCommand(runtime.GOOS, url)
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintf(c.stderr, "whosaidso ui: open the URL above in a browser (%v)\n", err)
 		return
 	}
 	go func() { _ = cmd.Wait() }()
 }
+
+// browserCommand keeps a URL in one argument, including on Windows.
+func browserCommand(platform, url string) *exec.Cmd {
+	switch platform {
+	case "windows":
+		return exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", url)
+	case "darwin":
+		return exec.Command("open", url)
+	default:
+		return exec.Command("xdg-open", url)
+	}
+}
+
+const uiHelp = `Serves Gallery, Overview, Tasks, Records and Activity on a random
+127.0.0.1 port while the command runs (Ctrl-C stops it). The printed URL
+carries a one-time token exchanged for a session cookie on its first visit.
+Run ui again for a fresh URL. --no-open keeps browser launch headless.
+Screens return bounded lists; Gallery loads more files as you scroll.
+Delete captures and admits a gallery retraction as --actor or WHOSAIDSO_ACTOR,
+without deleting the media file. The project's self-admission policy still
+applies: a refused admission leaves the packet pending and the entry visible.
+Reveal opens Finder on macOS, Explorer on Windows, or the containing folder
+in the Linux file manager. Copy path and Download work on every platform.
+Inside a checkout, the viewer opens that checkout; elsewhere it lists the
+projects registered with whosaidso home PATH, including unavailable homes.
+`

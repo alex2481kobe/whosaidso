@@ -15,9 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"time"
 
@@ -30,15 +28,6 @@ import (
 // maxText is how much of a text file the viewer shows: enough to debug by,
 // light enough to load a screen of them.
 const maxText = 128 << 10
-
-// RevealInFinder shows path selected in a Finder window. It runs
-// /usr/bin/open itself, never a shell, and works on macOS only.
-func RevealInFinder(path string) error {
-	if runtime.GOOS != "darwin" {
-		return errText("Reveal in Finder works on macOS only")
-	}
-	return exec.Command("/usr/bin/open", "-R", path).Run()
-}
 
 func (h *handler) gallery(w http.ResponseWriter, r *http.Request) {
 	q, parseErr := url.ParseQuery(r.URL.RawQuery)

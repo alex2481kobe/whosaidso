@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0
+
+Fix rejected Overview, Tasks, Records and Activity requests. Viewer reads reuse
+validated snapshots while checking every ledger byte; visible thumbnails load
+first, with faster cold PNG generation and private cache revalidation.
+
+Gallery loads more files on scroll. Cards and item views show a plain clickable
+title and Reveal, Copy path, Download and Delete icons. Delete captures and
+admits a retraction as the viewer actor, retaining the file and honoring project
+admission policy. Downloads also support files without an inline preview.
+Sidebar branding is removed; one theme icon toggles light/dark and remembers
+the choice. File-manager actions and browser launch support macOS, Linux and
+Windows. Linux reveal opens the containing folder.
+
 ## 0.2.0
 
 Gallery lists are paged and searched on the server. Kind sorting remains

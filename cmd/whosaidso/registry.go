@@ -86,18 +86,7 @@ recorded revisions. A review.admit row's author is the reviewer it records.
 --self-admitted cannot be combined with an ID; false excludes unknown, and
 an unknown author stays UNKNOWN.
 `, define: viewVerb("history")},
-		{name: "ui", summary: "a local, read-only viewer of the views in a browser", detail: `Serves todo, show, continue and history as a web page on a random
-127.0.0.1 port, for as long as the command runs (Ctrl-C stops it). The URL
-it prints carries a one-time token: the first visit trades it for a session
-cookie, and the URL opens nothing after that (run ui again for a new one).
-The page writes no ledger. Its Gallery Remove captures a retraction packet
-for admission through the CLI, attributed to --actor or WHOSAIDSO_ACTOR.
-Reveal in Finder opens the file manager on
-macOS. Every screen is the --json answer of the same
-view; the Gallery is whosaidso gallery list's. Run inside a
-checkout it opens that checkout; elsewhere it lists every project this
-machine registered with whosaidso home PATH, an unavailable one with its reason.
-`, define: uiVerb},
+		{name: "ui", summary: "a local gallery and bounded ledger viewer", detail: uiHelp, define: uiVerb},
 		{name: "capture", summary: "write a packet to immutable intake; publishes nothing", detail: `Reads a JSON array of typed events (whosaidso template makes one). A
 source.intake is captured with its original bytes, from its reference or
 from --blob; capture refuses a source whose bytes it cannot save. Prints

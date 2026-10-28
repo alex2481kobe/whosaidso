@@ -61,7 +61,7 @@ type Viewer func(ctx context.Context, project store.Project, request query.ViewR
 // Config is what the viewer reads through. Invoked is the project the
 // command was run inside, opened as the CLI opens it there; nil elsewhere.
 // Projects lists this machine's registry (store.Registered). Reveal shows
-// a gallery file in the desktop's file manager (RevealInFinder); nil, the
+// a gallery file in the desktop's file manager (RevealFile); nil, the
 // viewer says it cannot. CaptureActor is the attributed author of a retraction
 // packet; a missing actor remains explicitly unknown.
 type Config struct {
