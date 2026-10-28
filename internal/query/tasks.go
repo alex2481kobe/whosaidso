@@ -126,8 +126,19 @@ func taskList(s reduce.Snapshot, h ViewHeader, r ViewRequest) *TaskListAnswer {
 	}
 	rows := tree.rows(r.Under, r.Actor)
 	a.Total = len(rows)
-	if r.Limit > 0 && len(rows) > r.Limit {
-		rows = rows[:r.Limit]
+	if r.Limit > 0 {
+		kept := []ScreenRow{}
+		ready := 0
+		for _, row := range rows {
+			if row.Status == string(reduce.StatusReady) {
+				if ready >= r.Limit {
+					continue
+				}
+				ready++
+			}
+			kept = append(kept, row)
+		}
+		rows = kept
 	}
 	a.Tasks = rows
 	return a

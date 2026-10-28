@@ -49,6 +49,14 @@ func TestTaskNestingUsesCurrentOpenPrerequisiteLinks(t *testing.T) {
 	if !reflect.DeepEqual(ids(top.Tasks), []model.ID{testID(1), testID(5), testID(6), testID(7), testID(8)}) || top.Open != 8 || top.Tasks[0].Nested != 3 || top.Tasks[1].Nested != 1 {
 		t.Fatalf("top-level open tasks: %+v", top)
 	}
+	limited := view_(t, p, ViewRequest{View: "todo", Top: true, Limit: 1}).(*TaskListAnswer)
+	if !reflect.DeepEqual(ids(limited.Tasks), []model.ID{testID(1), testID(5), testID(6), testID(8)}) || limited.Total != 5 {
+		t.Fatalf("optional limit hid mandatory parents: %+v", limited)
+	}
+	limitedChildren := view_(t, p, ViewRequest{View: "todo", Under: testID(1), Limit: 1}).(*TaskListAnswer)
+	if len(limitedChildren.Tasks) != 2 {
+		t.Fatal("optional limit hid blocked children")
+	}
 	under := read(testID(1))
 	if !reflect.DeepEqual(ids(under.Tasks), []model.ID{testID(2), testID(3)}) || under.Tasks[0].Nested != 1 || under.Tasks[1].Nested != 1 {
 		t.Fatalf("direct children: %+v", under)
