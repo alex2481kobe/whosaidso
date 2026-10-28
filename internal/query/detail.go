@@ -67,8 +67,16 @@ type detailer struct {
 	corrections   []reduce.AdmittedCorrection
 }
 
-func newDetailer(s reduce.Snapshot) *detailer {
-	return &detailer{s: s, sources: s.Sources(), supersessions: s.Supersessions(), corrections: s.Corrections()}
+// newDetailer reads the lists once. Without sources every detail carries an
+// empty source list: a source names all its referents, so listing each one
+// under every record it names grows with the square of the ledger, and a
+// caller that never prints them (the brief) should not pay for them.
+func newDetailer(s reduce.Snapshot, withSources bool) *detailer {
+	d := &detailer{s: s, supersessions: s.Supersessions(), corrections: s.Corrections()}
+	if withSources {
+		d.sources = s.Sources()
+	}
+	return d
 }
 
 // detail describes one exact revision. The attention it returns is the

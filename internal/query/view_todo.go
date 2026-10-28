@@ -106,14 +106,14 @@ func accepterOf(spec *model.TaskSpec) any {
 	return actor(*spec.Accepter)
 }
 
-func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHeader, limit int, now time.Time, actorFilter string) (*TodoAnswer, error) {
+func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHeader, limit int, now time.Time, actorFilter string, brief bool) (*TodoAnswer, error) {
 	intake, err := pending(project, s)
 	if err != nil {
 		return nil, err
 	}
 	a := &TodoAnswer{ViewHeader: h, InFlight: []TodoTask{}, AwaitingAcceptance: []TodoTask{}, Blocked: []TodoTask{},
 		Ready: []TodoTask{}, OpenDecisions: []Detail{}, PacketsNotAccepted: intake, Attention: []Attention{}}
-	d := newDetailer(s)
+	d := newDetailer(s, !brief)
 	owed := []Attention{}
 	staleClaims := 0
 	flying := map[reduce.Ident]int{}

@@ -28,6 +28,7 @@ type ViewRequest struct {
 	Stale        *StaleGit                // show only, on request: the caller runs git, so never by default
 	SelfAdmitted model.SelfAdmissionState // history without ID only
 	Now          time.Time                // todo only: the caller's clock, to judge claims stale; zero judges none
+	Brief        bool                     // todo only: the caller renders the brief, so the answer may omit what no brief line reads (each task's sources)
 }
 
 // ViewHeader opens every view answer: which view, which project, and the
@@ -157,7 +158,7 @@ func view(project store.Project, r ViewRequest, source Source) (ViewAnswer, erro
 		if r.Top || r.Under != "" {
 			return taskList(s, h, r), nil
 		}
-		return todoView(project, s, source, h, r.Limit, r.Now, r.Actor)
+		return todoView(project, s, source, h, r.Limit, r.Now, r.Actor, r.Brief)
 	case "continue":
 		if intake != nil {
 			h.Result, h.Reason = "UNKNOWN", fmt.Sprintf("%s is an admitted source, not a record to resume: show %s or history %s reads it", r.ID, r.ID, r.ID)

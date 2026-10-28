@@ -70,6 +70,7 @@ func viewVerb(view string) func(*flag.FlagSet) func(*call) error {
 			}
 			if view == "todo" {
 				request.Now = time.Now().UTC()
+				request.Brief = !*jsonOutput
 			}
 			if err := query.CheckView(request); err != nil {
 				return usageError("whosaidso %s: %v", view, err)

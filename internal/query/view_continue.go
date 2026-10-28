@@ -90,7 +90,7 @@ func closureRefs(nodes []ClosureNode) []ClosureRef {
 }
 
 func continueView(s reduce.Snapshot, h ViewHeader, root reduce.Record, r ViewRequest) *ContinueAnswer {
-	d := newDetailer(s)
+	d := newDetailer(s, true)
 	ref := asRef(root.Key)
 	a := &ContinueAnswer{ViewHeader: h, Record: &ref, Records: map[string]Detail{}, Attention: []Attention{},
 		Handoff:   "none: this brief is generated on invocation and no handoff record was written",

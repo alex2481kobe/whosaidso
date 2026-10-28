@@ -66,7 +66,7 @@ var kindOrder = map[model.Kind]int{model.Task: 0, model.Claim: 1, model.Decision
 
 // showOne describes the one current record, and the runs its claim observes.
 func showOne(s reduce.Snapshot, h ViewHeader, root reduce.Record, stale *StaleGit) *ShowAnswer {
-	v, notes := newDetailer(s).detail(root)
+	v, notes := newDetailer(s, true).detail(root)
 	a := &ShowAnswer{ViewHeader: h, Records: []Detail{v}, Attention: append([]Attention{}, notes...)}
 	if v.Task != nil && v.Task.Status == reduce.StatusBlocked {
 		a.Attention = append(a.Attention, owedBy(v.Ref, v.Label, v.Task.Reasons)...)
@@ -98,7 +98,7 @@ func staleOf(s reduce.Snapshot, git *StaleGit, only map[model.ID]bool) *StaleSec
 
 // showAll is bare show, or bare show restricted to kind when kind is set.
 func showAll(s reduce.Snapshot, h ViewHeader, kind model.Kind, stale *StaleGit) *ShowAnswer {
-	d := newDetailer(s)
+	d := newDetailer(s, true)
 	a := &ShowAnswer{ViewHeader: h, Records: []Detail{}, Attention: []Attention{}}
 	sum := &Summary{Kind: "all"}
 	if kind != "" {
