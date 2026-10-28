@@ -117,7 +117,7 @@ func Load(project Project) (State, error) {
 	} else if off {
 		return Replayed(project)
 	}
-	state, moved, err := load(project)
+	state, moved, err := load(project, nil)
 	if err != nil {
 		// Whatever went wrong, the full read decides: it returns the answer,
 		// or the error, that the ledger alone gives.
@@ -129,12 +129,24 @@ func Load(project Project) (State, error) {
 	return state, nil
 }
 
-func load(project Project) (State, bool, error) {
+func load(project Project, prior *State) (State, bool, error) {
 	files, err := inventory(project)
 	if err != nil {
 		return State{}, false, err
 	}
-	image, usable := readImage(project, cacheVersion())
+	var image cacheImage
+	var usable bool
+	memory := prior != nil && prior.project.ID == project.ID && prior.project.Root == project.Root && prior.project.Ledger == project.Ledger
+	if memory {
+		image.count = len(prior.files)
+		image.chain = chainStart()
+		for _, f := range prior.files {
+			image.chain = chainLink(image.chain, f.name, f.hash)
+		}
+		usable = true
+	} else {
+		image, usable = readImage(project, cacheVersion())
+	}
 	if usable && image.count > len(files) {
 		usable = false // the ledger lost bundles the image folded: never resurrect them
 	}
@@ -159,6 +171,13 @@ func load(project Project) (State, bool, error) {
 		}
 	}
 	state := State{project: project, files: selected}
+	if memory {
+		if usable && image.count == len(files) {
+			state.snapshot, state.restored = prior.snapshot, len(files)
+			return state, false, nil
+		}
+		return load(project, nil)
+	}
 	if usable {
 		tail, err := decodeRange(project, selected, data, image.count)
 		if err != nil {

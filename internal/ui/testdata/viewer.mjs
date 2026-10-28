@@ -40,6 +40,14 @@ const fetch=async raw=>{
 };
 const location={hash:'#/gallery'};
 const context=vm.createContext({console,Node,document:doc,window:win,location,history:{replaceState(){}},URL,URLSearchParams,AbortController,fetch,innerWidth:1200,innerHeight:900,sessionStorage:{getItem(){return null;},setItem(){}},localStorage:{getItem(){return null;},setItem(){}},navigator:{clipboard:{writeText:async text=>{copied=text;}}},matchMedia:()=>({matches:false}),requestAnimationFrame:fn=>fn(),setTimeout:(fn,ms)=>{timers.set(++serial,{fn,ms});return serial;},clearTimeout:id=>timers.delete(id),setInterval:(fn,ms)=>{intervals.set(++serial,{fn,ms});return serial;},clearInterval:id=>intervals.delete(id)});
+const observers=new Set();
+class IntersectionObserver {
+ constructor(fn){this.fn=fn;this.nodes=new Set();observers.add(this);}
+ observe(node){this.nodes.add(node);}
+ disconnect(){this.nodes.clear();observers.delete(this);}
+}
+context.IntersectionObserver=IntersectionObserver;
+const visible=node=>{for(const observer of [...observers]) if([...observer.nodes].some(n=>node.contains(n))) observer.fn([...observer.nodes].map(target=>({target,isIntersecting:node.contains(target)})));};
 const modules=new Map(),root=path.resolve('.');
 async function moduleAt(file){if(!modules.has(file))modules.set(file,readFile(file,'utf8').then(source=>new vm.SourceTextModule(source,{context,identifier:file})));return modules.get(file);}
 const main=await moduleAt(path.join(root,'ui.js'));
@@ -52,6 +60,10 @@ assert.ok(doc.getElementById('main').textContent.includes('Loading gallery'),'sl
 assert.equal(requests[0].searchParams.get('summary'),'0','project discovery must avoid status construction');
 release();await settle();
 const cards=body.querySelector('.gallery-cards');assert.equal(cards?.children.length,24,'only one gallery page is mounted');
+assert.equal(cards.firstChild.querySelector('img').src,undefined,'offscreen images do not compete for decode slots');
+visible(cards.firstChild);visible(cards.children[5]);await settle();
+assert.equal(cards.children[1].querySelector('img').src,undefined,'only visible thumbnails start');
+assert.equal(cards.firstChild.querySelector('img').fetchPriority,'high','visible images have priority');
 const textPreview=cards.children[5].querySelector('pre');assert.ok(textPreview.textContent.includes('Could not read file'));assert.ok(textPreview.querySelector('button'),'failed text previews have a retry action');textFail=false;textPreview.querySelector('button').fire('click');await settle();assert.equal(textPreview.textContent,'synthetic text');
 assert.equal(cards.children[7].querySelector('.artifact-save').disabled,true,'unsupported types must not offer a failing save action');
 const first=cards.firstChild,img=first.querySelector('img');

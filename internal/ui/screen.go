@@ -51,7 +51,12 @@ func (h *handler) screen(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, 404, fmt.Errorf("no available project"))
 		return
 	}
-	answer, err := query.ReadScreen(p, request)
+	source, err := h.ledger.Load(p)
+	if err != nil {
+		h.fail(w, 500, err)
+		return
+	}
+	answer, err := query.ReadScreenFrom(p, request, source)
 	if err != nil {
 		h.fail(w, 500, err)
 		return

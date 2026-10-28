@@ -27,7 +27,7 @@ func TestScreenStartupSkipsUnselectedStatusWork(t *testing.T) {
 		t.Fatal(err)
 	}
 	var answer *ScreenAnswer
-	allocations := testing.AllocsPerRun(1, func() { answer, err = screenFrom(p, ScreenRequest{View: "records"}, state) })
+	allocations := testing.AllocsPerRun(1, func() { answer, err = ReadScreenFrom(p, ScreenRequest{View: "records"}, state) })
 	if err != nil || len(answer.Rows) != 24 || answer.Rows[0].ID != testID(25) {
 		t.Fatalf("startup selection: %v", err)
 	}

@@ -80,6 +80,22 @@ func readPageContext(ctx context.Context, p store.Project, r PageRequest, observ
 	if err != nil {
 		return Page{}, err
 	}
+	return pageFromContext(ctx, p, r, snapshot, observe)
+}
+
+// ReadPageFromContext observes one page of a validated immutable prefix.
+func ReadPageFromContext(ctx context.Context, p store.Project, r PageRequest, observer *Observer, snapshot reduce.Snapshot) (Page, error) {
+	budget := PageHashBytes
+	return pageFromContext(ctx, p, r, snapshot, func(p store.Project, e reduce.GalleryEntry) Shown { return observer.observe(ctx, p, e, &budget) })
+}
+
+func pageFromContext(ctx context.Context, p store.Project, r PageRequest, snapshot reduce.Snapshot, observe func(store.Project, reduce.GalleryEntry) Shown) (Page, error) {
+	if err := CheckPage(r); err != nil {
+		return Page{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return Page{}, err
+	}
 	records := snapshot.Gallery()
 	names := linkedTaskTitles(snapshot, p.ID, records)
 	selected := make([]reduce.GalleryEntry, 0, len(records))

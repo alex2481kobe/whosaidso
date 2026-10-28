@@ -62,6 +62,12 @@ func TestThumbnailsBoundRastersAndRecheckCachedSources(t *testing.T) {
 			if code != 200 || !bytes.Equal(body, again) || !stat.ModTime().Equal(stat2.ModTime()) {
 				t.Fatal("cache hit regenerated or changed the thumbnail")
 			}
+			if headers.Get("Cache-Control") != "private, no-cache" || headers.Get("ETag") == "" {
+				t.Fatal("thumbnail must permit private storage with mandatory revalidation")
+			}
+			if status, _, body := ask(t, host, "GET", thumb, "", session, "If-None-Match", headers.Get("ETag")); status != http.StatusNotModified || len(body) != 0 {
+				t.Fatalf("conditional thumbnail: %d %d bytes", status, len(body))
+			}
 			cached, err := os.ReadFile(names[0])
 			if err != nil {
 				t.Fatal(err)
@@ -83,7 +89,7 @@ func TestThumbnailsBoundRastersAndRecheckCachedSources(t *testing.T) {
 			if err := os.WriteFile(path, changed, 0600); err != nil {
 				t.Fatal(err)
 			}
-			code, _, _ = ask(t, host, "GET", thumb, "", session)
+			code, _, _ = ask(t, host, "GET", thumb, "", session, "If-None-Match", headers.Get("ETag"))
 			if code != http.StatusConflict {
 				t.Fatalf("cached thumbnail hid changed source: %d", code)
 			}

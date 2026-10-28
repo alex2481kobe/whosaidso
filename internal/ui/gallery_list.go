@@ -27,7 +27,12 @@ func (h *handler) galleryList(w http.ResponseWriter, r *http.Request, p store.Pr
 			h.fail(w, http.StatusBadRequest, err)
 			return
 		}
-		page, err = gallery.ReadPageContext(r.Context(), p, request, &h.observations)
+		source, loadErr := h.ledger.Load(p)
+		if loadErr != nil {
+			h.fail(w, http.StatusInternalServerError, loadErr)
+			return
+		}
+		page, err = gallery.ReadPageFromContext(r.Context(), p, request, &h.observations, source.Snapshot())
 		shown = page.Entries
 	} else {
 		shown, err = gallery.List(p)

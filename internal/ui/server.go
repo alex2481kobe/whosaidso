@@ -72,6 +72,7 @@ type Config struct {
 }
 
 type handler struct {
+	ledger       store.Reader
 	observations gallery.Observer
 	cfg          Config
 	host         string

@@ -4,7 +4,9 @@ package gallery
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
+	"errors"
 	"hash/crc32"
 	"image"
 	"image/png"
@@ -109,5 +111,29 @@ func TestThumbnailWaitsForAFreeDecodeSlot(t *testing.T) {
 	}
 	for range cap(thumbnailSlots) - 1 {
 		<-thumbnailSlots
+	}
+}
+
+func TestThumbnailCancellationDoesNotWaitForADecodeSlot(t *testing.T) {
+	p := pageProject(t, 0)
+	for range cap(thumbnailSlots) {
+		thumbnailSlots <- struct{}{}
+	}
+	defer func() {
+		for range cap(thumbnailSlots) {
+			<-thumbnailSlots
+		}
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	done := make(chan error, 1)
+	go func() { _, err := ThumbnailContext(ctx, p, forbiddenThumbnailRead{}, model.GalleryFile{}); done <- err }()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled decode: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("canceled thumbnail remained queued")
 	}
 }

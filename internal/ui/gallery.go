@@ -68,7 +68,12 @@ func (h *handler) galleryAnswer(w http.ResponseWriter, r *http.Request, file sto
 		return
 	}
 
-	entry, err := gallery.Find(file, id)
+	source, err := h.ledger.Load(file)
+	if err != nil {
+		h.fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	entry, err := gallery.FindEntry(file, source.Snapshot().Gallery(), id)
 	if errors.Is(err, gallery.ErrNoEntry) {
 		h.fail(w, http.StatusNotFound, errText("no gallery entry "+id))
 		return
@@ -159,11 +164,20 @@ func (h *handler) serveThumbnail(w http.ResponseWriter, r *http.Request, p store
 		return
 	}
 	defer f.Close()
-	b, err := gallery.Thumbnail(p, f, model.GalleryFile{SHA256: entry.SHA256, Length: entry.Length})
+	b, err := gallery.ThumbnailContext(r.Context(), p, f, model.GalleryFile{SHA256: entry.SHA256, Length: entry.Length})
 	if err != nil {
 		h.fail(w, http.StatusConflict, err)
 		return
 	}
 	w.Header().Set("Content-Type", "image/png")
+	// Revalidate ledger membership and the source before a conditional hit.
+	// Private caches may retain bytes, but can never hide a changed source.
+	w.Header().Set("Cache-Control", "private, no-cache")
+	tag := `"` + string(model.HashBytes(b)) + `"`
+	w.Header().Set("ETag", tag)
+	if r.Header.Get("If-None-Match") == tag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
 	_, _ = w.Write(b)
 }

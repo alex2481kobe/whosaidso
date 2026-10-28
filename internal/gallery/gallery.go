@@ -183,6 +183,11 @@ func Find(p store.Project, id string) (Entry, error) {
 	if err != nil {
 		return Entry{}, err
 	}
+	return FindEntry(p, entries, id)
+}
+
+// FindEntry resolves an id only within the supplied validated gallery.
+func FindEntry(p store.Project, entries []reduce.GalleryEntry, id string) (Entry, error) {
 	for _, e := range entries {
 		if string(e.Add.EntryID) == id && !e.Retracted {
 			return localEntry(p, e), nil

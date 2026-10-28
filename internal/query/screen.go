@@ -76,10 +76,11 @@ func ReadScreen(p store.Project, r ScreenRequest) (*ScreenAnswer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return screenFrom(p, r, source)
+	return ReadScreenFrom(p, r, source)
 }
 
-func screenFrom(p store.Project, r ScreenRequest, source Source) (*ScreenAnswer, error) {
+// ReadScreenFrom selects a bounded answer from an already validated prefix.
+func ReadScreenFrom(p store.Project, r ScreenRequest, source Source) (*ScreenAnswer, error) {
 	s := source.Snapshot()
 	a := &ScreenAnswer{ViewHeader: ViewHeader{View: r.View, Project: p.ID, Watermark: watermarkOf(s), Result: "KNOWN"}, Rows: []ScreenRow{}, Counts: map[string]int{}, Note: "Previews are shortened. Open a record for its complete detail. Counts cover the whole ledger; lists contain one page. Task status totals load on request. Intake proposals are available through whosaidso packets."}
 	if r.View == "status" {

@@ -4,6 +4,7 @@ package gallery
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
@@ -33,9 +34,21 @@ func Thumbnail(p store.Project, f io.Reader, pin model.GalleryFile) ([]byte, err
 	if pin.Length > thumbnailSourceBytes {
 		return nil, fmt.Errorf("image exceeds thumbnail byte budget; open the original")
 	}
-	thumbnailSlots <- struct{}{}
+	return ThumbnailContext(context.Background(), p, f, pin)
+}
+
+// ThumbnailContext cancels queued reads when the viewer leaves a screen.
+func ThumbnailContext(ctx context.Context, p store.Project, f io.Reader, pin model.GalleryFile) ([]byte, error) {
+	if pin.Length > thumbnailSourceBytes {
+		return nil, fmt.Errorf("image exceeds thumbnail byte budget; open the original")
+	}
+	select {
+	case thumbnailSlots <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 	defer func() { <-thumbnailSlots }()
-	data, err := io.ReadAll(io.LimitReader(f, thumbnailSourceBytes+1))
+	data, err := io.ReadAll(io.LimitReader(contextReader{ctx, f}, thumbnailSourceBytes+1))
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +92,8 @@ func Thumbnail(p store.Project, f io.Reader, pin model.GalleryFile) ([]byte, err
 		}
 	}
 	var out bytes.Buffer
-	if err := png.Encode(&out, dst); err != nil {
+	encoder := png.Encoder{CompressionLevel: png.BestSpeed}
+	if err := encoder.Encode(&out, dst); err != nil {
 		return nil, err
 	}
 	result := out.Bytes()

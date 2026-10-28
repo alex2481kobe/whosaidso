@@ -39,11 +39,11 @@ func TestHistoryStartupDecodesOnlyItsBatchPage(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := &rangeSource{State: state}
-	page, err := screenFrom(p, ScreenRequest{View: "history"}, source)
+	page, err := ReadScreenFrom(p, ScreenRequest{View: "history"}, source)
 	if err != nil || source.reads != 24 || len(page.Rows) != 24 || page.Total != 55 || page.Rows[0].Sequence != 55 || page.Rows[23].Sequence != 32 {
 		t.Fatalf("history: rows %d total %d reads %d err %v", len(page.Rows), page.Total, source.reads, err)
 	}
-	oldest, err := screenFrom(p, ScreenRequest{View: "history", Sort: "oldest", Offset: 24}, source)
+	oldest, err := ReadScreenFrom(p, ScreenRequest{View: "history", Sort: "oldest", Offset: 24}, source)
 	if err != nil || oldest.Rows[0].Sequence != 25 || oldest.Previous == nil || *oldest.Previous != 0 {
 		t.Fatalf("oldest page: %+v %v", oldest, err)
 	}
