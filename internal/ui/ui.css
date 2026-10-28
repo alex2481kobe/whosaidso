@@ -55,11 +55,8 @@ h1, h2, h3, h4, p { margin: 0; }
 .tone-tint { background: color-mix(in srgb, var(--tone) var(--tint), var(--surface)); color: var(--tone); }
 .dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; }
 
-/* header: the owl and the name, the project switch beside them; the tabs
-   and the theme switch on the right, as AskOther lays out its own */
+/* Navigation contains the workspace and screen links. */
 .topbar { flex: 0 0 58px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 clamp(16px, 3.4vw, 52px); background: var(--surface); border-bottom: 1px solid var(--line); }
-.brand { display: flex; align-items: center; gap: 8px; font-size: 22px; font-weight: 720; letter-spacing: -.035em; white-space: nowrap; }
-.brand img { width: 24px; height: 39px; }
 .tabstrip { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 3px; border-radius:10px; background: var(--tabstrip-ground); }
 .tabstrip a { display: inline-flex; align-items: center; justify-content: center; padding: 7px 18px; border: 1px solid transparent; border-radius:8px; color: var(--fg-mute); font-size: 13.5px; font-weight: 600; line-height: 1.15; white-space: nowrap; }
 .tabstrip a[aria-selected="true"] { color: var(--text); background: var(--selected-fill); box-shadow: var(--selected-lift); }
@@ -69,11 +66,7 @@ h1, h2, h3, h4, p { margin: 0; }
 .project-button:hover { background: var(--hover-fill); }
 .offline { color: var(--red); font-size: 12.5px; }
 .theme-control { display: flex; align-items: center; gap: 9px; color: var(--muted); }
-.theme-label { font-size: 23px; line-height: 1; }
-.theme-label.moon { font-size: 26px; }
-.theme-toggle { width: 50px; height: 28px; padding: 3px; border: 0; border-radius:99px; background: var(--toggle); display: flex; align-items: center; cursor: pointer; box-shadow: 0 2px 12px color-mix(in srgb, var(--toggle), transparent 80%); }
-.theme-toggle span { width: 22px; height: 22px; background: #fff; border-radius: 50%; box-shadow: 0 1px 4px rgba(28, 40, 73, .18); transform: translateX(21px); transition: transform .18s; }
-[data-theme="dark"] .theme-toggle span { transform: translateX(0); }
+.theme-toggle {display:flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;border:0;border-radius:8px;background:none;color:var(--text);cursor:pointer;}
 
 /* menus: the project switch, dropdowns and row menus share one look */
 /* a menu is never wider than the window; place() in ui-parts.js slides it inside and opens it upwards when needed */
@@ -181,8 +174,6 @@ button.stat[aria-pressed="true"] { border-color: color-mix(in srgb, var(--text) 
 :root[data-theme="dark"] { --bg:#151824; --surface:rgba(31,35,51,.77); --surface-2:#252b3e; --line:#ffffff16; --line-2:#ffffff0c; --text:#e7eaf7; --muted:#a3abc1; --faint:#7d879e; --blue:#b0a5ff; --sky:#87b9e6; --green:#72c8ab; --red:#ea92a2; --amber:#ddbe77; --amber-text:#ddbe77; --purple:#b8a3e4; --selected-fill:#bcb1ff13; --selected-lift:inset 0 1px 0 #ffffff10; --shadow:0 8px 32px #00000018,inset 0 1px 0 #ffffff08; --glass-ground:radial-gradient(ellipse at 80% 0,#30304c 0,transparent 55%),radial-gradient(ellipse at 0% 80%,#1d3340 0,transparent 55%),#171b28; }
 body { display:block; background:var(--glass-ground); font-size:14px; letter-spacing:-.015em; }
 .topbar { position:fixed; inset:18px auto 18px 18px; width:220px; padding:28px 16px 16px; display:flex; flex-direction:column; align-items:stretch; justify-content:flex-start; gap:0; border:1px solid var(--line); border-radius:16px; background:var(--surface); backdrop-filter:blur(28px); box-shadow:var(--shadow); }
-.brand { gap:10px; font-size:22px; padding:0 6px; align-items:center; letter-spacing:-.06em; }
-.brand img { width:27px; height:44px; object-fit:contain; filter:drop-shadow(0 4px 5px #846ac72a); }
 .project-button { width:100%; justify-content:space-between; font-size:12px; height:43px; padding:0 10px; background:transparent; border-radius:11px; }
 #project-name { flex:1; overflow:hidden; text-overflow:ellipsis; text-align:left; }
 .tabstrip { display:flex; flex-direction:column; gap:7px; padding:0; margin-top:27px; }
@@ -211,8 +202,8 @@ body { display:block; background:var(--glass-ground); font-size:14px; letter-spa
 .more { color:var(--blue); font-size:12px; }
 .home-body { gap:20px; }
 @media(min-width:1500px) { .page {padding-right:54px; padding-left:32px;} }
-@media(max-width:1050px) { .topbar {width:190px;left:12px;top:12px;bottom:12px;} .page {left:216px;padding-right:22px;} .brand {font-size:19px;} .stats.six {grid-template-columns:repeat(3,1fr);} }
-@media(max-width:700px) { .topbar {position:relative;inset:auto;margin:10px;width:calc(100% - 20px);border-radius:16px;padding:14px; flex-direction:row;flex-wrap:wrap;align-items:center;gap:12px;} .brand {font-size:20px;} .brand img {height:32px;width:20px;} .project {margin-left:auto;max-width:47%;} .tabstrip {width:100%;flex-direction:row;margin:0;gap:3px;} .tabstrip a {flex:1;padding:0 8px;justify-content:center;gap:5px;font-size:10px;height:36px;} .tabstrip .icon {width:13px;} .sidebar-bottom {position:absolute;right:14px;top:17px;padding:0;margin:0;} .theme-control {padding:0;border:0;} .theme-control>span {display:none;} .project {margin-right:44px;} .project-button {font-size:10px;max-width:150px;height:32px;} .page {position:relative;inset:auto;height:calc(100dvh - 132px);padding:16px 18px 30px;} .screen{gap:18px;} .hero {min-height:70px;} .hero h1{font-size:28px;} .offline {position:fixed;bottom:6px;left:10px;z-index:100;background:var(--surface);padding:8px;} }
+@media(max-width:1050px) { .topbar {width:190px;left:12px;top:12px;bottom:12px;} .page {left:216px;padding-right:22px;}  .stats.six {grid-template-columns:repeat(3,1fr);} }
+@media(max-width:700px) { .topbar {position:relative;inset:auto;margin:10px;width:calc(100% - 20px);border-radius:16px;padding:14px; flex-direction:row;flex-wrap:wrap;align-items:center;gap:12px;}   .project {margin-left:auto;max-width:47%;} .tabstrip {width:100%;flex-direction:row;margin:0;gap:3px;} .tabstrip a {flex:1;padding:0 8px;justify-content:center;gap:5px;font-size:10px;height:36px;} .tabstrip .icon {width:13px;} .sidebar-bottom {position:absolute;right:14px;top:17px;padding:0;margin:0;} .theme-control {padding:0;border:0;} .theme-control>span {display:none;} .project {margin-right:44px;} .project-button {font-size:10px;max-width:150px;height:32px;} .page {position:relative;inset:auto;height:calc(100dvh - 132px);padding:16px 18px 30px;} .screen{gap:18px;} .hero {min-height:70px;} .hero h1{font-size:28px;} .offline {position:fixed;bottom:6px;left:10px;z-index:100;background:var(--surface);padding:8px;} }
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;}}
 /* Legibility pass: glass is retained on chrome, reading surfaces stay stable. */
 :root {--surface:rgba(255,255,255,.91);--muted:#535e76;--faint:#535e76;--slate:#535e76;--violet:#5a48b6;--sky:#35649a;--blue:#5a48b6;--green:#216c55;--red:#a63751;--amber-text:#805719;--purple:#7050a2;}
@@ -221,12 +212,10 @@ body { display:block; background:var(--glass-ground); font-size:14px; letter-spa
 .tabstrip a[aria-current="page"] {color:var(--blue);border:1px solid color-mix(in srgb,var(--blue) 25%,transparent);background:color-mix(in srgb,var(--blue) 8%,transparent);}
 .search-input {font-size:14px;}
 .theme-toggle {position:relative;min-height:30px;}
-.theme-toggle::before {content:"";position:absolute;inset:-7px -5px;}
 .button,.icon-button {min-height:40px;}
 a:focus-visible,button:focus-visible,summary:focus-visible,pre:focus-visible {outline:2px solid var(--blue);outline-offset:3px;}
 @media(max-width:700px){.tabstrip a{font-size:12px;min-height:44px;}.tabstrip a .icon{display:none;}.project-button{font-size:12px;}.page{height:calc(100dvh - 140px);}.theme-toggle{margin-top:2px;}}
 /* The workspace, not product branding, anchors the navigation. */
-.topbar>.brand {margin-bottom:22px;}
 .topbar>.project {margin-top:2px;}
 .project-button {height:44px;padding:0 12px;gap:10px;border-radius:10px;background:var(--surface);font-size:14px;font-weight:550;box-shadow:inset 0 1px 0 color-mix(in srgb,white 30%,transparent);}
 .project-button .workspace-icon {flex:0 0 18px;color:var(--muted);}
@@ -248,5 +237,4 @@ body>.theme-control {position:fixed;top:20px;right:24px;z-index:35;display:flex;
 /* Content scrolls below the fixed theme control, never underneath it. */
 .page {top:76px;padding-top:8px;}
 @media(max-width:700px){.page{top:auto;padding-top:16px;}}
-/* On a phone the owl sits beside the workspace name; the name of the product is dropped. */
-@media(max-width:700px){.topbar>.brand{margin:0;}.topbar>.brand span{display:none;}.topbar>.brand img{width:20px;height:32px;}.topbar>.project{width:calc(100% - 100px);max-width:calc(100% - 100px);margin-right:0;}}
+

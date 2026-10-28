@@ -73,7 +73,7 @@ export async function renderBrowser(screen, params = new URLSearchParams()) {
     if (!active() || !rows.isConnected) { clearInterval(timer); clearTimeout(pending); return; }
     if (!busy && document.visibilityState !== "hidden") refresh();
   }, 3000);
-  return el("div", "screen browser-screen", el("h1", "", {home:"Overview", records:"Tasks & records", history:"Activity"}[screen]),
+  return el("div", "screen browser-screen", el("h1", "", (screen === "records" ? requestedKind === "TASK" ? "Tasks" : "Records" : {home:"Overview", history:"Activity"}[screen])),
     el("div", "gallery-toolbar", el("label", "search", icon("search"), search), tools),
     counts, screen === "home" ? workStatus : null, said, rows, el("nav", "gallery-tools", previous, range, next), note);
 }

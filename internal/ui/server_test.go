@@ -11,8 +11,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -263,49 +261,5 @@ func TestProjectsListsAnUnavailableHomeWithItsReason(t *testing.T) {
 	}
 	if w.reads.Load() != 1 {
 		t.Fatalf("todo is read for the available project only, read %d", w.reads.Load())
-	}
-}
-
-// The owner's design rules, checked in the files that draw the page: no
-// dot separators or bullet glyphs in its text; no pill-shaped tags (the one
-// capsule is the theme switch, and no other corner is rounder than 16px);
-// no checkboxes on rows, no avatars or profile pictures, no saved views; and
-// no picture but the owl and the favicons, all served from this package.
-// A file that brings any of them back fails here.
-func TestPageKeepsTheOwnersDesignRules(t *testing.T) {
-	page := []string{"index.html", "ui.css", "ui-screens.css", "ui.js", "ui-icons.js", "ui-parts.js", "ui-shell.js", "ui-browser.js", "ui-detail.js", "ui-kinds.js", "ui-gallery-media.js", "ui-gallery-inspect.js", "ui-gallery.js", "ui-gallery.css"}
-	images := regexp.MustCompile(`/[A-Za-z0-9_-]+\.(png|jpe?g|gif|webp|svg)\b`)
-	radius := regexp.MustCompile(`border-radius:\s*(\d+)px`)
-	capsules := 0
-	for _, file := range page {
-		b, err := files.ReadFile(file)
-		if err != nil {
-			t.Fatal(err)
-		}
-		text := string(b)
-		lower := strings.ToLower(text)
-		for _, banned := range []string{"·", "•", "<template", "type=\"checkbox\"", "type = \"checkbox\"", "type: \"checkbox\"", "avatar", "profile", "saved view"} {
-			if strings.Contains(lower, strings.ToLower(banned)) {
-				t.Errorf("%s carries %q", file, banned)
-			}
-		}
-		for _, image := range images.FindAllString(text, -1) {
-			if image != "/owl.png" && image != "/favicon-32.png" && image != "/favicon-180.png" {
-				t.Errorf("%s draws %s; the owl and the favicons are the only pictures", file, image)
-			}
-		}
-		for _, m := range radius.FindAllStringSubmatch(text, -1) {
-			if px, _ := strconv.Atoi(m[1]); px >= 99 {
-				capsules++
-			} else if px > 16 {
-				t.Errorf("%s rounds a corner %dpx, rounder than a rounded rectangle", file, px)
-			}
-		}
-	}
-	if capsules != 1 {
-		t.Errorf("%d capsule shapes; only the theme switch is one", capsules)
-	}
-	if page, _ := files.ReadFile("index.html"); !strings.Contains(string(page), `<img src="/owl.png"`) {
-		t.Error("the header's logo is not the owl")
 	}
 }

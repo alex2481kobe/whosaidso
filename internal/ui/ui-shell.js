@@ -9,6 +9,7 @@ import { renderGallery } from "./ui-gallery.js";
 const toggle = document.getElementById("theme-toggle");
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
+  toggle.replaceChildren(icon(theme === "dark" ? "sun" : "moon"));
   toggle.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
   toggle.setAttribute("aria-label", `Switch to ${theme === "dark" ? "light" : "dark"} mode`);
   try { localStorage.setItem("whosaidso-theme", theme); } catch {}
@@ -17,7 +18,7 @@ function initTheme() {
   let saved = null;
   try { saved = localStorage.getItem("whosaidso-theme"); } catch {}
   toggle.addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
-  setTheme(saved || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+  setTheme(saved === "light" || saved === "dark" ? saved : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
 }
 
 function renderMenu() {
@@ -149,12 +150,13 @@ async function route() {
     return;
   }
   if (restore) {
-    const loading = el("p", "notice", "Loading " + ({gallery:"gallery", records:"records", history:"activity", record:"record", home:"overview"}[screen] || "overview") + "…");
+    const loading = el("p", "notice", "Loading " + ({gallery:"gallery", records:"records", tasks:"tasks", history:"activity", record:"record", home:"overview"}[screen] || "overview") + "…");
     loading.setAttribute("role", "status"); show(loading);
   }
   try {
     let node;
-    if (screen === "records") node = await renderBrowser("records", new URLSearchParams(rest));
+    if (screen === "tasks") node = await renderBrowser("records", new URLSearchParams("kind=TASK"));
+    else if (screen === "records") node = await renderBrowser("records", new URLSearchParams(rest));
     else if (screen === "record") {
       const status = await api("/api/screen", {project:project(), screen:"status"});
       if (mine !== state.renders) return;

@@ -41,7 +41,8 @@ const fetch=async (raw,options={})=>{
   throw Error('unexpected request '+raw);
 };
 const location={hash:'#/gallery'};
-const context=vm.createContext({console,Node,document:doc,window:win,location,history:{replaceState(){}},URL,URLSearchParams,AbortController,fetch,innerWidth:1200,innerHeight:900,sessionStorage:{getItem(){return null;},setItem(){}},localStorage:{getItem(){return null;},setItem(){}},navigator:{clipboard:{writeText:async text=>{copied=text;}}},matchMedia:()=>({matches:false}),requestAnimationFrame:fn=>fn(),setTimeout:(fn,ms)=>{timers.set(++serial,{fn,ms});return serial;},clearTimeout:id=>timers.delete(id),setInterval:(fn,ms)=>{intervals.set(++serial,{fn,ms});return serial;},clearInterval:id=>intervals.delete(id)});
+const stored=new Map([["whosaidso-theme","dark"]]);
+const context=vm.createContext({console,Node,document:doc,window:win,location,history:{replaceState(){}},URL,URLSearchParams,AbortController,fetch,innerWidth:1200,innerHeight:900,sessionStorage:{getItem(){return null;},setItem(){}},localStorage:{getItem:key=>stored.get(key)||null,setItem:(key,value)=>stored.set(key,value)},navigator:{clipboard:{writeText:async text=>{copied=text;}}},matchMedia:()=>({matches:false}),requestAnimationFrame:fn=>fn(),setTimeout:(fn,ms)=>{timers.set(++serial,{fn,ms});return serial;},clearTimeout:id=>timers.delete(id),setInterval:(fn,ms)=>{intervals.set(++serial,{fn,ms});return serial;},clearInterval:id=>intervals.delete(id)});
 const observers=new Set();
 class IntersectionObserver {
  constructor(fn){this.fn=fn;this.nodes=new Set();observers.add(this);}
@@ -57,6 +58,12 @@ await main.link((spec,parent)=>moduleAt(path.resolve(path.dirname(parent.identif
 const settle=async()=>{for(let i=0;i<50;i++)await Promise.resolve();};await settle();
 const tick=async()=>{for(const {fn} of [...intervals.values()])await fn();await settle();};
 const find=(tag,text)=>flatten(body).find(n=>n.tagName===tag.toUpperCase()&&n.textContent===text);
+const theme=doc.getElementById('theme-toggle');
+assert.equal(doc.documentElement.dataset.theme,'dark','saved theme overrides the system preference');
+assert.equal(theme.children.length,1,'theme is one icon');assert.equal(theme.firstChild.tagName,'SVG');assert.equal(theme.textContent,'');
+const themeIcon=theme.firstChild.firstChild.getAttribute('d');theme.fire('click');
+assert.equal(doc.documentElement.dataset.theme,'light');assert.equal(stored.get('whosaidso-theme'),'light','theme persists');assert.equal(theme.getAttribute('aria-label'),'Switch to dark mode');assert.notEqual(theme.firstChild.firstChild.getAttribute('d'),themeIcon,'icon indicates the other theme');
+theme.fire('click');assert.equal(doc.documentElement.dataset.theme,'dark');assert.equal(stored.get('whosaidso-theme'),'dark');
 assert.equal(doc.getElementById('project-name').textContent,'test/viewer','switcher must render before the slow gallery response');
 assert.ok(doc.getElementById('main').textContent.includes('Loading gallery'),'slow startup shows progress');
 assert.equal(requests[0].searchParams.get('summary'),'0','project discovery must avoid status construction');
@@ -108,7 +115,8 @@ byLabel(cards.firstChild,'Delete').fire('click');await settle();assert.equal(car
 cards.firstChild.querySelector('.artifact-preview').fire('click');
 byLabel(body.querySelector('.artifact-dialog'),'Delete').fire('click');await settle();assert.equal(body.querySelector('.artifact-dialog'),null,'item deletion closes its view');assert.equal(cards.children.length,46,'item deletion removes the matching card');
 cards.firstChild.querySelector('.artifact-preview').fire('click');
-for(const screen of ['home','records','history']){location.hash='#/'+screen;win.fire('hashchange',{oldURL:'http://viewer/#/gallery'});await settle();assert.ok(body.querySelector('.browser-screen'),screen+' mounts bounded screen');
+for(const screen of ['home','tasks','records','history']){location.hash='#/'+screen;win.fire('hashchange',{oldURL:'http://viewer/#/gallery'});await settle();assert.ok(body.querySelector('.browser-screen'),screen+' mounts bounded screen');
+ if(screen==='tasks'||screen==='records'){const request=requests.filter(u=>u.pathname==='/api/screen').at(-1);assert.equal(request.searchParams.get('kind'),screen==='tasks'?'TASK':'','task and record routes select distinct bounded lists');}
  if(screen==='home'){assert.equal(body.querySelector('.artifact-dialog'),null,'routing closes the inspector');find('button','Load work status totals').fire('click');await settle();const full=requests.filter(u=>u.searchParams.get('status_counts')==='1').length;assert.equal(full,1,'status totals load on explicit request');await tick();assert.equal(requests.filter(u=>u.searchParams.get('status_counts')==='1').length,full,'polls must not recompute unrequested totals');}
 }
 assert.ok(!requests.some(u=>u.pathname==='/api/view'),'other screens must not fetch bulk models');
