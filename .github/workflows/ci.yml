@@ -5,102 +5,38 @@ on:
     branches: [main]
   pull_request:
 
-# Read-only by default. A workflow that never needs to write should never be
-# able to. Narrower write scopes belong in specific trusted workflows only.
 permissions:
   contents: read
 
+# Main requires a status named exactly "check", so that job keeps the name and
+# runs on Linux; macOS runs the same steps as its own job beside it.
 jobs:
   check:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          # Do not leave a credential in the checkout for later steps, or for
-          # anything a dependency might run.
-          persist-credentials: false
-
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          # Nothing to cache: there are no dependencies, so there is no go.sum
-          # to key a module cache on.
-          cache: false
-
-      - name: No dependencies
-        # WhoSaidSo is standard library only. A go.sum appearing means something
-        # pulled a dependency in, which is a decision, not an accident.
-        run: |
-          test ! -f go.sum || { echo "go.sum exists: a dependency was added"; exit 1; }
-
-      - name: Format
-        run: |
-          unformatted=$(gofmt -l .)
-          test -z "$unformatted" || { echo "gofmt needed on:"; echo "$unformatted"; exit 1; }
-
-      - name: Vet
-        run: go vet ./...
-
-      - name: Test
-        run: go test ./... -count=1
-
-      - name: Test under the race detector
-        # always(), because a step that only runs when everything else passed
-        # is not a check, it is a wish: while any test fails, a step without
-        # it is skipped, and the race detector would silently never run.
-        #
-        # Races are a different property from correctness, so this has to be
-        # able to fail on its own and to report when the suite is otherwise
-        # red. Admission takes a lock and publishes files, and two writers
-        # racing on one command id is a case to measure rather than hope about.
-        if: always()
-        run: go test ./... -race -count=1
-
-      - name: macOS release builds compile
-        # Releases ship darwin arm64 and amd64 binaries. Cross-compiling here
-        # proves both targets build; nothing is uploaded.
-        if: always()
-        run: |
-          GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/whosaidso
-          GOOS=darwin GOARCH=amd64 go build -o /dev/null ./cmd/whosaidso
-
-  windows:
-    # The store's Windows code (owner-only access lists, no-replace
-    # publication, directory flushes, the lock) runs only here: none of it is
-    # compiled into the Linux job.
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: bash
+    env:
+      RUSTFLAGS: -D warnings
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: Checkout has LF line endings
-        # .gitattributes pins LF. A CRLF checkout would fail gofmt and the
-        # byte-exact fixtures for a reason that has nothing to do with the code.
-        run: |
-          ! git ls-files --eol | grep -q 'w/crlf' || { git ls-files --eol | grep 'w/crlf'; exit 1; }
-
-      - name: Format
-        run: |
-          unformatted=$(gofmt -l .)
-          test -z "$unformatted" || { echo "gofmt needed on:"; echo "$unformatted"; exit 1; }
-
-      - name: Vet
-        run: go vet ./...
-
+      - name: Build without warnings
+        run: cargo build --locked
       - name: Test
-        run: go test ./... -count=1
+        run: cargo test --locked
+      - name: Release build
+        run: cargo build --release --locked
 
-      - name: Test under the race detector
-        if: always()
-        env:
-          CGO_ENABLED: '1'
-        run: go test ./... -race -count=1
+  macos:
+    runs-on: macos-latest
+    env:
+      RUSTFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Build without warnings
+        run: cargo build --locked
+      - name: Test
+        run: cargo test --locked
+      - name: Release build
+        run: cargo build --release --locked

@@ -1,11 +1,8 @@
 ---
 name: whosaidso
-description: Use when reading or writing a project's WhoSaidSo ledger (a repo with whosaidso.toml, which names its ledger) - finding owed work, starting or handing back a task, running a measurement, proving a claim, or recording an owner ruling.
+description: Use when working with a project's WhoSaidSo records, goals, proofs, search or code index.
 ---
 
 # WhoSaidSo
 
-WhoSaidSo is a project's accountable record: work finishes on a measured receipt,
-not on prose. The guide ships with the binary, so it cannot drift from the CLI:
-run `whosaidso help` (then `whosaidso help TOPIC`), and `whosaidso VERB --help` for one
-verb. Build it with `go build -o whosaidso ./cmd/whosaidso` in the WhoSaidSo repo.
+Run WhoSaidSo inside the project Git worktree. Read the project's records and use `whosaidso goals` and `whosaidso show <id>` to understand work. Select a goal with `whosaidso start <goal-id>`, check records with `whosaidso check`, and run its instrument with `whosaidso prove <goal-id>`. Use `find`, `grep` and `code` to locate records and code. Commit generated proof and image records when they should be shared. See [USAGE.md](../../USAGE.md) for commands, formats and state rules. Build with `cargo build` and test with `cargo test`.

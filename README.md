@@ -1,75 +1,66 @@
-<p align="center">
-  <img src="assets/whosaidso-mark.png" alt="WhoSaidSo" width="140" height="140" />
-</p>
+# WhoSaidSo
 
-<h1 align="center">WhoSaidSo</h1>
+WhoSaidSo keeps a project's engineering record in Git as small JSON files.
+It derives goal progress from commits and proofs and searches records and code.
+Its concise command-line answers are designed for people and coding agents.
 
-<p align="center">
-  <strong>Keep your agents accountable and your claims proven.</strong><br />
-  Every task, idea and decision is written down as it happens, and every answer points back to who said so.
-</p>
+## Install
 
-<p align="center">
-  <a href="#get-started">Get started</a> ·
-  <a href="#what-it-is-built-on">What it is built on</a> ·
-  <a href="USAGE.md">Usage and setup</a>
-</p>
+Requires Rust, Cargo, Git and a Unix shell; CI verifies the supported toolchain.
 
-<img src="assets/ui-light.png" alt="The WhoSaidSo viewer's Home screen, with sample data" width="912" />
-
-WhoSaidSo is for your agents, not for you to operate. Keep working with your agents the way you already do: they
-use WhoSaidSo to write down what they are doing and to prove what they claim, and a new session runs
-`whosaidso todo` and knows where things stand without being told again. You read along when you want to, in the
-terminal or with `whosaidso ui` for a quick look at progress and the decisions waiting on you.
-
-It is one small program: a single Go binary with no dependencies. A project's record is plain JSON files in an
-append-only ledger inside the repository, committed with your code. It is bare-bones on purpose, just what one
-project needs. It doesn't need a database; if a project ever outgrows plain files, SQLite could sit behind the same
-commands.
-
-## What it is built on
-
-**Testing and proving.** Nothing is done because someone says it is. A claim is proven against a criterion fixed
-before the run, with every result counted, failures included.
-
-**Accountable agents.** Tasks, ideas and decisions are written down as they happen, so nothing is forgotten between
-sessions, and every claim points back to who made it and what proved it.
-
-**Accountable tools.** Instruments and measurements are held to the same standard: each one declares what it cannot
-see, so a correct number can't quietly answer the wrong question. When something can't be checked, the answer is
-UNKNOWN, never a guess.
-
-**Knowing where you are.** One command shows what is done, what is owed, what is blocked, and why.
-
-**Agent first.** Built for AI agents doing the work every day, not for you to drive by hand. Every screen in the
-viewer is a command's `--json` answer, so you can build your own view on the same record.
-
-## Get started
-
-Tell your coding agent:
-
-```text
-Install WhoSaidSo from https://github.com/alex2481kobe/whosaidso and set it up in this project.
+```sh
+cargo install --path .
 ```
 
-Or do it yourself: download the file for your system from the
-[latest release](https://github.com/alex2481kobe/whosaidso/releases/latest), or
-`go install github.com/alex2481kobe/whosaidso/cmd/whosaidso@latest`, then run `whosaidso help`. Full steps and the
-first loop are in [Usage and setup](USAGE.md).
+## Quick start
 
-## Works with
+In a Git repository, create the first records (there is no initialization command):
 
-Any project and any agent that can run a command. Tested on macOS and, in CI, on Linux and Windows. Early:
-the design is still settling. Until 1.0 the ledger format may change; when it does, the release includes a one-time
-converter.
+```sh
+mkdir -p .whosaidso/{phases,goals,instruments}
+printf '%s\n' '{"title":"First phase","order":1}' > .whosaidso/phases/p1.json
+printf '%s\n' '{"command":"cargo test","answers":"Tests pass"}' > .whosaidso/instruments/test.json
+printf '%s\n' '{"title":"First goal","done_when":"Tests pass","check":"test","broader":"p1"}' > .whosaidso/goals/first-goal.json
+whosaidso check
+whosaidso install-hooks
+git add .whosaidso
+git commit -m 'Add records'
+```
 
-## What could come next
+Push the commit to `origin/main` and fetch that reference before asking for progress. Select a goal with `whosaidso start first-goal`; later commits will carry its `Goal:` trailer. After committing work, run:
 
-- **SQLite for large ledgers**, behind the same commands, if a project outgrows plain files.
-- **Sub-projects**: tag records by sub-project inside one ledger, so a project's folders can move around without
-  losing their records.
-- **Moving records between ledgers**: a sub-project splits off from the top-level ledger into its own, in its own
-  folder or its own repo, and can merge back.
-- **Adding records from the viewer**, through the same capture and admit.
+```sh
+whosaidso goals
+whosaidso prove first-goal
+whosaidso find first goal
+whosaidso grep search text --in src/
+whosaidso code defs physics::cross
+whosaidso code deps src/main.cpp
+whosaidso code includers src/types.h
+whosaidso view
+```
 
-Apache-2.0.
+`find` prints 8 ranked results and a total; use `--limit N` for more. Files appear once as paths, and commits use 10-character SHAs with subjects capped at 72 characters. `grep` accepts repeated `--in <path-or-prefix>` options; without scope, `.whosaidso/` hits come last. `code deps` lists includes, and `code includers` lists reverse includes (up to 20, with a total when truncated). Qualified definitions and references match enclosing scope suffixes from SCIP descriptors or C++ and Rust syntax. Search lines end in `...` when cut at 200 characters, or 160 for `grep`.
+
+`prove` creates a proof record to add and commit. It requires a readable, nonempty HEAD reflog with writing enabled (`core.logAllRefUpdates`) and refuses a proof if HEAD or its reflog changes during the run, including A to B and back. Content edits made and reverted without a commit or checkout are not detected. Record commit fields use 40 lowercase hex digits. `view` prints the path to a local HTML gallery and also writes a progress page.
+
+Whoever lands work runs `whosaidso prune` on main after merging; it keeps proofs selected at HEAD and origin/main, including time ties, and live unlanded proofs; deletes abandoned or missing-commit proofs; keeps 5 asks and 5 images per goal and collects unreferenced blobs (skipped with `WHOSAIDSO_BLOBS`).
+
+`ran_at` uses Unix nanoseconds for proofs and images. Proofs bind to the instrument record bytes at HEAD; `prove` requires clean tracked records and runs all gap-covering instruments.
+
+Loading and publication enforce 64 KiB records and 16 KiB proof tails; output is trimmed to fit serialized bytes and oversized asks are refused.
+
+Image evidence lives in `<git common dir>/whosaidso/blobs` (shared by this clone’s worktrees; `WHOSAIDSO_BLOBS` overrides it), outside the disposable cache; interrupted writes never publish partial blobs and corrupt destinations are repaired.
+
+`sync`, `grep-index` and `code index` are removed; queries index automatically and `code import-scip` remains.
+
+SCIP `[precise]` answers mean every occurrence whose name the import check could derive matched the current file, and the bytes have not changed since import. An occurrence added since indexing is not listed; files with mismatches use syntactic answers.
+
+See [usage and record formats](USAGE.md), [contributing](CONTRIBUTING.md), [changelog](CHANGELOG.md), [security](SECURITY.md), and [license](LICENSE).
+
+- `check` verifies every proof's `instrument_sha256` against the instrument bytes at that proof's own commit (`git show <commit>:<path>`); rejected proofs cannot determine goal state.
+- Blob collection protects every worktree's working tree and HEAD (including detached worktrees), blobs modified within 14 days, and live ref tips; bytes referenced by a live branch or tag deliberately stay until that ref goes.
+- Publishing proofs, asks and images refuses symlinks or non-directories in `.whosaidso/` or the kind folder before running instruments or writing anything.
+- `prune` also collects proofs, asks and images whose goal no longer exists at HEAD.
+- Records omit `kind` and `id`: the folder supplies the kind and `<id>.json` supplies the ID; proofs, asks and images retain content hash filenames, with no old-format compatibility. Phases have no five-phase cap; image titles need only be nonempty and at most 80 characters.
+- Git history keeps every committed proof, each capped at 64 KiB (16 KiB output tail); pruning never rewrites history.

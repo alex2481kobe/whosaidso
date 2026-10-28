@@ -1,0 +1,63 @@
+// Owner requests, coverage proofs, and progress views in a synthetic project.
+use sha2::{Digest, Sha256};
+use std::{fs, path::Path, process::{Command, Output}, time::{SystemTime, UNIX_EPOCH}};
+fn run(dir: &Path, home: &Path, program: &str, args: &[&str]) -> Output {
+    let mut c = Command::new(program);
+    c.current_dir(dir).env("HOME", home).env("GIT_CONFIG_NOSYSTEM", "1").env_remove("WHOSAIDSO_BLOBS");
+    if program == "git" { c.args(["-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "init.defaultBranch=main"]); }
+    c.args(args).output().unwrap()
+}
+fn ok(dir: &Path, home: &Path, program: &str, args: &[&str]) -> String {
+    let o = run(dir, home, program, args);
+    assert!(o.status.success(), "{args:?}: {} {}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
+    String::from_utf8(o.stdout).unwrap()
+}
+fn git(dir: &Path, home: &Path, args: &[&str]) -> String { ok(dir, home, "git", args) }
+fn cli(dir: &Path, home: &Path, args: &[&str]) -> String { ok(dir, home, env!("CARGO_BIN_EXE_whosaidso"), args) }
+fn bad(dir: &Path, home: &Path, args: &[&str], expected: &str) {
+    let o = run(dir, home, env!("CARGO_BIN_EXE_whosaidso"), args);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr)).contains(expected));
+}
+fn write(path: &Path, data: &[u8]) { fs::create_dir_all(path.parent().unwrap()).unwrap(); fs::write(path, data).unwrap(); }
+#[test]
+fn requests_coverage_and_progress_agree() {
+    let root = std::env::temp_dir().join(format!("progress-{}-{}", std::process::id(), SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+    fs::create_dir_all(&root).unwrap();
+    git(&root, &root, &["init", "--bare", "origin.git"]);
+    git(&root, &root, &["clone", "origin.git", "proj"]);
+    let proj = root.join("proj"); let records = proj.join(".whosaidso");
+    write(&records.join("phases/p1.json"), br#"{"title":"Phase","order":1}"#);
+    write(&records.join("goals/envelope.json"), br#"{"title":"Envelope","done_when":"Roof sheds water","check":"unit-tests","broader":"p1"}"#);
+    write(&records.join("instruments/unit-tests.json"), br#"{"run":["true"],"answers":"works","gaps":[{"what":"roof","why":"visual","covered_by":"site-photo"}]}"#);
+    write(&records.join("instruments/site-photo.json"), br#"{"run":["sh","-c","false # photo"],"answers":"roof"}"#);
+    git(&proj, &root, &["add", ".whosaidso"]); git(&proj, &root, &["commit", "-m", "records", "-m", "Goal: none"]); git(&proj, &root, &["push", "-u", "origin", "main"]);
+    let words = "Make the roof shed water like a real roof";
+    assert!(cli(&proj, &root, &["ask", "envelope", "Make", "the", "roof", "shed", "water", "like", "a", "real", "roof"]).starts_with("ask: envelope "));
+    let ask_path = fs::read_dir(records.join("asks")).unwrap().next().unwrap().unwrap().path();
+    assert!(fs::read_to_string(&ask_path).unwrap().contains(words));
+    assert!(cli(&proj, &root, &["check"]).contains("check: ok"));
+    let wrong = records.join("asks/wrong.json"); fs::rename(&ask_path, &wrong).unwrap();
+    bad(&proj, &root, &["check"], "ask filename does not match sha256"); fs::rename(&wrong, &ask_path).unwrap();
+    write(&proj.join("work"), b"work"); git(&proj, &root, &["add", "work"]);
+    git(&proj, &root, &["add", ".whosaidso/asks"]); git(&proj, &root, &["commit", "-m", "land work", "-m", "Goal: envelope"]); git(&proj, &root, &["push"]);
+    let proved = cli(&proj, &root, &["prove", "envelope"]);
+    assert!(proved.contains(" pass ") && proved.contains(" fail "));
+    git(&proj, &root, &["add", ".whosaidso/proofs"]); git(&proj, &root, &["commit", "-m", "proofs"]); git(&proj, &root, &["push"]);
+    assert!(cli(&proj, &root, &["goals"]).contains("failing envelope"));
+    write(&records.join("instruments/site-photo.json"), br#"{"run":["sh","-c","true # photo"],"answers":"roof"}"#);
+    git(&proj, &root, &["add", ".whosaidso/instruments"]); git(&proj, &root, &["commit", "-m", "cover roof"]); git(&proj, &root, &["push"]);
+    assert!(cli(&proj, &root, &["goals"]).contains("landed  envelope"));
+    cli(&proj, &root, &["view"]); let page = records.join("cache/view/progress.html");
+    assert!(fs::read_to_string(&page).unwrap().contains("<summary>landed Envelope</summary>"));
+    assert_eq!(cli(&proj, &root, &["prove", "envelope"]).lines().count(), 2);
+    git(&proj, &root, &["add", ".whosaidso/proofs"]); git(&proj, &root, &["commit", "-m", "passing coverage"]); git(&proj, &root, &["push"]);
+    assert!(cli(&proj, &root, &["goals"]).contains("done    envelope"));
+    let shown = cli(&proj, &root, &["show", "envelope"]); assert!(shown.contains(words) && shown.contains("done") && shown.contains("unit-tests"));
+    cli(&proj, &root, &["view"]); let html = fs::read_to_string(&page).unwrap(); assert!(html.contains(words) && html.contains("<summary>done Envelope</summary>"));
+    let ask = fs::read_to_string(ask_path).unwrap().replace("envelope", "nowhere");
+    let sha: String = Sha256::digest(ask.as_bytes()).iter().map(|b| format!("{b:02x}")).collect();
+    fs::write(records.join("asks").join(format!("{sha}.json")), ask).unwrap();
+    bad(&proj, &root, &["check"], "ask: unknown goal nowhere");
+    fs::remove_dir_all(root).unwrap();
+}

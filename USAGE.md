@@ -1,155 +1,89 @@
-# Usage and setup
+# Usage
 
-## Install
+Run commands inside a Git worktree. Arguments are positional except the search options shown below; quote an argument containing spaces. Answers go to stdout and errors normally to stderr. Exit status is 0 on success and 1 on error, including invalid arguments. Some validation errors are printed to stdout. A successful `prove` can record a failing result; inspect its output. No-match search results also exit 0.
 
-Download the archive for your computer from the
-[latest release](https://github.com/alex2481kobe/whosaidso/releases/latest), check it against `SHA256SUMS`, and
-put `whosaidso` on your `PATH` (for example `~/.local/bin`). The macOS builds are signed and notarized, so they run
-straight from a browser download.
+| Command | Arguments and output |
+| --- | --- |
+| `check` | Validates records, references, instruments and images. Prints problems or a count of phases, goals, instruments and proofs. Missing image bytes are warnings. |
+| `install-hooks` | Installs a `prepare-commit-msg` hook and configures `core.hooksPath`; prints confirmation. This replaces that setting and hook. |
+| `start <goal-id>` | Selects a goal for this worktree's commit hook; `none` selects `Goal: none`. Prints the selection. |
+| `gate [<base>]` | Checks non-merge commits in `base..HEAD` for exactly one known `Goal:` trailer or `none`. Base defaults to `origin/main`. Prints violations or a count. |
+| `ask <goal-id> <words...>` | Records nonempty words and the current commit; prints the goal and record hash prefix. |
+| `show <id>` | Prints up to 40 lines of details for a goal, phase or instrument. Goal details include up to five recent asks and the latest eligible proof and image. |
+| `goals` | Prints phases, the goal tree, states, branches and leaf counts. Requires `origin/main`. |
+| `prove <goal-id>` | Requires clean tracked `.whosaidso/` files and a clean tree outside it; runs the goal's check and all gap-covering instruments (argument lists by direct exec), records its output and result at HEAD, and prints the result and hash prefix. |
+| `prune` | The landing owner runs this on main after merging and commits the deletions with the landing; keeps proofs selected at HEAD and origin/main (including time ties), unlanded proofs reachable from any ref, and the newest 5 images and 5 asks per goal; deletes abandoned or missing-commit proofs and unreferenced blobs (skipped with `WHOSAIDSO_BLOBS`). |
+| `tools` | Prints instruments, commands, answers and gaps, followed by a count. |
+| `show-image <goal-id> <image> <title>` | Copies PNG, JPG, JPEG, WebP or GIF bytes into local blob storage and records an image; prints the goal and hash prefix. Title is one nonempty argument, at most 80 characters. |
+| `view` | Writes local gallery and progress HTML and prints the gallery path. Requires `origin/main`. |
+| `find <words...> [--limit N]` | Searches indexed records, visible files and main history, with ranking and typo correction. Optional `kind:<kind>` restricts the type. Prints 8 matches by default, followed by `shown K of N`, or no match. `--limit` takes a positive integer. Files print just their path; commits print a 10-character SHA and a subject capped at 72 characters. |
+| `grep <text...> [--in <path-or-prefix>]...` | Searches visible text case-insensitively; at least three characters are required. Repeated `--in` options select the union of repository-relative path prefixes. Without scope, `.whosaidso/` hits follow all other matches. Prints up to 20 matching lines capped at 160 characters, counts when truncated, and skipped files. Files over 1 MiB, binary files and non-UTF-8 files are skipped. |
+| `code defs <name>` / `code refs <name>` | Prints up to 20 definitions or references, labeled precise or syntactic. Qualified names (`a::b::name`, `Type::name`, `Type.name`) match a suffix of the enclosing scopes. |
+| `code deps <path>` | Prints up to 20 syntactic includes from the file, matched by name. |
+| `code includers <path>` | Prints who includes the file, matched by basename, capped at 20 with `shown 20 of N` when truncated. |
+| `code import-scip <file>` | Imports a SCIP index into the cache and prints document, occurrence, symbol and stale counts. Precise answers require unchanged imported bytes and at least one checkable occurrence whose range spells its name; every checkable occurrence, including references, must match. |
 
-Or, with Go 1.22 or later:
+`sync`, `grep-index` and `code index` are removed; queries index on demand and `code import-scip` remains.
 
-```sh
-go install github.com/alex2481kobe/whosaidso/cmd/whosaidso@latest
-```
+SCIP import checks identifier names from descriptors (or named local symbols), skipping synthetic names, operators and macro expansion ranges. Files with no checkable occurrences remain stale and use syntactic answers. `WHOSAIDSO_TIMING=1` reports checked/total occurrences per document on stderr. `[precise]` means every checkable occurrence matched the current file; constructor references (methods named after their enclosing type), type references and references to names beginning with `__` are not checked. These spelling checks detect shifted or renamed occurrences when importing an old index, including copied indexes. An occurrence added since indexing is not listed. SCIP without source text or content hashes cannot detect arbitrary edits outside the checked ranges before import; after import, any byte change expires precise answers. Unspecified position encoding uses byte columns, as emitted by scip-clang; declared UTF-8, UTF-16 and UTF-32 columns are honored.
 
-That puts `whosaidso` in Go's bin folder (`$(go env GOPATH)/bin`); make sure it is on your `PATH`. From a
-checkout, `go build -o whosaidso ./cmd/whosaidso` does the same. There are no other dependencies.
+Search answer lines are capped at 200 characters (160 for `grep`); caps include the ending `...` when cut and count Unicode characters. Qualified precise answers use SCIP descriptors. Syntactic scopes come from tree-sitter ancestors: C++ namespaces, classes and structs; Rust inline modules, impl types and traits. Explicit call qualifiers are also preserved; syntactic references do not resolve receiver types or imports.
 
-Then, in any project, `whosaidso help` is the topic and verb index,
-`whosaidso help all` is the complete manual, and `whosaidso ui` opens a local,
-read-only viewer of the record.
+Search considers tracked files, working-tree changes and unignored untracked files. Indexed content can come from Git when files are not checked out. Search and code indexing never follow symlinks and skip submodules. Files over 64 MiB are not code-indexed. Code queries also update their index. `find` and `grep` update theirs automatically.
 
-## The 60-second loop
+`prove` exits 1 without recording the current instrument's proof if tracked `.whosaidso/` files differ from HEAD or the tree outside `.whosaidso` is dirty before or after the run; untracked proofs, asks and images are allowed. It writes one proof per required instrument and stops at the first refusal. It requires a readable, nonempty HEAD reflog with reflog writing enabled (`core.logAllRefUpdates`); otherwise it exits 1 without a proof. It refuses to record if HEAD or its reflog changed during the run, including A to B and back. Content edits made and reverted without a commit or checkout are not detected.
 
-Declare the project; every clone and worktree reads and writes its own copy of the ledger, and git merges join
-them:
+## Records
 
-```sh
-cd your-project
-printf "id = 'you/your-project'\nledger = '.whosaidso/events'\n" > whosaidso.toml
-export WHOSAIDSO_ACTOR=alice          # who is acting; never guessed
-```
+Place JSON files under `.whosaidso/`. All fields below are required unless marked optional; unknown fields are rejected. Phase, goal and instrument filenames are `<id>.json`. IDs contain 1–64 lowercase ASCII letters, digits or hyphens and are unique across record kinds; `none` is reserved and cannot name a goal. Proof, ask and image filenames are the SHA-256 of their exact JSON bytes plus `.json`.
 
-Writing is two acts: **capture** proposes a packet, **admit** reviews it and
-is the only act that writes to the ledger.
+| Directory | Fields |
+| --- | --- |
+| `phases` | `title`, `order` (integer, unique). |
+| `goals` | `title`, `done_when` (nonempty), `check` (instrument ID), `broader` (phase or goal ID; chains must not loop). |
+| `instruments` | `run` (nonempty argument list, e.g. `["cargo", "test", "--offline"]`), `answers`, optional `gaps` array. Each gap has `what`, `why` and `covered_by` (another instrument ID). Executables must resolve and argument lists must not duplicate another instrument. |
+| `proofs` | `goal`, `instrument`, `commit` (40 lowercase hex digits), `exit_code` (integer), `output_sha256` (64 hex digits), `output_tail`, `ran_at` (Unix nanoseconds). Result is derived: exit code 0 passes; nonzero fails. A run that cannot start records no proof. |
+| `asks` | `goal`, `said` (nonempty), `ran_at` (Unix nanoseconds), `commit` (40 lowercase hex digits). |
+| `images` | `goal`, `shows` (title), `media_sha256` (64 hex digits), `ext` (`png`, `jpg`, `jpeg`, `webp`, `gif`), `commit` (40 lowercase hex digits), `ran_at` (Unix nanoseconds). |
 
-```sh
-whosaidso template task.create > task.json   # fill chosen values; delete unused keys
-whosaidso capture --events task.json --admit --reason "the work we agreed"
-whosaidso todo                               # the new task is READY
+Record loading validates cross-references, record shapes and blob hashes; rejected records are excluded from search and other answers, and symlinks anywhere in record paths are rejected. `check` reports the same validation errors. Proofs, asks and images are created by their commands; commit their JSON records to share them. Image bytes are local and are not included in the record.
 
-whosaidso template task.start --task TASK_ID --capture --admit --reason "starting"
-whosaidso handback --attempt-id ATTEMPT_ID --outcome success \
-    --reason "every sample config loads" --next-action "accept it"
-whosaidso admit --outcome accepted --reason "receipt checked" PACKET_ID
-whosaidso continue TASK_ID                   # awaiting acceptance, with its receipt
-```
+- `check` allows at most 200 total goals and 100 open goals; every state except `done` counts as open. Retire a goal by deleting its file; Git history keeps it.
+- Each record file is capped at 64 KiB at load and publication; oversized asks are refused and `check` reports invalid records.
+- Proof output tails are capped at 16 KiB of UTF-8 bytes; `prove` retains a UTF-8 suffix that also fits the 64 KiB serialized record budget, hashes the full output, and loading rejects oversized tails.
+- `check` warns about superseded proofs and goals with over 5 asks, naming `whosaidso prune`; these warnings do not fail validation. Show, view and prune order asks by `ran_at`, then record hash, newest first; prune keeps the first five. Branch commands only add records.
 
-Each command prints the ids the next one needs. In a script, add `--json` to
-`capture` or `template --capture`: `created` holds the ids identified as new.
-For `task.amend`, only criteria `template --capture` minted are listed; ids you
-supply are not classified, and a raw capture lists none. A success
-handback ends the attempt, not the task: a `task.close` with its witnesses does
-that (`whosaidso help accept`).
+## Derived state
 
-In zsh (the macOS default), quote empty lists: `--set 'spec.prerequisites=[]'`,
-since zsh reads `[]` as a filename pattern.
+State uses non-merge commits and their `Goal:` trailers in `origin/main` and remote branches; commits changing only `.whosaidso/` never count as work or make a goal stale, regardless of trailers. A branch is active when its newest unmatched goal commit is less than 72 hours old; otherwise it is idle. Cherry-picked commits already on main do not count as branch work. Only proofs whose instrument bytes at their own commit match the current instrument record bytes count; the newest pass or fail proof for the goal's check whose commit is an ancestor of `origin/main` is selected by `ran_at`, then record hash. Unlanded proofs do not determine state.
 
-Commit the `.whosaidso/` folder with your code. It is the record.
+- `open`: no eligible proof, landed goal commit or remote branch work.
+- `active`: no eligible proof or landed goal commit, with recent remote branch work.
+- `idle`: as above, but all matching remote branch work is at least 72 hours old.
+- `landed`: a goal commit is on main without an eligible proof, or a required gap lacks a current passing covering proof.
+- `failing`: the selected check or covering proof fails.
+- `done`: the selected check and all gap-covering instruments have current passing proofs.
+- `stale`: the check passed, but a later main commit has the goal trailer, provided gap coverage does not reduce the state to landed.
 
-On Windows, git converts line endings by default, which changes the bytes the ledger's digests cover. Turn
-that off for the record by adding `.whosaidso/** -text` to the project's `.gitattributes`. The home is
-`%USERPROFILE%\.whosaidso` unless `WHOSAIDSO_HOME` names another.
+Proof states take precedence over branch activity. Gap coverage can override a passing or stale check; a failing check remains failing.
 
-To keep machines on the right version, set `requires = 'v0.1.8'` in
-`whosaidso.toml`. Older binaries refuse writes (exit 2) and warn on reads,
-naming the running and required versions and the install command. Versions
-use semantic ordering, including prereleases. Development builds (`(devel)`,
-shown as `dev` by `version`) satisfy the requirement but warn once per command;
-this is a dev convenience. Omit `requires` to leave versions unrestricted.
+## Local cache
 
-## Common records from flags
+`.whosaidso/cache/` contains the shared SQLite index and generated HTML; it is Git-ignored and disposable. Image evidence lives in `<git common dir>/whosaidso/blobs`, shared by worktrees of this clone (override with `WHOSAIDSO_BLOBS`); writes publish by rename and verify or repair existing destinations.
 
-Create a task without editing JSON. Scope is authored explicitly; the remaining
-context lists start empty. Repeated criteria and non-goals form lists.
+- Instrument hashes are derived from the instrument file at each proof commit; proofs store no instrument hash, and byte changes expire eligibility.
+- Image publication holds a shared lock on the blob store’s `.lock` until its record is written; collection holds an exclusive lock through verification and deletes every interrupted `.tmp-*` blob write.
+- `prune` refuses before changing anything when tracked `.whosaidso/` files differ from HEAD or unignored untracked ledger files other than publication `.tmp-*` files exist.
+- Blob collection protects every worktree's working tree and HEAD (including detached worktrees), blobs modified within 14 days, and live ref tips; bytes referenced by a live branch or tag deliberately stay until that ref goes.
+- Publishing proofs, asks and images refuses symlinks or non-directories in `.whosaidso/` or the kind folder before running instruments or writing anything.
+- `prune` also collects proofs, asks and images whose goal no longer exists at HEAD, plus proofs and instruments no goal at HEAD requires through its check or transitive gaps, including deleted instruments.
+- Records omit `kind` and `id`: the folder supplies the kind and `<id>.json` supplies the ID; proofs, asks and images retain content hash filenames, with no old-format compatibility. Phases have no five-phase cap; image titles need only be nonempty and at most 80 characters.
+- Git history keeps every committed proof, each capped at 64 KiB (16 KiB output tail); pruning never rewrites history.
 
-```sh
-whosaidso task new --subject "Export report" --intent "Export results" \
-  --for worker --criterion "CSV opens" --non-goal "PDF export" \
-  --applies-when "Report export" --limitations "CSV only"
-```
-
-`--after TASK` adds a prerequisite requiring success at that task's current
-revision, without a waiver. `--source SOURCE_ID` cites an admitted source;
-`--pin PATH` pins provenance bytes (the template pin syntax also accepts a git
-revision and selector). Both may be supplied. The output includes the packet
-id and newly created task and criterion ids.
-
-Amend the current specification; omitted spec fields stay unchanged. Repeated
-`--criterion`, `--non-goal` or `--after` flags replace that list. Replacement
-criteria get fresh ids; omitted criteria keep their ids. Provenance belongs to
-this amendment and is empty unless supplied with `--source` or `--pin`.
-
-```sh
-whosaidso task amend TASK --for reviewer
-```
-
-Close a task with one witness per current acceptance criterion, in criterion
-order. Each witness also serves as a delivery witness. The admission gate still
-checks that the closure is effective. Outcomes are `success`, `cancelled`,
-`withdrawn` and `waived`.
-
-```sh
-whosaidso task close TASK --outcome success --witness report.csv \
-  --reason "Reviewed the exported CSV" --admit
-```
-
-`--reason` is required for close. The existing `task.close` event has no reason
-field: only `--admit` stores it, as the review reason. To preserve separate
-reason text, capture it with `source add`. `--authority SOURCE_ID` uses an
-admitted source's speaker and whole bytes; supply `--applies-when` and
-`--limitations` to author its scope over the current task.
-
-Capture an original message file with explicit speaker and zero-based order.
-Repeated `--about TASK` flags bind tasks at their current revisions.
-
-```sh
-whosaidso source add request.txt --speaker requester --order 0 --about TASK
-```
-
-All four verbs collect missing required inputs into one error, support
-`--actor` (otherwise `WHOSAIDSO_ACTOR`), and capture through the existing
-template/capture path. `--json` returns the packet and created ids.
-`--dry-run` prints the admission result without capturing (exit 0 would-admit,
-1 would-refuse). `--admit --reason TEXT` captures then admits under the same
-actor and obeys the project's self-admission policy; refusal leaves the packet
-captured and exits 4. `--dry-run` and `--admit` cannot be combined.
-
-Use `template` for fields without these flags: structured context, accepter,
-progress, other prerequisite policies, distinct delivery witnesses, narrower
-authority selectors or source referents of other record kinds. Each verb's
-`help` lists its exact translation and limitations.
-
-## Learn more
-
-The guide ships with the binary, so it cannot drift from the CLI:
-
-```sh
-whosaidso help             # every topic and verb
-whosaidso help all         # complete manual
-whosaidso help loop        # capture, admit, run, handback, accept
-whosaidso help proof       # criterion first, the whole family, a verdict
-whosaidso help branches    # many agents, many machines: claiming, merging, check ledger
-whosaidso VERB --help      # one verb's usage
-whosaidso version          # which build you are running; include it in a report
-```
-
-`skill/whosaidso/SKILL.md` is a short pointer for agent harnesses that load
-skills.
-
-## Contributing and security
-
-See [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md) for agents
-working on the code, and [SECURITY.md](SECURITY.md) to report a
-vulnerability.
+- Prune makes recoverable record removals, verifies identical `goals` output and current blob references, and undoes removals on verification failure: "refs changed during prune; nothing was removed; run it again".
+- Instruments execute `run` argument lists directly with no shell parsing; use `["sh", "-c", "..."]` for a shell and its real exit code. Spawn errors publish no proof; exit 127 after launch records failure.
+- Proof, ask and image record publication holds the blob store’s shared lock; prune holds it exclusively and collects interrupted record and blob `.tmp-*` files.
+- Images are capped at 8 MiB each and the blob store at 1 GiB; a full store refuses publication and names prune. Asks and images share newest `ran_at`, then record hash ordering in show, view and prune.
+- Unreferenced image bytes older than 14 days move by rename to `<blob store>/trash/`; readers also use trash, and prune restores referenced trash and permanently deletes only trash older than 14 days after rechecking references.
+- The remaining concurrent-ref window matches git gc’s prune expiry; restoring an old commit after expiry can show missing bytes.
+- The commit index under the cache grows with Git history, is derived, and can be deleted at any time.
