@@ -5,6 +5,7 @@ package gallery
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -57,4 +58,16 @@ func TestGalleryLocatorsFollowProjectHomes(t *testing.T) {
 	if _, err := Pin(next, filepath.Join(t.TempDir(), "unrelated", "media", "image.png")); err == nil {
 		t.Fatal("unanchored path guessed a local file")
 	}
+	nested := filepath.Join(next, "project", "media")
+	if err := os.MkdirAll(nested, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "image.png"), []byte("different media"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	ambiguous := filepath.Join(t.TempDir(), "project", "project", "media", "image.png")
+	if _, err := Pin(next, ambiguous); err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("ambiguous home mapping was guessed: %v", err)
+	}
+
 }
