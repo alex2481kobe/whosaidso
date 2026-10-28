@@ -1,15 +1,62 @@
-# WhoSaidSo
+<h1 align="center">WhoSaidSo</h1>
 
-WhoSaidSo keeps a project's engineering record in Git as small JSON files.
-It derives goal progress from commits and proofs and searches records and code.
-Its concise command-line answers are designed for people and coding agents.
+<p align="center">
+  <strong>Keep your agents accountable and your claims proven.</strong><br />
+  Goals, proofs and evidence live in your repository, and progress is worked out from what actually landed.
+</p>
 
-## Install
+<p align="center">
+  <a href="#get-started">Get started</a> ·
+  <a href="#what-it-is-built-on">What it is built on</a> ·
+  <a href="USAGE.md">Usage and record formats</a>
+</p>
 
-Requires Rust, Cargo, Git and a Unix shell; CI verifies the supported toolchain.
+<img src="assets/ui-progress.png" alt="The progress page, with sample data" width="912" />
 
-```sh
-cargo install --path .
+WhoSaidSo is for your agents, not for you to operate. They write down the goals they are working toward, prove
+them by running the checks you agreed on, and attach evidence: screenshots, videos and documents. A new session
+runs `whosaidso goals` and knows where things stand without being told again. You read along whenever you want, in
+the terminal or with `whosaidso view`, which writes a plain progress page and a gallery of the evidence.
+
+It is one small Rust program. A project's record is small JSON files in `.whosaidso/`, committed with your code, so
+it branches, merges and travels with the work. A goal's state is never stored: it is worked out from Git and the
+proofs every time you ask.
+
+<img src="assets/ui-gallery.png" alt="The evidence gallery, with sample data" width="912" />
+
+## What it is built on
+
+**Proven, not claimed.** A goal is done when its instrument has passed on the code that landed on main. A proof
+records the exact commit, the exit code and the output, and stops counting when the instrument changes.
+
+**Instruments that admit their blind spots.** Each instrument says what it answers and what it cannot see, and names
+the instrument that covers each gap. Proving a goal runs them all.
+
+**State from Git.** Open, active, landed, done, failing and stale are worked out from local branches, local main and
+the proofs. There is no status field to forget to update.
+
+**Evidence that is kept.** Media is detected by its signature, stored by content hash and never deleted: the newest
+100 items stay in the gallery, and older ones move into monthly archive bundles you can open with `tar`.
+
+**Bounded by design.** Records, output tails, asks and search answers all have fixed caps, so a long-running project
+stays small enough for an agent to read. `prune` keeps it that way, and recoverably: an interrupted prune is undone
+and run again by the next one.
+
+**Agent first.** Short, predictable answers made for coding agents doing the work every day, plus search over the
+records, the files and the code.
+
+## Get started
+
+Tell your coding agent:
+
+```text
+Install WhoSaidSo from https://github.com/alex2481kobe/whosaidso and set it up in this project.
+```
+
+Or do it yourself. Building needs Rust, Cargo, Git and a Unix shell:
+
+```text
+cargo install --git https://github.com/alex2481kobe/whosaidso --tag v0.3.0 --locked
 ```
 
 ## Quick start
@@ -27,7 +74,8 @@ git add .whosaidso
 git commit -m 'Add records'
 ```
 
-Each clone needs its own `whosaidso install-hooks`, even when the hook file is tracked. Select a goal with `whosaidso start first-goal`; later commits will carry its `Goal:` trailer. Progress uses local `main` and local branches. After committing work, run:
+Each clone runs `whosaidso install-hooks` once. `whosaidso start first-goal` selects the goal, and later commits
+carry its `Goal:` trailer. After committing work:
 
 ```sh
 whosaidso goals
@@ -40,37 +88,19 @@ whosaidso code includers src/types.h
 whosaidso view
 ```
 
-`find` prints 8 ranked results and a total; use `--limit N` for more. Files appear once as paths, and commits use 10-character SHAs with subjects capped at 72 characters. `grep` accepts repeated `--in <path-or-prefix>` options; without scope, `.whosaidso/` hits come last. `code deps` lists includes, and `code includers` lists reverse includes (up to 20, with a total when truncated). Qualified definitions and references match enclosing scope suffixes from SCIP descriptors or C++ and Rust syntax. Search lines end in `...` when cut at 200 characters, or 160 for `grep`.
+`prove` writes a proof record to commit with your work. `view` prints the path of the gallery; the progress page
+sits beside it. Attach evidence with `whosaidso media <goal> <file> <title>`: PNG, JPEG, GIF, WebP, MP4, MOV,
+WebM or PDF, up to 64 MiB each.
 
-`prove` creates a proof record to add and commit. It requires a readable, nonempty HEAD reflog with writing enabled (`core.logAllRefUpdates`) and refuses a proof if HEAD or its reflog changes during the run, including A to B and back. Content edits made and reverted without a commit or checkout are not detected. Record commit fields use 40 lowercase hex digits. `view` prints the path to a local HTML gallery and also writes a progress page.
+## Working with a team
 
-Whoever lands work runs `whosaidso prune` on main after merging; it keeps each required instrument’s selected proof on local main and the newest proof per (goal, instrument, commit) on live local refs; deletes abandoned or missing-commit proofs; keeps 5 asks per goal and the newest 100 media records across the ledger, archives older media and collects unreferenced blobs (skipped with `WHOSAIDSO_BLOBS`).
+Whoever lands work on main runs `whosaidso prune` and commits its deletions with the landing. The sync recipe is:
+pull, prune, commit, push. If the push is rejected, pull and prune again. If prune is interrupted, run it again.
 
-`ran_at` uses Unix nanoseconds for proofs, asks and media. Proofs bind to the instrument record bytes at HEAD; `prove` requires clean tracked records and runs all gap-covering instruments.
+## Works with
 
-Loading and publication enforce 64 KiB records and 16 KiB proof tails; output is trimmed to fit serialized bytes and oversized asks are refused.
+Any project and any agent that can run a command. Tested on Linux and macOS in CI; Windows is untested. Until 1.0
+the record format may still change.
 
-Evidence media lives in `<git common dir>/whosaidso/blobs` (shared by this clone’s worktrees; `WHOSAIDSO_BLOBS` overrides it), outside the disposable cache; interrupted writes never publish partial blobs and corrupt destinations are repaired.
-
-`sync`, `grep-index` and `code index` are removed; queries index automatically and `code import-scip` remains.
-
-SCIP `[precise]` answers mean every occurrence whose name the import check could derive matched the current file, and the bytes have not changed since import. An occurrence added since indexing is not listed; files with mismatches use syntactic answers.
-
-Sync recipe: pull, prune, commit the deletions, push; if push is rejected, pull and prune again.
-
-`start` refuses without installed hooks; empty `find` refuses; media types are detected by signature. Code queries retain only 20 answer lines and count the rest.
-
-See [usage and record formats](USAGE.md), [contributing](CONTRIBUTING.md), [changelog](CHANGELOG.md), [security](SECURITY.md), and [license](LICENSE).
-
-- Proof eligibility compares the current instrument bytes with the instrument at the proof commit; proofs store no instrument hash.
-- Blob collection protects every worktree's working tree and HEAD (including detached worktrees), blobs modified within 14 days, and local branch and tag tips; bytes referenced by a live branch or tag deliberately stay until that ref goes.
-- Publishing proofs, asks and media refuses symlinks or non-directories in `.whosaidso/` or the kind folder before running instruments or writing anything.
-- `prune` also collects proofs and asks whose goal no longer exists at HEAD and archives media for retired goals.
-- Records omit `kind` and `id`: the folder supplies the kind and `<id>.json` supplies the ID; proofs, asks and media retain content hash filenames, with no old-format compatibility. `check` caps phases at 50; deleting a phase retires it. Media titles need only be nonempty and at most 80 characters.
-- Git history keeps every committed proof, each capped at 64 KiB (16 KiB output tail); pruning never rewrites history.
-
-Record evidence with `whosaidso media <goal> <file> <title>`. Supported signatures are PNG, JPEG, GIF, WebP, MP4/MOV (`ftyp`), WebM (EBML) and PDF, regardless of extension. Each file is at most 64 MiB; the live store, including trash, is at most 4 GiB. Records in `.whosaidso/media/` keep the title, detected type, exact byte size and SHA-256. The old image command and kind are removed.
-
-`view` shows images inline, videos with controls (no autoplay, preload metadata), and PDFs as links, newest time then record hash first. Media is never deleted by prune: older records and their bytes go to monthly plain ustar bundles under `<git common dir>/whosaidso/archive/`, or `WHOSAIDSO_ARCHIVE` on durable storage. Archives are never collected and do not count toward the live quota. Use `tar -tf` to list and `tar -xf` to restore them; see USAGE for the file layout.
-
-Contributors run `cargo test --locked` for the default suite (200 invariant steps per recorded seed). Before release run `WHOSAIDSO_LONG=1 cargo test --release --offline --test invariant` for every recorded seed at 2,000 steps.
+See [usage and record formats](USAGE.md), [contributing](CONTRIBUTING.md), [changelog](CHANGELOG.md),
+[security](SECURITY.md) and the [license](LICENSE) (Apache-2.0).

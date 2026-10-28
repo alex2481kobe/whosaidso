@@ -96,6 +96,8 @@ Proof states take precedence over branch activity. Gap coverage can override a p
 
 ## Evidence media and archives
 
+Media bytes live in `<git common dir>/whosaidso/blobs`, shared by this clone's worktrees (`WHOSAIDSO_BLOBS` overrides it), outside the disposable cache. Interrupted writes never publish partial blobs, and a corrupt destination is replaced.
+
 `whosaidso media <goal> <file> <title>` accepts PNG, JPEG, GIF, WebP, MP4, MOV, WebM and PDF. Detection uses signatures and headers, never filename extensions: ISO-BMFF `ftyp` brands distinguish MP4/MOV, and WebM uses its EBML header. JPEG is stored as `jpg`. Unsupported bytes are refused with the supported types. `check` validates the stored bytes against the record's type, exact byte size and SHA-256. Titles are nonempty, at most 80 characters. The old image command and record kind have no alias or migration path.
 
 Media is never discarded by prune. It keeps the newest 100 media records across the ledger (descending `ran_at`, then descending record hash). Each older record and its original bytes move into a plain ustar monthly bundle, `media-YYYY-MM.tar`, using the record's UTC month. Media for retired goals is also archived. Missing or invalid bytes cannot be archived; their records remain live until repaired. Archived copies never count toward the live quota and are never collected. Other live refs and worktrees still protect live blob copies under the usual collection rules.

@@ -88,6 +88,8 @@ fn evidence_media_is_typed_rendered_and_archived_without_loss() {
     let mut expected = Vec::new();
     for n in 0..130 {
         let (ext, _, _, mut bytes) = fixtures[n % fixtures.len()].clone(); bytes.extend(format!("payload-{n}").as_bytes());
+        // 8 KiB each, so the 30-item archive bundle outgrows `ulimit -f 64` in both 512- and 1024-byte block shells.
+        bytes.resize(bytes.len() + 8192, b' ');
         let digest = hash(&bytes); write(&blobs.join(format!("{digest}.{ext}")), &bytes);
         let value = json!({"goal":if n % 2 == 0 {"a"} else {"b"},"shows":format!("item-{n:03}"),"media_sha256":digest,"ext":ext,"byte_size":bytes.len(),"commit":head,"ran_at":if n<30 {1767225600000000000i64+n as i64/2} else {1769904000000000000i64+n as i64/2}});
         let path = addressed(&media, &value); expected.push((value["ran_at"].as_i64().unwrap(), path, value, bytes));
@@ -144,7 +146,8 @@ fn evidence_media_is_typed_rendered_and_archived_without_loss() {
     // A later prune appends to the same default month without losing earlier entries.
     for n in 0..2 {
         let mut value = expected[129].2.clone(); value["shows"] = format!("extra-{n}").into();
-        let mut bytes = expected[129].3.clone(); bytes.resize(20000, 0); value["media_sha256"] = hash(&bytes).into(); value["byte_size"] = bytes.len().into();
+        // 40,000 bytes each, so two together outgrow `ulimit -f 64` in any shell.
+        let mut bytes = expected[129].3.clone(); bytes.resize(40000, 0); value["media_sha256"] = hash(&bytes).into(); value["byte_size"] = bytes.len().into();
         write(&blobs.join(format!("{}.{}", value["media_sha256"].as_str().unwrap(), value["ext"].as_str().unwrap())), &bytes);
         addressed(&media, &value); commit(&root);
         if n == 1 {
