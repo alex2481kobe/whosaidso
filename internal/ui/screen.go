@@ -18,7 +18,7 @@ func (h *handler) screen(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, 400, err)
 		return
 	}
-	allowed := map[string]bool{"project": true, "screen": true, "offset": true, "search": true, "kind": true, "status": true, "sort": true, "status_counts": true}
+	allowed := map[string]bool{"under": true, "project": true, "screen": true, "offset": true, "search": true, "kind": true, "status": true, "sort": true, "status_counts": true}
 	for k, v := range q {
 		if !allowed[k] || len(v) != 1 {
 			h.fail(w, 400, fmt.Errorf("invalid screen parameter %s", k))
@@ -37,7 +37,7 @@ func (h *handler) screen(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, 400, fmt.Errorf("status_counts must be 1 or omitted"))
 		return
 	}
-	request := query.ScreenRequest{StatusCounts: q.Get("status_counts") == "1", View: q.Get("screen"), Offset: offset, Search: q.Get("search"), Kind: q.Get("kind"), Status: q.Get("status"), Sort: q.Get("sort")}
+	request := query.ScreenRequest{Under: model.ID(q.Get("under")), StatusCounts: q.Get("status_counts") == "1", View: q.Get("screen"), Offset: offset, Search: q.Get("search"), Kind: q.Get("kind"), Status: q.Get("status"), Sort: q.Get("sort")}
 	if err := query.CheckScreen(request); err != nil {
 		h.fail(w, 400, err)
 		return

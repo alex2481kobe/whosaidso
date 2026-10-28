@@ -122,8 +122,7 @@ cards.firstChild.querySelector('.artifact-preview').fire('click');
 byLabel(body.querySelector('.artifact-dialog'),'Delete').fire('click');await settle();assert.equal(body.querySelector('.artifact-dialog'),null,'item deletion closes its view');assert.equal(cards.children.length,46,'item deletion removes the matching card');
 cards.firstChild.querySelector('.artifact-preview').fire('click');
 for(const screen of ['home','tasks','records','history']){location.hash='#/'+screen;win.fire('hashchange',{oldURL:'http://viewer/#/gallery'});await settle();assert.ok(body.querySelector(screen==='home'?'.overview-screen':'.browser-screen'),screen+' mounts bounded screen');
- if(screen==='tasks'||screen==='records'){const request=requests.filter(u=>u.pathname==='/api/screen').at(-1);assert.equal(request.searchParams.get('kind'),screen==='tasks'?'TASK':'','task and record routes select distinct bounded lists');}
-
+ if(screen==='tasks'||screen==='records'){const request=requests.filter(u=>u.pathname==='/api/screen').at(-1);assert.equal(request.searchParams.get('screen'),screen==='tasks'?'tasks':'records','task and record routes select distinct bounded lists'); if(screen==='tasks'){const parent=find('a','Parent task');assert.equal(parent.href,'#/tasks?under='+entries[0].id,'clicking a parent drills into prerequisites');assert.ok(body.textContent.includes('3 open nested'),'parent shows nested count');}}
  if(screen==='home'){
   assert.equal(body.querySelector('.artifact-dialog'),null,'routing closes the inspector');
   assert.equal(body.querySelectorAll('h2').length,2,'overview has only flight and decision panels');

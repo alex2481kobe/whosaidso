@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -64,7 +65,7 @@ func TestLargeLedgerCommands(t *testing.T) {
 	if out, err := prepare.CombinedOutput(); err != nil {
 		t.Fatalf("prepare CLI: %v %s", err, out)
 	}
-	for _, args := range [][]string{{"todo"}, {"check", "claim", string(largeID(1)), "--json"}} {
+	for _, args := range [][]string{{"todo"}, {"todo", "--top"}, {"todo", "--under", string(largeID(1))}, {"check", "claim", string(largeID(1)), "--json"}} {
 		cmd := exec.Command(bin, args...)
 		cmd.Dir = p.Root
 		start = time.Now()
@@ -75,7 +76,7 @@ func TestLargeLedgerCommands(t *testing.T) {
 				t.Fatalf("%v: %v %s", args, err, out)
 			}
 		}
-		measureLarge(t, "fresh process "+args[0]+" with index", time.Since(start), time.Second)
+		measureLarge(t, "fresh process "+strings.Join(args, " ")+" with index", time.Since(start), time.Second)
 	}
 
 }

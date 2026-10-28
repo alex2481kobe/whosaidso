@@ -156,7 +156,7 @@ async function route() {
   }
   try {
     let node;
-    if (screen === "tasks") node = await renderBrowser("records", new URLSearchParams("kind=TASK"));
+    if (screen === "tasks") node = await renderBrowser("tasks", new URLSearchParams(rest));
     else if (screen === "records") node = await renderBrowser("records", new URLSearchParams(rest));
     else if (screen === "record") {
       const status = await api("/api/screen", {project:project(), screen:"status"});

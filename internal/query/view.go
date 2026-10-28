@@ -17,6 +17,8 @@ import (
 )
 
 type ViewRequest struct {
+	Top          bool                     // todo: only top-level open tasks
+	Under        model.ID                 // todo: direct open prerequisites of this task
 	Actor        string                   // todo only: task next actor or live holder
 	View         string                   // todo, continue, show, history or packets
 	ID           model.ID                 // continue (required), show and history (optional)
@@ -68,6 +70,12 @@ func ReadViewFrom(project store.Project, request ViewRequest, source Source) (Vi
 // CheckView refuses a request no view can answer, before any ledger is read.
 func CheckView(r ViewRequest) error {
 	switch {
+	case (r.Top || r.Under != "") && r.View != "todo":
+		return fmt.Errorf("--top and --under belong only to todo")
+	case r.Top && r.Under != "":
+		return fmt.Errorf("--top and --under cannot be combined")
+	case r.Under != "" && !model.ValidID(r.Under):
+		return fmt.Errorf("--under requires a task ULID")
 	case r.Actor != "" && r.View != "todo":
 		return fmt.Errorf("the actor filter belongs only to todo")
 	case r.View != "todo" && r.View != "continue" && r.View != "show" && r.View != "history" && r.View != "packets":
@@ -146,6 +154,9 @@ func view(project store.Project, r ViewRequest, source Source) (ViewAnswer, erro
 	}
 	switch r.View {
 	case "todo":
+		if r.Top || r.Under != "" {
+			return taskList(s, h, r), nil
+		}
 		return todoView(project, s, source, h, r.Limit, r.Now, r.Actor)
 	case "continue":
 		if intake != nil {

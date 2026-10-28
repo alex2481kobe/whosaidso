@@ -16,7 +16,9 @@ export async function renderBrowser(screen, params = new URLSearchParams()) {
   const state = states.get(key);
  const requestedKind = params.get("kind")?.toUpperCase() || "";
  if (state.routeKind !== requestedKind) Object.assign(state, {routeKind:requestedKind, kind:requestedKind, status:"", offset:0});
-  const request = statusCounts => api("/api/screen", {project:shown, screen, offset:state.offset, search:state.search, kind:state.kind, status:state.status, sort:state.sort, status_counts:statusCounts ? "1" : ""});
+  const under = screen === "tasks" ? params.get("under") || "" : "";
+  if (state.under !== under) Object.assign(state, {under, offset:0, search:"", status:""});
+  const request = () => api("/api/screen", {project:shown, screen, under, offset:state.offset, search:state.search, kind:state.kind, status:state.status, sort:state.sort});
   let page = await request();
   if (!active()) return el("div");
   const rows = el("section", "panel browser-rows");
@@ -28,27 +30,34 @@ export async function renderBrowser(screen, params = new URLSearchParams()) {
   const next = button("Next", () => refresh(page.next));
   const note = el("p", "muted browser-note");
   const tools = el("div", "gallery-tools");
+  const nesting = el("nav", "gallery-tools");
   let generation = 0, busy = false, pending;
 
   function draw(answer) {
     if (JSON.stringify(answer.watermark) === JSON.stringify(page.watermark)) answer.counts = {...page.counts, ...answer.counts};
     page = answer; state.offset = page.offset;
-    const nodes = page.rows.map(r => el("div", "row-line browser-row", r.id ? link(r.id, r.title || r.id, "row-title") : el("span", "row-title", r.title || r.kind), el("span", "muted", happened[r.kind] || r.kind), el("span", "", r.status), el("span", "muted", r.actor)));
+    const titleLink = r => {
+      const a = link(r.id, r.title || r.id, "row-title");
+      if (screen === "tasks" && r.nested > 0) a.href = "#/tasks?under=" + encodeURIComponent(r.id);
+      return a;
+    };
+    if (screen === "tasks") {
+      const top = el("a", "link", "Top-level tasks"); top.href = "#/tasks";
+      nesting.replaceChildren(top, ...(page.parent ? [link(page.parent.id, page.parent.title)] : []));
+    }
+    const nodes = page.rows.map(r => el("div", "row-line browser-row", r.id ? titleLink(r) : el("span", "row-title", r.title || r.kind), el("span", "muted", screen === "tasks" ? `${r.nested} open nested` : happened[r.kind] || r.kind), el("span", "", r.status), el("span", "muted", r.actor)));
     rows.replaceChildren(...(nodes.length ? nodes : [el("p", "empty", "No entries match these filters.")]));
     previous.disabled = page.previous == null; next.disabled = page.next == null;
     range.textContent = page.total ? `${page.offset + 1}–${page.offset + page.rows.length} of ${page.total}` : "0 entries";
     note.textContent = page.note;
-    counts.replaceChildren(...Object.entries(page.counts).map(([label, n]) => {
-      if (screen !== "home" || !["READY", "BLOCKED", "IN FLIGHT", "CLOSED"].includes(label)) return el("span", "muted", `${label}: ${n}`);
-      return button(`${label}: ${n}`, () => change({kind:"TASK", status:state.status === label ? "" : label}));
-    }));
+    counts.replaceChildren(...Object.entries(page.counts).map(([label, n]) => el("span", "muted", `${label}: ${n}`)));
   }
-  async function refresh(offset = state.offset, statusCounts = false) {
+  async function refresh(offset = state.offset) {
     if (!active() || offset == null) return;
     state.offset = offset;
     const version = ++generation; busy = true;
     try {
-      const answer = await request(statusCounts);
+      const answer = await request();
       if (!active() || version !== generation || !rows.isConnected) return;
       if (JSON.stringify(answer) !== JSON.stringify(page)) draw(answer);
       said.textContent = "";
@@ -56,7 +65,7 @@ export async function renderBrowser(screen, params = new URLSearchParams()) {
     finally { if (version === generation) busy = false; }
   }
   const paintTools = () => tools.replaceChildren(
-    screen !== "history" ? dropdown({options:kinds, value:state.kind, onPick:kind => change({kind, status:""})}) : null,
+    screen === "tasks" ? dropdown({options:[["","All open statuses"],["READY","Ready"],["BLOCKED","Blocked"],["IN FLIGHT","In flight"]], value:state.status, onPick:status => change({status})}) : screen !== "history" ? dropdown({options:kinds, value:state.kind, onPick:kind => change({kind, status:""})}) : null,
     dropdown({glyph:"sort", options:screen === "history" ? sorts.slice(0,2) : sorts, value:state.sort, onPick:sort => change({sort})}),
     state.status ? button("Clear status: " + state.status, () => change({status:""})) : null);
   function change(values) {
@@ -73,7 +82,7 @@ export async function renderBrowser(screen, params = new URLSearchParams()) {
     if (!active() || !rows.isConnected) { clearInterval(timer); clearTimeout(pending); return; }
     if (!busy && document.visibilityState !== "hidden") refresh();
   }, 3000);
-  return el("div", "screen browser-screen", el("h1", "", (screen === "records" ? requestedKind === "TASK" ? "Tasks" : "Records" : {home:"Overview", history:"Activity"}[screen])),
+  return el("div", "screen browser-screen", el("h1", "", (screen === "records" ? requestedKind === "TASK" ? "Tasks" : "Records" : {home:"Overview", tasks:"Tasks", history:"Activity"}[screen])),
     el("div", "gallery-toolbar", el("label", "search", icon("search"), search), tools),
-    counts, said, rows, el("nav", "gallery-tools", previous, range, next), note);
+    screen === "tasks" ? nesting : null, counts, said, rows, el("nav", "gallery-tools", previous, range, next), note);
 }

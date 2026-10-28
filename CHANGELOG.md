@@ -2,6 +2,12 @@
 
 ## 0.3.0
 
+Overview shows open task counts, live holders and work awaiting a decision.
+Tasks lists top-level open tasks with unique open descendant counts; selecting
+an expandable task drills into its prerequisites. `todo --top` and
+`todo --under ID` provide the same navigation on the command line, using
+existing plan links. Text reads avoid retaining export audit bookkeeping.
+
 Fix rejected Overview, Tasks, Records and Activity requests. Viewer reads reuse
 validated snapshots while checking every ledger byte. Gallery reads index their
 own events and copy only the requested item. Visible thumbnails load first,

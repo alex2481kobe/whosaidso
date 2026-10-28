@@ -38,7 +38,8 @@ func viewVerb(view string) func(*flag.FlagSet) func(*call) error {
 	return func(fs *flag.FlagSet) func(*call) error {
 		jsonOutput := jsonFlag(fs)
 		var limit int
-		var kind, actor string
+		var kind, actor, under string
+		var top bool
 		var selfAdmitted selfAdmissionFlag
 		stale := false
 		intakeDetails := false
@@ -52,11 +53,13 @@ func viewVerb(view string) func(*flag.FlagSet) func(*call) error {
 			fs.Var(&selfAdmitted, "self-admitted", "only the per-packet reviews whose self-admission is `true|false|unknown` (bare: true)")
 		}
 		if view == "todo" {
+			fs.BoolVar(&top, "top", false, "list only top-level open tasks and open nested counts")
+			fs.StringVar(&under, "under", "", "list the direct open prerequisites of task `ID`")
 			fs.StringVar(&actor, "actor", "", "show work for actor `NAME` (next actor or live holder)")
 			fs.BoolVar(&intakeDetails, "intake-details", false, "expand verified packet summaries in text; --json includes complete packets")
 		}
 		return func(c *call) error {
-			request := query.ViewRequest{Actor: actor, View: view, Limit: limit, Kind: kind, SelfAdmitted: model.SelfAdmissionState(selfAdmitted)}
+			request := query.ViewRequest{Top: top, Under: model.ID(under), Actor: actor, View: view, Limit: limit, Kind: kind, SelfAdmitted: model.SelfAdmissionState(selfAdmitted)}
 			switch {
 			case c.argv != nil || len(c.args) > 1 || len(c.args) > 0 && view == "todo":
 				return usageError("whosaidso %s: unexpected positional arguments", view)

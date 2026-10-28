@@ -122,7 +122,7 @@ func TestLargeLedgerScreensAndFirstImages(t *testing.T) {
 		t.Fatal("fixture event count")
 	}
 	t.Logf("cold ledger load: %s", time.Since(start))
-	for _, screen := range []struct{ name, query string }{{"Overview", "home"}, {"Tasks", "records&kind=TASK"}, {"Records", "records"}, {"Activity", "history"}} {
+	for _, screen := range []struct{ name, query string }{{"Overview", "home"}, {"Tasks", "tasks"}, {"Records", "records"}, {"Activity", "history"}} {
 		start = time.Now()
 		code, _, body := ask(t, host, "GET", "/api/screen?project=team%2Fok&offset=0&screen="+screen.query, "", session)
 		elapsed := time.Since(start)

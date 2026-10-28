@@ -18,10 +18,12 @@ const screenText = 256
 
 type ScreenRequest struct {
 	View, Search, Kind, Status, Sort string
+	Under                            model.ID
 	Offset                           int
 	StatusCounts                     bool
 }
 type ScreenRow struct {
+	Nested      int      `json:"nested"`
 	Group       string   `json:"group,omitempty"`
 	ID          model.ID `json:"id,omitempty"`
 	Title       string   `json:"title"`
@@ -35,6 +37,7 @@ type ScreenRow struct {
 }
 type ScreenAnswer struct {
 	ViewHeader
+	Parent   *ScreenRow     `json:"parent,omitempty"`
 	Rows     []ScreenRow    `json:"rows"`
 	Counts   map[string]int `json:"counts"`
 	Total    int            `json:"total"`
@@ -45,8 +48,11 @@ type ScreenAnswer struct {
 }
 
 func CheckScreen(r ScreenRequest) error {
-	if r.View != "home" && r.View != "records" && r.View != "history" && r.View != "status" {
-		return fmt.Errorf("screen must be home, records, history or status")
+	if r.View != "home" && r.View != "records" && r.View != "history" && r.View != "status" && r.View != "tasks" {
+		return fmt.Errorf("screen must be home, tasks, records, history or status")
+	}
+	if r.Under != "" && (r.View != "tasks" || !model.ValidID(r.Under)) {
+		return fmt.Errorf("under requires a task screen and task ULID")
 	}
 	if r.Offset < 0 {
 		return fmt.Errorf("offset must be nonnegative")
@@ -87,6 +93,9 @@ func ReadScreenFrom(p store.Project, r ScreenRequest, source Source) (*ScreenAns
 	if r.View == "status" {
 		a.Note = "Ledger watermark only"
 		return a, nil
+	}
+	if r.View == "tasks" {
+		return taskScreen(s, r, a), nil
 	}
 	if r.View == "home" {
 		return overview(s, r, a), nil
