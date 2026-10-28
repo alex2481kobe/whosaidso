@@ -80,6 +80,10 @@ func (h *handler) galleryAnswer(w http.ResponseWriter, r *http.Request, file sto
 	case "/api/gallery/file", "/api/gallery/download":
 		h.serveEntry(w, r, file.Root, entry)
 	case "/api/gallery/remove":
+		if current, ok := source.Snapshot().GalleryEntry(model.ID(id)); !ok || current.Retracted {
+			h.fail(w, http.StatusNotFound, errText("Gallery entry is no longer available"))
+			return
+		}
 		ref, err := gallery.Capture(r.Context(), file, h.cfg.CaptureActor, &model.GalleryRetract{EntryID: model.ID(id)})
 		if err != nil {
 			h.fail(w, http.StatusInternalServerError, err)
@@ -96,7 +100,7 @@ func (h *handler) galleryAnswer(w http.ResponseWriter, r *http.Request, file sto
 		h.json(w, map[string]string{"captured": string(ref.CommandID), "removed": id})
 	case "/api/gallery/reveal":
 		if info, err := os.Stat(entry.Path); err != nil || !info.Mode().IsRegular() {
-			h.fail(w, http.StatusNotFound, errText("missing: "+entry.Path))
+			h.fail(w, http.StatusNotFound, errText("File not on this machine"))
 			return
 		}
 		if h.cfg.Reveal == nil {
@@ -123,18 +127,18 @@ func (h *handler) serveEntry(w http.ResponseWriter, r *http.Request, checkout st
 	}
 	f, err := gallery.Open(checkout, entry.Locator)
 	if err != nil {
-		h.fail(w, http.StatusNotFound, errText("missing: "+entry.Path))
+		h.fail(w, http.StatusNotFound, errText("File not on this machine"))
 		return
 	}
 	defer f.Close()
 	info, err := f.Stat()
 	if err != nil || !info.Mode().IsRegular() {
-		h.fail(w, http.StatusNotFound, errText("missing: "+entry.Path))
+		h.fail(w, http.StatusNotFound, errText("File not on this machine"))
 		return
 	}
 	pin, err := gallery.Hash(f, entry.Path)
 	if err != nil || !pin.SameContent(model.GalleryFile{SHA256: entry.SHA256, Length: entry.Length}) {
-		h.fail(w, http.StatusConflict, errText("changed: "+entry.Path))
+		h.fail(w, http.StatusConflict, errText("File changed since it was recorded"))
 		return
 	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {

@@ -15,7 +15,7 @@
   <a href="USAGE.md">Usage and setup</a>
 </p>
 
-<img src="assets/ui-light.png" alt="The WhoSaidSo viewer's Home screen, with sample data" width="912" />
+<img src="assets/ui-light.png" alt="The WhoSaidSo viewer" width="912" />
 
 WhoSaidSo is for your agents, not for you to operate. Keep working with your agents the way you already do: they
 use WhoSaidSo to write down what they are doing and to prove what they claim, and a new session runs
@@ -41,8 +41,23 @@ UNKNOWN, never a guess.
 
 **Knowing where you are.** One command shows what is done, what is owed, what is blocked, and why.
 
-**Agent first.** Built for AI agents doing the work every day, not for you to drive by hand. Every screen in the
-viewer is a command's `--json` answer, so you can build your own view on the same record.
+**Agent first.** Built for AI agents doing the work every day. The viewer and CLI read the same admitted
+ledger; CLI `--json` answers keep the full detail for tools and other views.
+
+## The viewer in v0.2.1
+
+Run `whosaidso ui` to read your workspace locally:
+
+- **Gallery** shows files with icon actions to reveal, copy the path, download or remove an entry from the gallery.
+  Removing an entry records a retraction and keeps the file. Videos play inside their cards.
+- **Overview** shows open task counts, work in flight with its holders, and work awaiting a decision.
+- **Tasks** groups open work by existing prerequisite links. Open a parent to browse its nested items and counts.
+  Agents can use `whosaidso todo --top` and `whosaidso todo --under ID` for the same navigation.
+- **Records** browses admitted tasks, claims, decisions, instruments and sources.
+- **Activity** shows the admitted history.
+
+Lists load more as you scroll, without page controls. Use Refresh to read new changes; gallery entries are
+not polled in the background. One theme icon sits beside the page title.
 
 ## Get started
 

@@ -1,6 +1,7 @@
 // Shared viewer data and DOM helpers live here. Chrome and routing belong to
 // ui-shell.js; each screen owns its rendering and bounded refresh.
 import { icon } from "./ui-icons.js";
+import { card, message } from "./ui-components.js";
 import { startViewer } from "./ui-shell.js";
 
 export { icon };
@@ -168,8 +169,8 @@ export function item(title, value, detail, tone = "") {
 
 // section is one titled panel whose list scrolls inside itself.
 export function section(title, items) {
-  return el("section", "panel", el("h2", "", el("span", "", title), el("span", "count", String(items.length))),
-    el("div", "panel-body", items.length ? el("ul", "items", items) : el("p", "empty", "empty...")));
+  return card(el("h2", "", el("span", "", title), el("span", "count", String(items.length))),
+    el("div", "panel-body", items.length ? el("ul", "items", items) : message("No entries.")));
 }
 
 // ---- words: the ledger's values, labelled for people
@@ -187,7 +188,7 @@ export function since(d) {
   if (!d) return "since UNKNOWN";
   return new Date().toDateString() === d.toDateString() ? "since " + clock.format(d) : "since " + monthDay.format(d);
 }
-export const titleCase = (s) => String(s).toLowerCase().replace(/(^|[\s-])\S/g, (c) => c.toUpperCase());
+export const titleCase = (s) => String(s ?? "").toLowerCase().replace(/(^|[\s-])\S/g, (c) => c.toUpperCase());
 
 // status is a record's real status, labelled, with the tone that colours it.
 export function status(record) {
@@ -218,4 +219,4 @@ export function status(record) {
 }
 
 
-startViewer().catch(error => main.replaceChildren(el("p", "notice", "The viewer could not start: " + error.message)));
+startViewer().catch(() => main.replaceChildren(el("div", "content-state error", "The viewer could not start.")));

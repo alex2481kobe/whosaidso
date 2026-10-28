@@ -1,6 +1,7 @@
 // Viewer chrome and routing belong here; shared DOM/data helpers are ui.js's.
 // Each screen owns its bounded refresh, and late routes cannot replace a newer one.
 import { main, state, el, project, api, icon } from "./ui.js";
+import { pageFrame, message } from "./ui-components.js";
 import { place } from "./ui-parts.js";
 import { renderOverview } from "./ui-overview.js";
 import { renderBrowser } from "./ui-browser.js";
@@ -129,7 +130,7 @@ async function route() {
   const show = (node) => {
     if (mine !== state.renders) return;
     const saved = scrollPositions.get(routeKey);
-    main.replaceChildren(node);
+    main.replaceChildren(pageFrame(node, ({gallery:"Gallery",tasks:"Tasks",records:"Records",home:"Overview",history:"Activity",record:"Record"}[routeTarget().screen] || "Overview")));
     if (restore) {
       const apply = () => { if (mine === state.renders) { main.scrollTop = saved?.page || 0; window.scrollTo(0, saved?.window || 0); } };
       apply();
@@ -147,11 +148,11 @@ async function route() {
   }
   renderMenu();
   if (!state.project) {
-    show(el("p", "notice", "No WhoSaidSo project is registered on this machine."));
+    show(message("No workspace is available."));
     return;
   }
   if (restore) {
-    const loading = el("p", "notice", "Loading " + ({gallery:"gallery", records:"records", tasks:"tasks", history:"activity", record:"record", home:"overview"}[screen] || "overview") + "…");
+    const loading = message("Loading " + ({gallery:"gallery", records:"records", tasks:"tasks", history:"activity", record:"record", home:"overview"}[screen] || "overview") + "…", "loading");
     loading.setAttribute("role", "status"); show(loading);
   }
   try {
@@ -169,7 +170,7 @@ async function route() {
     else node = await renderOverview();
     show(node);
   } catch (error) {
-    show(el("p", "notice", "Could not read this project: " + error.message));
+    show(message("Could not read this workspace. Use Refresh to try again.", "error"));
   }
 }
 

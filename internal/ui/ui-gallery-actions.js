@@ -1,14 +1,10 @@
 // Gallery file actions share one icon row across cards and the item view.
 // The server verifies files and admits retractions; the browser reports errors.
 import { el, icon, send, project } from "./ui.js";
+import { iconButton } from "./ui-components.js";
 import { fileURL } from "./ui-gallery-media.js";
 
-export function iconAction(glyph, label, fn) {
-  const b = el("button", "button icon-button", icon(glyph));
-  b.type = "button"; b.title = label; b.setAttribute("aria-label", label);
-  b.addEventListener("click", fn);
-  return b;
-}
+export const iconAction = iconButton;
 const reveal = (entry, shown) => send("/api/gallery/reveal", {project:shown, id:entry.id});
 export function titleButton(entry, said) {
   const shown = project();
@@ -21,7 +17,7 @@ export function galleryActions(entry, said, removed) {
   const shown = project();
   const run = async (button, fn) => {
     button.disabled = true; said.textContent = "";
-    try { await fn(); } catch (error) { said.textContent = error.message; }
+    try { await fn(); } catch (error) { said.textContent = error.message; said.setAttribute("role","alert"); button.closest(".gallery-card")?.classList.add("has-error"); }
     finally { button.disabled = false; }
   };
   const show = iconAction("open", "Reveal in file manager", () => run(show, () => reveal(entry, shown)));

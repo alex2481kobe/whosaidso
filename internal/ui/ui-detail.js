@@ -7,6 +7,7 @@
 // sources. A task reads from continue; dates are when WhoSaidSo captured the
 // events (times()).
 import { el, facts, item, section, copyButton, openButton, view, times, titles, actorName, status, stamp, when, titleCase, fullTitle, icon, project } from "./ui.js";
+import { card, message } from "./ui-components.js";
 import { kinds } from "./ui-icons.js";
 import { renderClaim, renderDecision, renderInstrument, renderSource } from "./ui-kinds.js";
 
@@ -43,7 +44,7 @@ export function frame({ id, kind, title, tone, statusLabel, chip, details }, ...
 }
 
 // panel is a titled section holding labelled facts rather than a list.
-export const panel = (title, body) => el("section", "panel", el("h2", "", el("span", "", title)), el("div", "panel-body", body));
+export const panel = (title, body) => card(el("h2", "", el("span", "", title)), el("div", "panel-body", body));
 
 // span dates a record by its history: the first and the latest event naming it.
 export function span(history, at) {
@@ -96,7 +97,7 @@ export async function renderDetail(id) {
   if (answer.result === "UNKNOWN") {
     const shown = await view("show", { id });
     if (shown.sources?.length) return renderSource(shown.sources[0], history, at, names);
-    return el("div", "screen", el("p", "notice", `UNKNOWN: ${answer.reason}`));
+    return el("div", "screen", message(answer.reason || "Record unavailable."));
   }
   const root = answer.records[`${answer.record.record_id}@${answer.record.revision}`];
   const context = { id, root, answer, history, at, names, dates: span(history, at) };

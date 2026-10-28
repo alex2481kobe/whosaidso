@@ -1,6 +1,12 @@
 # Changelog
 
-## 0.3.0
+## 0.2.1
+
+All lists share infinite scroll and explicit refresh. Appended batches preserve
+existing nodes, scroll and focus. Page titles share one borderless theme action
+and centered content states. Gallery media fills its cards; videos play inline.
+Missing files have a quiet state, and older absolute locators can resolve against
+the current project home. The unused owl asset is removed.
 
 Overview shows open task counts, live holders and work awaiting a decision.
 Tasks lists top-level open tasks with unique open descendant counts; selecting

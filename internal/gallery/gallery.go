@@ -43,7 +43,7 @@ type Entry struct {
 // is the only handle callers may hash or serve; display paths are not authority.
 func Open(checkout, locator string) (*os.File, error) {
 	var root *os.Root
-	if !filepath.IsAbs(locator) {
+	if !absoluteLocator(locator) {
 		locator = filepath.Clean(filepath.FromSlash(locator))
 		if !filepath.IsLocal(locator) {
 			return nil, fmt.Errorf("relative gallery locator escapes checkout: %s", locator)
@@ -55,7 +55,20 @@ func Open(checkout, locator string) (*os.File, error) {
 		}
 		defer root.Close()
 	}
-	f, err := openMedia(root, locator)
+	var f *os.File
+	var err error
+	if root == nil && !filepath.IsAbs(locator) {
+		err = os.ErrNotExist
+	} else {
+		f, err = openMedia(root, locator)
+	}
+	if root == nil && errors.Is(err, os.ErrNotExist) {
+		if relative, resolveErr := relocatedLocator(checkout, locator); resolveErr == nil {
+			return Open(checkout, relative)
+		} else if !errors.Is(resolveErr, os.ErrNotExist) {
+			return nil, resolveErr
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -93,8 +106,9 @@ func Hash(f io.Reader, path string) (model.GalleryFile, error) {
 
 func Prepare(dir, path, title, note string, by model.Actor, tasks []model.RecordRef, now time.Time) (model.GalleryAdd, error) {
 	locator := path
-	if filepath.IsAbs(locator) {
-		if rel, err := filepath.Rel(dir, locator); err == nil && filepath.IsLocal(rel) {
+	if absoluteLocator(locator) {
+		resolved, _ := ResolvePath(dir, locator)
+		if rel, err := filepath.Rel(dir, resolved); err == nil && filepath.IsLocal(rel) {
 			// Only internal absolute locators become portable. Explicit paths
 			// to external targets stay absolute, including symlinks.
 			if _, err := ResolvePath(dir, rel); err == nil {
@@ -200,13 +214,23 @@ func localEntry(p store.Project, record reduce.GalleryEntry) Entry {
 	// Unavailable locators remain visible as ledger records, without a usable
 	// local display path. Media reads use the original locator through Open.
 	path, _ := ResolvePath(p.Root, a.File.Path)
-	return Entry{Locator: a.File.Path, ID: string(a.EntryID), Path: path, Title: a.Title, Note: a.Note, AddedAt: record.AddedAt, AddedBy: a.Actor.ID, SHA256: a.File.SHA256, Length: a.File.Length, Verdict: record.Verdict, VerdictBy: record.Actor, VerdictNote: record.Note, Tasks: a.Tasks}
+	locator := a.File.Path
+	if relative, err := filepath.Rel(p.Root, path); path != "" && err == nil && filepath.IsLocal(relative) {
+		locator = filepath.ToSlash(relative)
+	}
+	return Entry{Locator: locator, ID: string(a.EntryID), Path: path, Title: a.Title, Note: a.Note, AddedAt: record.AddedAt, AddedBy: a.Actor.ID, SHA256: a.File.SHA256, Length: a.File.Length, Verdict: record.Verdict, VerdictBy: record.Actor, VerdictNote: record.Note, Tasks: a.Tasks}
 }
 
 // ResolvePath supplies a display path after checking current containment. It
 // cannot authorize a later open; media reads must use Open with the locator.
 func ResolvePath(root, locator string) (string, error) {
-	if filepath.IsAbs(locator) {
+	if absoluteLocator(locator) {
+		_, statErr := os.Stat(locator)
+		if !filepath.IsAbs(locator) || errors.Is(statErr, os.ErrNotExist) {
+			if relative, err := relocatedLocator(root, locator); err == nil {
+				return ResolvePath(root, relative)
+			}
+		}
 		return locator, nil
 	}
 	local := filepath.Clean(filepath.FromSlash(locator))

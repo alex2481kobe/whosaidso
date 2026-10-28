@@ -26,7 +26,7 @@ func TestNavigationOmitsProductBrandAndThemeIsOneButton(t *testing.T) {
 			t.Errorf("missing screen link %s", route)
 		}
 	}
-	_, theme, ok := strings.Cut(page, `<div class="theme-control">`)
+	_, theme, ok := strings.Cut(page, `<div class="theme-control" hidden>`)
 	if !ok {
 		t.Fatal("missing theme action")
 	}

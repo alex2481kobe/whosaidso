@@ -202,6 +202,9 @@ func TestViewerRefusesEveryMethodButGetOrTheGalleryPosts(t *testing.T) {
 
 func TestStaticFilesAreServedWithTheirTypes(t *testing.T) {
 	host, token := testUI(t, &stubWorld{})
+	if code, _, _ := do(t, host, probe{"GET", "/owl.png", host, "", sess{}}); code != 404 {
+		t.Fatalf("unused asset is still routed: %d", code)
+	}
 	// The types are stated here, not read from the table they check.
 	types := map[string]string{".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".png": "image/png", ".ico": "image/png"}
 	for path, file := range staticFiles {
@@ -215,9 +218,18 @@ func TestStaticFilesAreServedWithTheirTypes(t *testing.T) {
 			t.Errorf("%s: %d %q, want 200 %q with its embedded bytes", path, got, header.Get("Content-Type"), kind)
 		}
 	}
-	if len(staticFiles) != 18 {
-		t.Fatalf("every embedded file but the page is served: %d paths", len(staticFiles))
+	embedded, err := files.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
 	}
+	for _, entry := range embedded {
+		if entry.Name() != "index.html" {
+			if _, ok := staticFiles["/"+entry.Name()]; !ok {
+				t.Fatalf("embedded asset has no served path: %s", entry.Name())
+			}
+		}
+	}
+
 	got, header, body := do(t, host, probe{"GET", "/", host, "", enter(t, host, token)})
 	if got != 200 || header.Get("Content-Type") != "text/html; charset=utf-8" || !strings.Contains(body, `src="/ui.js"`) ||
 		!strings.Contains(header.Get("Content-Security-Policy"), "default-src 'none'") {

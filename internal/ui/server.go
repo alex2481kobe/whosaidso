@@ -27,7 +27,7 @@ import (
 	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
-//go:embed index.html ui.css ui-screens.css ui-gallery.css ui.js ui-icons.js ui-parts.js ui-detail.js ui-kinds.js ui-gallery.js ui-gallery-media.js ui-gallery-actions.js ui-gallery-inspect.js ui-browser.js ui-overview.js ui-shell.js favicon-32.png favicon-180.png owl.png
+//go:embed index.html ui.css ui-screens.css ui-gallery.css ui.js ui-icons.js ui-parts.js ui-detail.js ui-kinds.js ui-gallery.js ui-gallery-media.js ui-gallery-actions.js ui-gallery-inspect.js ui-browser.js ui-components.js ui-stream.js ui-overview.js ui-shell.js favicon-32.png favicon-180.png
 var files embed.FS
 
 // staticFiles maps each served path to its embedded file and media type.
@@ -46,10 +46,11 @@ var staticFiles = map[string][2]string{
 	"/ui-gallery-media.js":   {"ui-gallery-media.js", "text/javascript; charset=utf-8"},
 	"/ui-gallery-inspect.js": {"ui-gallery-inspect.js", "text/javascript; charset=utf-8"},
 	"/ui-shell.js":           {"ui-shell.js", "text/javascript; charset=utf-8"},
+	"/ui-components.js":      {"ui-components.js", "text/javascript; charset=utf-8"},
+	"/ui-stream.js":          {"ui-stream.js", "text/javascript; charset=utf-8"},
 	"/ui-overview.js":        {"ui-overview.js", "text/javascript; charset=utf-8"},
 	"/ui-browser.js":         {"ui-browser.js", "text/javascript; charset=utf-8"},
 	"/ui-gallery.js":         {"ui-gallery.js", "text/javascript; charset=utf-8"},
-	"/owl.png":               {"owl.png", "image/png"},
 	"/favicon-32.png":        {"favicon-32.png", "image/png"},
 	"/favicon-180.png":       {"favicon-180.png", "image/png"},
 	"/favicon.ico":           {"favicon-32.png", "image/png"},

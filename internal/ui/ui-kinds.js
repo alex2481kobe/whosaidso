@@ -130,7 +130,7 @@ export function renderSource(source, history, at, names) {
   const s = source.intake;
   const dates = span(history, at);
   return frame({ id: s.source_id, kind: "source", title: `${actorName(s.speaker)} said, ${s.length} bytes`, tone: "green", statusLabel: "Captured",
-    details: [["Speaker", who(s.speaker)], ["Captured by", who(source.author?.actor)], ["Approved by", who(source.admitted_by)], ["Order", String(s.order)], ["Created", stamp(dates[0])]] },
+    details: [["Speaker", who(s.speaker)], ["Captured by", who(source.author?.actor)], ["Approved by", who(source.admitted_by)], ["Order", String(s.order ?? "")], ["Created", stamp(dates[0])]] },
   section("Concerns", s.referents.map((r) => el("li", "item", link(r.record_id, names.get(r.record_id) || r.record_id, "item-link")))),
-  panel("Bytes", facts([["Digest", mono(s.original_digest)], ["Length", String(s.length)], ["Media type", s.source_ref?.content?.media_type || "UNKNOWN"]])));
+  panel("Bytes", facts([["Digest", mono(s.original_digest)], ["Length", String(s.length ?? "")], ["Media type", s.source_ref?.content?.media_type || "UNKNOWN"]])));
 }

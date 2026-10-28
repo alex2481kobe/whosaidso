@@ -128,4 +128,20 @@ func TestViewerDeletionAdmitsAttributedRetractionAndRetainsTheFile(t *testing.T)
 	if code, _, _ := ask(t, host, "GET", original, "", session); code != 404 {
 		t.Fatalf("old capability opened retracted entry: %d", code)
 	}
+	before, err := store.IntakeIDs(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, _, _ := ask(t, host, "POST", "/api/gallery/remove?project=team%2Fok&id="+id, "http://"+host, session); code != 404 {
+		t.Fatalf("repeat delete: %d", code)
+	}
+	after, err := store.IntakeIDs(p)
+	if err != nil || len(before) != len(after) {
+		t.Fatalf("retracted entry captured another packet: %v %v", after, err)
+	}
+	again, err := store.Load(p)
+	if err != nil || again.Snapshot().Watermark() != state.Snapshot().Watermark() {
+		t.Fatal("repeat delete changed the ledger")
+	}
+
 }

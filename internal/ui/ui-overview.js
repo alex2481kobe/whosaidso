@@ -1,46 +1,25 @@
-// The owner overview renders server-selected actions. Record browsing and
-// task navigation belong to ui-browser.js.
+// Overview displays the server's two owner-action queues with the same
+// cards, empty states and batch stream as the other screens.
 import { el, api, project, link } from "./ui.js";
-
+import { card, message } from "./ui-components.js";
+import { scrollBatches } from "./ui-stream.js";
 export async function renderOverview() {
-  const shown = project(), route = location.hash;
-  const active = () => shown === project() && route === location.hash;
-  let page = await api("/api/screen", {project:shown, screen:"home"});
-  const counts = el("div", "browser-counts");
-  const flying = el("section", "panel");
-  const waiting = el("section", "panel");
-  const said = el("p", "muted"); said.setAttribute("role", "status");
-  const previous = el("button", "button", "Previous");
-  const next = el("button", "button", "Next");
-  previous.type = next.type = "button";
-  const range = el("span", "muted");
-  const root = el("div", "screen overview-screen", el("h1", "", "Overview"), counts, flying, waiting, said, el("nav", "gallery-tools", previous, range, next));
-  function draw(answer) {
-    page = answer;
-    counts.replaceChildren(...Object.entries(page.counts).map(([status, n]) => el("span", "", `${status}: ${n}`)));
-    for (const [panel, group, title] of [[flying,"in_flight","In flight"], [waiting,"awaiting_decision","Awaiting your decision"]]) {
-      const rows = page.rows.filter(row => row.group === group).map(row => el("div", "row-line browser-row", link(row.id, row.title, "row-title"), el("span", "muted", row.status), el("span", "", row.actor)));
-      panel.replaceChildren(el("h2", "", title), ...(rows.length ? rows : [el("p", "empty", "None on this page.")]));
+  const shown=project(),route=location.hash;
+  const active=()=>shown===project() && route===location.hash;
+  const request=(offset,signal)=>api("/api/screen",{project:shown,screen:"home",offset},signal);
+  const first=await request(0);
+  const counts=el("div","browser-counts");
+  const panels={in_flight:card(el("h2","","In flight")),awaiting_decision:card(el("h2","","Awaiting your decision"))};
+  const empty={in_flight:message("None awaiting action."),awaiting_decision:message("None awaiting action.")};
+  for (const group of Object.keys(panels)) panels[group].append(empty[group]);
+  const drawn=new Set();
+  const stream=scrollBatches({first,request,active,draw:(page,reset)=>{
+    if (reset) {for (const group of Object.keys(panels)) {for (const row of panels[group].querySelectorAll(".browser-row")) row.remove();empty[group].hidden=false;}drawn.clear();}
+    for (const row of page.rows || []) {
+      if (!panels[row.group] || drawn.has(row.id)) continue;drawn.add(row.id);empty[row.group].hidden=true;
+      panels[row.group].append(el("div","row-line browser-row",link(row.id,row.title,"row-title"),el("span","muted",row.status ?? "—"),el("span","",row.actor ?? "—")));
     }
-    previous.disabled = page.previous == null; next.disabled = page.next == null;
-    range.textContent = page.total ? `${page.offset+1}–${page.offset+page.rows.length} of ${page.total} actions` : "No actions waiting";
-  }
-  let busy = false;
-  async function refresh(offset = page.offset) {
-    if (!active() || offset == null || busy) return;
-    busy = true;
-    try {
-      const answer = await api("/api/screen", {project:shown, screen:"home", offset});
-      if (active() && root.isConnected) { draw(answer); said.textContent = ""; }
-    } catch (error) { if (active()) said.textContent = "Could not refresh: " + error.message; }
-    finally { busy = false; }
-  }
-  previous.addEventListener("click", () => refresh(page.previous));
-  next.addEventListener("click", () => refresh(page.next));
-  draw(page);
-  const timer = setInterval(() => {
-    if (!active() || !root.isConnected) { clearInterval(timer); return; }
-    if (document.visibilityState !== "hidden") refresh();
-  }, 3000);
-  return root;
+    counts.replaceChildren(...Object.entries(page.counts || {}).filter(([,n])=>n!=null).map(([status,n])=>el("span","",`${status}: ${n}`)));
+  }});
+  return el("div","screen overview-screen",el("h1","","Overview"),el("div","gallery-tools",counts,stream.refresh),panels.in_flight,panels.awaiting_decision,stream.sentinel,stream.error);
 }
