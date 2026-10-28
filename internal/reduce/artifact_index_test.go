@@ -6,6 +6,7 @@ package reduce
 // count.
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -126,5 +127,29 @@ func TestCitationIndexSurvivesAnImageAndAForkedApply(t *testing.T) {
 	}
 	if got := base.DisposalCitations(e); len(got) != 0 {
 		t.Fatalf("the snapshot Apply started from changed: %v", got)
+	}
+}
+
+// A support read must cost what the disposed artifact's citers cost, not what
+// the whole ledger holds: with a disposal admitted, every unrelated event once
+// made every support read walk its payload.
+func TestSupportReadDoesNotWalkUnrelatedEventsOnceAnArtifactIsDisposed(t *testing.T) {
+	claim := ref(newID("CMA1"), 1)
+	allocations := func(unrelated int) float64 {
+		l := proofLedger(t, true)
+		artifact := blobRef("result")
+		l.add(t, &model.ArtifactDispose{Artifact: artifact, Digest: artifact.Content.SHA256, PreviousLocation: "moved/result", SupportLoss: []model.SupportLoss{}, Authority: rulingAuthority("owner")})
+		for i := 0; i < unrelated; i++ {
+			l.add(t, createTask(fmt.Sprintf("TV%d", i)))
+		}
+		s := mustReplay(t, l.out)
+		if facts, ok := s.Support(claim); !ok || facts.EvidenceAvailable != TruthFalse {
+			t.Fatalf("control: the disposal must reach the claim: %+v", facts)
+		}
+		return testing.AllocsPerRun(5, func() { s.Support(claim) })
+	}
+	small, large := allocations(20), allocations(1000)
+	if large > small*1.5+50 {
+		t.Fatalf("a support read walked the unrelated events: %.0f -> %.0f allocations", small, large)
 	}
 }
