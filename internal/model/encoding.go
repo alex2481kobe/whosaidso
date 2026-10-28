@@ -62,7 +62,7 @@ func Encode(v any) ([]byte, error) {
 
 var rawMessageType = reflect.TypeOf(json.RawMessage(nil))
 
-// walkWire visits every value json.Marshal would write: exported fields under
+// walkWire visits values json.Marshal would write: exported fields under
 // their JSON names, map keys (at "<map key>") and values, and slice elements.
 // It is the one walk behind the UTF-8 and the UTC checks. Past json.Marshal's
 // own cycle depth it stops and leaves the cycle for json.Marshal to refuse.
@@ -107,6 +107,11 @@ func walkWire(v reflect.Value, path string, depth int, visit func(reflect.Value,
 			}
 		}
 	case reflect.Slice, reflect.Array:
+		// The container was visited above: raw JSON gets its whole UTF-8 check.
+		// Individual bytes carry neither text nor timestamps to validate.
+		if v.Type().Elem().Kind() == reflect.Uint8 {
+			return nil
+		}
 		for i := 0; i < v.Len(); i++ {
 			if err := walkWire(v.Index(i), fmt.Sprintf("%s[%d]", path, i), depth+1, visit); err != nil {
 				return err
