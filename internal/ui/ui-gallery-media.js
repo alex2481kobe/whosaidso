@@ -9,18 +9,6 @@ export function action(glyph, label, fn, cls = "button") {
   return b;
 }
 export const fileURL = (entry, kind = "file") => apiURL("/api/gallery/" + kind, {project:project(), id:entry.id, cap:entry.cap});
-export function saveOriginal(entry) {
-  if (!entry.kind) {
-    const unavailable = action("file", "Save unavailable", () => {}, "button artifact-save");
-    unavailable.disabled = true; unavailable.title = "This file type is not served. Use Copy path in file details.";
-    return unavailable;
-  }
-  const a = el("a", "button artifact-save", icon("down"), "Save original");
-  a.href = fileURL(entry, "download");
-  a.setAttribute("download", "");
-  a.addEventListener("click", e => e.stopPropagation());
-  return a;
-}
 function whenVisible(node, load, full) {
  if (full || typeof IntersectionObserver === "undefined") {load(); return;}
  const observer = new IntersectionObserver(entries => {

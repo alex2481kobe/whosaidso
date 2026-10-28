@@ -84,18 +84,18 @@ assert.ok(requests.some(u=>u.pathname==='/api/gallery/reveal'),'title reveals th
 first.querySelector('.artifact-preview').fire('click');await settle();
 let dialog=body.querySelector('.artifact-dialog');assert.ok(dialog?.open);
 assert.ok(dialog.querySelector('img').src.startsWith('/api/gallery/file?'),'inspector requests the full original');
-assert.equal(find('button','Previous artifact').disabled,true);
-dialog.fire('keydown',{key:'ArrowRight'});assert.equal(dialog.getAttribute('aria-label'),'Artifact 1','right arrow inspects next artifact');
-dialog.fire('keydown',{key:'ArrowLeft'});assert.equal(dialog.getAttribute('aria-label'),'Artifact 0');
-const stage=dialog.querySelector('.artifact-stage'),dialogBody=dialog.querySelector('.artifact-dialog-body');
-dialogBody.fire('pointerdown',{target:stage,pointerType:'touch',clientX:200,clientY:80,pointerId:1});dialogBody.fire('pointerup',{target:stage,clientX:80,clientY:85,pointerId:1});assert.equal(dialog.getAttribute('aria-label'),'Artifact 1','horizontal touch swipe advances');
-find('button','Next artifact').fire('click');find('button','Next artifact').fire('click');
-assert.equal(dialog.getAttribute('aria-label'),'Artifact 3');assert.ok(dialog.querySelector('img')?.src.startsWith('/api/gallery/file?'),'opening UNKNOWN requests a fresh source verification');
-find('button','Next artifact').fire('click');assert.equal(find('button','Copy path').disabled,true,'an unavailable local path cannot be copied as a blank success');dialog.fire('keydown',{key:'ArrowLeft'});
-dialog.fire('keydown',{key:'ArrowLeft'});dialog.fire('keydown',{key:'ArrowLeft'});
-const save=dialog.querySelector('.artifact-save');assert.ok(save.href.startsWith('/api/gallery/download?'));assert.equal(save.textContent,'Save original');
-find('button','Copy path').fire('click');await settle();assert.equal(copied,'shot-1.png','copy path is platform neutral');
+assert.equal(dialog.querySelector('aside'),null,'item view has no metadata sidebar');
+assert.equal(dialog.querySelector('details'),null,'item view has no hidden metadata fields');
+assert.equal(dialog.querySelector('nav'),null,'item view has no page controls or counts');
+assert.equal(dialog.querySelector('.artifact-title-button').querySelector('svg'),null,'item title is text only');
+assert.deepEqual(dialog.querySelector('.gallery-actions').children.map(n=>n.getAttribute('aria-label')),['Reveal in file manager','Copy path','Download','Delete']);
+assert.ok(byLabel(dialog,'Download').href.startsWith('/api/gallery/download?'));
+byLabel(dialog,'Copy path').fire('click');await settle();assert.equal(copied,'shot-0.png','copy path is platform neutral');
+const reveals=requests.filter(u=>u.pathname==='/api/gallery/reveal').length;
+dialog.querySelector('.artifact-title-button').fire('click');await settle();assert.equal(requests.filter(u=>u.pathname==='/api/gallery/reveal').length,reveals+1,'item title reveals the file');
 dialog.close();assert.equal(first.querySelector('.artifact-preview').focusArgs?.preventScroll,true,'closing preserves scroll');
+cards.children[3].querySelector('.artifact-preview').fire('click');dialog=body.querySelector('.artifact-dialog');assert.ok(dialog.querySelector('img')?.src.startsWith('/api/gallery/file?'),'opening UNKNOWN requests fresh verification');dialog.close();
+cards.children[4].querySelector('.artifact-preview').fire('click');dialog=body.querySelector('.artifact-dialog');assert.equal(byLabel(dialog,'Copy path').disabled,true,'unknown path cannot be copied');dialog.close();
 cards.children[6].querySelector('.artifact-preview').fire('click');const videoDialog=body.querySelector('.artifact-dialog'),video=videoDialog.querySelector('video');assert.ok(video?.loaded,'video loads only when opened');videoDialog.close();assert.equal(video.paused,true,'closing inspection stops playback');
 await tick();assert.equal(cards.firstChild,first,'unchanged polls preserve media nodes');
 fail=true;await tick();assert.ok(body.textContent.includes('fixture refresh failure'),'refresh failure must be visible');fail=false;
@@ -105,6 +105,8 @@ late();await settle();assert.equal(cards.children.length,48,'a late poll cannot 
 assert.equal(find('button','Next'),undefined,'gallery has no page controls');
 assert.ok(!body.textContent.includes('of 60'),'gallery has no page counts');
 byLabel(cards.firstChild,'Delete').fire('click');await settle();assert.equal(cards.children.length,47,'admitted delete removes the card immediately');assert.equal(cards.firstChild.querySelector('.artifact-title-button').textContent,'Artifact 1');
+cards.firstChild.querySelector('.artifact-preview').fire('click');
+byLabel(body.querySelector('.artifact-dialog'),'Delete').fire('click');await settle();assert.equal(body.querySelector('.artifact-dialog'),null,'item deletion closes its view');assert.equal(cards.children.length,46,'item deletion removes the matching card');
 cards.firstChild.querySelector('.artifact-preview').fire('click');
 for(const screen of ['home','records','history']){location.hash='#/'+screen;win.fire('hashchange',{oldURL:'http://viewer/#/gallery'});await settle();assert.ok(body.querySelector('.browser-screen'),screen+' mounts bounded screen');
  if(screen==='home'){assert.equal(body.querySelector('.artifact-dialog'),null,'routing closes the inspector');find('button','Load work status totals').fire('click');await settle();const full=requests.filter(u=>u.searchParams.get('status_counts')==='1').length;assert.equal(full,1,'status totals load on explicit request');await tick();assert.equal(requests.filter(u=>u.searchParams.get('status_counts')==='1').length,full,'polls must not recompute unrequested totals');}

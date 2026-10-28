@@ -10,11 +10,11 @@ const state = { project: "", search: "", kind: "", sort: "recent" };
 const kinds = [["", "All types"], ["image", "Images"], ["video", "Videos"], ["text", "Text"], ["other", "Other"]];
 const sorts = [["recent", "Newest first"], ["oldest", "Oldest first"], ["title", "Title A–Z"], ["kind", "Kind"]];
 
-function card(entry, removed, sequence) {
+function card(entry, removed) {
   const said = el("p", "gallery-said"); said.setAttribute("role", "status");
   const media = preview(entry, fileURL(entry, entry.kind === "image" ? "thumb" : "file"));
   const stage = el("div", "artifact-preview", media);
-  const open = () => inspect(entry, stage, new Map(), sequence(), removed);
+  const open = () => inspect(entry, stage, removed);
   stage.tabIndex = 0; stage.setAttribute("role", "button");
   stage.setAttribute("aria-label", "Open " + entry.title);
   stage.addEventListener("click", e => { if (!e.target.closest("button")) open(); });
@@ -38,25 +38,25 @@ export async function renderGallery() {
   const sentinel = el("div", "gallery-sentinel");
   const retry = iconAction("refresh", "Retry loading files", () => refresh(nextOffset)); retry.hidden = true;
   const drawn = new Map();
-  let nextOffset = answer.next, firstSignature = "", generation = 0, busy = false, polling = false, current, debounce;
+  let nextOffset = answer.next, firstSignature = "", firstCount = 0, generation = 0, busy = false, polling = false, current, debounce;
   const signature = page => JSON.stringify(page.entries);
   const removed = id => {
     drawn.get(id)?.node.remove(); drawn.delete(id);
     if (nextOffset != null) nextOffset = Math.max(0, nextOffset - 1);
     empty.hidden = drawn.size > 0;
-    firstSignature = JSON.stringify([...drawn.values()].slice(0, 24).map(v => v.entry));
+    firstSignature = JSON.stringify([...drawn.values()].slice(0, firstCount).map(v => v.entry));
   };
   const draw = (page, reset) => {
     answer = page; nextOffset = page.next;
     if (reset) {
-      firstSignature = signature(page);
+      firstSignature = signature(page); firstCount = page.entries.length;
       const keep = new Set(page.entries.map(entry => entry.id));
       for (const [id, old] of drawn) if (!keep.has(id)) {old.node.remove(); drawn.delete(id);}
     }
     for (const entry of page.entries) {
       const sig = JSON.stringify(entry), old = drawn.get(entry.id);
       if (!reset && old?.sig === sig) continue;
-      const node = old?.sig === sig ? old.node : card(entry, removed, () => [...drawn.values()].map(v => v.entry));
+      const node = old?.sig === sig ? old.node : card(entry, removed);
       if (old && node !== old.node) old.node.remove();
       drawn.set(entry.id, {sig, node, entry});
       cards.append(node);
