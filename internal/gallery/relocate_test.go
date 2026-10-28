@@ -38,13 +38,18 @@ func TestGalleryLocatorsFollowProjectHomes(t *testing.T) {
 	if err := os.RemoveAll(old); err != nil {
 		t.Fatal(err)
 	}
+	// ResolvePath returns the symlink-resolved path (macOS temp dirs sit behind /var -> /private/var).
+	resolvedLocal, err := filepath.EvalSymlinks(local)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, locator := range []string{original, fresh.File.Path, `Z:\old\project\media\image.png`} {
 		got, err := Pin(next, locator)
 		if err != nil || !got.SameContent(pin) {
 			t.Fatalf("moved pin %s: %+v %v", locator, got, err)
 		}
 		path, err := ResolvePath(next, locator)
-		if err != nil || path != local {
+		if err != nil || path != resolvedLocal {
 			t.Fatalf("local display location: %s %v", path, err)
 		}
 	}
