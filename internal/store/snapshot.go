@@ -60,13 +60,13 @@ func (s State) Bundles() ([]model.Bundle, error) {
 	if s.bundles != nil {
 		return s.bundles, nil
 	}
-	out := make([]model.Bundle, 0, len(s.files))
-	for i := range s.files {
-		b, err := s.selectedBundle(i)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, b)
+	out := make([]model.Bundle, len(s.files))
+	err := parallelDo(len(out), func(i int) (err error) {
+		out[i], err = s.selectedBundle(i)
+		return err
+	})
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -152,20 +152,28 @@ func load(project Project, prior *State) (State, bool, error) {
 	}
 	selected := make([]selectedFile, len(files))
 	data := make([][]byte, len(files))
-	chain := chainStart()
-	if usable && image.count == 0 && chain != image.chain {
+	if usable && image.count == 0 && chainStart() != image.chain {
 		usable = false
 	}
-	for i, f := range files {
-		raw, err := readBundle(filepath.Join(project.Ledger, f.name))
+	// Reading and hashing a file depends on no other file; the chain, which
+	// does, is linked afterwards in file order.
+	keepAll := !usable
+	if err := parallelDo(len(files), func(i int) error {
+		raw, err := readBundle(filepath.Join(project.Ledger, files[i].name))
 		if err != nil {
-			return State{}, false, err
+			return err
 		}
-		selected[i] = selectedFile{ledgerFile: f, hash: sha256.Sum256(raw)}
-		chain = chainLink(chain, f.name, selected[i].hash)
-		if !usable || i >= image.count {
+		selected[i] = selectedFile{ledgerFile: files[i], hash: sha256.Sum256(raw)}
+		if keepAll || i >= image.count {
 			data[i] = raw // decoded below; a prefix the image covers is not
 		}
+		return nil
+	}); err != nil {
+		return State{}, false, err
+	}
+	chain := chainStart()
+	for i, f := range selected {
+		chain = chainLink(chain, f.name, f.hash)
 		if usable && i+1 == image.count && chain != image.chain {
 			usable = false
 		}
@@ -215,23 +223,25 @@ func bound(s reduce.Snapshot, project Project, files []selectedFile) bool {
 // decodeRange decodes files[from:], re-reading any whose bytes were not kept
 // and checking them against the selection's hashes.
 func decodeRange(project Project, files []selectedFile, data [][]byte, from int) ([]model.Bundle, error) {
-	out := make([]model.Bundle, 0, len(files)-from)
-	for i := from; i < len(files); i++ {
+	out := make([]model.Bundle, len(files)-from)
+	err := parallelDo(len(out), func(k int) error {
+		i := from + k
 		raw := data[i]
 		if raw == nil {
 			var err error
 			if raw, err = readBundle(filepath.Join(project.Ledger, files[i].name)); err != nil {
-				return nil, err
+				return err
 			}
 			if sha256.Sum256(raw) != files[i].hash {
-				return nil, errImage
+				return errImage
 			}
 		}
 		b, err := decodeSelected(project, files, i, raw)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, b)
+		out[k] = b
+		return err
+	})
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }
