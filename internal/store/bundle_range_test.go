@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/alex2481kobe/whosaidso/internal/model"
 )
 
 func TestBundleRangesPreserveSelectionAndBounds(t *testing.T) {
@@ -58,5 +60,52 @@ func TestBundleRangesPreserveSelectionAndBounds(t *testing.T) {
 	}
 	if _, err := state.BundleRange(3, 1); err != nil {
 		t.Fatalf("unrelated changed bundle was decoded by a range read: %v", err)
+	}
+}
+
+func TestBundlesByRefReadOnlyTheNamedBundlesAndRefuseChangedOrAbsent(t *testing.T) {
+	p := ledgerProject(t)
+	if err := os.WriteFile(filepath.Join(p.Root, "whosaidso.toml"), []byte("id = 'team/project'\nledger = '.whosaidso/events'\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	admitCached(t, p, 1, 5)
+	state, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	all, err := state.Bundles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cold, err := Replayed(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []model.Bundle{all[1], all[3]}
+	refs := []model.BundleRef{all[3].Ref(), all[1].Ref()} // unsorted on purpose
+	for name, s := range map[string]State{"selected": state, "replayed": cold} {
+		got, err := s.BundlesByRef(refs)
+		if err != nil || !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s: named bundles differ from the full selection (canonical order): %v", name, err)
+		}
+		missing := all[1].Ref()
+		missing.CommandID = all[2].Ref().CommandID
+		if _, err := s.BundlesByRef([]model.BundleRef{missing}); err == nil {
+			t.Fatalf("%s: a ref the prefix does not hold was skipped", name)
+		}
+	}
+	path := filepath.Join(p.Ledger, state.files[1].name)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(raw, '\n'), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := state.BundlesByRef([]model.BundleRef{all[1].Ref()}); err == nil {
+		t.Fatal("served changed selected bytes")
+	}
+	if _, err := state.BundlesByRef([]model.BundleRef{all[3].Ref()}); err != nil {
+		t.Fatalf("an unrelated changed bundle was read: %v", err)
 	}
 }

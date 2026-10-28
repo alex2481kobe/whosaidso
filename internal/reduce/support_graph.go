@@ -168,15 +168,8 @@ func (s *state) disposalSeeds(e *model.ArtifactDispose) []supportNode {
 	for _, loss := range e.SupportLoss {
 		seeds = append(seeds, recordNode(loss.Target))
 	}
-	for _, o := range s.log.all {
-		event := s.events[o]
-		owners := eventOwners(s.project, event)
-		if len(owners) == 0 {
-			continue
-		}
-		if citesDisposed(event, e) {
-			seeds = append(seeds, owners...)
-		}
+	for _, o := range s.citingEvents(e) {
+		seeds = append(seeds, eventOwners(s.project, s.events[o])...)
 	}
 	return seeds
 }
@@ -270,10 +263,8 @@ type ArtifactCitation struct {
 // that costs.
 func (s Snapshot) DisposalCitations(e model.ArtifactDispose) []ArtifactCitation {
 	out := []ArtifactCitation{}
-	for _, o := range s.inner().log.all {
-		if event := s.inner().events[o]; citesDisposed(event, &e) {
-			out = append(out, ArtifactCitation{Origin: o, Type: event.EventType()})
-		}
+	for _, o := range s.inner().citingEvents(&e) {
+		out = append(out, ArtifactCitation{Origin: o, Type: s.inner().events[o].EventType()})
 	}
 	return out
 }

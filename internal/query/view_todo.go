@@ -216,14 +216,26 @@ func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHea
 // setAsideBundles lists every set-aside bundle not yet resolved, with what to
 // do about it and the command that records it was dealt with, counts the
 // resolved ones, and names the packets set-aside bundles carried, so todo
-// does not offer them as intake to admit again. Bundles are read only when
-// replay set one aside.
+// does not offer them as intake to admit again. Only the set-aside bundles
+// are read, and only when replay set one aside.
 func setAsideBundles(s reduce.Snapshot, source Source) ([]SetAsideBundle, int, map[model.ID]bool, error) {
 	aside := s.SetAside()
 	if len(aside) == 0 {
 		return nil, 0, nil, nil
 	}
-	bundles, err := source.Bundles()
+	refs := make([]model.BundleRef, len(aside))
+	for i, v := range aside {
+		refs[i] = model.BundleRef{Sequence: v.Sequence, CommandID: v.CommandID}
+	}
+	var bundles []model.Bundle
+	var err error
+	if reader, ok := source.(interface {
+		BundlesByRef([]model.BundleRef) ([]model.Bundle, error)
+	}); ok {
+		bundles, err = reader.BundlesByRef(refs)
+	} else {
+		bundles, err = source.Bundles()
+	}
 	if err != nil {
 		return nil, 0, nil, err
 	}

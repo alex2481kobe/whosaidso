@@ -51,6 +51,7 @@ type state struct {
 	reverseCriterion  map[CriterionKey][]Referrer
 	reverseInvocation map[InvocationKey][]Referrer
 	reverseBlocker    map[BlockerKey][]Referrer
+	reverseArtifact   map[citeKey][]Referrer // artifact pin -> the events citing it
 
 	// bundle is the candidate bundle's inventory while it is applied, nil
 	// otherwise. clone never copies it.
@@ -83,6 +84,7 @@ func newState() *state {
 		reverseCriterion:  map[CriterionKey][]Referrer{},
 		reverseInvocation: map[InvocationKey][]Referrer{},
 		reverseBlocker:    map[BlockerKey][]Referrer{},
+		reverseArtifact:   map[citeKey][]Referrer{},
 	}
 }
 
@@ -133,6 +135,7 @@ func (s *state) clone() *state {
 		reverseCriterion:  copyReferrers(s.reverseCriterion),
 		reverseInvocation: copyReferrers(s.reverseInvocation),
 		reverseBlocker:    copyReferrers(s.reverseBlocker),
+		reverseArtifact:   copyReferrers(s.reverseArtifact),
 	}
 }
 
@@ -257,6 +260,7 @@ func (s *state) applyEvents(b model.Bundle) error {
 		put(s, s.events, origin, typed)
 		s.log.add(origin, typed)
 		s.recordReferrers(b, i, typed, refs)
+		s.indexCitations(origin, typed)
 	}
 	return nil
 }
