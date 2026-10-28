@@ -1,4 +1,4 @@
-package store
+package parallel
 
 import (
 	"errors"
@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-func TestParallelDoRunsEachIndexOnceAndReportsTheLowestFailure(t *testing.T) {
+func TestDoRunsEachIndexOnceAndReportsTheLowestFailure(t *testing.T) {
 	var runs [200]atomic.Int32
-	if err := parallelDo(len(runs), func(i int) error { runs[i].Add(1); return nil }); err != nil {
+	if err := Do(len(runs), 0, func(i int) error { runs[i].Add(1); return nil }); err != nil {
 		t.Fatal(err)
 	}
 	for i := range runs {
@@ -20,7 +20,7 @@ func TestParallelDoRunsEachIndexOnceAndReportsTheLowestFailure(t *testing.T) {
 	// The later failure finishes first; the answer must still be the one a
 	// sequential loop stops at.
 	low, high := errors.New("low"), errors.New("high")
-	err := parallelDo(200, func(i int) error {
+	err := Do(200, 3, func(i int) error {
 		switch i {
 		case 7:
 			time.Sleep(50 * time.Millisecond)
@@ -33,7 +33,7 @@ func TestParallelDoRunsEachIndexOnceAndReportsTheLowestFailure(t *testing.T) {
 	if err != low {
 		t.Fatalf("got %v, want the lowest failing index's error", err)
 	}
-	if err := parallelDo(0, func(int) error { return errors.New("never") }); err != nil {
+	if err := Do(0, 0, func(int) error { return errors.New("never") }); err != nil {
 		t.Fatalf("empty run: %v", err)
 	}
 }

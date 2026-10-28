@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
+	"github.com/alex2481kobe/whosaidso/internal/parallel"
 	"github.com/alex2481kobe/whosaidso/internal/reduce"
 )
 
@@ -61,7 +62,7 @@ func (s State) Bundles() ([]model.Bundle, error) {
 		return s.bundles, nil
 	}
 	out := make([]model.Bundle, len(s.files))
-	err := parallelDo(len(out), func(i int) (err error) {
+	err := parallel.Do(len(out), parallel.IOWorkers, func(i int) (err error) {
 		out[i], err = s.selectedBundle(i)
 		return err
 	})
@@ -158,7 +159,7 @@ func load(project Project, prior *State) (State, bool, error) {
 	// Reading and hashing a file depends on no other file; the chain, which
 	// does, is linked afterwards in file order.
 	keepAll := !usable
-	if err := parallelDo(len(files), func(i int) error {
+	if err := parallel.Do(len(files), parallel.IOWorkers, func(i int) error {
 		raw, err := readBundle(filepath.Join(project.Ledger, files[i].name))
 		if err != nil {
 			return err
@@ -224,7 +225,7 @@ func bound(s reduce.Snapshot, project Project, files []selectedFile) bool {
 // and checking them against the selection's hashes.
 func decodeRange(project Project, files []selectedFile, data [][]byte, from int) ([]model.Bundle, error) {
 	out := make([]model.Bundle, len(files)-from)
-	err := parallelDo(len(out), func(k int) error {
+	err := parallel.Do(len(out), 0, func(k int) error {
 		i := from + k
 		raw := data[i]
 		if raw == nil {

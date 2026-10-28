@@ -58,7 +58,7 @@ type persistedField struct {
 	ptr  any
 }
 
-var transientFields = map[string]bool{"bundle": true, "proofRefusals": true, "trial": true}
+var transientFields = map[string]bool{"bundle": true, "proofRefusals": true, "trial": true, "prepared": true}
 
 // SnapshotVersion is what an image must match to be restored: the encoding,
 // and a fingerprint of every type the persisted state reaches, so adding,
@@ -142,10 +142,8 @@ func RestoreSnapshot(data []byte, tail []model.Bundle) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
-	for i := range tail {
-		if err := st.apply(tail[i]); err != nil {
-			return Snapshot{}, err
-		}
+	if err := replayInto(st, tail); err != nil {
+		return Snapshot{}, err
 	}
 	return Snapshot{st: st}, nil
 }

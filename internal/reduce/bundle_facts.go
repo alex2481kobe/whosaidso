@@ -38,9 +38,10 @@ type RejectedFact struct {
 	Fact    model.ReviewedInvocation `json:"fact"`
 }
 
-// indexBundle decodes every event once and indexes what the whole bundle says.
+// indexBundle takes every event decoded once (prepare.go) and indexes what the
+// whole bundle says.
 // Its refusals are ones a sequential fold also makes, found here first.
-func indexBundle(b model.Bundle, position uint64) (*bundleFacts, error) {
+func indexBundle(b model.Bundle, position uint64, prepared []preparedEvent) (*bundleFacts, error) {
 	f := &bundleFacts{
 		position: position,
 		events:   make([]model.TypedEvent, 0, len(b.Events)),
@@ -50,8 +51,8 @@ func indexBundle(b model.Bundle, position uint64) (*bundleFacts, error) {
 		starts:   map[InvocationKey]int{},
 		seals:    map[InvocationKey]int{},
 	}
-	for i, raw := range b.Events {
-		typed, err := model.DecodeEvent(raw)
+	for i := range b.Events {
+		typed, err := prepared[i].typed, prepared[i].err
 		if err != nil {
 			// Keep the model's own diagnostic and add where in the ledger it is.
 			if flt, ok := err.(*model.Fault); ok {

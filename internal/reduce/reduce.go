@@ -62,6 +62,9 @@ type state struct {
 	// trial is set only while a bundle is tried (trial.go); clone never
 	// copies it.
 	trial *journal
+	// prepared is the bundle being applied, decoded ahead of the fold by
+	// replayInto; nil means applyEvents prepares it itself. clone never copies it.
+	prepared []preparedEvent
 }
 
 func newState() *state {
@@ -154,10 +157,8 @@ func addReferrer[K comparable](s *state, m map[K][]Referrer, k K, r Referrer) {
 // later question with a number that looks fine.
 func Replay(bundles []model.Bundle) (Snapshot, error) {
 	st := newState()
-	for i := range bundles {
-		if err := st.apply(bundles[i]); err != nil {
-			return Snapshot{}, err
-		}
+	if err := replayInto(st, bundles); err != nil {
+		return Snapshot{}, err
 	}
 	return Snapshot{st: st}, nil
 }
@@ -236,7 +237,11 @@ func (s *state) apply(b model.Bundle) error {
 // returns the first refusal. On a refusal the state is partly written, so a
 // caller that keeps going must have run it on a fork.
 func (s *state) applyEvents(b model.Bundle) error {
-	facts, err := indexBundle(b, uint64(s.watermark.Bundles)+1)
+	prepared := s.prepared
+	if prepared == nil {
+		prepared = prepareBundle(b)
+	}
+	facts, err := indexBundle(b, uint64(s.watermark.Bundles)+1, prepared)
 	if err != nil {
 		return err
 	}
@@ -249,7 +254,7 @@ func (s *state) applyEvents(b model.Bundle) error {
 		if err := s.checkExpectations(b, i, typed); err != nil {
 			return err
 		}
-		refs, err := s.checkReferences(b, i, typed)
+		refs, err := s.checkReferences(b, i, typed, prepared[i])
 		if err != nil {
 			return err
 		}

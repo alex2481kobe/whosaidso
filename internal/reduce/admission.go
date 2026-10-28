@@ -169,8 +169,8 @@ func (s *state) checkExpectations(b model.Bundle, idx int, e model.TypedEvent) e
 // schema validation run once per admitted event.
 // Cross-project links are exempt by design: they resolve on read and may dangle,
 // and reporting an unresolved one is not the same as treating it as absent.
-func (s *state) checkReferences(b model.Bundle, idx int, e model.TypedEvent) ([]model.Reference, error) {
-	refs, err := model.SameProjectReferences(e, b.Project)
+func (s *state) checkReferences(b model.Bundle, idx int, e model.TypedEvent, p preparedEvent) ([]model.Reference, error) {
+	refs, err := p.refs, p.refsErr
 	if err != nil {
 		if f, ok := err.(*model.Fault); ok {
 			return nil, faultAt(f.Code, b.Sequence, idx, f.Path, f.Detail)
