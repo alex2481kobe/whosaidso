@@ -30,6 +30,10 @@ const fetch=async raw=>{
   }
   if(url.pathname==='/api/screen' && url.searchParams.get('screen')==='status')return {ok:true,json:async()=>({watermark:{sequence:recordSequence,head:{command_id:String(recordSequence).padStart(26,'0')}}})};
   if(url.pathname==='/api/view' && url.searchParams.get('id'))return {ok:true,json:async()=>url.searchParams.get('view')==='history'?{events:[],watermark:{sequence:recordSequence,head:{command_id:String(recordSequence).padStart(26,'0')}}}:{result:'UNKNOWN',reason:'synthetic absent record',records:[],sources:[]}};
+  if(url.pathname==='/api/screen') {
+    const allowed=new Set(['project','screen','offset','search','kind','status','sort','status_counts']);
+    for(const key of url.searchParams.keys()) if(!allowed.has(key)) return {ok:false,status:400,json:async()=>({error:{message:'invalid screen parameter '+key}})};
+  }
   if(url.pathname==='/api/screen')return {ok:true,json:async()=>({rows:[{id:entries[0].id,title:'Task preview',kind:'TASK',status:'READY',actor:'contributor'}],counts:{records:60,READY:60},offset:0,total:60,previous:null,next:24,note:'One page'})};
   if(url.pathname==='/api/times')return {ok:true,json:async()=>({watermark:{sequence:timeSequence,head:{command_id:String(timeSequence).padStart(26,'0')}},times:{'1:0':{state:'known',value:'2026-01-01T00:00:00Z'}}})};
   throw Error('unexpected request '+raw);

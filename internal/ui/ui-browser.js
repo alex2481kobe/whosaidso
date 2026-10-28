@@ -16,7 +16,7 @@ export async function renderBrowser(screen, params = new URLSearchParams()) {
   const state = states.get(key);
  const requestedKind = params.get("kind")?.toUpperCase() || "";
  if (state.routeKind !== requestedKind) Object.assign(state, {routeKind:requestedKind, kind:requestedKind, status:"", offset:0});
-  const request = statusCounts => api("/api/screen", {project:shown, screen, ...state, status_counts:statusCounts ? "1" : ""});
+  const request = statusCounts => api("/api/screen", {project:shown, screen, offset:state.offset, search:state.search, kind:state.kind, status:state.status, sort:state.sort, status_counts:statusCounts ? "1" : ""});
   let page = await request();
   if (!active()) return el("div");
   const rows = el("section", "panel browser-rows");
