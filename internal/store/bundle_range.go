@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"path/filepath"
-	"sort"
 
 	"github.com/alex2481kobe/whosaidso/internal/model"
 )
@@ -39,37 +38,6 @@ func (s State) BundleRange(offset, count int) ([]model.Bundle, error) {
 	}
 	out := make([]model.Bundle, 0, end-offset)
 	for i := offset; i < end; i++ {
-		b, err := s.selectedBundle(i)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, b)
-	}
-	return out, nil
-}
-
-// BundlesByRef reads the named bundles, in canonical order, from the selected
-// prefix. A ref the prefix does not hold is an error, never skipped, and a
-// changed selected file is refused, exactly as in Bundles.
-func (s State) BundlesByRef(refs []model.BundleRef) ([]model.Bundle, error) {
-	sorted := append([]model.BundleRef(nil), refs...)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Before(sorted[j]) })
-	length := len(s.files)
-	at := func(i int) model.BundleRef { return s.files[i].ref() }
-	if s.bundles != nil {
-		length = len(s.bundles)
-		at = func(i int) model.BundleRef { return s.bundles[i].Ref() }
-	}
-	out := make([]model.Bundle, 0, len(sorted))
-	for _, ref := range sorted {
-		i := sort.Search(length, func(i int) bool { return !at(i).Before(ref) })
-		if i == length || at(i) != ref {
-			return nil, fmt.Errorf("bundle %d %s is not in the selected prefix", ref.Sequence, ref.CommandID)
-		}
-		if s.bundles != nil {
-			out = append(out, s.bundles[i])
-			continue
-		}
 		b, err := s.selectedBundle(i)
 		if err != nil {
 			return nil, err

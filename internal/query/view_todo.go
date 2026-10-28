@@ -106,7 +106,7 @@ func accepterOf(spec *model.TaskSpec) any {
 	return actor(*spec.Accepter)
 }
 
-func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHeader, limit int, now time.Time, actorFilter string, brief bool) (*TodoAnswer, error) {
+func todoView(project store.Project, s reduce.Snapshot, h ViewHeader, limit int, now time.Time, actorFilter string, brief bool) (*TodoAnswer, error) {
 	intake, err := pending(project, s)
 	if err != nil {
 		return nil, err
@@ -179,9 +179,7 @@ func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHea
 		Ready: report.Offered, OpenDecisions: len(a.OpenDecisions), StaleClaims: staleClaims}
 	var resolved int
 	var asidePackets map[model.ID]bool
-	if a.SetAside, resolved, asidePackets, err = setAsideBundles(s, source); err != nil {
-		return nil, err
-	}
+	a.SetAside, resolved, asidePackets = setAsideBundles(s)
 	a.Totals.SetAside, a.Totals.SetAsideResolved = len(a.SetAside), resolved
 	for i, p := range a.PacketsNotAccepted {
 		if asidePackets[p.CommandID] && (p.Disposition == "pending" || p.Disposition == "captured-elsewhere") {
@@ -216,36 +214,21 @@ func todoView(project store.Project, s reduce.Snapshot, source Source, h ViewHea
 // setAsideBundles lists every set-aside bundle not yet resolved, with what to
 // do about it and the command that records it was dealt with, counts the
 // resolved ones, and names the packets set-aside bundles carried, so todo
-// does not offer them as intake to admit again. Only the set-aside bundles
-// are read, and only when replay set one aside.
-func setAsideBundles(s reduce.Snapshot, source Source) ([]SetAsideBundle, int, map[model.ID]bool, error) {
+// does not offer them as intake to admit again. It reads what replay kept of
+// each set-aside bundle, never the bundles.
+func setAsideBundles(s reduce.Snapshot) ([]SetAsideBundle, int, map[model.ID]bool) {
 	aside := s.SetAside()
 	if len(aside) == 0 {
-		return nil, 0, nil, nil
-	}
-	refs := make([]model.BundleRef, len(aside))
-	for i, v := range aside {
-		refs[i] = model.BundleRef{Sequence: v.Sequence, CommandID: v.CommandID}
-	}
-	var bundles []model.Bundle
-	var err error
-	if reader, ok := source.(interface {
-		BundlesByRef([]model.BundleRef) ([]model.Bundle, error)
-	}); ok {
-		bundles, err = reader.BundlesByRef(refs)
-	} else {
-		bundles, err = source.Bundles()
-	}
-	if err != nil {
-		return nil, 0, nil, err
+		return nil, 0, nil
 	}
 	claims, packets := map[model.BundleRef][]claimEvent{}, map[model.ID]bool{}
-	for _, b := range bundles {
-		if _, ok := s.SetAsideBundle(b.Ref()); ok {
-			claims[b.Ref()] = claimsIn(b)
-			for _, p := range b.Packets {
-				packets[p.CommandID] = true
-			}
+	for _, v := range aside {
+		ref := model.BundleRef{Sequence: v.Sequence, CommandID: v.CommandID}
+		for _, c := range v.Claims {
+			claims[ref] = append(claims[ref], claimEvent{attempt: c.Attempt, task: c.Task, actor: c.Actor})
+		}
+		for _, id := range v.Packets {
+			packets[id] = true
 		}
 	}
 	out, resolved := []SetAsideBundle{}, 0
@@ -265,7 +248,7 @@ func setAsideBundles(s reduce.Snapshot, source Source) ([]SetAsideBundle, int, m
 		}
 		out = append(out, entry)
 	}
-	return out, resolved, packets, nil
+	return out, resolved, packets
 }
 
 // lostClaimNext tells the holder of each claim a set-aside bundle carried

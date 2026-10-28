@@ -5,6 +5,7 @@ package reduce
 // snapshot (Replay, Apply, a restored image) agrees.
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -288,4 +289,32 @@ func mergingBundle(t *testing.T, prefix Snapshot, events ...model.TypedEvent) mo
 		RequestDigest: newDigest("merge"), Admitter: model.Actor{ID: "coordinator"}, RecordedAt: baseTime.Add(time.Hour),
 		Packets: []model.PacketRef{{CommandID: newID("PKTM"), Digest: newDigest("pktm")}}, Events: raw})
 	return b
+}
+
+// What a set-aside bundle carried (its packets and the claims it lost) is
+// kept with it, so a read never has to decode the bundle again; and it is not
+// part of the entry's JSON.
+func TestASetAsideBundleKeepsItsPacketsAndClaimsThroughAnImage(t *testing.T) {
+	base := goodLedger(t)
+	a, b := base.branch(100), base.branch(200)
+	a.add(t, createTask("TSKB"))
+	start := &model.TaskStart{Task: ref(newID("TSKB"), 1), Actor: model.Actor{ID: "agent-b"}, AttemptID: newID("ATTB")}
+	lost := b.add(t, createTask("TSKB"), start)
+	s := mustReplay(t, merged(a, b))
+	aside := onlySetAside(t, s, CodeDuplicateRecord)
+	wantClaims := []AsideClaim{{Attempt: start.AttemptID, Task: start.Task, Actor: start.Actor}}
+	if !reflect.DeepEqual(aside.Claims, wantClaims) || len(lost.Packets) != 1 || !reflect.DeepEqual(aside.Packets, []model.ID{lost.Packets[0].CommandID}) {
+		t.Fatalf("set-aside entry lost what the bundle carried: %+v, bundle packets %+v", aside, lost.Packets)
+	}
+	restored, err := RestoreSnapshot(mustEncode(t, s), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := restored.SetAside(); !reflect.DeepEqual(got, s.SetAside()) {
+		t.Fatalf("an image dropped the set-aside facts: %+v vs %+v", got, s.SetAside())
+	}
+	raw, err := json.Marshal(aside)
+	if err != nil || strings.Contains(strings.ToLower(string(raw)), "claims") || strings.Contains(strings.ToLower(string(raw)), "packets") {
+		t.Fatalf("the entry's JSON grew: %s %v", raw, err)
+	}
 }

@@ -29,6 +29,18 @@ type SetAside struct {
 	// Resolved is the setaside.resolve that dealt with it, once one is
 	// admitted (setaside_resolve.go).
 	Resolved *SetAsideResolution `json:"resolved,omitempty"`
+	// Packets and Claims are what the bundle carried, kept so a read can say
+	// which intake a set-aside bundle holds and which claims it lost without
+	// reading and decoding the bundle again. They are not part of its answer.
+	Packets []model.ID   `json:"-"`
+	Claims  []AsideClaim `json:"-"`
+}
+
+// AsideClaim is one task.start or task.takeover a set-aside bundle carried.
+type AsideClaim struct {
+	Attempt model.ID
+	Task    model.RecordRef
+	Actor   model.Actor
 }
 
 // fold applies b's events, or sets b aside.
@@ -107,7 +119,27 @@ func optional(o *Origin) []Origin {
 }
 
 func (s *state) setAsideBundle(b model.Bundle, err error) {
-	s.setAside[b.Ref()] = SetAside{Sequence: b.Sequence, CommandID: b.CommandID, Code: faultCode(err), Reason: err.Error()}
+	v := SetAside{Sequence: b.Sequence, CommandID: b.CommandID, Code: faultCode(err), Reason: err.Error()}
+	for _, p := range b.Packets {
+		v.Packets = append(v.Packets, p.CommandID)
+	}
+	// An event that does not decode is no claim: the fold already reported it.
+	for _, raw := range b.Events {
+		if raw.Type != "task.start" && raw.Type != "task.takeover" {
+			continue
+		}
+		typed, derr := model.DecodeEvent(raw)
+		if derr != nil {
+			continue
+		}
+		switch e := typed.(type) {
+		case *model.TaskStart:
+			v.Claims = append(v.Claims, AsideClaim{Attempt: e.AttemptID, Task: e.Task, Actor: e.Actor})
+		case *model.TaskTakeover:
+			v.Claims = append(v.Claims, AsideClaim{Attempt: e.AttemptID, Task: e.Task, Actor: e.Actor})
+		}
+	}
+	s.setAside[b.Ref()] = v
 }
 
 // faultCode is the machine-readable code of a refusal.

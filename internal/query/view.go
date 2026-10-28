@@ -158,7 +158,7 @@ func view(project store.Project, r ViewRequest, source Source) (ViewAnswer, erro
 		if r.Top || r.Under != "" {
 			return taskList(s, h, r), nil
 		}
-		return todoView(project, s, source, h, r.Limit, r.Now, r.Actor, r.Brief)
+		return todoView(project, s, h, r.Limit, r.Now, r.Actor, r.Brief)
 	case "continue":
 		if intake != nil {
 			h.Result, h.Reason = "UNKNOWN", fmt.Sprintf("%s is an admitted source, not a record to resume: show %s or history %s reads it", r.ID, r.ID, r.ID)

@@ -29,7 +29,7 @@ import (
 // rather than answering from old events. /4 carries the ledger's lineage (its
 // chain structure) in place of a bare command index, and its set-aside bundles.
 // Format /8 also persists the gallery event index; /9 the artifact-citation
-// index. Older disposable images rebuild.
+// index and what each set-aside bundle carried. Older disposable images rebuild.
 const snapshotFormat = "whosaidso-snapshot/9"
 
 // persisted names every state field an image carries, in encoding order. The
