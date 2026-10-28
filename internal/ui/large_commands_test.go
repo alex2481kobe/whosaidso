@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alex2481kobe/whosaidso/internal/query"
 	"github.com/alex2481kobe/whosaidso/internal/store"
 )
 
@@ -40,10 +41,22 @@ func TestLargeLedgerCommands(t *testing.T) {
 	// A fresh Reader stands for a new viewer process using its persistent index.
 	start = time.Now()
 	var reader store.Reader
-	if _, err := reader.Load(p); err != nil {
+	source, err := reader.Load(p)
+	if err != nil {
 		t.Fatal(err)
 	}
 	measureLarge(t, "fresh reader with index", time.Since(start), time.Second)
+	start = time.Now()
+	todo, err := query.ReadViewFrom(p, query.ViewRequest{View: "todo"}, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("todo selection only: %s", time.Since(start))
+	start = time.Now()
+	if err := query.RenderViewBrief(io.Discard, todo); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("todo text only: %s", time.Since(start))
 	// The CLI is a different build from this test executable and deliberately
 	// cannot reuse its image. Prepare the CLI's own index before timing restarts.
 	prepare := exec.Command(bin, "todo", "--limit", "1")

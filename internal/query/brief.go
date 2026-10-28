@@ -30,8 +30,9 @@ type BriefFact struct {
 
 // cur is a position in the decoded export. A missing position is nil.
 type cur struct {
-	v    any
-	path []string
+	v        any
+	path     []string
+	textOnly bool
 }
 
 func (c cur) at(steps ...any) cur {
@@ -39,15 +40,23 @@ func (c cur) at(steps ...any) cur {
 		switch k := step.(type) {
 		case string:
 			m, _ := c.v.(map[string]any)
+			if c.textOnly {
+				c = cur{v: m[k], textOnly: true}
+				continue
+			}
 			quoted, _ := json.Marshal(k)
-			c = cur{m[k], append(append([]string{}, c.path...), string(quoted))}
+			c = cur{v: m[k], path: append(append([]string{}, c.path...), string(quoted))}
 		case int:
 			xs, _ := c.v.([]any)
 			var v any
 			if k < len(xs) {
 				v = xs[k]
 			}
-			c = cur{v, append(append([]string{}, c.path...), "["+strconv.Itoa(k)+"]")}
+			if c.textOnly {
+				c = cur{v: v, textOnly: true}
+				continue
+			}
+			c = cur{v: v, path: append(append([]string{}, c.path...), "["+strconv.Itoa(k)+"]")}
 		}
 	}
 	return c
@@ -56,7 +65,7 @@ func (c cur) at(steps ...any) cur {
 func (c cur) ok() bool { return c.v != nil }
 func (c cur) items() []cur {
 	xs, _ := c.v.([]any)
-	out := []cur{}
+	out := make([]cur, 0, len(xs))
 	for i := range xs {
 		out = append(out, c.at(i))
 	}
@@ -65,8 +74,9 @@ func (c cur) items() []cur {
 func (c cur) text() string { s, _ := c.v.(string); return s }
 
 type briefWriter struct {
-	out   strings.Builder
-	facts []BriefFact
+	out      strings.Builder
+	facts    []BriefFact
+	textOnly bool
 }
 
 // line writes one line. A string piece is literal layout; a cur piece is a
@@ -88,7 +98,9 @@ func (b *briefWriter) line(indent int, pieces ...any) {
 		case count:
 			xs, _ := p.v.([]any)
 			n := strconv.Itoa(len(xs))
-			b.facts = append(b.facts, BriefFact{Path: p.path, Value: n, Count: true, Display: n})
+			if !b.textOnly {
+				b.facts = append(b.facts, BriefFact{Path: p.path, Value: n, Count: true, Display: n})
+			}
 			b.out.WriteString(n)
 		}
 	}
@@ -104,8 +116,11 @@ func (b *briefWriter) fact(c cur, truncate bool) string {
 	if !c.ok() {
 		return "UNKNOWN(absent)"
 	}
-	encoded, _ := json.Marshal(c.v) // decoded JSON values always re-encode
-	display := string(encoded)
+	var encoded []byte
+	if !b.textOnly {
+		encoded, _ = json.Marshal(c.v)
+	}
+	display := ""
 	if s, isString := c.v.(string); isString {
 		shown, cut := s, false
 		if truncate {
@@ -123,9 +138,15 @@ func (b *briefWriter) fact(c cur, truncate bool) string {
 		}
 		truncate = cut
 	} else {
+		if encoded == nil {
+			encoded, _ = json.Marshal(c.v)
+		}
+		display = string(encoded)
 		truncate = false
 	}
-	b.facts = append(b.facts, BriefFact{Path: c.path, Value: string(encoded), Prefix: truncate, Display: display})
+	if !b.textOnly {
+		b.facts = append(b.facts, BriefFact{Path: c.path, Value: string(encoded), Prefix: truncate, Display: display})
+	}
 	return display
 }
 

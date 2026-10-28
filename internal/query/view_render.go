@@ -30,11 +30,11 @@ func RenderViewBriefWithIntakeDetails(w io.Writer, answer ViewAnswer) error {
 }
 
 func renderViewBrief(w io.Writer, answer ViewAnswer, intakeDetails bool) error {
-	var encoded bytes.Buffer
-	if err := RenderViewJSON(&encoded, answer); err != nil {
+	data, err := json.Marshal(answer)
+	if err != nil {
 		return err
 	}
-	text, _, err := viewBriefOf(encoded.Bytes(), intakeDetails)
+	text, _, err := decodeViewBrief(data, intakeDetails, true)
 	if err != nil {
 		return err
 	}
@@ -49,17 +49,25 @@ func ViewBriefOf(exported []byte) (string, []BriefFact, error) {
 }
 
 func viewBriefOf(exported []byte, intakeDetails bool) (string, []BriefFact, error) {
+	return decodeViewBrief(exported, intakeDetails, false)
+}
+
+func decodeViewBrief(exported []byte, intakeDetails, textOnly bool) (string, []BriefFact, error) {
 	decoder := json.NewDecoder(bytes.NewReader(exported))
 	decoder.UseNumber()
 	var value any
 	if err := decoder.Decode(&value); err != nil {
 		return "", nil, err
 	}
-	b := &briefWriter{}
-	a := cur{v: value}
+	b := &briefWriter{textOnly: textOnly}
+	a := cur{v: value, textOnly: textOnly}
 	briefHeader(b, a, a.at("view"))
 	switch a.at("view").text() {
 	case "todo":
+		if a.at("tasks").ok() {
+			briefTaskList(b, a)
+			break
+		}
 		briefTodo(b, a, intakeDetails)
 	case "continue":
 		briefContinue(b, a)

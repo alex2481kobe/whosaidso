@@ -90,3 +90,17 @@ func briefIntake(b *briefWriter, title string, total, list cur, disposition stri
 		}
 	}
 }
+
+func briefTaskList(b *briefWriter, a cur) {
+	b.line(0, "open tasks:", a.at("open"), "shown:", count(a.at("tasks")), "of", a.at("total"))
+	if a.at("under").ok() {
+		b.line(0, "under:", a.at("under"))
+	}
+	if a.at("note").ok() {
+		b.line(0, a.at("note"))
+	}
+	for _, row := range a.at("tasks").items() {
+		b.line(0, row.at("id"), row.at("status"), "actor", row.at("actor"), "open nested", row.at("nested"))
+		b.line(1, prefix(row.at("title")))
+	}
+}
