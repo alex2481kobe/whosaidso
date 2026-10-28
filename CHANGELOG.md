@@ -3,8 +3,10 @@
 ## 0.3.0
 
 Fix rejected Overview, Tasks, Records and Activity requests. Viewer reads reuse
-validated snapshots while checking every ledger byte; visible thumbnails load
-first, with faster cold PNG generation and private cache revalidation.
+validated snapshots while checking every ledger byte. Gallery reads index their
+own events and copy only the requested item. Visible thumbnails load first,
+with faster cold PNG generation and private cache revalidation. Disposable
+snapshot caches rebuild on upgrade.
 
 Gallery loads more files on scroll. Cards and item views show a plain clickable
 title and Reveal, Copy path, Download and Delete icons. Delete captures and

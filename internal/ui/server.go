@@ -126,7 +126,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if want := map[bool]string{true: http.MethodPost, false: http.MethodGet}[posts[r.URL.Path]]; r.Method != want {
 		w.Header().Set("Allow", want)
-		http.Error(w, "method not allowed: the viewer is read-only but for the gallery's Reveal and Remove", http.StatusMethodNotAllowed)
+		http.Error(w, "method not allowed: gallery actions use POST; reads use GET", http.StatusMethodNotAllowed)
 		return
 	}
 	// A POST must name this page as its Origin, never leave it out.
