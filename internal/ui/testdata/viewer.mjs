@@ -16,7 +16,7 @@ const timers=new Map(),intervals=new Map();let serial=0;
 const requests=[];let hold,release,delayGallery=null,fail=false,copied='',recordSequence=1,timeSequence=1,textFail=true;
 const entry=i=>({id:String(i).padStart(26,'0'),title:'Artifact '+i,kind:'image',status:'present',path:'shot-'+i+'.png',sha256:'a'.repeat(64),length:20000,added_at:'2026-01-01T00:00:00Z',tasks:[],cap:'fixture',verdict:'unreviewed'});
 const entries=Array.from({length:60},(_,i)=>entry(i));entries[3].status='unknown';entries[3].status_reason='not compared in list';entries[4].status='missing';entries[4].path='';entries[5].kind='text';entries[5].path='shot-5.txt';entries[6].kind='video';entries[6].path='shot-6.mp4';entries[7].kind='';entries[7].path='shot-7.pdf';
-const gallery=offset=>({entries:entries.slice(offset,offset+24),offset,total:60,previous:offset?Math.max(0,offset-24):null,next:offset+24<60?offset+24:null,task_titles:{}});
+const gallery=offset=>({revision:entries.map(e=>e.id).join('|'),entries:entries.slice(offset,offset+24),offset,total:entries.length,previous:offset?Math.max(0,offset-24):null,next:offset+24<entries.length?offset+24:null,task_titles:{}});
 hold=new Promise(resolve=>{release=resolve;});
 const fetch=async (raw,options={})=>{
   const url=new URL(raw,'http://viewer');requests.push(url);
@@ -111,6 +111,10 @@ visible(body.querySelector('.gallery-sentinel'));await settle();assert.equal(car
 late();await settle();assert.equal(cards.children.length,48,'a late poll cannot overwrite the appended batch');
 assert.equal(find('button','Next'),undefined,'gallery has no page controls');
 assert.ok(!body.textContent.includes('of 60'),'gallery has no page counts');
+const remote=entries[40];entries.splice(40,1);await tick();assert.equal(cards.children.length,24,'a retraction beyond the first batch resets the stream');
+visible(body.querySelector('.gallery-sentinel'));await settle();assert.equal(cards.children.length,48);assert.ok(![...cards.children].some(n=>n.querySelector('.artifact-title-button').textContent===remote.title),'remote retractions disappear even outside the polled first batch');
+let finishBatch;delayGallery=new Promise(resolve=>{finishBatch=resolve;});visible(body.querySelector('.gallery-sentinel'));await settle();entries.splice(55,1);finishBatch();await settle();assert.equal(cards.children.length,24,'a changed revision while loading the next batch restarts instead of mixing prefixes');
+visible(body.querySelector('.gallery-sentinel'));await settle();assert.equal(cards.children.length,48);
 byLabel(cards.firstChild,'Delete').fire('click');await settle();assert.equal(cards.children.length,47,'admitted delete removes the card immediately');assert.equal(cards.firstChild.querySelector('.artifact-title-button').textContent,'Artifact 1');
 cards.firstChild.querySelector('.artifact-preview').fire('click');
 byLabel(body.querySelector('.artifact-dialog'),'Delete').fire('click');await settle();assert.equal(body.querySelector('.artifact-dialog'),null,'item deletion closes its view');assert.equal(cards.children.length,46,'item deletion removes the matching card');

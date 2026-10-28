@@ -38,7 +38,7 @@ export async function renderGallery() {
   const sentinel = el("div", "gallery-sentinel");
   const retry = iconAction("refresh", "Retry loading files", () => refresh(nextOffset)); retry.hidden = true;
   const drawn = new Map();
-  let nextOffset = answer.next, firstSignature = "", firstCount = 0, generation = 0, busy = false, polling = false, current, debounce;
+  let nextOffset = answer.next, firstSignature = "", firstCount = 0, revision = answer.revision, generation = 0, busy = false, polling = false, current, debounce;
   const signature = page => JSON.stringify(page.entries);
   const removed = id => {
     drawn.get(id)?.node.remove(); drawn.delete(id);
@@ -49,7 +49,7 @@ export async function renderGallery() {
   const draw = (page, reset) => {
     answer = page; nextOffset = page.next;
     if (reset) {
-      firstSignature = signature(page); firstCount = page.entries.length;
+      firstSignature = signature(page); firstCount = page.entries.length; revision = page.revision;
       const keep = new Set(page.entries.map(entry => entry.id));
       for (const [id, old] of drawn) if (!keep.has(id)) {old.node.remove(); drawn.delete(id);}
     }
@@ -72,7 +72,8 @@ export async function renderGallery() {
     try {
       const page = await api("/api/gallery", params(offset), stop.signal);
       if (!active() || mine !== generation || !cards.isConnected) return;
-      if (!poll || signature(page) !== firstSignature) draw(page, offset === 0);
+      if (offset > 0 && page.revision !== revision) {await refresh(0); return;}
+      if (!poll || page.revision !== revision || signature(page) !== firstSignature) draw(page, offset === 0);
       said.textContent = ""; retry.hidden = true;
     } catch (error) {
       if (active() && mine === generation && cards.isConnected) {said.textContent = error.message; retry.hidden = false;}

@@ -4,6 +4,7 @@ package gallery
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -30,6 +31,7 @@ type PageRequest struct {
 // Page carries navigation offsets, so clients do not repeat pagination policy.
 // TaskTitles contains current local task intents linked from the selected page.
 type Page struct {
+	Revision   model.Digest        `json:"revision"`
 	Entries    []Shown             `json:"entries"`
 	Total      int                 `json:"total"`
 	Offset     int                 `json:"offset"`
@@ -85,6 +87,9 @@ func readPageContext(ctx context.Context, p store.Project, r PageRequest, observ
 
 // ReadPageFromContext observes one page of a validated immutable prefix.
 func ReadPageFromContext(ctx context.Context, p store.Project, r PageRequest, observer *Observer, snapshot reduce.Snapshot) (Page, error) {
+	if observer == nil {
+		observer = &Observer{}
+	}
 	budget := PageHashBytes
 	return pageFromContext(ctx, p, r, snapshot, func(p store.Project, e reduce.GalleryEntry) Shown { return observer.observe(ctx, p, e, &budget) })
 }
@@ -97,6 +102,11 @@ func pageFromContext(ctx context.Context, p store.Project, r PageRequest, snapsh
 		return Page{}, err
 	}
 	records := snapshot.Gallery()
+	revisionBytes, err := json.Marshal(records)
+	if err != nil {
+		return Page{}, err
+	}
+	revision := model.HashBytes(revisionBytes)
 	names := linkedTaskTitles(snapshot, p.ID, records)
 	selected := make([]reduce.GalleryEntry, 0, len(records))
 	search := strings.ToLower(strings.TrimSpace(r.Search))
@@ -134,7 +144,7 @@ func pageFromContext(ctx context.Context, p store.Project, r PageRequest, snapsh
 	default:
 		slices.Reverse(selected)
 	}
-	page := Page{Entries: []Shown{}, Total: len(selected), TaskTitles: map[model.ID]string{}}
+	page := Page{Revision: revision, Entries: []Shown{}, Total: len(selected), TaskTitles: map[model.ID]string{}}
 	if len(selected) == 0 {
 		return page, nil
 	}
