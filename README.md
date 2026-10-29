@@ -35,14 +35,14 @@ git add .whosaidso
 git commit -m 'Add records'
 ```
 
-Run `whosaidso install-hooks` once in each clone. Then claim a goal with `whosaidso start first-goal`; your commits carry its `Goal:` trailer. After committing work:
+Run `whosaidso install-hooks` once per clone. `whosaidso start first-goal` claims the goal; your commits then carry its `Goal:` trailer. After committing work:
 
 ```sh
 whosaidso goals
 whosaidso prove first-goal
 ```
 
-`prove` runs the check and records the result; commit it with your work. Attach a screenshot or video with `whosaidso media <goal> <file> <title>`.
+`prove` runs the check and records the result; commit it. Attach a screenshot or video with `whosaidso media <goal> <file> <title>`.
 
 ## Code search
 
@@ -55,7 +55,7 @@ whosaidso code deps src/main.cpp
 whosaidso code includers src/types.h
 ```
 
-`find` searches records, files and history. `grep` searches file text. `code defs` and `code refs` show where a name is defined and used; `code deps` and `code includers` show what a file includes and what includes it. Answers work for C, C++, Rust and Python out of the box; `whosaidso code import-scip <file>` adds exact answers from a SCIP index.
+`find` searches records, files and history; `grep` searches file text; `code defs`/`refs` find where a name is defined and used; `code deps`/`includers` show what a file includes and what includes it. C, C++, Rust and Python work out of the box; `whosaidso code import-scip <file>` adds exact answers from a SCIP index.
 
 ## Viewer
 
