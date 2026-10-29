@@ -22,6 +22,25 @@ fn value(path: &Path) -> Value { serde_json::from_slice(&fs::read(path).unwrap()
 fn commit(root: &Path) { git(root, &["add", "."]); git(root, &["commit", "--allow-empty", "-m", "fixture"]); }
 fn age(path: &Path, days: u64) { fs::File::open(path).unwrap().set_times(fs::FileTimes::new().set_modified(SystemTime::now() - Duration::from_secs(days * 86400))).unwrap(); }
 fn hash(bytes: &[u8]) -> String { Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect() }
+
+struct ViewerProcess(std::process::Child);
+impl Drop for ViewerProcess { fn drop(&mut self) { let _ = self.0.kill(); let _ = self.0.wait(); } }
+fn ui(c: &mut std::process::Command, endpoint: &str) -> String {
+    use std::{io::{BufRead, BufReader, Read, Write}, net::TcpStream, process::Stdio};
+    let registry = c.get_current_dir().unwrap().with_extension("ui-home");
+    let mut child = ViewerProcess(c.env("WHOSAIDSO_HOME", &registry).args(["ui", "--port", "0"]).stdout(Stdio::piped()).spawn().unwrap());
+    let mut url = String::new(); BufReader::new(child.0.stdout.take().unwrap()).read_line(&mut url).unwrap();
+    let (address, launch) = url.trim().strip_prefix("http://").expect("viewer URL").split_once('/').unwrap();
+    let request = |path: &str, cookie: &str| {
+        let mut stream = TcpStream::connect(address).unwrap(); stream.set_read_timeout(Some(std::time::Duration::from_secs(30))).unwrap();
+        write!(stream, "GET {path} HTTP/1.1\r\nHost: {address}\r\nCookie: {cookie}\r\nConnection: close\r\n\r\n").unwrap();
+        let mut bytes = Vec::new(); stream.read_to_end(&mut bytes).unwrap(); String::from_utf8(bytes).unwrap()
+    };
+    let first = request(&format!("/{launch}"), "");
+    let cookie = first.lines().find_map(|l| l.strip_prefix("Set-Cookie: ")).unwrap().split(';').next().unwrap();
+    let answer = request(endpoint, cookie); drop(child); fs::remove_dir_all(registry).unwrap();
+    answer.split_once("\r\n\r\n").unwrap().1.to_owned()
+}
 #[test]
 fn prune_recovers_and_instruments_execute_exact_arguments() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/e2e-tmp").join(format!("fix10-{}-{}", std::process::id(), SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
@@ -83,7 +102,7 @@ fn prune_recovers_and_instruments_execute_exact_arguments() {
     assert!(fs::metadata(&trash).unwrap().modified().unwrap().elapsed().unwrap() < Duration::from_secs(60), "trash gets a fresh expiry"); commit(&root);
     write(&image, &image_bytes);
     assert!(!cli(&root, &["check"]).contains("missing media")); assert!(cli(&root, &["show", "g"]).contains("held evidence"));
-    cli(&root, &["view"]); assert!(fs::read_to_string(r.join("cache/view/gallery.html")).unwrap().contains("blobs/trash/"));
+    assert!(ui(&mut command(&root, env!("CARGO_BIN_EXE_whosaidso"), &[]), "/api/gallery").contains("blobs/trash/"));
     fs::remove_file(&image).unwrap(); git(&root, &["tag", "held", &held]); cli(&root, &["prune"]);
     assert!(blob.is_file() && !trash.exists(), "referenced trash is restored");
     git(&root, &["tag", "-d", "held"]); age(&blob, 15); cli(&root, &["prune"]); assert!(trash.is_file());

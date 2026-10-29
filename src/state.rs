@@ -1,10 +1,52 @@
-// Goal states derived from local history and recorded proofs.
+// Goal states derived from Git history and recorded proofs.
 use crate::{git, record::{Proof, Store}};
-use std::{collections::{HashMap, HashSet}, path::Path, time::{SystemTime, UNIX_EPOCH}};
+use std::{collections::{HashMap, HashSet}, path::Path, sync::OnceLock, time::{SystemTime, UNIX_EPOCH}};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum State { Open, Active, Idle, Landed, Failing, Done, Stale }
-pub struct GoalState { pub id: String, pub state: State, pub active_branches: Vec<String>, pub proof: Option<usize> }
+#[derive(Clone, serde::Serialize)]
+pub struct Branch { pub name: String, pub author: String, pub time: i64, pub worktree: Option<String> }
+pub struct GoalState { pub id: String, pub state: State, pub active_branches: Vec<String>, pub branches: Vec<Branch>, pub proof: Option<usize> }
+pub fn now() -> Result<i64, String> {
+    // Prune compares repeated state reads, so one command needs one clock snapshot.
+    static NOW: OnceLock<Result<i64, String>> = OnceLock::new();
+    NOW.get_or_init(|| SystemTime::now().duration_since(UNIX_EPOCH).map(|t| t.as_secs() as i64).map_err(|e| e.to_string())).clone()
+}
+pub fn active(time: i64, now: i64) -> bool { now.saturating_sub(time) < 72 * 3600 }
+pub fn age(time: i64) -> String {
+    let seconds = now().unwrap_or(time).saturating_sub(time).max(0);
+    let (n, unit) = if seconds < 86400 { (seconds / 3600, "h") } else { (seconds / 86400, "d") };
+    format!("{n}{unit} ago")
+}
+// Local names shadow the same branch on every remote, even if the local tip is older.
+pub fn branch_refs(root: &Path) -> Result<Vec<(String, String)>, String> {
+    let refs = git::run(root, &["for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes"])?;
+    let local: HashSet<_> = refs.lines().filter_map(|r| r.strip_prefix("refs/heads/")).collect();
+    let mut selected = Vec::new();
+    for reference in refs.lines() {
+        let name = if let Some(name) = reference.strip_prefix("refs/heads/") {
+            if name == "main" { continue; }
+            name
+        } else if let Some(name) = reference.strip_prefix("refs/remotes/") {
+            let Some((_, branch)) = name.split_once('/') else { continue; };
+            if branch == "HEAD" || branch == "main" || local.contains(branch) { continue; }
+            name
+        } else { continue; };
+        selected.push((name.to_owned(), reference.to_owned()));
+    }
+    selected.sort();
+    Ok(selected)
+}
+fn worktrees(root: &Path) -> Result<HashMap<String, String>, String> {
+    let listing = git::run(root, &["worktree", "list", "--porcelain", "-z"])?;
+    let mut paths = HashMap::new();
+    let mut path = "";
+    for field in listing.split('\0') {
+        if let Some(value) = field.strip_prefix("worktree ") { path = value; }
+        if let Some(branch) = field.strip_prefix("branch refs/heads/") { paths.insert(branch.to_owned(), path.to_owned()); }
+    }
+    Ok(paths)
+}
 
 fn trailers(log: &str) -> impl Iterator<Item = &str> {
     log.lines().filter_map(|line| line.split_once('\t').map(|(_, value)| value))
@@ -31,22 +73,29 @@ pub fn states(root: &Path, store: &Store) -> Result<Vec<GoalState>, String> {
     if store.goals.is_empty() { return Ok(Vec::new()); }
     let commits: HashSet<_> = revisions.lines().collect();
     let main = work_log(root, &["log", &tip, "--no-merges", format])?;
-    let refs = git::run(root, &["for-each-ref", "--format=%(refname)", "refs/heads"])?;
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| e.to_string())?.as_secs() as i64;
-    let mut branches: HashMap<String, Vec<(String, bool)>> = HashMap::new();
-    for reference in refs.lines().filter(|r| *r != "refs/heads/main") {
+    let now = now()?;
+    let mut branches: HashMap<String, Vec<Branch>> = HashMap::new();
+    let goals: HashSet<_> = store.goals.iter().map(|g| g.id.as_str()).collect();
+    let mut paths = None;
+    for (name, reference) in branch_refs(root)? {
         let range = format!("{tip}...{reference}");
-        let log = work_log(root, &["log", "--no-merges", "--cherry-pick", "--right-only", "--format=%H%x09%ct%x09%(trailers:key=Goal,valueonly,separator=%x2C)", &range])?;
-        let mut newest: HashMap<&str, i64> = HashMap::new();
+        let log = work_log(root, &["log", "--no-merges", "--cherry-pick", "--right-only", "--format=%H%x00%ct%x00%an%x00%(trailers:key=Goal,valueonly,separator=%x2C)", &range])?;
+        let mut newest: HashMap<&str, (i64, &str)> = HashMap::new();
         for line in log.lines() {
-            let mut parts = line.splitn(3, '\t');
-            let _ = parts.next();
-            if let (Some(time), Some(goal)) = (parts.next(), parts.next()) {
-                if let Ok(time) = time.parse::<i64>() { newest.entry(goal).and_modify(|t| *t = (*t).max(time)).or_insert(time); }
+            let parts: Vec<_> = line.splitn(4, '\0').collect();
+            if let [_, time, author, goal] = parts.as_slice() {
+                if !goals.contains(goal) { continue; }
+                if let Ok(time) = time.parse::<i64>() {
+                    let entry = newest.entry(goal).or_insert((time, author));
+                    if time > entry.0 { *entry = (time, author); }
+                }
             }
         }
-        for (goal, time) in newest {
-            branches.entry(goal.to_owned()).or_default().push((reference.trim_start_matches("refs/heads/").to_owned(), now - time < 72 * 3600));
+        let local = reference.starts_with("refs/heads/");
+        if local && !newest.is_empty() && paths.is_none() { paths = Some(worktrees(root)?); }
+        for (goal, (time, author)) in newest {
+            let worktree = if local { paths.as_ref().and_then(|p| p.get(&name)).cloned() } else { None };
+            branches.entry(goal.to_owned()).or_default().push(Branch { name: name.clone(), author: author.to_owned(), time, worktree });
         }
     }
     let mut result = Vec::new();
@@ -80,10 +129,10 @@ pub fn states(root: &Path, store: &Store) -> Result<Vec<GoalState>, String> {
             }
         }
         let bs = branches.get(&goal.id);
-        let state = state.unwrap_or_else(|| if trailers(&main).any(|g| g == goal.id) { State::Landed } else if let Some(bs) = bs { if bs.iter().any(|(_, active)| *active) { State::Active } else { State::Idle } } else { State::Open });
-        let mut active_branches: Vec<String> = bs.into_iter().flatten().map(|(name, _)| name.clone()).collect();
+        let state = state.unwrap_or_else(|| if trailers(&main).any(|g| g == goal.id) { State::Landed } else if let Some(bs) = bs { if bs.iter().any(|b| active(b.time, now)) { State::Active } else { State::Idle } } else { State::Open });
+        let mut active_branches: Vec<String> = bs.into_iter().flatten().map(|b| b.name.clone()).collect();
         active_branches.sort();
-        result.push(GoalState { id: goal.id.clone(), state, active_branches, proof: proof_index });
+        result.push(GoalState { id: goal.id.clone(), state, active_branches, branches: bs.cloned().unwrap_or_default(), proof: proof_index });
     }
     Ok(result)
 }

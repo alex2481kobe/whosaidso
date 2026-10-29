@@ -47,8 +47,9 @@ fn keep(before: &Bytes, after: &Bytes) { for (path, bytes) in before { assert_eq
 fn blobs(root: &Path) -> PathBuf { root.join(git(root, &["rev-parse", "--git-common-dir"]).trim()).join("whosaidso/blobs") }
 fn checkpoint(root: &Path, states: [&str; 3], expected: &Bytes, local_media: &Bytes) {
     assert_eq!(&records(root), expected, "record bytes in {}", root.display());
+    let blobs = if local_media.is_empty() { PathBuf::new() } else { blobs(root) };
     for (name, bytes) in local_media {
-        assert_eq!(fs::read(blobs(root).join(name)).unwrap(), *bytes, "retained image {name}");
+        assert_eq!(fs::read(blobs.join(name)).unwrap(), *bytes, "retained image {name}");
     }
     let tree = cli(root, &["goals"], "P1 Team");
     for (goal, state) in GOALS.into_iter().zip(states) {
@@ -71,10 +72,8 @@ fn checkpoint(root: &Path, states: [&str; 3], expected: &Bytes, local_media: &By
 // The retention oracle follows USAGE's (ran_at, record hash) ordering, without asking prune which evidence it intended to keep.
 fn retained(all: &Bytes) -> Bytes {
     let mut result = all.clone();
-    for kind in ["asks"] {
-        for goal in GOALS {
-            let mut ranked: Vec<_> = all.iter().filter_map(|(path, bytes)| {
-                let v: Value = serde_json::from_slice(bytes).unwrap();
+    { let kind = "asks"; for goal in GOALS {
+            let mut ranked: Vec<_> = all.iter().filter_map(|(path, bytes)| { let v: Value = serde_json::from_slice(bytes).unwrap();
                 (path.starts_with(&format!(".whosaidso/{kind}/")) && v["goal"] == goal)
                     .then(|| (v["ran_at"].as_i64().unwrap(), path.clone()))
             }).collect(); ranked.sort_by(|a, b| b.cmp(a));
@@ -92,15 +91,15 @@ fn publish(root: &Path, goal: &str, states: [&str; 3], local: &mut Bytes, fail_c
     let mut expected = records(root);
     if fail_cover { write(&root.join(".whosaidso/cache/fail-cover"), b"cover failed"); }
     let answer = cli(root, &["prove", goal], &format!("prove: {goal} pass ")); assert_eq!(answer.lines().count(), 2); assert!(answer.lines().nth(1).unwrap().starts_with(&format!("prove: {goal} {} ", if fail_cover { "fail" } else { "pass" }))); let added = records(root); keep(&expected, &added); assert_eq!(added.len(), expected.len() + 2);
+    let head = git(root, &["rev-parse", "HEAD"]);
     for (path, bytes) in added.iter().filter(|(p, _)| !expected.contains_key(*p)) {
-        let v: Value = serde_json::from_slice(bytes).unwrap(); assert!(path.starts_with(".whosaidso/proofs/")); assert_eq!(v["goal"], goal); assert_eq!(v["commit"], git(root, &["rev-parse", "HEAD"]).trim()); assert_eq!(v["exit_code"], if v["instrument"] == "cover" && fail_cover { 1 } else { 0 }); assert_eq!(v["output_sha256"], hash(v["output_tail"].as_str().unwrap().as_bytes())); let result = if v["exit_code"] == 0 { "pass" } else { "fail" }; let sha = Path::new(path).file_stem().unwrap().to_str().unwrap(); assert!(answer.lines().any(|l| l == format!("prove: {goal} {result} {}", &sha[..12])));
+        let v: Value = serde_json::from_slice(bytes).unwrap(); assert!(path.starts_with(".whosaidso/proofs/")); assert_eq!(v["goal"], goal); assert_eq!(v["commit"], head.trim()); assert_eq!(v["exit_code"], if v["instrument"] == "cover" && fail_cover { 1 } else { 0 }); assert_eq!(v["output_sha256"], hash(v["output_tail"].as_str().unwrap().as_bytes())); let result = if v["exit_code"] == 0 { "pass" } else { "fail" }; let sha = Path::new(path).file_stem().unwrap().to_str().unwrap(); assert!(answer.lines().any(|l| l == format!("prove: {goal} {result} {}", &sha[..12])));
     }
     expected = added; checkpoint(root, states, &expected, local);
     for n in 0..6 {
         let said = format!("{goal} decision {n}: preserve the engineering evidence");
         // All developers discuss alpha's integration. Concurrent landings must prune the merged asks again, even after each side already pruned.
-        let asked = cli(root, &["ask", "alpha", &said], "ask: alpha ");
-        let next = records(root);
+        let asked = cli(root, &["ask", "alpha", &said], "ask: alpha "); let next = records(root);
         keep(&expected, &next);
         assert_eq!(next.len(), expected.len() + 1);
         let (path, bytes) = next.iter().find(|(p, _)| !expected.contains_key(*p)).unwrap();
@@ -114,12 +113,10 @@ fn publish(root: &Path, goal: &str, states: [&str; 3], local: &mut Bytes, fail_c
         checkpoint(root, states, &expected, local);
         let image = common::png(format!("{goal} image {n}"));
         write(&root.join(".whosaidso/cache/shot.png"), &image);
-        let published = cli(root, &["media", goal, ".whosaidso/cache/shot.png", &format!("{goal} image {n}")], &format!("media: {goal} "));
-        let next = records(root);
+        let published = cli(root, &["media", goal, ".whosaidso/cache/shot.png", &format!("{goal} image {n}")], &format!("media: {goal} ")); let next = records(root);
         keep(&expected, &next);
         assert_eq!(next.len(), expected.len() + 1);
-        let (_, bytes) = next.iter().find(|(p, _)| !expected.contains_key(*p)).unwrap();
-        let v: Value = serde_json::from_slice(bytes).unwrap();
+        let (_, bytes) = next.iter().find(|(p, _)| !expected.contains_key(*p)).unwrap(); let v: Value = serde_json::from_slice(bytes).unwrap();
         assert_eq!(v["media_sha256"], hash(&image));
         assert_eq!(v["shows"], format!("{goal} image {n}"));
         assert_eq!(v["goal"], goal);
@@ -135,12 +132,8 @@ fn publish(root: &Path, goal: &str, states: [&str; 3], local: &mut Bytes, fail_c
 }
 #[test]
 fn team_landings_retry_rejected_push_without_losing_evidence() {
-    let sandbox = Sandbox::new();
-    let origin = sandbox.0.join("origin.git");
-    let team = sandbox.0.join("team");
-    let alpha = sandbox.0.join("alpha");
-    let beta = sandbox.0.join("beta");
-    let other = sandbox.0.join("other");
+    let sandbox = Sandbox::new(); let origin = sandbox.0.join("origin.git"); let team = sandbox.0.join("team");
+    let alpha = sandbox.0.join("alpha"); let beta = sandbox.0.join("beta"); let other = sandbox.0.join("other");
     git(&sandbox.0, &["init", "--bare", origin.to_str().unwrap()]);
     git(&sandbox.0, &["clone", origin.to_str().unwrap(), team.to_str().unwrap()]);
     write(&team.join(".whosaidso/.gitignore"), "cache/\n");
@@ -163,9 +156,7 @@ fn team_landings_retry_rejected_push_without_losing_evidence() {
     let empty = Bytes::new();
     for root in [&team, &alpha, &beta, &other] { checkpoint(root, ["open"; 3], &empty, &empty); }
     // Proof order is alpha, beta, gamma. Landing order is beta, gamma, alpha.
-    let mut team_media = Bytes::new();
-    let mut other_media = Bytes::new();
-    let mut history = Vec::new();
+    let mut team_media = Bytes::new(); let mut other_media = Bytes::new(); let mut history = Vec::new();
     cli(&alpha, &["start", "alpha"], "start: alpha\n");
     write(&alpha.join("alpha.txt"), "alpha implementation\n");
     commit(&alpha, "Implement alpha");
@@ -238,12 +229,18 @@ fn team_landings_retry_rejected_push_without_losing_evidence() {
         checkpoint(root, ["done", "failing", "done"], &combined, local);
         assert_eq!(cli(root, &["goals"], "2/3 done"), final_tree);
         // Even intentionally pruned records remain byte-for-byte in Git history.
-        for (tip, evidence) in &history {
-            for (path, bytes) in evidence {
-                let out = command(root, "git", &["show", &format!("{tip}:{path}")]).output().unwrap();
-                assert_eq!(out.status.code(), Some(0), "{out:?}");
-                assert_eq!(&out.stdout, bytes);
-            } }
+        let evidence: Vec<_> = history.iter().flat_map(|(tip, records)| records.iter().map(move |(path, bytes)| (format!("{tip}:{path}"), bytes))).collect();
+        let requests = root.join(".whosaidso/cache/history-objects");
+        write(&requests, evidence.iter().map(|(name, _)| format!("{name}\n")).collect::<String>());
+        let out = command(root, "git", &["cat-file", "--batch"]).stdin(fs::File::open(requests).unwrap()).output().unwrap(); let mut rest = out.stdout.as_slice();
+        for (_, bytes) in evidence {
+            assert_eq!(out.status.code(), Some(0), "{out:?}");
+            let end = rest.iter().position(|b| *b == b'\n').unwrap(); let header = std::str::from_utf8(&rest[..end]).unwrap();
+            assert_eq!(header.split_whitespace().nth(1), Some("blob"));
+            let size: usize = header.split_whitespace().nth(2).unwrap().parse().unwrap();
+            assert_eq!(&rest[end + 1..end + 1 + size], bytes);
+            rest = &rest[end + 2 + size..];
+        }
     }
     assert_eq!(git(&team, &["rev-parse", "main"]), git(&other, &["rev-parse", "main"]));
     assert_eq!(git(&team, &["ls-remote", "origin", "refs/heads/main"]).split_whitespace().next(), Some(git(&team, &["rev-parse", "main"]).trim()));

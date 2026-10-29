@@ -32,6 +32,25 @@ fn commit(root: &Path, message: &str) { git(root, &["add", ".whosaidso"]); git(r
 fn proof(_root: &Path, instrument: &str, commit: &str, at: i64, result: &str) -> Value {
     json!({"goal":"g","instrument":instrument,"commit":commit,"exit_code":if result == "fail" {1} else {0},"output_sha256":"0".repeat(64),"output_tail":"","ran_at":at})
 }
+
+struct ViewerProcess(std::process::Child);
+impl Drop for ViewerProcess { fn drop(&mut self) { let _ = self.0.kill(); let _ = self.0.wait(); } }
+fn ui(c: &mut std::process::Command, endpoint: &str) -> String {
+    use std::{io::{BufRead, BufReader, Read, Write}, net::TcpStream, process::Stdio};
+    let registry = c.get_current_dir().unwrap().with_extension("ui-home");
+    let mut child = ViewerProcess(c.env("WHOSAIDSO_HOME", &registry).args(["ui", "--port", "0"]).stdout(Stdio::piped()).spawn().unwrap());
+    let mut url = String::new(); BufReader::new(child.0.stdout.take().unwrap()).read_line(&mut url).unwrap();
+    let (address, launch) = url.trim().strip_prefix("http://").expect("viewer URL").split_once('/').unwrap();
+    let request = |path: &str, cookie: &str| {
+        let mut stream = TcpStream::connect(address).unwrap(); stream.set_read_timeout(Some(std::time::Duration::from_secs(30))).unwrap();
+        write!(stream, "GET {path} HTTP/1.1\r\nHost: {address}\r\nCookie: {cookie}\r\nConnection: close\r\n\r\n").unwrap();
+        let mut bytes = Vec::new(); stream.read_to_end(&mut bytes).unwrap(); String::from_utf8(bytes).unwrap()
+    };
+    let first = request(&format!("/{launch}"), "");
+    let cookie = first.lines().find_map(|l| l.strip_prefix("Set-Cookie: ")).unwrap().split(';').next().unwrap();
+    let answer = request(endpoint, cookie); drop(child); fs::remove_dir_all(registry).unwrap();
+    answer.split_once("\r\n\r\n").unwrap().1.to_owned()
+}
 #[test]
 fn prune_preserves_evidence_and_all_readers_share_validation() {
     let home = std::env::temp_dir().join(format!("fix6-{}-{}", std::process::id(), SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
@@ -129,8 +148,7 @@ fn prune_preserves_evidence_and_all_readers_share_validation() {
     for n in 10..17 { let mut i = image.clone(); i["ran_at"] = n.into(); invalid.push(addressed(&images, &i)); }
     bad(&root, &["check"], "media sha256 mismatch");
     assert!(cli(&root, &["find", "kind:media", title]).contains("no indexed match")); assert!(cli(&root, &["grep", title]).contains("no match"));
-    assert!(!cli(&root, &["show", "g"]).contains(title)); cli(&root, &["view"]);
-    assert!(!fs::read_to_string(r.join("cache/view/gallery.html")).unwrap().contains(title));
+    assert!(!cli(&root, &["show", "g"]).contains(title)); assert!(!ui(&mut command(&root, env!("CARGO_BIN_EXE_whosaidso"), &[]), "/api/gallery").contains(title));
     commit(&root, "rejected images");
     cli(&root, &["prune"]); assert!(invalid.iter().all(|p| p.exists()) && image_path.exists(), "prune ignores rejected images");
     for p in invalid { fs::remove_file(p).unwrap(); } commit(&root, "remove rejected extras"); age(&corrupt); cli(&root, &["prune"]);
@@ -141,8 +159,7 @@ fn prune_preserves_evidence_and_all_readers_share_validation() {
     write(&r.join("goals/g.json"), String::from_utf8_lossy(goal).replace("\"check\":\"test\"", "\"check\":\"missing\""));
     bad(&root, &["check"], "missing instrument file .whosaidso/instruments/missing.json"); bad(&root, &["show", "g"], "no record g");
     assert!(cli(&root, &["find", "kind:goal", "validationneedle"]).contains("no indexed match")); assert!(cli(&root, &["grep", "validationneedle"]).contains("no match"));
-    assert!(!cli(&root, &["goals"]).contains("validationneedle")); cli(&root, &["view"]);
-    for page in ["gallery", "progress"] { assert!(!fs::read_to_string(r.join(format!("cache/view/{page}.html"))).unwrap().contains("validationneedle")); }
+    assert!(!cli(&root, &["goals"]).contains("validationneedle")); for page in ["/api/gallery", "/api/goals"] { assert!(!ui(&mut command(&root, env!("CARGO_BIN_EXE_whosaidso"), &[]), page).contains("validationneedle")); }
     let old = paths(&proofs); bad(&root, &["prune"], "commit or stash"); assert_eq!(paths(&proofs), old); write(&r.join("goals/g.json"), goal);
     // A record symlink, its folder, and the record root are all refused.
     let outside = home.join("outside"); write(&outside.join("g.json"), goal);

@@ -17,6 +17,25 @@ fn commit(root: &Path) { git(root, &["add", "."]); git(root, &["commit", "--allo
 fn hash(bytes: &[u8]) -> String { Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect() }
 fn addressed(dir: &Path, v: serde_json::Value) -> PathBuf { let b = serde_json::to_vec(&v).unwrap(); let p = dir.join(format!("{}.json", hash(&b))); write(&p, b); p }
 fn paths(dir: &Path) -> Vec<PathBuf> { fs::read_dir(dir).map(|d| d.map(|e| e.unwrap().path()).collect()).unwrap_or_default() }
+
+struct ViewerProcess(std::process::Child);
+impl Drop for ViewerProcess { fn drop(&mut self) { let _ = self.0.kill(); let _ = self.0.wait(); } }
+fn ui(c: &mut std::process::Command, endpoint: &str) -> String {
+    use std::{io::{BufRead, BufReader, Read, Write}, net::TcpStream, process::Stdio};
+    let registry = c.get_current_dir().unwrap().with_extension("ui-home");
+    let mut child = ViewerProcess(c.env("WHOSAIDSO_HOME", &registry).args(["ui", "--port", "0"]).stdout(Stdio::piped()).spawn().unwrap());
+    let mut url = String::new(); BufReader::new(child.0.stdout.take().unwrap()).read_line(&mut url).unwrap();
+    let (address, launch) = url.trim().strip_prefix("http://").expect("viewer URL").split_once('/').unwrap();
+    let request = |path: &str, cookie: &str| {
+        let mut stream = TcpStream::connect(address).unwrap(); stream.set_read_timeout(Some(std::time::Duration::from_secs(30))).unwrap();
+        write!(stream, "GET {path} HTTP/1.1\r\nHost: {address}\r\nCookie: {cookie}\r\nConnection: close\r\n\r\n").unwrap();
+        let mut bytes = Vec::new(); stream.read_to_end(&mut bytes).unwrap(); String::from_utf8(bytes).unwrap()
+    };
+    let first = request(&format!("/{launch}"), "");
+    let cookie = first.lines().find_map(|l| l.strip_prefix("Set-Cookie: ")).unwrap().split(';').next().unwrap();
+    let answer = request(endpoint, cookie); drop(child); fs::remove_dir_all(registry).unwrap();
+    answer.split_once("\r\n\r\n").unwrap().1.to_owned()
+}
 #[test]
 fn local_refs_retention_and_new_user_failures() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/e2e-tmp").join(format!("fix11-{}-{}", std::process::id(), SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
@@ -33,7 +52,7 @@ fn local_refs_retention_and_new_user_failures() {
     bad(&clone, &["start", "g"], "run whosaidso install-hooks");
     bad(&root, &["find"], "needs words"); bad(&root, &["find", "kind:goal"], "needs words");
     let usage = bad(&root, &[], "usage:");
-    for cmd in ["check", "install-hooks", "start", "gate", "ask", "show", "goals", "prove", "prune", "tools", "media", "view", "grep", "find", "code import-scip", "defs", "refs", "deps", "includers"] { assert!(usage.contains(cmd), "{cmd}: {usage}"); }
+    for cmd in ["check", "install-hooks", "start", "gate", "ask", "show", "goals", "prove", "prune", "tools", "media", "ui", "grep", "find", "code import-scip", "defs", "refs", "deps", "includers"] { assert!(usage.contains(cmd), "{cmd}: {usage}"); }
     // Every dispatch entry must remain in the generated usage table.
     let source = include_str!("../src/main.rs"); let table = source.split("    commands! {").nth(1).unwrap().split("\n    }").next().unwrap();
     for row in table.lines().filter(|l| l.contains("=>")) { let spelling = row.trim().split('"').nth(1).unwrap(); assert!(usage.contains(spelling), "{spelling}"); }
@@ -66,7 +85,7 @@ fn local_refs_retention_and_new_user_failures() {
     for p in old { fs::remove_file(p).unwrap(); } commit(&root);
     // Remote advances and rewinds never alter any local state consumer.
     let before = cli(&root, &["goals"]); git(&root, &["update-ref", "refs/remotes/origin/main", &head]);
-    assert_eq!(cli(&root, &["goals"]), before); assert_eq!(cli(&root, &["show", "g"]), shown); cli(&root, &["view"]); assert!(cli(&root, &["gate"]).contains("ok"));
+    assert_eq!(cli(&root, &["goals"]), before); assert_eq!(cli(&root, &["show", "g"]), shown); ui(&mut command(&root, env!("CARGO_BIN_EXE_whosaidso"), &[]), "/api/gallery"); assert!(cli(&root, &["gate"]).contains("ok"));
     bad(&root, &["gate", "origin/main"], "local branch");
     git(&root, &["tag", "-a", "local-base", "-m", "base", "main"]);
     for base in ["local-base", "refs/tags/local-base"] { assert!(cli(&root, &["gate", base]).contains("gate: ok")); }
@@ -79,13 +98,15 @@ fn local_refs_retention_and_new_user_failures() {
     let repeated: Vec<_> = paths(&r.join("proofs")).into_iter().map(|p| serde_json::from_slice::<serde_json::Value>(&fs::read(p).unwrap()).unwrap()).filter(|v| v["commit"] == feature).collect();
     assert_eq!(repeated.len(), 1); assert_eq!(repeated[0]["ran_at"], 19); assert_eq!(cli(&root, &["goals"]), before); commit(&root);
     git(&root, &["branch", "-m", "other"]);
-    for args in [vec!["goals"], vec!["show", "g"], vec!["view"], vec!["gate"], vec!["prune"]] { bad(&root, &args, "no local branch main"); }
+    for args in [vec!["goals"], vec!["show", "g"], vec!["gate"], vec!["prune"]] { bad(&root, &args, "no local branch main"); }
+    assert!(ui(&mut command(&root, exe, &[]), "/api/overview").contains("no local branch main"));
     git(&root, &["branch", "-m", "main"]);
-    // Trace every git request to prove no consumer consults remote-tracking refs.
+    // goals, show and the viewer read remote-tracking branches to show work from other clones, and prune compares that
+    // output before and after; what may land is decided from local refs only, so gate never consults them.
     let real = success(command(&root, "sh", &["-c", "command -v git"]).output().unwrap()); let bin = r.join("cache/bin");
     write(&bin.join("git"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FIX11_TRACE\"\nexec \"$FIX11_GIT\" -c user.name=Test -c user.email=test@example.com -c init.defaultBranch=main \"$@\"\n");
     fs::set_permissions(bin.join("git"), fs::Permissions::from_mode(0o755)).unwrap(); let trace = r.join("cache/trace");
-    for args in [vec!["goals"], vec!["show", "g"], vec!["view"], vec!["gate"], vec!["prune"]] {
+    for args in [vec!["gate"]] {
         success(command(&root, exe, &args).env("PATH", format!("{}:{}", bin.display(), std::env::var("PATH").unwrap())).env("FIX11_TRACE", &trace).env("FIX11_GIT", real.trim()).output().unwrap());
     }
     let calls = fs::read_to_string(trace).unwrap(); assert!(!calls.contains("remotes") && !calls.contains("--all"), "{calls}");

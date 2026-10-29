@@ -5,14 +5,14 @@ use std::{collections::HashSet, path::Path};
 
 fn err(e: impl std::fmt::Display) -> String { e.to_string() }
 fn remove(tx: &Transaction<'_>, key: &str) -> Result<(), String> {
-    tx.execute("INSERT INTO docs_fts(docs_fts,rowid,kind,title,body) SELECT 'delete',id,kind,title,body FROM docs WHERE key=?1", [key]).map_err(err)?;
-    tx.execute("DELETE FROM docs WHERE key=?1", [key]).map_err(err)?;
+    tx.prepare_cached("INSERT INTO docs_fts(docs_fts,rowid,kind,title,body) SELECT 'delete',id,kind,title,body FROM docs WHERE key=?1").map_err(err)?.execute([key]).map_err(err)?;
+    tx.prepare_cached("DELETE FROM docs WHERE key=?1").map_err(err)?.execute([key]).map_err(err)?;
     Ok(())
 }
 fn put(tx: &Transaction<'_>, kind: &str, key: &str, title: &str, body: &str) -> Result<(), String> {
     remove(tx, key)?;
-    tx.execute("INSERT INTO docs(kind,key,title,body) VALUES (?1,?2,?3,?4)", params![kind,key,title,body]).map_err(err)?;
-    tx.execute("INSERT INTO docs_fts(rowid,kind,title,body) SELECT id,kind,title,body FROM docs WHERE key=?1", [key]).map_err(err)?;
+    tx.prepare_cached("INSERT INTO docs(kind,key,title,body) VALUES (?1,?2,?3,?4)").map_err(err)?.execute(params![kind,key,title,body]).map_err(err)?;
+    tx.prepare_cached("INSERT INTO docs_fts(rowid,kind,title,body) SELECT id,kind,title,body FROM docs WHERE key=?1").map_err(err)?.execute([key]).map_err(err)?;
     Ok(())
 }
 fn stamp(tx: &Transaction<'_>, source: &str) -> Result<Option<String>, String> {
@@ -22,8 +22,8 @@ fn remember(tx: &Transaction<'_>, source: &str, value: &str, key: &str) -> Resul
     if let Some(old) = tx.query_row("SELECT key FROM source_docs WHERE source=?1", [source], |r| r.get::<_, String>(0)).optional().map_err(err)? {
         if old != key { remove(tx, &old)?; }
     }
-    tx.execute("INSERT OR REPLACE INTO manifest VALUES (?1,?2)", params![source,value]).map_err(err)?;
-    tx.execute("INSERT OR REPLACE INTO source_docs VALUES (?1,?2)", params![source,key]).map_err(err)?;
+    tx.prepare_cached("INSERT OR REPLACE INTO manifest VALUES (?1,?2)").map_err(err)?.execute(params![source,value]).map_err(err)?;
+    tx.prepare_cached("INSERT OR REPLACE INTO source_docs VALUES (?1,?2)").map_err(err)?.execute(params![source,key]).map_err(err)?;
     Ok(())
 }
 pub fn sync(root: &Path) -> Result<(), String> {
@@ -72,7 +72,7 @@ pub fn sync(root: &Path) -> Result<(), String> {
     let mut changed = Vec::new();
     let mut stable = true;
     if !same_files {
-        tx.execute("DELETE FROM manifest WHERE source='tree:files'", []).map_err(err)?;
+        tx.prepare_cached("DELETE FROM manifest WHERE source='tree:files'").map_err(err)?.execute([]).map_err(err)?;
         // Records are indexed above as records; their files would only repeat them.
         for file in &files.entries {
             let source = format!("file:{}", file.path);
@@ -93,7 +93,7 @@ pub fn sync(root: &Path) -> Result<(), String> {
             put(&tx, "file", &source, &file.path, &body)?;
             remember(&tx, &source, &file.blob, &source)?;
         }
-        if stable { tx.execute("INSERT OR REPLACE INTO manifest VALUES ('tree:files',?1)", [&snapshot]).map_err(err)?; }
+        if stable { tx.prepare_cached("INSERT OR REPLACE INTO manifest VALUES ('tree:files',?1)").map_err(err)?.execute([&snapshot]).map_err(err)?; }
     }
     drop(phase);
     let phase = crate::cache::timer("sync history");
@@ -106,7 +106,7 @@ pub fn sync(root: &Path) -> Result<(), String> {
     if head.is_none() || (head != old && !ancestor) {
         let keys: Vec<String> = tx.prepare("SELECT key FROM docs WHERE kind='commit'").map_err(err)?.query_map([], |r| r.get(0)).map_err(err)?.collect::<Result<_,_>>().map_err(err)?;
         for key in keys { remove(&tx, &key)?; }
-        tx.execute("DELETE FROM manifest WHERE source='git:main'", []).map_err(err)?;
+        tx.prepare_cached("DELETE FROM manifest WHERE source='git:main'").map_err(err)?.execute([]).map_err(err)?;
     }
     if let Some(head) = head {
         if old.as_deref() != Some(&head) {
@@ -120,7 +120,7 @@ pub fn sync(root: &Path) -> Result<(), String> {
                 let body = if goal.is_empty() { title.to_string() } else { format!("{title} goal {goal}") };
                 put(&tx, "commit", &format!("commit:{sha}"), title, &body)?;
             }
-            tx.execute("INSERT OR REPLACE INTO manifest VALUES ('git:main',?1)", [head]).map_err(err)?;
+            tx.prepare_cached("INSERT OR REPLACE INTO manifest VALUES ('git:main',?1)").map_err(err)?.execute([head]).map_err(err)?;
         }
     }
     drop(phase);
@@ -128,8 +128,8 @@ pub fn sync(root: &Path) -> Result<(), String> {
     let sources: Vec<(String,String)> = tx.prepare("SELECT source,key FROM source_docs WHERE ?1=0 OR source NOT LIKE 'file:%'").map_err(err)?.query_map([same_files], |r| Ok((r.get(0)?,r.get(1)?))).map_err(err)?.collect::<Result<_,_>>().map_err(err)?;
     for (source,key) in sources { if !seen.contains(&source) {
         remove(&tx, &key)?;
-        tx.execute("DELETE FROM manifest WHERE source=?1", [&source]).map_err(err)?;
-        tx.execute("DELETE FROM source_docs WHERE source=?1", [&source]).map_err(err)?;
+        tx.prepare_cached("DELETE FROM manifest WHERE source=?1").map_err(err)?.execute([&source]).map_err(err)?;
+        tx.prepare_cached("DELETE FROM source_docs WHERE source=?1").map_err(err)?.execute([&source]).map_err(err)?;
     }}
     drop(phase);
     tx.commit().map_err(err)?;

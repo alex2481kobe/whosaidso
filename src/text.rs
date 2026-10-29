@@ -14,7 +14,19 @@ fn sync(root: &Path) -> Result<Counts, String> {
     let phase = crate::cache::timer("text setup");
     let mut db = cache::db(root)?;
     db.execute_batch("CREATE TABLE IF NOT EXISTS text_files(path TEXT PRIMARY KEY, blob TEXT);
-        CREATE VIRTUAL TABLE IF NOT EXISTS text_fts USING fts5(path UNINDEXED, body, tokenize='trigram');").map_err(err)?;
+        CREATE VIRTUAL TABLE IF NOT EXISTS text_fts USING fts5(path UNINDEXED, body, tokenize='trigram', detail=none);").map_err(err)?;
+    let schema = |db: &rusqlite::Connection| db.query_row("SELECT sql FROM sqlite_master WHERE name='text_fts'", [], |r| r.get::<_, String>(0)).map_err(err);
+    if !schema(&db)?.contains("detail=none") {
+        let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(err)?;
+        if !schema(&tx)?.contains("detail=none") {
+        tx.execute_batch("DROP TABLE text_fts; DELETE FROM text_files;
+            CREATE VIRTUAL TABLE text_fts USING fts5(path UNINDEXED, body, tokenize='trigram', detail=none);
+            CREATE TABLE IF NOT EXISTS tree_warm(source TEXT PRIMARY KEY,stamp TEXT,unchanged INTEGER,skipped INTEGER);
+            CREATE TABLE IF NOT EXISTS tree_skips(source TEXT,path TEXT,blob TEXT,PRIMARY KEY(source,path));
+            DELETE FROM tree_warm WHERE source='text_files'; DELETE FROM tree_skips WHERE source='text_files';").map_err(err)?;
+        }
+        tx.commit().map_err(err)?;
+    }
     drop(phase);
     let start = std::time::Instant::now();
     let valid: HashSet<_> = record::load(root)?.records.into_iter().map(|(path, _)| path).collect();
@@ -30,8 +42,8 @@ fn sync(root: &Path) -> Result<Counts, String> {
         for (file, bytes) in batch {
             let body = bytes.filter(|b| !b[..b.len().min(8192)].contains(&0)).and_then(|b| String::from_utf8(b).ok());
             if let Some(body) = body {
-                tx.execute("INSERT INTO text_files VALUES (?1, ?2)", params![file.path, file.blob]).map_err(err)?;
-                tx.execute("INSERT INTO text_fts(path,body) VALUES (?1, ?2)", params![file.path, body]).map_err(err)?;
+                tx.prepare_cached("INSERT INTO text_files VALUES (?1, ?2)").map_err(err)?.execute(params![file.path, file.blob]).map_err(err)?;
+                tx.prepare_cached("INSERT INTO text_fts(path,body) VALUES (?1, ?2)").map_err(err)?.execute(params![file.path, body]).map_err(err)?;
                 indexed += 1;
             } else { tree::skip(tx, "text_files", &file)?; skipped += 1; }
         }
@@ -57,9 +69,16 @@ pub fn grep(root: &Path, args: &[String]) -> Result<(), String> {
     let needle = words.join(" ");
     if needle.chars().count() < 3 { println!("grep: needs at least 3 characters"); return Err(String::new()); }
     let counts = sync(root)?;
+    if std::env::var("WHOSAIDSO_TIMING").as_deref() == Ok("1") {
+        for (name, time) in [("listing files", counts.listing), ("reading blobs", counts.reading), ("writing database", counts.writing)] {
+            eprintln!("text timing: {name}: {:.3} ms", time.as_secs_f64() * 1000.0);
+        }
+    }
     let phase = crate::cache::timer("grep query");
     let db = cache::db(root)?;
-    let expression = format!("\"{}\"", needle.replace('"', "\"\""));
+    // Positions dwarf the text index. Intersect trigrams, then check complete lines below.
+    let chars: Vec<_> = needle.chars().collect();
+    let expression = chars.windows(3).map(|w| format!("\"{}\"", w.iter().collect::<String>().replace('"', "\"\""))).collect::<Vec<_>>().join(" AND ");
     let scope = if paths.is_empty() { String::new() } else {
         format!(" AND ({})", (2..paths.len() + 2).map(|i| format!("substr(path,1,length(?{i}))=?{i}")).collect::<Vec<_>>().join(" OR "))
     };

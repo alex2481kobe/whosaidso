@@ -26,6 +26,26 @@ fn addressed(dir: &Path, value: &serde_json::Value) -> PathBuf {
     let sha: String = Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect();
     let path = dir.join(format!("{sha}.json")); write(&path, &bytes); path
 }
+
+struct ViewerProcess(std::process::Child);
+impl Drop for ViewerProcess { fn drop(&mut self) { let _ = self.0.kill(); let _ = self.0.wait(); } }
+fn ui(c: &mut std::process::Command, endpoint: &str) -> String {
+    use std::{io::{BufRead, BufReader, Read, Write}, net::TcpStream, process::Stdio};
+    let registry = c.get_current_dir().unwrap().with_extension("ui-home");
+    let mut child = ViewerProcess(c.env("WHOSAIDSO_HOME", &registry).args(["ui", "--port", "0"]).stdout(Stdio::piped()).spawn().unwrap());
+    let mut url = String::new(); BufReader::new(child.0.stdout.take().unwrap()).read_line(&mut url).unwrap();
+    let (address, launch) = url.trim().strip_prefix("http://").expect("viewer URL").split_once('/').unwrap();
+    let request = |path: &str, cookie: &str| {
+        let mut stream = TcpStream::connect(address).unwrap(); stream.set_read_timeout(Some(std::time::Duration::from_secs(30))).unwrap();
+        write!(stream, "GET {path} HTTP/1.1\r\nHost: {address}\r\nCookie: {cookie}\r\nConnection: close\r\n\r\n").unwrap();
+        let mut bytes = Vec::new(); stream.read_to_end(&mut bytes).unwrap(); String::from_utf8(bytes).unwrap()
+    };
+    let first = request(&format!("/{launch}"), "");
+    let cookie = first.lines().find_map(|l| l.strip_prefix("Set-Cookie: ")).unwrap().split(';').next().unwrap();
+    let answer = request(endpoint, cookie); drop(child); fs::remove_dir_all(registry).unwrap();
+    answer.split_once("\r\n\r\n").unwrap().1.to_owned()
+}
+fn request(root: &Path, home: &Path) -> Command { let mut c = Command::new(env!("CARGO_BIN_EXE_whosaidso")); c.current_dir(root).env("HOME", home).env("GIT_CONFIG_NOSYSTEM", "1"); c }
 #[test]
 fn proofs_and_images_must_support_the_claims() {
     let home = std::env::temp_dir().join(format!("trust-{}-{}", std::process::id(), SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
@@ -39,8 +59,8 @@ fn proofs_and_images_must_support_the_claims() {
     git(&root, &home, &["add", ".whosaidso"]); git(&root, &home, &["commit", "-m", "initial"]);
     git(&root, &home, &["branch", "-m", "feature"]);
     let no_main = run(&root, &home, env!("CARGO_BIN_EXE_whosaidso"), &["goals"]);
-    let no_view = run(&root, &home, env!("CARGO_BIN_EXE_whosaidso"), &["view"]);
-    assert!(!no_main.status.success() && !no_view.status.success()); assert_eq!(no_main.stderr, no_view.stderr);
+    let no_view = ui(&mut request(&root, &home), "/api/overview");
+    assert!(!no_main.status.success()); assert!(no_view.contains("no local branch main"));
     git(&root, &home, &["branch", "-m", "main"]);
     git(&root, &home, &["push", "-u", "origin", "main"]);
     write(&root.join("untracked"), b"dirty");
@@ -73,16 +93,15 @@ fn proofs_and_images_must_support_the_claims() {
     proof["commit"] = unlanded.into(); proof["ran_at"] = 2.into(); proof["exit_code"] = 1.into(); addressed(&records.join("proofs"), &proof);
     assert!(cli(&root, &home, &["goals"]).contains("done    goal"));
     let shown = cli(&root, &home, &["show", "goal"]); assert!(shown.contains(&landed[..7]), "{shown}");
-    cli(&root, &home, &["view"]);
-    let progress = fs::read_to_string(records.join("cache/view/progress.html")).unwrap(); assert!(progress.contains(&landed[..7]));
+    let detail: serde_json::Value = serde_json::from_str(&ui(&mut request(&root, &home), "/api/goal?id=goal")).unwrap(); assert_eq!(detail["proof"]["commit"], landed);
     let image = serde_json::json!({"goal":"goal","shows":"A valid image title","media_sha256":"../../etc/passwd","ext":"png","byte_size":0,"commit":landed,"ran_at":3});
     let path = addressed(&records.join("media"), &image);
     write(&records.join("etc/passwd.png"), b"outside");
-    cli(&root, &home, &["view"]); bad(&root, &home, &["check"], "media: bad media sha256 ../../etc/passwd");
+    ui(&mut request(&root, &home), "/api/gallery"); bad(&root, &home, &["check"], "media: bad media sha256 ../../etc/passwd");
     fs::remove_file(path).unwrap();
     let mut invalid_ext = image.clone(); invalid_ext["media_sha256"] = "0".repeat(64).into(); invalid_ext["ext"] = "../bad".into();
     addressed(&records.join("media"), &invalid_ext);
-    cli(&root, &home, &["view"]); bad(&root, &home, &["check"], "media: bad media type ../bad");
-    for name in ["gallery.html", "progress.html"] { assert!(!fs::read_to_string(records.join("cache/view").join(name)).unwrap().contains("../../etc/passwd")); }
+    ui(&mut request(&root, &home), "/api/gallery"); bad(&root, &home, &["check"], "media: bad media type ../bad");
+    for path in ["/api/gallery", "/api/goal?id=goal"] { assert!(!ui(&mut request(&root, &home), path).contains("../../etc/passwd")); }
     fs::remove_dir_all(home).unwrap();
 }

@@ -20,6 +20,25 @@ fn bad(dir: &Path, home: &Path, args: &[&str], expected: &str) {
     assert!(format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr)).contains(expected));
 }
 fn write(path: &Path, data: &[u8]) { fs::create_dir_all(path.parent().unwrap()).unwrap(); fs::write(path, data).unwrap(); }
+
+struct ViewerProcess(std::process::Child);
+impl Drop for ViewerProcess { fn drop(&mut self) { let _ = self.0.kill(); let _ = self.0.wait(); } }
+fn ui(c: &mut std::process::Command, endpoint: &str) -> String {
+    use std::{io::{BufRead, BufReader, Read, Write}, net::TcpStream, process::Stdio};
+    let registry = c.get_current_dir().unwrap().with_extension("ui-home");
+    let mut child = ViewerProcess(c.env("WHOSAIDSO_HOME", &registry).args(["ui", "--port", "0"]).stdout(Stdio::piped()).spawn().unwrap());
+    let mut url = String::new(); BufReader::new(child.0.stdout.take().unwrap()).read_line(&mut url).unwrap();
+    let (address, launch) = url.trim().strip_prefix("http://").expect("viewer URL").split_once('/').unwrap();
+    let request = |path: &str, cookie: &str| {
+        let mut stream = TcpStream::connect(address).unwrap(); stream.set_read_timeout(Some(std::time::Duration::from_secs(30))).unwrap();
+        write!(stream, "GET {path} HTTP/1.1\r\nHost: {address}\r\nCookie: {cookie}\r\nConnection: close\r\n\r\n").unwrap();
+        let mut bytes = Vec::new(); stream.read_to_end(&mut bytes).unwrap(); String::from_utf8(bytes).unwrap()
+    };
+    let first = request(&format!("/{launch}"), "");
+    let cookie = first.lines().find_map(|l| l.strip_prefix("Set-Cookie: ")).unwrap().split(';').next().unwrap();
+    let answer = request(endpoint, cookie); drop(child); fs::remove_dir_all(registry).unwrap();
+    answer.split_once("\r\n\r\n").unwrap().1.to_owned()
+}
 #[test]
 fn requests_coverage_and_progress_agree() {
     let root = std::env::temp_dir().join(format!("progress-{}-{}", std::process::id(), SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
@@ -48,13 +67,15 @@ fn requests_coverage_and_progress_agree() {
     write(&records.join("instruments/site-photo.json"), br#"{"run":["sh","-c","true # photo"],"answers":"roof"}"#);
     git(&proj, &root, &["add", ".whosaidso/instruments"]); git(&proj, &root, &["commit", "-m", "cover roof"]); git(&proj, &root, &["push"]);
     assert!(cli(&proj, &root, &["goals"]).contains("landed  envelope"));
-    cli(&proj, &root, &["view"]); let page = records.join("cache/view/progress.html");
-    assert!(fs::read_to_string(&page).unwrap().contains("<summary>landed Envelope</summary>"));
+    let request = || { let mut c = Command::new(env!("CARGO_BIN_EXE_whosaidso")); c.current_dir(&proj).env("HOME", &root).env("GIT_CONFIG_NOSYSTEM", "1"); c };
+    let detail: serde_json::Value = serde_json::from_str(&ui(&mut request(), "/api/goal?id=envelope")).unwrap();
+    assert_eq!(detail["state"], "landed"); assert_eq!(detail["title"], "Envelope");
     assert_eq!(cli(&proj, &root, &["prove", "envelope"]).lines().count(), 2);
     git(&proj, &root, &["add", ".whosaidso/proofs"]); git(&proj, &root, &["commit", "-m", "passing coverage"]); git(&proj, &root, &["push"]);
     assert!(cli(&proj, &root, &["goals"]).contains("done    envelope"));
     let shown = cli(&proj, &root, &["show", "envelope"]); assert!(shown.contains(words) && shown.contains("done") && shown.contains("unit-tests"));
-    cli(&proj, &root, &["view"]); let html = fs::read_to_string(&page).unwrap(); assert!(html.contains(words) && html.contains("<summary>done Envelope</summary>"));
+    let detail: serde_json::Value = serde_json::from_str(&ui(&mut request(), "/api/goal?id=envelope")).unwrap();
+    assert!(detail["asks"].to_string().contains(words)); assert_eq!(detail["state"], "done"); assert_eq!(detail["title"], "Envelope");
     let ask = fs::read_to_string(ask_path).unwrap().replace("envelope", "nowhere");
     let sha: String = Sha256::digest(ask.as_bytes()).iter().map(|b| format!("{b:02x}")).collect();
     fs::write(records.join("asks").join(format!("{sha}.json")), ask).unwrap();

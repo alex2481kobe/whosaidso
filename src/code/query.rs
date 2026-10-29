@@ -11,7 +11,7 @@ impl Answers {
     }
 }
 pub fn parts(value: &str) -> Vec<&str> { value.split("::").flat_map(|s| s.split('.')).collect() }
-pub fn matches(qualified: &str, value: &str) -> bool {
+fn matches(qualified: &str, value: &str) -> bool {
     parts(qualified).ends_with(&parts(value))
 }
 pub fn leaf(value: &str) -> &str { value.rsplit("::").next().unwrap_or(value).rsplit('.').next().unwrap_or(value) }

@@ -1,5 +1,5 @@
 // Hook installation and worktree goal selection.
-use crate::{git, record};
+use crate::{claims, git, record, state};
 use std::{fs, os::unix::fs::PermissionsExt, path::Path};
 const HOOK: &str = "#!/bin/sh\n# Appends the worktree's goal as a Goal: trailer. Merge commits carry no trailer.\ncase \"$2\" in merge) exit 0 ;; esac\nf=\"$(git rev-parse --git-dir)/whosaidso-goal\"\n[ -f \"$f\" ] || exit 0\ngoal=\"$(cat \"$f\")\"\n[ -n \"$goal\" ] || exit 0\ngit interpret-trailers --in-place --if-exists doNothing --trailer \"Goal: $goal\" \"$1\"\n";
 pub fn install(root: &Path) -> Result<(), String> {
@@ -22,6 +22,14 @@ pub fn start(root: &Path, cwd: &Path, id: &str) -> Result<(), String> {
     if id != "none" && !store.goals.iter().any(|g| g.id == id) {
         return Err(format!("unknown goal {id}"));
     }
+    let states = if id == "none" { None } else {
+        match state::states(root, &store) { Ok(states) => Some(states), Err(e) if e == "no local branch main" => None, Err(e) => return Err(e) }
+    };
+    if id != "none" {
+        let settled = states.as_ref().and_then(|s| s.iter().find(|g| g.id == id)).is_some_and(|g| matches!(g.state, state::State::Landed | state::State::Done));
+        claims::claim(root, cwd, id, settled)?;
+    }
+    claims::release(root, cwd, if id == "none" { "" } else { id })?;
     let git_dir = git::run(cwd, &["rev-parse", "--git-dir"])?;
     fs::write(
         cwd.join(git_dir.trim()).join("whosaidso-goal"),
@@ -29,5 +37,16 @@ pub fn start(root: &Path, cwd: &Path, id: &str) -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
     println!("start: {id}");
+    if let Some(states) = states {
+        let current = git::run(cwd, &["branch", "--show-current"])?;
+        let now = state::now()?;
+        if let Some(goal) = states.iter().find(|g| g.id == id) {
+            for branch in &goal.branches {
+                if (branch.name != current.trim() || branch.worktree.as_deref() != root.to_str()) && state::active(branch.time, now) {
+                    println!("warning: {id} is active on {} ({}, {}); coordinate before working on it", branch.name, branch.author, state::age(branch.time));
+                }
+            }
+        }
+    }
     Ok(())
 }

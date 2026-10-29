@@ -37,23 +37,21 @@ pub struct Store {
     pub proof_hashes: HashMap<String, String>,
     pub asks: Vec<Ask>,
     pub media: Vec<Media>,
-    pub errors: Vec<String>,
-    pub warnings: Vec<String>,
+    pub errors: Vec<String>, pub warnings: Vec<String>,
     pub records: Vec<(PathBuf, serde_json::Value)>,
 }
 pub fn sha256_hex(bytes: &[u8]) -> String {
     Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
 }
-pub fn valid_id(id: &str) -> bool {
+fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
-pub fn load(root: &Path) -> Result<Store, String> {
-    let mut store = read(root)?; validate(root, &mut store); Ok(store)
-}
+pub fn load(root: &Path) -> Result<Store, String> { let mut store = read(root)?; validate(root, &mut store); Ok(store) }
 pub fn kind(path: &Path) -> &str { path.parent().and_then(Path::file_name).and_then(|s| s.to_str()).unwrap_or("").trim_end_matches('s') }
+pub const FOLDERS: [&str; 6] = ["phases", "goals", "instruments", "proofs", "asks", "media"];
 pub fn read(root: &Path) -> Result<Store, String> {
     let mut store = Store::default();
-    for folder in ["phases", "goals", "instruments", "proofs", "asks", "media"] {
+    for folder in FOLDERS {
         if let Err(e) = publish::record_dir(root, folder) { store.errors.push(e); continue; }
         let entries = match fs::read_dir(root.join(".whosaidso").join(folder)) {
             Ok(entries) => entries, Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
@@ -142,10 +140,9 @@ fn commit(value: &str) -> bool { hex(value, 40) && !value.bytes().any(|b| b.is_a
 pub fn asks<'a>(store: &'a Store, goal: &str) -> Vec<&'a Ask> {
     publish::newest(store.asks.iter().filter(|a| a.goal == goal).map(|a| (a, a.ran_at, a.sha.as_str())))
 }
-fn media_for_goal<'a>(store: &'a Store, goal: &str) -> Vec<&'a Media> {
-    publish::newest(store.media.iter().filter(|i| i.goal == goal).map(|i| (i, i.ran_at, i.sha.as_str())))
+pub fn newest_media<'a>(store: &'a Store, goal: &str) -> Option<&'a Media> {
+    store.media.iter().filter(|m| m.goal == goal).max_by(|a,b| (a.ran_at, &a.sha).cmp(&(b.ran_at, &b.sha)))
 }
-pub fn newest_media<'a>(store: &'a Store, goal: &str) -> Option<&'a Media> { media_for_goal(store, goal).first().copied() }
 fn validate(root: &Path, s: &mut Store) {
     // Report the root cause once while removing dependent records to a fixed point.
     let mut rejected = HashSet::new();
@@ -216,10 +213,16 @@ fn validate(root: &Path, s: &mut Store) {
     let phases: HashSet<_> = s.phases.iter().map(|p| p.id.as_str()).collect(); let goals: HashSet<_> = s.goals.iter().map(|g| g.id.as_str()).collect();
     let instruments: HashSet<_> = s.instruments.iter().map(|i| i.id.as_str()).collect();
     s.asks.retain(|a| { if goals.contains(a.goal.as_str()) { true } else { if !rejected.contains(&a.goal) { s.errors.push(format!("ask: unknown goal {}", a.goal)); } false } });
+    let mut names: Vec<_> = s.proofs.iter().filter(|p| instruments.contains(p.instrument.as_str()) && !rejected.contains(&p.goal) && !rejected.contains(&p.instrument))
+        .flat_map(|p| [format!("HEAD:.whosaidso/instruments/{}.json", p.instrument), format!("{}:.whosaidso/instruments/{}.json", p.commit, p.instrument)]).collect();
+    names.sort_unstable(); names.dedup();
     let mut hashes = HashMap::new();
-    for id in s.proofs.iter().map(|p| p.instrument.as_str()).collect::<HashSet<_>>() {
-        let head = git::run_bytes(root, &["show", &format!("HEAD:.whosaidso/instruments/{id}.json")]).ok().map(|b| sha256_hex(&b));
-        if s.instrument_hashes.get(id) != head.as_ref() { s.instrument_hashes.remove(id); }
+    if let Err(e) = git::read_objects(root, &names, MAX_RECORD_BYTES as usize, |i, bytes, _| {
+        hashes.insert(names[i].as_str(), bytes.map(|b| sha256_hex(&b))); Ok(())
+    }) { s.errors.push(e); hashes.clear(); }
+    for id in s.proofs.iter().map(|p| p.instrument.as_str()) {
+        let name = format!("HEAD:.whosaidso/instruments/{id}.json");
+        if s.instrument_hashes.get(id) != hashes.get(name.as_str()).and_then(Option::as_ref) { s.instrument_hashes.remove(id); }
     }
     s.proofs.retain(|p| {
         if rejected.contains(&p.goal) || rejected.contains(&p.instrument) { return false; }
@@ -228,9 +231,8 @@ fn validate(root: &Path, s: &mut Store) {
         if !instruments.contains(p.instrument.as_str()) {
             if rejected.insert(p.instrument.clone()) { s.errors.push(format!("missing instrument file .whosaidso/instruments/{}.json", p.instrument)); }
             return false; }
-        let hash = hashes.entry((p.commit.clone(), p.instrument.clone())).or_insert_with(|| {
-            git::run_bytes(root, &["show", &format!("{}:.whosaidso/instruments/{}.json", p.commit, p.instrument)]).ok().map(|b| sha256_hex(&b))
-        });
+        let name = format!("{}:.whosaidso/instruments/{}.json", p.commit, p.instrument);
+        let hash = hashes.get(name.as_str()).and_then(Option::as_ref);
         if let Some(hash) = hash { s.proof_hashes.insert(p.sha.clone(), hash.clone()); }
         else { s.errors.push(format!("proof {}: missing instrument at {}", p.sha, p.commit)); }
         s.errors.len() == before

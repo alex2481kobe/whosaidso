@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 # Main requires a status named exactly "check", so that job keeps the name and
-# runs on Linux; macOS runs the same steps as its own job beside it.
+# runs on Linux; macOS runs the regular suite in its own job beside it.
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -22,7 +22,11 @@ jobs:
       - name: Build without warnings
         run: cargo build --locked
       - name: Test
-        run: cargo test --locked
+        run: cargo test --release --locked
+      - name: Every invariant seed
+        run: WHOSAIDSO_SEEDS=all cargo test --release --locked --test invariant
+      - name: Debug fault injection regressions
+        run: cargo test --locked --test invariant --test fix10 --test fix11 --test fix12
       - name: Release build
         run: cargo build --release --locked
 
@@ -37,6 +41,6 @@ jobs:
       - name: Build without warnings
         run: cargo build --locked
       - name: Test
-        run: cargo test --locked
+        run: cargo test --release --locked
       - name: Release build
         run: cargo build --release --locked

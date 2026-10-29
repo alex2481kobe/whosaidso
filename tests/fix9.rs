@@ -27,6 +27,25 @@ fn snapshot(dir: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     for p in paths(dir) { if p.file_name().unwrap() == "cache" { continue; } if p.is_dir() { all.extend(snapshot(&p)); } else { all.insert(p.clone(), fs::read(p).unwrap()); } } all
 }
 fn commit(root: &Path) { git(root, &["add", "."]); git(root, &["commit", "--allow-empty", "-m", "fixture"]); }
+
+struct ViewerProcess(std::process::Child);
+impl Drop for ViewerProcess { fn drop(&mut self) { let _ = self.0.kill(); let _ = self.0.wait(); } }
+fn ui(c: &mut std::process::Command, endpoint: &str) -> String {
+    use std::{io::{BufRead, BufReader, Read, Write}, net::TcpStream, process::Stdio};
+    let registry = c.get_current_dir().unwrap().with_extension("ui-home");
+    let mut child = ViewerProcess(c.env("WHOSAIDSO_HOME", &registry).args(["ui", "--port", "0"]).stdout(Stdio::piped()).spawn().unwrap());
+    let mut url = String::new(); BufReader::new(child.0.stdout.take().unwrap()).read_line(&mut url).unwrap();
+    let (address, launch) = url.trim().strip_prefix("http://").expect("viewer URL").split_once('/').unwrap();
+    let request = |path: &str, cookie: &str| {
+        let mut stream = TcpStream::connect(address).unwrap(); stream.set_read_timeout(Some(std::time::Duration::from_secs(30))).unwrap();
+        write!(stream, "GET {path} HTTP/1.1\r\nHost: {address}\r\nCookie: {cookie}\r\nConnection: close\r\n\r\n").unwrap();
+        let mut bytes = Vec::new(); stream.read_to_end(&mut bytes).unwrap(); String::from_utf8(bytes).unwrap()
+    };
+    let first = request(&format!("/{launch}"), "");
+    let cookie = first.lines().find_map(|l| l.strip_prefix("Set-Cookie: ")).unwrap().split(';').next().unwrap();
+    let answer = request(endpoint, cookie); drop(child); fs::remove_dir_all(registry).unwrap();
+    answer.split_once("\r\n\r\n").unwrap().1.to_owned()
+}
 #[test]
 fn prune_and_publication_survive_races_and_interruptions() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/e2e-tmp").join(format!("fix9-{}-{}", std::process::id(), SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
@@ -98,7 +117,7 @@ fn prune_and_publication_survive_races_and_interruptions() {
     }
     images.sort_by(|a,b| b.0.cmp(&a.0));
     assert!(cli(&root, &["show", "g"]).contains(&format!("media: {}", images[0].1)), "image ties use hash");
-    cli(&root, &["view"]); let page = fs::read_to_string(r.join("cache/view/gallery.html")).unwrap();
+    let page = ui(&mut command(&root, env!("CARGO_BIN_EXE_whosaidso"), &[]), "/api/gallery");
     let positions: Vec<_> = images.iter().map(|(_, title)| page.find(title).unwrap()).collect(); assert!(positions.windows(2).all(|w| w[0] < w[1]));
     commit(&root); let shown = cli(&root, &["show", "g"]); cli(&root, &["prune"]);
     assert_eq!(cli(&root, &["show", "g"]), shown, "prune preserves exact show output");

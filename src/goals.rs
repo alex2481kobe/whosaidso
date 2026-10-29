@@ -13,6 +13,11 @@ fn walk(goals: &[Goal], states: &[GoalState], parent: &str, depth: usize, seen: 
         let Some(current) = states.iter().find(|s| s.id == goal.id) else { continue };
         let label = label(current.state);
         let branches = if current.active_branches.is_empty() { String::new() } else { format!("  [{}]", current.active_branches.join(", ")) };
+        let details = current.branches.iter().map(|b| {
+            let path = b.worktree.as_ref().map_or(String::new(), |p| format!(", {p}"));
+            format!("{} ({}, {}{path})", b.name, b.author, state::age(b.time))
+        }).collect::<Vec<_>>().join(", ");
+        let branches = if details.is_empty() { branches } else { format!("{branches}  {details}") };
         output.push_str(&format!("{}{:7} {}  {}{}\n", "  ".repeat(depth), label, goal.id, goal.title, branches));
         walk(goals, states, &goal.id, depth + 1, seen, output);
     }

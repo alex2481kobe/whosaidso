@@ -93,7 +93,7 @@ fn jpeg(bytes: &[u8]) -> bool {
 pub fn archive_path(root: &Path, nanos: i64) -> Result<std::path::PathBuf, String> {
     Ok(archive_dir(root)?.join(format!("media-{}.tar", month(nanos))))
 }
-fn archive_dir(root: &Path) -> Result<std::path::PathBuf, String> {
+pub fn archive_dir(root: &Path) -> Result<std::path::PathBuf, String> {
     Ok(match std::env::var_os("WHOSAIDSO_ARCHIVE") {
         Some(path) => std::env::current_dir().map_err(|e| e.to_string())?.join(path),
         None => root.join(git::run(root, &["rev-parse", "--git-common-dir"])?.trim_end_matches('\n')).join("whosaidso/archive"),
@@ -125,10 +125,7 @@ pub fn archive(root: &Path, items: &[&Media]) -> Result<(), String> {
                 Ok(mut input) => loop {
                     let mut header = [0u8; 512]; input.read_exact(&mut header).map_err(|e| e.to_string())?;
                     if header == [0; 512] { break; }
-                    let octal = |b: &[u8]| u64::from_str_radix(std::str::from_utf8(b).map_err(|e| e.to_string())?.trim_matches(['\0', ' ']), 8).map_err(|e| e.to_string());
-                    let sum: u64 = header.iter().enumerate().map(|(i, b)| if (148..156).contains(&i) { 32 } else { u64::from(*b) }).sum();
-                    if &header[257..263] != b"ustar\0" || octal(&header[148..156])? != sum { return Err("invalid media archive header".into()); }
-                    let size = octal(&header[124..136])?;
+                    let size = archive_size(&header)?;
                     output.write_all(&header).map_err(|e| e.to_string())?;
                     let padded = size.checked_add(511).ok_or("invalid archive size")? / 512 * 512;
                     if std::io::copy(&mut Read::by_ref(&mut input).take(padded), &mut output).map_err(|e| e.to_string())? != padded { return Err("truncated media archive".into()); }
@@ -179,4 +176,40 @@ fn month(nanos: i64) -> String {
     let m = (5 * ordinal + 2) / 153;
     let month = m + if m < 10 { 3 } else { -9 };
     format!("{:04}-{month:02}", year + era * 400 + i64::from(month <= 2))
+}
+
+// Merge independently extended monthly bundles without replacing either clone's entries.
+pub fn merge_archives(left: &[u8], right: &[u8]) -> Result<Vec<u8>, String> {
+    let mut entries = std::collections::BTreeMap::new();
+    for mut bytes in [left, right] {
+        while !bytes.is_empty() {
+            let header = bytes.get(..512).ok_or("truncated media archive")?;
+            if header == [0; 512] {
+                if bytes.len() < 1024 || bytes.iter().any(|b| *b != 0) { return Err("invalid media archive end".into()); }
+                break;
+            }
+            let size = usize::try_from(archive_size(header)?).map_err(|e| e.to_string())?;
+            let name = std::str::from_utf8(&header[..100]).map_err(|e| e.to_string())?.trim_end_matches('\0');
+            let (sha, ext) = name.split_once('.').ok_or("invalid archive entry name")?;
+            if sha.len() != 64 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) || (ext != "json" && media_type(ext).is_err()) { return Err(format!("invalid archive entry {name}")); }
+            let end = size.checked_add(511).and_then(|n| (n / 512).checked_mul(512)).and_then(|n| n.checked_add(512)).ok_or("invalid archive size")?;
+            let entry = bytes.get(..end).ok_or("truncated media archive")?;
+            if let Some((old_size, old)) = entries.insert(name.to_owned(), (size, entry)) {
+                if old_size != size || old[512..512 + size] != entry[512..512 + size] { return Err(format!("conflicting archive entry {name}")); }
+            }
+            bytes = &bytes[end..];
+            if bytes.is_empty() { return Err("missing media archive end".into()); }
+        }
+    }
+    let mut output = Vec::new();
+    for (_, entry) in entries.values() { output.extend_from_slice(entry); }
+    output.extend_from_slice(&[0; 1024]);
+    Ok(output)
+}
+
+fn archive_size(header: &[u8]) -> Result<u64, String> {
+    let octal = |b: &[u8]| u64::from_str_radix(std::str::from_utf8(b).map_err(|e| e.to_string())?.trim_matches(['\0', ' ']), 8).map_err(|e| e.to_string());
+    let sum: u64 = header.iter().enumerate().map(|(i, b)| if (148..156).contains(&i) { 32 } else { u64::from(*b) }).sum();
+    if &header[257..263] != b"ustar\0" || octal(&header[148..156])? != sum || header[156] != b'0' { return Err("invalid media archive header".into()); }
+    octal(&header[124..136])
 }

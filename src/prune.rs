@@ -1,6 +1,6 @@
 // Only the landing owner deletes records; branches publish without pruning.
 use crate::{blob, gallery, git, goals, publish, tree, record::{self, Proof, Store}, state};
-use std::{collections::{BTreeMap, HashSet}, fs, io::Write, os::unix::fs::MetadataExt, path::{Path, PathBuf}, time::SystemTime};
+use std::{collections::{BTreeMap, HashMap, HashSet}, fs, io::Write, os::unix::fs::MetadataExt, path::{Path, PathBuf}, time::SystemTime};
 
 fn required(store: &Store) -> HashSet<&str> {
     let mut pending: Vec<_> = store.goals.iter().map(|g| g.check.as_str()).collect();
@@ -129,11 +129,13 @@ fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<()
     for instrument in &candidates.instruments {
         if !required.contains(instrument.id.as_str()) { deletions.push(root.join(".whosaidso/instruments").join(format!("{}.json", instrument.id))); }
     }
+    let mut commits = HashMap::new();
     for (path, value) in &candidates.records {
         if matches!(record::kind(&path), "proof" | "ask") &&
             (!goals.contains(value["goal"].as_str().unwrap_or("")) || (record::kind(&path) == "proof" &&
                 (!required.contains(value["instrument"].as_str().unwrap_or("")) ||
-                git::run(root, &["cat-file", "-e", &format!("{}^{{commit}}", value["commit"].as_str().unwrap_or(""))]).is_err()))) {
+                !*commits.entry(value["commit"].as_str().unwrap_or("")).or_insert_with(||
+                    git::run(root, &["cat-file", "-e", &format!("{}^{{commit}}", value["commit"].as_str().unwrap_or(""))]).is_ok())))) {
             removed[if record::kind(&path) == "proof" { 0 } else { 1 }] += 1;
             deletions.push(path.clone());
         }
@@ -157,12 +159,14 @@ fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<()
     let kept = if shared { HashSet::new() } else { blob::referenced(root)? };
     let blobs = if shared { Vec::new() } else { blob::to_remove(root, &kept, false)? };
     let trash = blob::trash(root)?;
-    let mut records = Vec::new();
-    for path in deletions {
+    let names = deletions.iter().map(|path| {
         let relative = path.strip_prefix(root).map_err(|e| e.to_string())?.to_str().ok_or("invalid record path")?;
-        let bytes = git::run_bytes(root, &["show", &format!("{}:{relative}", head.trim())])?;
-        records.push((path, bytes));
-    }
+        Ok(format!("{}:{relative}", head.trim()))
+    }).collect::<Result<Vec<_>, String>>()?;
+    let mut records = Vec::new();
+    git::read_objects(root, &names, record::MAX_RECORD_BYTES as usize, |i, bytes, _| {
+        records.push((deletions[i].clone(), bytes.ok_or("missing or oversized record in HEAD")?)); Ok(())
+    })?;
     journal.records = records.iter().map(|(path, _)| path.clone()).collect();
     journal.moves = Vec::new();
     if !shared && trash.is_dir() {
@@ -206,7 +210,7 @@ fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<()
     } };
     if !shared { for path in blob::to_remove(root, &kept, true)? { fs::remove_file(path).map_err(|e| e.to_string())?; } }
     for tree in blob::worktrees(root)? {
-        for folder in ["phases", "goals", "instruments", "proofs", "asks", "media"] {
+        for folder in record::FOLDERS {
             publish::record_dir(&tree, folder)?;
             if let Ok(entries) = fs::read_dir(tree.join(".whosaidso").join(folder)) {
                 for entry in entries {

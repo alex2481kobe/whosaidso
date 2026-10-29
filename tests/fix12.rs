@@ -18,6 +18,25 @@ fn hash(bytes: &[u8]) -> String { Sha256::digest(bytes).iter().map(|b| format!("
 fn addressed(dir: &Path, value: &Value) -> PathBuf { let bytes = serde_json::to_vec(value).unwrap(); let path = dir.join(format!("{}.json", hash(&bytes))); write(&path, bytes); path }
 fn commit(root: &Path) { git(root, &["add", ".whosaidso"]); git(root, &["commit", "--allow-empty", "-m", "fixture"]); }
 fn png() -> Vec<u8> { vec![137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,8,6,0,0,0,31,21,196,137] }
+
+struct ViewerProcess(std::process::Child);
+impl Drop for ViewerProcess { fn drop(&mut self) { let _ = self.0.kill(); let _ = self.0.wait(); } }
+fn ui(c: &mut std::process::Command, endpoint: &str) -> String {
+    use std::{io::{BufRead, BufReader, Read, Write}, net::TcpStream, process::Stdio};
+    let registry = c.get_current_dir().unwrap().with_extension("ui-home");
+    let mut child = ViewerProcess(c.env("WHOSAIDSO_HOME", &registry).args(["ui", "--port", "0"]).stdout(Stdio::piped()).spawn().unwrap());
+    let mut url = String::new(); BufReader::new(child.0.stdout.take().unwrap()).read_line(&mut url).unwrap();
+    let (address, launch) = url.trim().strip_prefix("http://").expect("viewer URL").split_once('/').unwrap();
+    let request = |path: &str, cookie: &str| {
+        let mut stream = TcpStream::connect(address).unwrap(); stream.set_read_timeout(Some(std::time::Duration::from_secs(30))).unwrap();
+        write!(stream, "GET {path} HTTP/1.1\r\nHost: {address}\r\nCookie: {cookie}\r\nConnection: close\r\n\r\n").unwrap();
+        let mut bytes = Vec::new(); stream.read_to_end(&mut bytes).unwrap(); String::from_utf8(bytes).unwrap()
+    };
+    let first = request(&format!("/{launch}"), "");
+    let cookie = first.lines().find_map(|l| l.strip_prefix("Set-Cookie: ")).unwrap().split(';').next().unwrap();
+    let answer = request(endpoint, cookie); drop(child); fs::remove_dir_all(registry).unwrap();
+    answer.split_once("\r\n\r\n").unwrap().1.to_owned()
+}
 #[test]
 fn evidence_media_is_typed_rendered_and_archived_without_loss() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/e2e-tmp").join(format!("fix12-{}-{}", std::process::id(), SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
@@ -60,13 +79,13 @@ fn evidence_media_is_typed_rendered_and_archived_without_loss() {
         let (path, value) = paths(&media).into_iter().map(|p| { let v: Value = serde_json::from_slice(&fs::read(&p).unwrap()).unwrap(); (p,v) }).find(|(_,v)| v["ext"] == *ext).unwrap();
         assert_eq!(value["media_sha256"], hash(bytes)); assert_eq!(value["byte_size"], bytes.len());
         assert_eq!(fs::read(blobs.join(format!("{}.{}", hash(bytes), ext))).unwrap(), *bytes);
-        let html = fs::read_to_string(cli(&root, &["view"]).trim()).unwrap();
-        assert!(html.contains(&format!("{ext} &lt;evidence&gt;"))); assert!(!html.contains("autoplay"));
-        for page in [html, fs::read_to_string(r.join("cache/view/progress.html")).unwrap()] {
-            assert!(page.contains(&format!("<{tag} ")), "{ext}: {page}");
-            if *tag != "img" { assert!(page.contains(mime)); }
-            if *tag == "video" { assert!(page.contains("<video controls preload=\"metadata\">")); }
-        }
+        let answer: Value = serde_json::from_str(&ui(&mut command(&root, exe, &[]), "/api/gallery")).unwrap();
+        let entry = answer["entries"].as_array().unwrap().iter().find(|e| e["ext"] == *ext).unwrap();
+        assert_eq!(entry["shows"], format!("{ext} <evidence>")); assert_eq!(entry["tag"], *tag); assert_eq!(entry["mime"], *mime);
+        let detail: Value = serde_json::from_str(&ui(&mut command(&root, exe, &[]), "/api/goal?id=a")).unwrap();
+        assert!(detail["media"].as_array().unwrap().iter().any(|e| e["ext"] == *ext && e["tag"] == *tag && e["mime"] == *mime));
+        let source = ui(&mut command(&root, exe, &[]), "/ui-gallery-media.js");
+        assert!(!source.contains("autoplay")); assert!(source.contains("controls:true") && source.contains("preload:\"metadata\""));
         records.push((path, value));
     }
     write(&r.join("cache/extended.bin"), b"\0\0\0\x01ftyp\0\0\0\0\0\0\0\x18isom\0\0\0\0");
@@ -95,7 +114,7 @@ fn evidence_media_is_typed_rendered_and_archived_without_loss() {
         let path = addressed(&media, &value); expected.push((value["ran_at"].as_i64().unwrap(), path, value, bytes));
     }
     expected.sort_by(|a,b| (b.0,&b.1).cmp(&(a.0,&a.1))); commit(&root);
-    let html = fs::read_to_string(cli(&root, &["view"]).trim()).unwrap(); assert_eq!(html.matches("<article>").count(), 100);
+    let html = ui(&mut command(&root, exe, &[]), "/api/gallery"); let answer: Value = serde_json::from_str(&html).unwrap(); assert_eq!(answer["entries"].as_array().unwrap().len(), 100);
     let positions: Vec<_> = expected.iter().take(100).map(|(_,_,v,_)| html.find(v["shows"].as_str().unwrap()).unwrap()).collect(); assert!(positions.windows(2).all(|p| p[0]<p[1]));
     assert!(expected.iter().skip(100).all(|(_,_,v,_)| !html.contains(v["shows"].as_str().unwrap())));
     let before: BTreeMap<_,_> = paths(&media).into_iter().map(|p| { let bytes=fs::read(&p).unwrap(); (p,bytes) }).collect();

@@ -11,23 +11,24 @@ pub fn lock(root: &Path, shared: bool) -> Result<fs::File, String> {
     if shared { file.lock_shared() } else { file.lock() }.map_err(|e| e.to_string())?;
     Ok(file)
 }
-fn dir(root: &Path) -> Result<PathBuf, String> {
+pub fn dir(root: &Path) -> Result<PathBuf, String> {
     match std::env::var_os("WHOSAIDSO_BLOBS") {
         Some(value) => Ok(PathBuf::from(value)),
         None => Ok(root.join(git::run(root, &["rev-parse", "--git-common-dir"])?.trim_end_matches('\n')).join("whosaidso/blobs")),
     }
 }
-fn validate(sha: &str, ext: &str) -> Result<(), String> {
+pub fn validate(sha: &str, ext: &str) -> Result<(), String> {
     if sha.len() != 64 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(format!("bad media sha256 {sha}"));
     }
     if crate::gallery::media_type(ext).is_err() { return Err(format!("bad media type {ext}")); }
     Ok(())
 }
-pub fn path(root: &Path, sha: &str, ext: &str) -> Result<PathBuf, String> {
+pub fn path(root: &Path, sha: &str, ext: &str) -> Result<PathBuf, String> { path_in(&dir(root)?, sha, ext) }
+pub fn path_in(dir: &Path, sha: &str, ext: &str) -> Result<PathBuf, String> {
     validate(sha, ext).map_err(|_| "invalid media blob path".to_string())?;
-    let path = dir(root)?.join(format!("{sha}.{ext}"));
-    let trash = trash(root)?.join(format!("{sha}.{ext}"));
+    let path = dir.join(format!("{sha}.{ext}"));
+    let trash = dir.join("trash").join(format!("{sha}.{ext}"));
     Ok(if !path.exists() && trash.is_file() { trash } else { path })
 }
 pub fn put(root: &Path, source: &Path) -> Result<(String, String, u64), String> {

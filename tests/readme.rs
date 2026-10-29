@@ -29,10 +29,10 @@ fn documented_quick_start_runs_verbatim() {
             assert!(success(command(&root, "git", &["status", "--porcelain"]).output().unwrap()).is_empty());
         } else {
             assert!(out.contains("open    first-goal")); assert!(out.contains("prove: first-goal pass")); assert!(out.contains("goal first-goal  First goal"));
-            assert!(out.contains("grep: no match")); assert_eq!(out.matches("code: none recorded").count(), 3); assert!(out.contains("gallery.html"));
+            assert!(out.contains("grep: no match")); assert_eq!(out.matches("code: none recorded").count(), 3); assert!(out.contains("usage: whosaidso ui"));
             let proofs: Vec<_> = fs::read_dir(root.join(".whosaidso/proofs")).unwrap().collect(); assert_eq!(proofs.len(), 1);
             let p: serde_json::Value = serde_json::from_slice(&fs::read(proofs[0].as_ref().unwrap().path()).unwrap()).unwrap(); assert_eq!(p["exit_code"], 0);
-            assert!(root.join(".whosaidso/cache/view/progress.html").is_file());
+            assert!(!root.join(".whosaidso/cache/view").exists());
         }
     }
     fs::remove_dir_all(root).unwrap();

@@ -1,0 +1,69 @@
+// Ported from v0.2.1 internal/ui/ui-icons.js.
+// The viewer's inline SVG icons and the words and colours every screen gives
+// a record kind or an event type. Only drawing and naming live here: no
+// data is read and nothing is rendered from the ledger.
+const NS = "http://www.w3.org/2000/svg";
+
+// Line icons on a 24-unit grid, drawn with the current text colour.
+const paths = {
+  sun: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5",
+  moon: "M20 15A9 9 0 0 1 9 4a9 9 0 1 0 11 11Z",
+  download: "M12 3v12M7 10l5 5 5-5M4 17v4h16v-4",
+  progress: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2",
+  back: "M9 10l-5 5 5 5M4 15h11a5 5 0 0 0 0-10h-3",
+  blocked: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM5.6 5.6l12.8 12.8",
+  ready: "M5 21V4M5 4h12l-2.5 4 2.5 4H5",
+  // a signpost: one pole, two small rounded signs pointing opposite ways; the
+  // pole is left out where a sign covers it
+  decision: "M12 3v1.5M12 9.5V12M12 17v4M8 4.5h8.3q.5 0 .85.35l1.9 1.8q.35.35 0 .7l-1.9 1.8q-.35.35-.85.35H8q-1.2 0-1.2-1.2v-2.6q0-1.2 1.2-1.2z"
+    + "M16 12H7.7q-.5 0-.85.35l-1.9 1.8q-.35.35 0 .7l1.9 1.8q.35.35.85.35H16q1.2 0 1.2-1.2v-2.6q0-1.2-1.2-1.2z",
+  proposal: "M3 13h5l1.5 3h5l1.5-3h5M5.5 5h13L21 13v6H3v-6z",
+  chevron: "M9 6l6 6-6 6",
+  down: "M6 9l6 6 6-6",
+  copy: "M9 9h10v12H9zM5 15V3h10",
+  open: "M14 4h6v6M20 4l-9 9M18 14v6H4V6h6",
+  list: "M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01",
+  grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
+  check: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM8 12.5l2.7 2.7L16 9.8",
+  claim: "M4 5h5v5H4zM4 14h5v5H4zM13 7h7M13 16h7",
+  instrument: "M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6",
+  box: "M12 3l8 4.5v9L12 21l-8-4.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9",
+  source: "M4 5h16v11H9l-5 4z",
+  review: "M4 5h16v11H9l-5 4zM12 8v3M12 13.5h.01",
+  search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4",
+  sort: "M8 4v16M4.5 7.5L8 4l3.5 3.5M16 20V4M12.5 16.5L16 20l3.5-3.5",
+  filter: "M4 5h16l-6 7.5V19l-4 1.5v-8z",
+  bars: "M5 20V10M10 20V4M15 20v-7M20 20v-4",
+  refresh: "M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6",
+  calendar: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
+  history: "M4 12a8 8 0 1 0 2.3-5.7M4 4v5h5M12 8v4l3 2",
+  play: "M8 5.5v13l10.5-6.5z",
+  dots: "M5 12h.01M12 12h.01M19 12h.01",
+  close: "M6 6l12 12M18 6L6 18",
+  expand: "M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5",
+  file: "M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h4",
+  up: "M12 19V5M6 11l6-6 6 6",
+  arrow: "M5 12h14M13 6l6 6-6 6",
+  tick: "M7 12.5l3.2 3.2L17 9",
+};
+
+// icon draws one line icon; className adds to "icon" (e.g. "icon solid").
+export function icon(name, className = "") {
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("class", ("icon " + className).trim());
+  const path = document.createElementNS(NS, "path");
+  path.setAttribute("d", paths[name]);
+  svg.append(path);
+  return svg;
+}
+
+// svg builds one SVG element with attributes, for the hero and sparklines.
+export function svg(tag, attrs = {}, ...children) {
+  const node = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+  node.append(...children);
+  return node;
+}
+

@@ -2,7 +2,7 @@
 use crate::{git, record};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior};
 use sha2::{Digest, Sha256};
-use std::{collections::{HashMap, HashSet}, fs, io::{BufRead, BufReader, Read, Write}, path::Path, process::{Command, Stdio}, time::{Duration, Instant}};
+use std::{collections::{HashMap, HashSet}, fs, io::Read, path::Path, time::{Duration, Instant}};
 
 pub const BATCH_BYTES: usize = 64 * 1024 * 1024;
 #[derive(Clone)]
@@ -118,33 +118,11 @@ pub fn read(root: &Path, files: &[File], max_bytes: usize, mut each: impl FnMut(
         Ok(())
     };
     if staged.is_empty() { return read_disk(&mut each); }
-    let mut child = Command::new("git").args(["cat-file", "--batch"]).current_dir(root).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().map_err(err)?;
-    let mut input = child.stdin.take().ok_or("missing git stdin")?;
-    let requests = staged.iter().map(|f| format!("{}\n", f.blob)).collect::<String>();
-    let writer = std::thread::spawn(move || input.write_all(requests.as_bytes()));
-    let mut reader = BufReader::new(child.stdout.take().ok_or("missing git stdout")?);
-    let result = (|| {
-        for file in staged {
-            let mut header = String::new(); reader.read_line(&mut header).map_err(err)?;
-            let mut parts = header.split_whitespace();
-            if parts.next() != Some(file.blob.as_str()) || parts.next() != Some("blob") { return Err(format!("invalid git cat-file response: {header}")); }
-            let size: usize = parts.next().ok_or("missing blob size")?.parse().map_err(err)?;
-            let data = if size > max_bytes {
-                std::io::copy(&mut Read::by_ref(&mut reader).take(size as u64), &mut std::io::sink()).map_err(err)?;
-                None
-            } else { let mut bytes = vec![0; size]; reader.read_exact(&mut bytes).map_err(err)?; Some(bytes) };
-            let mut newline = [0]; reader.read_exact(&mut newline).map_err(err)?;
-            if newline != [b'\n'] { return Err("invalid git cat-file separator".into()); }
-            each(file, data)?;
-        }
-        Ok(())
-    })();
-    drop(reader);
-    if result.is_err() { let _ = child.kill(); }
-    let wrote = writer.join().map_err(|_| "git input thread failed")?;
-    let status = child.wait().map_err(err)?;
-    result?; wrote.map_err(err)?;
-    if !status.success() { return Err("git cat-file failed".into()); }
+    let names: Vec<_> = staged.iter().map(|file| file.blob.clone()).collect();
+    git::read_objects(root, &names, max_bytes, |i, bytes, exists| {
+        if !exists { return Err(format!("missing git blob {}", names[i])); }
+        each(staged[i], bytes)
+    })?;
     read_disk(&mut each)
 }
 
