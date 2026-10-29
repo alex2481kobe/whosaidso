@@ -91,7 +91,7 @@ async function route() {
   }
   renderMenu();
   current = null;
-  if (!state.project) { main.replaceChildren(message("No workspace is available.")); return; }
+  if (!state.project) { main.replaceChildren(message("No workspace")); return; }
   const shown = screen === "gallery" ? galleryScreen() : goalsScreen(), key = state.project + screen;
   main.replaceChildren(shown.node);
   try { seen = await shown.load(); }

@@ -22,7 +22,7 @@ html, body { height: 100%; margin: 0; }
 body { background: var(--ground); color: var(--text); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; letter-spacing: -.01em; }
 a { color: inherit; text-decoration: none; }
 button, input { font: inherit; color: inherit; }
-h1, h2, h3, p, dl, dd { margin: 0; }
+h1, h2, h3, p { margin: 0; }
 :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .mono { font-family: var(--mono); font-size: .92em; }
 .muted { color: var(--muted); }
@@ -101,9 +101,7 @@ h1, h2, h3, p, dl, dd { margin: 0; }
 .work .path { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .work b { font-weight: 600; color: var(--blue); }
 .goal-detail { display: grid; gap: 4px; padding: 4px 12px 10px 86px; font-size: 13px; }
-.field { display: grid; grid-template-columns: 84px minmax(0,1fr); gap: 10px; }
-.field dt { color: var(--muted); }
-.verdict.pass { color: var(--green); } .verdict.fail { color: var(--red); }
+.verdict.pass { color: var(--green); } .verdict.fail { color: var(--red); } .verdict.old { opacity: .6; }
 .output { margin: 2px 0 0; padding: 8px; max-height: 160px; overflow: auto; border-radius: 8px; background: var(--surface-2); font: 12px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .thumbs { display: flex; flex-wrap: wrap; gap: 6px; }
 .thumb { display: grid; place-items: center; width: 72px; height: 48px; overflow: hidden; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); color: var(--muted); }
@@ -113,7 +111,6 @@ h1, h2, h3, p, dl, dd { margin: 0; }
   .goal-head { grid-template-columns: 64px minmax(0,1fr); }
   .goal-id, .works { grid-column: 2; }
   .goal-detail { padding-left: 12px; }
-  .field { grid-template-columns: 1fr; gap: 0; }
 }
 @media (max-width: 700px) {
   body { display: flex; flex-direction: column; }
