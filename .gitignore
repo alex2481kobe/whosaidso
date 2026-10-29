@@ -1,21 +1,9 @@
-# Go
-/whosaidso
-/dist/
-*.test
-*.out
-coverage.*
+# Local build output
+/target/
 
-# Ledger working files. The lock lives inside the ledger directory by design,
-# and a crash can leave a publication temporary. Neither is a record.
-.whosaidso/events/.lock
-.whosaidso/events/*.json.tmp
+# Disposable WhoSaidSo cache
+.whosaidso/cache/
 
 # OS / editor
 .DS_Store
 *.swp
-
-# WhoSaidSo's disposable snapshot cache, rebuilt from the ledger whenever it is
-# missing, stale or damaged. Never a record.
-.whosaidso/cache/
-
-out/

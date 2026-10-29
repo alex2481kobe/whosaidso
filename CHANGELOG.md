@@ -1,42 +1,13 @@
 # Changelog
 
-## 0.2.0
+## 0.3.0
 
-Gallery lists are paged and searched on the server. Kind sorting remains
-available. Title sorting compares lowercased Unicode text in byte order rather
-than the browser's locale-dependent order, so the same ledger has the same
-order on every platform. Equal titles retain their ledger order.
+Rust rebuild of the ledger, kept to what a large multi-agent project needs.
 
-Image cards use bounded PNG/JPEG/GIF thumbnails; originals load in the inspector.
-Preview failures have a per-card retry action. The inspector supports previous
-and next within the current page, with arrow keys and horizontal touch swipes.
-Save original and Copy path provide the same file actions on every platform.
-
-The project switcher lists homes before reading ledger status. Records and
-Overview start with 24 previews; work status totals load on request. Activity
-starts with 24 admission-batch summaries, with full-batch search on demand.
-Complete record detail and CLI view JSON remain available.
-
-Gallery polling reuses observations while file identity, size and modification
-time agree, stops hashing on cancellation, and bounds hashing per page. Original
-and thumbnail requests verify source bytes independently. Missing partial-clone
-Git blobs remain UNKNOWN without discarding unrelated ledger-check results.
-
-New and changed commands:
-
-- `packets` lists bounded headers of verified packets (local intake and packets
-  named by the ledger); `packets PACKET_ID` prints one packet's payload.
-- `todo --intake-details` expands verified packet summaries in text output;
-  `--json` keeps the complete packets.
-- Bare `help` prints the keyword index only; `help all` prints the full guide.
-- `check ledger --against-checkout PATH` compares problem classes between a base
-  checkout and the current one. `check` JSON adds `classes`, `git_pin_locations`
-  and `check_error`; `clean` is false whenever `check_error` is set. The changes
-  are additive.
-- `gallery import` records files it skipped as missing and pins it reused in the
-  import seal. An import with no skips hashes exactly as before.
-
-Upgrading: a v0.1.x binary refuses a ledger containing a `gallery import` record
-with the new `skipped` or `reused` fields, with a generic decode error. Once a
-ledger holds such a record, set `requires = 'v0.2.0'` so binaries that read `requires` refuse it
-by naming the needed version instead.
+- Goals, phases, one check instrument per goal, proofs, asks and media evidence live as JSON in `.whosaidso/`. A goal's state (open, active, idle, landed, done, failing, stale) is derived from Git, local main and the check's proofs. Instruments are direct argument lists and have no gap or coverage mechanism: the check must cover what the goal needs.
+- `start` claims a goal through `refs/whosaidso/claims` on `origin`, so two workers never hold one goal. `gate` refuses commits without a known `Goal:` trailer and refuses uncommitted records.
+- `prove` records a proof only on a clean tree and unmoved HEAD. `prune` is recoverable and keeps the ledger small.
+- `media` stores PNG, JPEG, GIF, WebP, MP4, MOV, WebM and PDF by signature and content hash; `prune` archives older evidence into monthly tar bundles; `sync` shares bytes and bundles across clones.
+- `ui` serves a local read-only viewer with Goals and Gallery.
+- `find`, `grep` and `code defs|refs|deps|includers|import-scip` search records, files, history and code.
+- `--version` prints the version.
