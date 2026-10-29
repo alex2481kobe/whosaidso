@@ -1,4 +1,4 @@
-// End-to-end code graph behavior in an isolated Git project.
+// End-to-end code search behavior in an isolated Git project.
 use std::{fs, path::Path, process::{Command, Output}, time::{SystemTime, UNIX_EPOCH}};
 fn run(dir: &Path, home: &Path, program: &str, args: &[&str]) -> Output {
     let mut c = Command::new(program);
@@ -27,16 +27,8 @@ fn code_graph_tracks_sources() {
     fs::write(root.join("bad.c"), [0xff, 0xfe]).unwrap();
     git(&root, &root, &["add", "."]);
     git(&root, &root, &["commit", "-m", "sources"]);
-    let output = Command::new(env!("CARGO_BIN_EXE_whosaidso"))
-        .current_dir(&root).env("HOME", &root).env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("WHOSAIDSO_TIMING", "1").args(["code", "defs", "area"]).output().unwrap();
-    assert!(output.status.success());
-    let stdout = String::from_utf8(output.stdout).unwrap();
+    let stdout = cli(&root, &root, &["code", "defs", "area"]);
     assert!(stdout.contains("geom/area.cpp:2"), "{stdout}");
-    let stderr = String::from_utf8(output.stderr).unwrap();
-    for phase in ["listing files:", "reading blobs:", "parsing (worker time):", "extracting (worker time):", "writing database:"] {
-        assert!(stderr.contains(&format!("code timing: {phase} ")), "{stderr}");
-    }
     assert!(cli(&root, &root, &["code", "refs", "go"]).contains("tool/run.py:4  in <top level>"));
     let defs = cli(&root, &root, &["code", "defs", "area"]);
     assert!(defs.contains("geom/area.cpp:2  function area  [syntactic]"), "{defs}");

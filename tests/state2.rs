@@ -30,18 +30,16 @@ fn ui(c: &mut std::process::Command, endpoint: &str) -> String {
 }
 fn request(root: &Path) -> Command { let mut c = Command::new(env!("CARGO_BIN_EXE_whosaidso")); c.current_dir(root).env("HOME", root).env("GIT_CONFIG_NOSYSTEM", "1"); c }
 #[test]
-fn states_ignore_invalid_records_and_follow_coverage() {
+fn states_ignore_invalid_records() {
     let root = std::env::temp_dir().join(format!("state2-{}-{}", std::process::id(), SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
     fs::create_dir_all(&root).unwrap(); ok(&root, "git", &["init"]); ok(&root, "git", &["commit", "--allow-empty", "-m", "initial"]);
     let sha = ok(&root, "git", &["rev-parse", "HEAD"]).trim().to_owned(); ok(&root, "git", &["update-ref", "refs/remotes/origin/main", &sha]);
     let r = root.join(".whosaidso");
     write(&r.join("phases/p1.json"), r#"{"title":"Phase","order":1}"#);
     write(&r.join("goals/p1.json"), r#"{"title":"Loop","done_when":"done","check":"a","broader":"p1"}"#);
-    write(&r.join("instruments/a.json"), r#"{"run":["true"],"answers":"a","gaps":[{"what":"x","why":"x","covered_by":"b"}]}"#);
-    write(&r.join("instruments/b.json"), r#"{"run":["false"],"answers":"b","gaps":[{"what":"x","why":"x","covered_by":"c"}]}"#);
-    write(&r.join("instruments/c.json"), r#"{"run":["echo","c"],"answers":"c"}"#);
+    write(&r.join("instruments/a.json"), r#"{"run":["true"],"answers":"a"}"#);
     let check = run(&root, env!("CARGO_BIN_EXE_whosaidso"), &["check"]); assert!(!check.status.success() && String::from_utf8_lossy(&check.stdout).contains("phase p1 and goal p1"));
-    cli(&root, &["goals"]); ui(&mut request(&root), "/api/overview");
+    cli(&root, &["goals"]); ui(&mut request(&root), "/api/goals");
     let show = run(&root, env!("CARGO_BIN_EXE_whosaidso"), &["show", "p1"]);
     assert_eq!(show.status.code(), Some(1)); assert!(String::from_utf8_lossy(&show.stderr).contains("show: no record p1"));
     fs::remove_file(r.join("goals/p1.json")).unwrap();
@@ -52,31 +50,51 @@ fn states_ignore_invalid_records_and_follow_coverage() {
     let invalid_pass = addressed(&r.join("proofs"), proof("a", "pass", 1, 3));
     assert!(cli(&root, &["goals"]).contains("open    g")); assert!(!cli(&root, &["show", "g"]).contains("proof:"));
     fs::remove_file(invalid_pass).unwrap();
-    addressed(&r.join("proofs"), proof("a", "pass", 0, 1)); addressed(&r.join("proofs"), proof("b", "pass", 0, 1));
-    assert!(cli(&root, &["goals"]).contains("landed  g"));
-    let fail = addressed(&r.join("proofs"), proof("c", "fail", 1, 1)); assert!(cli(&root, &["goals"]).contains("failing g")); fs::remove_file(fail).unwrap();
-    addressed(&r.join("proofs"), proof("c", "pass", 0, 1)); assert!(cli(&root, &["goals"]).contains("done    g"));
+    addressed(&r.join("proofs"), proof("a", "pass", 0, 1)); assert!(cli(&root, &["goals"]).contains("done    g"));
+    let fail = addressed(&r.join("proofs"), proof("a", "fail", 1, 2)); assert!(cli(&root, &["goals"]).contains("failing g")); fs::remove_file(fail).unwrap();
     let ask = addressed(&r.join("asks"), serde_json::json!({"goal":"g","said":"","ran_at":1,"commit":sha}));
     let image = addressed(&r.join("media"), serde_json::json!({"goal":"g","shows":"A valid image title","media_sha256":"../bad","ext":"png","byte_size":0,"commit":sha,"ran_at":1}));
-    assert!(!cli(&root, &["show", "g"]).contains("media:")); ui(&mut request(&root), "/api/overview");
+    assert!(!cli(&root, &["show", "g"]).contains("media:")); ui(&mut request(&root), "/api/goals");
     let check = run(&root, env!("CARGO_BIN_EXE_whosaidso"), &["check"]); let errors = String::from_utf8_lossy(&check.stdout); assert!(!check.status.success() && errors.contains("ask: empty said") && errors.contains("media: bad media sha256"));
     fs::remove_file(ask).unwrap(); fs::remove_file(image).unwrap();
     let bad = addressed(&r.join("proofs"), proof("a", "fail", 0, 2));
     let check = run(&root, env!("CARGO_BIN_EXE_whosaidso"), &["check"]); assert!(!check.status.success() && String::from_utf8_lossy(&check.stdout).contains("unknown field `result`"));
     assert!(cli(&root, &["show", "g"]).contains("proof: pass")); assert!(cli(&root, &["goals"]).contains("done    g")); fs::remove_file(bad).unwrap();
-    write(&r.join("instruments/c.json"), r#"{"run":["echo","c"],"answers":"c","gaps":[{"what":"x","why":"x","covered_by":"a"}]}"#);
-    let check = run(&root, env!("CARGO_BIN_EXE_whosaidso"), &["check"]); assert!(!check.status.success() && String::from_utf8_lossy(&check.stdout).contains("gap cycle")); cli(&root, &["goals"]);
     let bin = root.join("bin"); fs::create_dir_all(&bin).unwrap();
     write(&bin.join("git"), "#!/bin/sh\necho \"$*\" >> \"$GIT_TRACE_FILE\"\nexec /usr/bin/git -c user.name=Test -c user.email=test@example.com -c init.defaultBranch=main \"$@\"\n");
     use std::os::unix::fs::PermissionsExt; fs::set_permissions(bin.join("git"), fs::Permissions::from_mode(0o755)).unwrap();
     let trace = root.join("trace");
     for command in ["goals", "ui"] {
         let mut c = request(&root); c.env("GIT_TRACE_FILE", &trace).env("PATH", format!("{}:/usr/bin:/bin", bin.display()));
-        if command == "ui" { ui(&mut c, "/api/overview"); } else { assert!(c.arg(command).output().unwrap().status.success()); }
+        if command == "ui" { ui(&mut c, "/api/goals"); } else { assert!(c.arg(command).output().unwrap().status.success()); }
         let calls = fs::read_to_string(&trace).unwrap();
         assert_eq!(calls.lines().filter(|l| l.starts_with("rev-list ")).count(), 1, "{calls}");
         assert!(!calls.contains("merge-base")); fs::remove_file(&trace).unwrap();
     }
 
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn state_follows_only_the_goals_check() {
+    let root = std::env::temp_dir().join(format!("state2-check-{}-{}", std::process::id(), SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+    fs::create_dir_all(&root).unwrap(); ok(&root, "git", &["init"]);
+    let r = root.join(".whosaidso");
+    write(&r.join("phases/p.json"), r#"{"title":"Phase","order":1}"#);
+    write(&r.join("goals/g.json"), r#"{"title":"Goal","done_when":"done","check":"a","broader":"p"}"#);
+    write(&r.join("instruments/a.json"), r#"{"run":["true"],"answers":"a"}"#);
+    write(&r.join("instruments/b.json"), r#"{"run":["false"],"answers":"b"}"#);
+    ok(&root, "git", &["add", ".whosaidso"]); ok(&root, "git", &["commit", "-m", "records"]);
+    let sha = ok(&root, "git", &["rev-parse", "HEAD"]).trim().to_owned(); ok(&root, "git", &["update-ref", "refs/remotes/origin/main", &sha]);
+    let proof = |instrument: &str, exit_code: i32, ran_at: i32| serde_json::json!({"goal":"g","instrument":instrument,"commit":sha,"exit_code":exit_code,"output_sha256":"0".repeat(64),"output_tail":"","ran_at":ran_at});
+    addressed(&r.join("proofs"), proof("a", 0, 1));
+    assert!(cli(&root, &["goals"]).contains("done    g"));
+    // A newer failing proof of some other instrument cannot change the state; only the check counts.
+    addressed(&r.join("proofs"), proof("b", 1, 2));
+    assert!(cli(&root, &["goals"]).contains("done    g"));
+    // The removed instrument `gaps` field is rejected.
+    write(&r.join("instruments/a.json"), r#"{"run":["true"],"answers":"a","gaps":[]}"#);
+    let check = run(&root, env!("CARGO_BIN_EXE_whosaidso"), &["check"]);
+    assert!(!check.status.success() && String::from_utf8_lossy(&check.stdout).contains("unknown field `gaps`"), "{check:?}");
     fs::remove_dir_all(root).unwrap();
 }

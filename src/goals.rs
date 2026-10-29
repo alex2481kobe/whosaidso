@@ -42,12 +42,8 @@ pub fn counts(goals: &[Goal], states: &[GoalState], parent: &str) -> (usize, usi
 }
 pub fn output(root: &Path) -> Result<String, String> {
     let mut output = String::new();
-    let phase = crate::cache::timer("goals records");
     let store = record::load(root)?;
-    drop(phase);
-    let phase = crate::cache::timer("goals state");
     let states = state::states(root, &store)?;
-    drop(phase);
     let mut phases: Vec<_> = store.phases.iter().collect();
     phases.sort_by_key(|p| p.order);
     for phase in phases {

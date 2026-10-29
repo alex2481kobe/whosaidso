@@ -1,5 +1,4 @@
 // CLI dispatch; record and command rules live in their respective modules.
-mod activity;
 mod ask;
 mod blob;
 mod cache;
@@ -23,18 +22,21 @@ mod state;
 mod sync;
 mod title;
 mod text;
-mod tools;
 mod tree;
 mod ui;
 fn run() -> Result<(), String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.len() == 1 && (args[0] == "--version" || args[0] == "-V") {
+        println!("whosaidso {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
     let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
     let root = if args.first().is_some_and(|cmd| cmd == "ui") { cwd.clone() } else { git::root(&cwd)? };
     macro_rules! commands {
         ($($usage:literal, $pattern:pat $(if $guard:expr)? => $action:expr);+ $(;)?) => {
             match args.as_slice() {
                 $($pattern $(if $guard)? => $action,)+
-                _ => Err(format!("usage: whosaidso {}", [$($usage),+].join(" | "))),
+                _ => Err(format!("usage: whosaidso {} | --version", [$($usage),+].join(" | "))),
             }
         };
     }
@@ -46,11 +48,9 @@ fn run() -> Result<(), String> {
         "gate [<base>]", [cmd, rest @ ..] if cmd == "gate" && rest.len() <= 1 => gate::gate(&root, rest.first().map_or("main", String::as_str));
         "ask <goal-id> <words...>", [cmd, id, words @ ..] if cmd == "ask" => ask::ask(&root, id, words);
         "show <id>", [cmd, id] if cmd == "show" => show::show(&root, id);
-        "log [--limit N]", [cmd, rest @ ..] if cmd == "log" => activity::log(&root, rest);
         "goals", [cmd] if cmd == "goals" => goals::goals(&root);
         "prove <goal-id>", [cmd, id] if cmd == "prove" => prove::prove(&root, id);
         "prune", [cmd] if cmd == "prune" => prune::prune(&root);
-        "tools", [cmd] if cmd == "tools" => tools::tools(&root);
         "media <goal-id> <file> <title>", [cmd, goal, path, shows] if cmd == "media" => gallery::show(&root, &cwd, goal, path, shows);
         "ui [--port N] [--open]", [cmd, rest @ ..] if cmd == "ui" => ui::serve(&root, rest);
         "grep <text...> [--in <path-or-prefix>]...", [cmd, words @ ..] if cmd == "grep" => text::grep(&root, words);

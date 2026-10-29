@@ -7,7 +7,7 @@ export function preview(entry, full = false) {
   if (entry.kind === "document") return el("div", "gallery-none", icon("file"), "PDF document");
   const media = el(entry.kind === "image" ? "img" : "video");
   const said = el("span", "gallery-load-status", "Loading"); said.setAttribute("role", "status");
-  const retry = el("button", "button", icon("refresh"), "Retry preview"); retry.type = "button"; retry.hidden = true;
+  const retry = el("button", "button", icon("retry"), "Retry preview"); retry.type = "button"; retry.hidden = true;
   const node = el("div", "gallery-media", media, said, retry);
   const load = () => { said.textContent = "Loading"; retry.hidden = true; media.src = fileURL(entry); if (entry.kind === "video") media.load(); };
   media.addEventListener(entry.kind === "image" ? "load" : "loadedmetadata", () => { said.textContent = ""; retry.hidden = true; });

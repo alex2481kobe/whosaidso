@@ -2,21 +2,20 @@
 
 <p align="center">
   <strong>Keep your agents accountable and your claims proven.</strong><br />
-  Goals, proofs and evidence live in your repository, and progress is worked out from what actually landed.
+  Goals, claims, proofs and evidence live in your repository, and progress is worked out from what actually landed.
 </p>
 
 <p align="center">
   <a href="#get-started">Get started</a> ·
-  <a href="#what-it-is-built-on">What it is built on</a> ·
+  <a href="#what-it-does">What it does</a> ·
   <a href="USAGE.md">Usage and record formats</a>
 </p>
 
-<img src="assets/ui-overview.png" alt="Overview of the sample game engine project" width="912" />
-
-WhoSaidSo is for your agents, not for you to operate. They write down the goals they are working toward, prove
-them by running the checks you agreed on, and attach evidence: screenshots, videos and documents. A new session
-runs `whosaidso goals` and knows where things stand without being told again. You read along whenever you want, in
-the terminal or with `whosaidso ui`, the local read-only viewer for progress and evidence.
+WhoSaidSo is the engineering ledger for a large project worked on by many agents across many machines. Agents
+write down the goals they are working toward, claim one goal at a time, prove it by running the check you agreed
+on, and attach evidence: screenshots, videos and documents. A new session runs `whosaidso goals` and knows where
+things stand without being told again. You read along in the terminal or with `whosaidso ui`, the local read-only
+viewer for goals and evidence.
 
 It is one small Rust program. A project's record is small JSON files in `.whosaidso/`, committed with your code, so
 it branches, merges and travels with the work. A goal's state is never stored: it is worked out from Git and the
@@ -24,29 +23,30 @@ proofs every time you ask.
 
 <img src="assets/ui-goals.png" alt="Goals and branch work in the sample game engine project" width="912" />
 <img src="assets/ui-gallery.png" alt="Evidence gallery for the sample game engine project" width="912" />
-<img src="assets/ui-activity.png" alt="Activity in the sample game engine project" width="912" />
 <img src="assets/ui-dark.png" alt="The sample game engine project in dark mode" width="912" />
 
-## What it is built on
+## What it does
 
-**Proven, not claimed.** A goal is done when its instrument has passed on the code that landed on main. A proof
-records the exact commit, the exit code and the output, and stops counting when the instrument changes.
+**Goals and claims.** Work is phases, goals and one check instrument per goal. `start` claims a goal through a ref
+on `origin`, so two workers on any machines never hold the same goal, and a gate refuses commits without a known
+`Goal:` trailer.
 
-**Instruments that admit their blind spots.** Each instrument says what it answers and what it cannot see, and names
-the instrument that covers each gap. Proving a goal runs them all.
+**Proven, not claimed.** A goal is done when its check has passed on the code that landed on main. A proof records
+the exact commit, the exit code and the output, and stops counting when the instrument changes. The check is the
+whole answer: if a goal needs several things verified, the instrument runs them all.
 
-**State from Git.** Open, active, landed, done, failing and stale are worked out from local branches, local main and
+**State from Git.** Open, active, idle, landed, done, failing and stale are worked out from branches, local main and
 the proofs. There is no status field to forget to update.
 
-**Evidence that is kept.** Media is detected by its signature, stored by content hash and never deleted: the newest
-100 items stay in the gallery, and older ones move into monthly archive bundles you can open with `tar`.
+**Cleanup.** `prune` removes superseded proofs, old asks and unused instruments, and keeps the project small enough
+for an agent to read. An interrupted prune is undone by the next one.
 
-**Bounded by design.** Records, output tails, asks and search answers all have fixed caps, so a long-running project
-stays small enough for an agent to read. `prune` keeps it that way, and recoverably: an interrupted prune is undone
-and run again by the next one.
+**Evidence that is kept.** Media is detected by its signature, stored by content hash and shared between machines
+with `sync`. The newest 100 items stay in the gallery; older ones move into monthly archive bundles you can open
+with `tar`.
 
-**Agent first.** Short, predictable answers made for coding agents doing the work every day, plus search over the
-records, the files and the code.
+**Code search.** `find` and `grep` search the records, files and history; `code defs`, `refs`, `deps` and
+`includers` answer where a name is defined, used or included.
 
 ## Get started
 
@@ -61,6 +61,9 @@ Or do it yourself. Building needs Rust, Cargo, Git and a Unix shell:
 ```text
 cargo install --git https://github.com/alex2481kobe/whosaidso --tag v0.3.0 --locked
 ```
+
+From a checkout, `cargo build --release --locked` puts the binary at `target/release/whosaidso`.
+`whosaidso --version` prints `whosaidso 0.3.0`.
 
 ## Quick start
 
@@ -98,7 +101,7 @@ WebM or PDF, up to 64 MiB each.
 
 ## Working with a team
 
-Fetch to see other workstations’ branches, authors and local worktree paths in `whosaidso goals`; `start` warns about overlapping work and `whosaidso log` shows recent activity.
+`whosaidso start <goal>` claims the goal and refuses, naming the holder, while another worktree on any workstation holds it. Fetch to see other workstations' branches, authors and worktree paths in `whosaidso goals`.
 
 Whoever lands work on main runs `whosaidso prune` and commits its deletions with the landing. The sync recipe is:
 pull, prune, commit, push, `whosaidso sync` to share media bytes and archive bundles across clones. If the push is rejected, pull and prune again. If prune is interrupted, run it again.
@@ -112,7 +115,7 @@ WHOSAIDSO="$PWD/target/release/whosaidso" sh scripts/sample-project.sh target/ui
 (cd target/ui-sample/game-engine && ../../release/whosaidso ui --port 0)
 ```
 
-Open the printed URL, then select Overview, Goals, Gallery or Activity. The theme button switches to dark mode.
+Open the printed URL, then select Goals or Gallery. The theme button switches to dark mode.
 The fixture has three phases, nine goals in six derived states, two real proofs, three asks, five PNGs and one PDF,
 two local worktrees and fetched remote work. Use a fresh destination for another sample.
 

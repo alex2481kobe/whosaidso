@@ -61,7 +61,7 @@ fn working_tree_files_are_visible_and_writers_wait() {
     assert!(cli(&root, &["code", "defs", "new_function"]).contains("[syntactic]"));
     cli(&root, &["grep", "editedneedle"]);
     for i in 0..200 { fs::write(root.join(format!("file{i}.txt")), format!("changed {i}\n")).unwrap(); }
-    let db = rusqlite::Connection::open(root.join(".whosaidso/cache/index.db")).unwrap();
+    let db = rusqlite::Connection::open(root.join(".git/whosaidso/cache/index.db")).unwrap();
     db.execute_batch("BEGIN IMMEDIATE").unwrap();
     let mut children: Vec<_> = (0..2).map(|_| command(&root, env!("CARGO_BIN_EXE_whosaidso"), &["grep", "changed", "--in", "file0.txt"])
         .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap()).collect();

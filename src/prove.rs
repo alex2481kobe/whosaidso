@@ -25,15 +25,8 @@ pub fn prove(root: &Path, id: &str) -> Result<(), String> {
     if !clean(root)? { return Err("prove: commit or stash your changes first".into()); }
     let store = record::load(root)?;
     let goal = store.goals.iter().find(|g| g.id == id).ok_or_else(|| if store.errors.is_empty() { format!("unknown goal {id}") } else { store.errors.join("\n") })?;
-    let mut pending = vec![goal.check.as_str()];
-    let mut seen = std::collections::HashSet::new();
-    while let Some(id) = pending.pop() {
-        if !seen.insert(id) { continue; }
-        let instrument = store.instruments.iter().find(|i| i.id == id).ok_or_else(|| format!("unknown instrument {id}"))?;
-        run(root, &goal.id, instrument)?;
-        pending.extend(instrument.gaps.iter().rev().map(|g| g.covered_by.as_str()));
-    }
-    Ok(())
+    let instrument = store.instruments.iter().find(|i| i.id == goal.check).ok_or_else(|| format!("unknown instrument {}", goal.check))?;
+    run(root, &goal.id, instrument)
 }
 fn run(root: &Path, id: &str, instrument: &Instrument) -> Result<(), String> {
     publish::record_dir(root, "proofs")?;

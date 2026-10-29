@@ -1,4 +1,4 @@
-// Code graph commands; parsing, storage and presentation live in their own modules.
+// Code search commands; parsing, storage and presentation live in their own modules.
 mod precise;
 mod parse;
 mod query;

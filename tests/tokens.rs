@@ -66,7 +66,7 @@ fn search_answers_save_tokens_without_losing_scope() {
     let cut = cli(&root, &["find", "longpath", "kind:file"]);
     assert!(cut.lines().next().unwrap().ends_with("...") && cut.lines().next().unwrap().chars().count() == 200, "answer cutting: {cut}");
     // A pre-scope cache must be rebuilt without discarding the text index.
-    let db = rusqlite::Connection::open(root.join(".whosaidso/cache/index.db")).unwrap();
+    let db = rusqlite::Connection::open(root.join(".git/whosaidso/cache/index.db")).unwrap();
     db.execute_batch("CREATE TABLE files(path TEXT PRIMARY KEY,blob TEXT); CREATE TABLE defs(path TEXT,name TEXT,kind TEXT,line INTEGER); CREATE TABLE calls(path TEXT,callee TEXT,line INTEGER,caller TEXT); CREATE TABLE includes(path TEXT,target TEXT,line INTEGER);").unwrap(); drop(db);
     let code_cut = cli(&root, &["code", "defs", &long_name]);
     assert!(code_cut.trim_end().ends_with("...") && code_cut.trim_end().chars().count() == 200, "code cutting: {code_cut}");

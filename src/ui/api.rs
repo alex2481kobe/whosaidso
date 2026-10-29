@@ -1,10 +1,9 @@
 // Screen JSON is a projection of validated records and the shared derived states.
-use super::Reply;
-use crate::{activity, blob, gallery, goals, record::{self, Goal, Store}, state::{self, GoalState}};
+use super::{Reply, version};
+use crate::{blob, claims, gallery, goals, record::{self, Store}, state::{self, GoalState}};
 use serde_json::{Value, json};
-use std::{collections::{BTreeMap, HashMap, HashSet}, fs, io::{Read, Seek, SeekFrom}, path::Path};
+use std::{collections::{BTreeMap, HashMap, HashSet}, fs, io::{Read, Seek, SeekFrom}, path::{Path, PathBuf}, sync::Mutex};
 
-fn proof(p: &record::Proof) -> Value { let mut v = json!(p); v["sha"] = json!(p.sha); v }
 fn media(root: &Path, m: &gallery::Media, store: &Store) -> Result<Value, String> {
     let kind = gallery::media_type(&m.ext)?;
     let path = blob::path(root, &m.media_sha256, &m.ext)?;
@@ -15,78 +14,55 @@ fn media(root: &Path, m: &gallery::Media, store: &Store) -> Result<Value, String
     value["goal_title"] = json!(store.goals.iter().find(|g| g.id == m.goal).map(|g| &g.title));
     Ok(value)
 }
-fn goal(g: &Goal, store: &Store, states: &[GoalState]) -> Value {
-    let mut v = json!(g); v["id"] = json!(g.id);
-    if let Some(s) = states.iter().find(|s| s.id == g.id) {
-        v["state"] = json!(goals::label(s.state)); v["active_branches"] = json!(s.active_branches);
-        v["branches"] = json!(s.branches);
-        v["proof"] = s.proof.map(|i| proof(&store.proofs[i])).unwrap_or(Value::Null);
+// The newest few proofs, asks and media a goal row opens onto; the rest is one `whosaidso` call away.
+const RECENT: usize = 3;
+fn tally<'a>(labels: impl Iterator<Item = &'a str>) -> BTreeMap<&'a str, usize> {
+    let mut counts = BTreeMap::new();
+    for label in labels { *counts.entry(label).or_default() += 1; }
+    counts
+}
+// Also returns when the answer next goes stale by the clock alone: the first moment a branch stops counting as active or a shown claim lapses.
+fn goals_screen(root: &Path, store: &Store) -> Result<(Value, i64), String> {
+    state::renew();
+    let states = state::states(root, store)?;
+    let now = state::now()?;
+    let held: HashMap<String, claims::Held> = claims::held(root, &states, now)?.into_iter().map(|c| (c.goal.clone(), c)).collect();
+    let lapses = states.iter().flat_map(|s| &s.branches).map(|b| b.time).chain(held.values().map(|c| c.since)).map(state::lapse).filter(|t| *t > now).min().unwrap_or(i64::MAX);
+    let by_id: HashMap<&str, &GoalState> = states.iter().map(|s| (s.id.as_str(), s)).collect();
+    let mut proofs: HashMap<&str, &record::Proof> = HashMap::new();
+    for p in &store.proofs {
+        if proofs.get(p.goal.as_str()).is_none_or(|q| (q.ran_at, &q.sha) < (p.ran_at, &p.sha)) { proofs.insert(&p.goal, p); }
     }
-    v["phase"] = json!(store.phases.iter().find(|p| goals::in_phase(g, &p.id, &store.goals)).map(|p| &p.id));
-    v
-}
-fn phases(store: &Store, states: &[GoalState]) -> Vec<Value> {
-    let mut phases: Vec<_> = store.phases.iter().collect(); phases.sort_by_key(|p| (p.order, &p.id));
-    phases.into_iter().map(|p| {
-        let (done, total, summary) = goals::counts(&store.goals, states, &p.id);
-        json!({"id":p.id,"title":p.title,"order":p.order,"done":done,"total":total,"summary":summary})
-    }).collect()
-}
-fn overview(root: &Path, store: &Store) -> Result<Value, String> {
-    let states = state::states(root, store)?;
-    let mut counts: BTreeMap<&str, usize> = ["done", "active", "idle", "landed", "failing", "stale", "open"].into_iter().map(|s| (s, 0)).collect();
-    for s in &states { *counts.entry(goals::label(s.state)).or_default() += 1; }
-    let mut screens = Vec::new();
-    if store.records.iter().any(|(p, _)| record::kind(p) != "media") { screens.push("records"); }
-    if !store.goals.is_empty() || !store.phases.is_empty() { screens.push("overview"); }
-    if !store.goals.is_empty() { screens.push("goals"); }
-    if !store.media.is_empty() || !archives(root)?.is_empty() { screens.push("gallery"); }
-    screens.push("activity");
-    let mut in_flight: Vec<_> = store.goals.iter().filter(|g| states.iter().any(|s| s.id == g.id && !s.active_branches.is_empty())).map(|g| goal(g, store, &states)).collect();
-    in_flight.sort_by(|a, b| a["id"].as_str().cmp(&b["id"].as_str()));
-    Ok(json!({"counts":counts,"phases":phases(store, &states),"in_flight":in_flight,"screens":screens}))
-}
-fn goals_screen(root: &Path, store: &Store) -> Result<Value, String> {
-    let states = state::states(root, store)?;
+    let mut media: HashMap<&str, Vec<&gallery::Media>> = HashMap::new();
+    for m in gallery::newest(store).into_iter().take(gallery::LIVE_MEDIA) { media.entry(&m.goal).or_default().push(m); }
     let mut entries: Vec<_> = store.goals.iter().collect(); entries.sort_by(|a, b| a.id.cmp(&b.id));
-    Ok(json!({"phases":phases(store, &states),"goals":entries.into_iter().map(|g| goal(g, store, &states)).collect::<Vec<_>>()}))
+    let rows = entries.into_iter().map(|g| {
+        let s = by_id.get(g.id.as_str());
+        // The eligible proof that decided the state; with none, the newest one for the goal, marked as not current.
+        let proof = s.and_then(|s| s.proof).map(|i| (&store.proofs[i], true)).or_else(|| proofs.get(g.id.as_str()).map(|p| (*p, false)));
+        let instrument = store.instruments.iter().find(|i| i.id == g.check).map(|i| json!({"id":i.id,"answers":i.answers,"run":i.run}));
+        json!({
+            "id":g.id, "title":g.title, "done_when":g.done_when,
+            "phase":store.phases.iter().find(|p| goals::in_phase(g, &p.id, &store.goals)).map(|p| &p.id),
+            "state":s.map(|s| goals::label(s.state)), "branches":s.map(|s| &s.branches), "claim":held.get(&g.id), "instrument":instrument,
+            "proof":proof.map(|(p, current)| json!({"instrument":p.instrument,"commit":p.commit,"exit_code":p.exit_code,"ran_at":p.ran_at,"output_tail":p.output_tail,"current":current})),
+            "asks":record::asks(store, &g.id).into_iter().take(RECENT).map(|a| json!({"said":a.said,"ran_at":a.ran_at})).collect::<Vec<_>>(),
+            "media":media.get(g.id.as_str()).into_iter().flatten().take(RECENT).map(|m| json!({"id":m.sha,"media_sha256":m.media_sha256,"tag":gallery::media_type(&m.ext).map_or("", |t| t.tag),"shows":m.shows})).collect::<Vec<_>>(),
+        })
+    }).collect::<Vec<_>>();
+    let mut phases: Vec<_> = store.phases.iter().collect(); phases.sort_by_key(|p| (p.order, &p.id));
+    let phases = phases.into_iter().map(|p| {
+        let counts = tally(rows.iter().filter(|g| g["phase"] == p.id.as_str()).filter_map(|g| g["state"].as_str()));
+        json!({"id":p.id,"title":p.title,"counts":counts})
+    }).collect::<Vec<_>>();
+    Ok((json!({"totals":tally(rows.iter().filter_map(|g| g["state"].as_str())),"phases":phases,"goals":rows}), lapses))
 }
-fn goal_detail(root: &Path, store: &Store, id: &str) -> Result<Option<Value>, String> {
-    let Some(g) = store.goals.iter().find(|g| g.id == id) else { return Ok(None); };
-    let states = state::states(root, store)?;
-    let mut v = goal(g, store, &states);
-    v["instrument"] = json!(store.instruments.iter().find(|i| i.id == g.check));
-    v["newest_proof"] = store.proofs.iter().filter(|p| p.goal == id).max_by(|a, b| (a.ran_at, &a.sha).cmp(&(b.ran_at, &b.sha))).map(proof).unwrap_or(Value::Null);
-    v["asks"] = json!(record::asks(store, id));
-    v["media"] = json!(gallery::newest(store).into_iter().filter(|m| m.goal == id).map(|m| media(root, m, store)).collect::<Result<Vec<_>, _>>()?);
-    Ok(Some(v))
-}
-fn records(store: &Store) -> Value {
-    let mut entries: Vec<_> = store.records.iter().filter(|(p, _)| record::kind(p) != "media").map(|(p, v)| {
-        let mut v = v.clone(); v["kind"] = json!(record::kind(p));
-        v["id"] = json!(p.file_stem().and_then(|s| s.to_str()).unwrap_or("")); v
-    }).collect();
-    entries.sort_by(|a, b| (a["kind"].as_str(), a["id"].as_str()).cmp(&(b["kind"].as_str(), b["id"].as_str())));
-    json!({"records":entries})
-}
-fn gallery_screen(root: &Path, store: &Store) -> Result<Value, String> {
-    let entries = gallery::newest(store).into_iter().take(gallery::LIVE_MEDIA).map(|m| media(root, m, store)).collect::<Result<Vec<_>, _>>()?;
-    Ok(json!({"entries":entries,"archives":archives(root)?}))
-}
-fn activity_screen(root: &Path, store: &Store, limit: usize) -> Result<Value, String> {
-    let mut media = gallery::newest(store);
-    let mut entries = Vec::new();
-    for entry in activity::entries(root, limit)? {
-        let mut value = json!(entry);
-        if let activity::Entry::Media { goal, title, time } = &entry {
-            // Repeated titles in one second still link to their exact ordered media records.
-            if let Some(i) = media.iter().position(|m| &m.goal == goal && &m.shows == title && m.ran_at.div_euclid(1_000_000_000) == *time) {
-                value["media_id"] = json!(media.remove(i).sha);
-            }
-        }
-        entries.push(value);
-    }
-    Ok(json!({"entries":entries}))
+fn gallery_screen(root: &Path) -> Result<Value, String> {
+    // The version is read before the records, so a change in between shows up on the next poll.
+    let token = current_version(root)?;
+    let store = record::load(root)?;
+    let entries = gallery::newest(&store).into_iter().take(gallery::LIVE_MEDIA).map(|m| media(root, m, &store)).collect::<Result<Vec<_>, _>>()?;
+    Ok(json!({"version":token,"entries":entries,"archives":archives(root)?}))
 }
 fn archives(root: &Path) -> Result<Vec<Value>, String> {
     let sample = gallery::archive_path(root, 0)?;
@@ -119,37 +95,50 @@ fn archives(root: &Path) -> Result<Vec<Value>, String> {
     entries.sort_by(|a, b| b["month"].as_str().cmp(&a["month"].as_str()));
     Ok(entries)
 }
+// The goals answer is the slowest to derive, so it is kept per project until the change token moves or a branch lapses to idle.
+// The lock is held while deriving: a second caller (the start-up warm-up and the first page load) waits for the answer rather than deriving it again.
+// The version is the token plus the moment of derivation, so a lapse that only the clock causes still moves it and every screen refreshes.
+struct Kept { token: String, until: i64, version: String, body: String }
+fn goals_kept(root: &Path) -> Result<(String, String), String> {
+    static KEPT: Mutex<Option<HashMap<PathBuf, Kept>>> = Mutex::new(None);
+    let token = version::token(root)?;
+    let mut guard = KEPT.lock().unwrap_or_else(|e| e.into_inner());
+    let kept = guard.get_or_insert_with(HashMap::new);
+    let now = state::clock()?;
+    if let Some(k) = kept.get(root).filter(|k| k.token == token && now < k.until) { return Ok((k.version.clone(), k.body.clone())); }
+    let (mut screen, until) = goals_screen(root, &record::load(root)?)?;
+    let version = format!("{token}.{now:x}");
+    screen["version"] = json!(version);
+    let body = screen.to_string();
+    kept.insert(root.to_owned(), Kept { token, until, version: version.clone(), body: body.clone() });
+    Ok((version, body))
+}
+// What the poll compares. Goals that cannot be derived (no main yet) report their own error on their screen, so the version falls back to the bare token.
+fn current_version(root: &Path) -> Result<String, String> {
+    goals_kept(root).map(|k| k.0).or_else(|_| version::token(root))
+}
+fn goals_answer(root: &Path) -> Reply {
+    match goals_kept(root) { Ok((_, body)) => Reply::bytes("application/json; charset=utf-8", body.as_bytes()), Err(e) => Reply::error(500, &e) }
+}
+pub(super) fn warm(root: &Path) { let _ = goals_answer(root); }
+fn media_file(root: &Path, sha: &str, params: &HashMap<String, String>) -> Reply {
+    let result = (|| -> Result<Reply, String> {
+        let store = record::load(root)?;
+        let Some(m) = store.media.iter().find(|m| m.media_sha256 == sha) else { return Err("no recorded media with this sha".to_owned()); };
+        let bytes = fs::read(blob::path(root, &m.media_sha256, &m.ext)?).map_err(|e| e.to_string())?;
+        if bytes.len() as u64 != m.byte_size || record::sha256_hex(&bytes) != sha { return Err("media changed while reading".into()); }
+        let mut reply = Reply::bytes(gallery::media_type(&m.ext)?.mime, &bytes);
+        reply.header("Accept-Ranges", "bytes");
+        if params.get("download").is_some_and(|v| v == "1") { reply.header("Content-Disposition", format!("attachment; filename=\"{}.{}\"", m.media_sha256, m.ext)); }
+        Ok(reply)
+    })();
+    result.unwrap_or_else(|e| Reply::error(404, &e))
+}
 pub(super) fn answer(root: &Path, path: &str, params: &HashMap<String, String>) -> Reply {
-    let store = match record::load(root) { Ok(s) => s, Err(e) => return Reply::error(500, &e) };
-    let id = params.get("id").map_or("", String::as_str);
-    let limit = if path == "/api/activity" {
-        match params.get("limit").map(|n| n.parse::<usize>()) {
-            None => 100,
-            Some(Ok(n)) if n > 0 => n.min(500),
-            _ => return Reply::error(400, "activity: limit needs a positive integer"),
-        }
-    } else { 0 };
-    if let Some(sha) = path.strip_prefix("/api/media/") {
-        let Some(m) = store.media.iter().find(|m| m.media_sha256 == sha) else { return Reply::error(404, "no recorded media with this sha"); };
-        let result = (|| {
-            let bytes = fs::read(blob::path(root, &m.media_sha256, &m.ext)?).map_err(|e| e.to_string())?;
-            if bytes.len() as u64 != m.byte_size || record::sha256_hex(&bytes) != sha { return Err("media changed while reading".into()); }
-            let mut reply = Reply::bytes(gallery::media_type(&m.ext)?.mime, &bytes);
-            reply.header("Accept-Ranges", "bytes");
-            if params.get("download").is_some_and(|v| v == "1") { reply.header("Content-Disposition", format!("attachment; filename=\"{}.{}\"", m.media_sha256, m.ext)); }
-            Ok(reply)
-        })();
-        return result.unwrap_or_else(|e: String| Reply::error(404, &e));
+    match path {
+        "/api/version" => current_version(root).map_or_else(|e| Reply::error(500, &e), |v| Reply::json(&json!({"version":v}))),
+        "/api/goals" => goals_answer(root),
+        "/api/gallery" => match gallery_screen(root) { Ok(value) => Reply::json(&value), Err(e) => Reply::error(500, &e) },
+        _ => path.strip_prefix("/api/media/").map_or_else(|| Reply::error(404, "not found"), |sha| media_file(root, sha, params)),
     }
-    let result = match path {
-        "/api/overview" => overview(root, &store).map(Some),
-        "/api/goals" => goals_screen(root, &store).map(Some),
-        "/api/goal" => goal_detail(root, &store, id),
-        "/api/records" => Ok(Some(records(&store))),
-        "/api/record" => Ok(records(&store)["records"].as_array().and_then(|rows| rows.iter().find(|v| v["id"] == id)).cloned()),
-        "/api/gallery" => gallery_screen(root, &store).map(Some),
-        "/api/activity" => activity_screen(root, &store, limit).map(Some),
-        _ => Ok(None),
-    };
-    match result { Ok(Some(value)) => Reply::json(&value), Ok(None) => Reply::error(404, "not found"), Err(e) => Reply::error(500, &e) }
 }

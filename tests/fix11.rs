@@ -43,8 +43,7 @@ fn local_refs_retention_and_new_user_failures() {
     let r = root.join(".whosaidso"); let exe = env!("CARGO_BIN_EXE_whosaidso");
     write(&r.join(".gitignore"), "cache/\n"); write(&r.join("phases/p.json"), json!({"title":"Phase","order":0}).to_string());
     write(&r.join("goals/g.json"), json!({"title":"Goal","done_when":"done","check":"test","broader":"p"}).to_string());
-    write(&r.join("instruments/test.json"), json!({"run":["true"],"answers":"works","gaps":[{"what":"cover","why":"required","covered_by":"cover"}]}).to_string());
-    write(&r.join("instruments/cover.json"), json!({"run":["false"],"answers":"cover"}).to_string()); commit(&root);
+    write(&r.join("instruments/test.json"), json!({"run":["true"],"answers":"works"}).to_string()); commit(&root);
     bad(&root, &["start", "g"], "run whosaidso install-hooks");
     cli(&root, &["install-hooks"]); cli(&root, &["start", "g"]); commit(&root);
     assert!(git(&root, &["log", "-1", "--format=%B"]).contains("Goal: g"));
@@ -52,7 +51,7 @@ fn local_refs_retention_and_new_user_failures() {
     bad(&clone, &["start", "g"], "run whosaidso install-hooks");
     bad(&root, &["find"], "needs words"); bad(&root, &["find", "kind:goal"], "needs words");
     let usage = bad(&root, &[], "usage:");
-    for cmd in ["check", "install-hooks", "start", "gate", "ask", "show", "goals", "prove", "prune", "tools", "media", "ui", "grep", "find", "code import-scip", "defs", "refs", "deps", "includers"] { assert!(usage.contains(cmd), "{cmd}: {usage}"); }
+    for cmd in ["check", "install-hooks", "start", "gate", "ask", "show", "goals", "prove", "prune", "media", "ui", "grep", "find", "code import-scip", "defs", "refs", "deps", "includers", "--version"] { assert!(usage.contains(cmd), "{cmd}: {usage}"); }
     // Every dispatch entry must remain in the generated usage table.
     let source = include_str!("../src/main.rs"); let table = source.split("    commands! {").nth(1).unwrap().split("\n    }").next().unwrap();
     for row in table.lines().filter(|l| l.contains("=>")) { let spelling = row.trim().split('"').nth(1).unwrap(); assert!(usage.contains(spelling), "{spelling}"); }
@@ -72,11 +71,11 @@ fn local_refs_retention_and_new_user_failures() {
     let invalid = addressed(&r.join("media"), json!({"goal":"g","shows":"bad","media_sha256":hash(bytes),"ext":"png","byte_size":bytes.len(),"commit":head,"ran_at":0}));
     bad(&root, &["check"], "signature and header"); fs::remove_file(invalid).unwrap(); commit(&root);
     cli(&root, &["prove", "g"]); commit(&root);
-    let shown = cli(&root, &["show", "g"]); assert!(shown.contains("state: failing") && shown.lines().any(|l| l.starts_with("proof: fail") && l.ends_with("cover")), "{shown}");
-    fs::remove_file(r.join("instruments/cover.json")).unwrap();
-    let missing = bad(&root, &["check"], "missing instrument file .whosaidso/instruments/cover.json");
+    let shown = cli(&root, &["show", "g"]); assert!(shown.contains("state: done") && shown.lines().any(|l| l.starts_with("proof: pass") && l.ends_with("test")), "{shown}");
+    let test = fs::read(r.join("instruments/test.json")).unwrap(); fs::remove_file(r.join("instruments/test.json")).unwrap();
+    let missing = bad(&root, &["check"], "missing instrument file .whosaidso/instruments/test.json");
     assert_eq!(missing.lines().count(), 1, "one root cause: {missing}");
-    write(&r.join("instruments/cover.json"), json!({"run":["false"],"answers":"cover"}).to_string());
+    write(&r.join("instruments/test.json"), test);
     write(&r.join("instruments/old.json"), json!({"run":["true","old"],"answers":"old"}).to_string()); commit(&root);
     let at = git(&root, &["rev-parse", "HEAD"]).trim().to_owned(); let mut old = Vec::new();
     for n in 0..4 { old.push(addressed(&r.join("proofs"), json!({"goal":"g","instrument":"old","commit":at,"exit_code":0,"output_sha256":"0".repeat(64),"output_tail":"","ran_at":n}))); }
@@ -94,12 +93,12 @@ fn local_refs_retention_and_new_user_failures() {
     let feature = git(&root, &["rev-parse", "HEAD"]).trim().to_owned();
     for n in 0..20 { addressed(&r.join("proofs"), json!({"goal":"g","instrument":"test","commit":feature,"exit_code":n%2,"output_sha256":"0".repeat(64),"output_tail":"repeated","ran_at":n})); }
     commit(&root); git(&root, &["checkout", "main"]); git(&root, &["merge", "--squash", "feature"]); commit(&root);
-    cli(&root, &["prune"]);
+    let merged = cli(&root, &["goals"]); cli(&root, &["prune"]);
     let repeated: Vec<_> = paths(&r.join("proofs")).into_iter().map(|p| serde_json::from_slice::<serde_json::Value>(&fs::read(p).unwrap()).unwrap()).filter(|v| v["commit"] == feature).collect();
-    assert_eq!(repeated.len(), 1); assert_eq!(repeated[0]["ran_at"], 19); assert_eq!(cli(&root, &["goals"]), before); commit(&root);
+    assert_eq!(repeated.len(), 1); assert_eq!(repeated[0]["ran_at"], 19); assert_eq!(cli(&root, &["goals"]), merged); commit(&root);
     git(&root, &["branch", "-m", "other"]);
     for args in [vec!["goals"], vec!["show", "g"], vec!["gate"], vec!["prune"]] { bad(&root, &args, "no local branch main"); }
-    assert!(ui(&mut command(&root, exe, &[]), "/api/overview").contains("no local branch main"));
+    assert!(ui(&mut command(&root, exe, &[]), "/api/goals").contains("no local branch main"));
     git(&root, &["branch", "-m", "main"]);
     // goals, show and the viewer read remote-tracking branches to show work from other clones, and prune compares that
     // output before and after; what may land is decided from local refs only, so gate never consults them.
@@ -121,7 +120,7 @@ fn local_refs_retention_and_new_user_failures() {
     }
     // Warm cache rows isolate answer buffering from parsing, with 400,000 matching definitions.
     write(&root.join("many.rs"), "fn repeated() {}\n"); commit(&root); cli(&root, &["code", "defs", "repeated"]);
-    let db = rusqlite::Connection::open(r.join("cache/index.db")).unwrap();
+    let db = rusqlite::Connection::open(root.join(".git/whosaidso/cache/index.db")).unwrap();
     db.execute_batch("CREATE INDEX fix11_defs_order ON defs(name,path,line); CREATE INDEX fix11_calls_order ON calls(callee,path,line);
         WITH RECURSIVE n(i) AS (VALUES(2) UNION ALL SELECT i+1 FROM n WHERE i<400000) INSERT INTO defs SELECT 'many.rs','repeated','fn',i,'repeated' FROM n;
         INSERT INTO calls SELECT path,name,line,'caller',qualified FROM defs;
@@ -132,7 +131,7 @@ fn local_refs_retention_and_new_user_failures() {
         assert_eq!(answer.lines().count(), 21); assert!(answer.ends_with("shown 20 of 400000\n"), "{answer}");
     }
     // Precise answers use the same bounded collector.
-    let db = rusqlite::Connection::open(r.join("cache/index.db")).unwrap();
+    let db = rusqlite::Connection::open(root.join(".git/whosaidso/cache/index.db")).unwrap();
     db.execute_batch("INSERT INTO scip_docs SELECT path,blob FROM files WHERE path='many.rs'; INSERT INTO scip_syms VALUES ('scip-test pkg project 1 repeated().','repeated','repeated'); INSERT INTO scip_occ SELECT path,'scip-test pkg project 1 repeated().',line,1 FROM defs;").unwrap(); drop(db);
     let answer = success(command(&root, "sh", &["-c", "ulimit -v 45000; exec \"$1\" code defs repeated", "sh", exe]).output().unwrap());
     assert_eq!(answer.lines().count(), 21); assert!(answer.ends_with("shown 20 of 400000\n")); assert!(answer.lines().take(20).all(|l| l.ends_with("[precise]")));

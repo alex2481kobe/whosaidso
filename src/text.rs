@@ -11,7 +11,6 @@ fn clear(tx: &Transaction<'_>, path: &str) -> Result<(), String> {
     Ok(())
 }
 fn sync(root: &Path) -> Result<Counts, String> {
-    let phase = crate::cache::timer("text setup");
     let mut db = cache::db(root)?;
     db.execute_batch("CREATE TABLE IF NOT EXISTS text_files(path TEXT PRIMARY KEY, blob TEXT);
         CREATE VIRTUAL TABLE IF NOT EXISTS text_fts USING fts5(path UNINDEXED, body, tokenize='trigram', detail=none);").map_err(err)?;
@@ -27,8 +26,6 @@ fn sync(root: &Path) -> Result<Counts, String> {
         }
         tx.commit().map_err(err)?;
     }
-    drop(phase);
-    let start = std::time::Instant::now();
     let valid: HashSet<_> = record::load(root)?.records.into_iter().map(|(path, _)| path).collect();
     let files = tree::files_in(root, |path| {
         let mut parts = path.split('/');
@@ -36,8 +33,7 @@ fn sync(root: &Path) -> Result<Counts, String> {
             valid.contains(&root.join(path))
         } else { true }
     })?;
-    let listing = start.elapsed();
-    let mut counts = tree::reconcile(root, &mut db, &files, "text_files", |_| true, 1024 * 1024, clear, |tx, batch| {
+    tree::reconcile(root, &mut db, &files, "text_files", |_| true, 1024 * 1024, clear, |tx, batch| {
         let mut indexed = 0; let mut skipped = 0;
         for (file, bytes) in batch {
             let body = bytes.filter(|b| !b[..b.len().min(8192)].contains(&0)).and_then(|b| String::from_utf8(b).ok());
@@ -48,9 +44,7 @@ fn sync(root: &Path) -> Result<Counts, String> {
             } else { tree::skip(tx, "text_files", &file)?; skipped += 1; }
         }
         Ok((indexed, skipped))
-    })?;
-    counts.listing = listing;
-    Ok(counts)
+    })
 }
 pub fn cut(line: &str, limit: usize) -> String {
     if line.chars().count() <= limit { return line.to_owned(); }
@@ -69,12 +63,6 @@ pub fn grep(root: &Path, args: &[String]) -> Result<(), String> {
     let needle = words.join(" ");
     if needle.chars().count() < 3 { println!("grep: needs at least 3 characters"); return Err(String::new()); }
     let counts = sync(root)?;
-    if std::env::var("WHOSAIDSO_TIMING").as_deref() == Ok("1") {
-        for (name, time) in [("listing files", counts.listing), ("reading blobs", counts.reading), ("writing database", counts.writing)] {
-            eprintln!("text timing: {name}: {:.3} ms", time.as_secs_f64() * 1000.0);
-        }
-    }
-    let phase = crate::cache::timer("grep query");
     let db = cache::db(root)?;
     // Positions dwarf the text index. Intersect trigrams, then check complete lines below.
     let chars: Vec<_> = needle.chars().collect();
@@ -102,6 +90,5 @@ pub fn grep(root: &Path, args: &[String]) -> Result<(), String> {
     if lines == 0 { println!("grep: no match"); }
     else if lines > 20 { println!("shown 20 of {lines} lines in {files} files"); }
     if counts.skipped > 0 { println!("not searched: {} files (over 1 MiB, binary, not UTF-8, symlink or submodule)", counts.skipped); }
-    drop(phase);
     Ok(())
 }

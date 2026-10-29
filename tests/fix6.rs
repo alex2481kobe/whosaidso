@@ -60,10 +60,9 @@ fn prune_preserves_evidence_and_all_readers_share_validation() {
     write(&r.join("phases/p.json"), br#"{"title":"Phase","order":1}"#);
     let goal = br#"{"title":"validationneedle","done_when":"done","check":"test","broader":"p"}"#;
     write(&r.join("goals/g.json"), goal);
-    write(&r.join("instruments/test.json"), br#"{"run":["test","-f",".whosaidso/cache/pass"],"answers":"works","gaps":[{"what":"cover","why":"required","covered_by":"cover"}]}"#);
-    write(&r.join("instruments/cover.json"), br#"{"run":["true"],"answers":"coverage"}"#);
+    write(&r.join("instruments/test.json"), br#"{"run":["test","-f",".whosaidso/cache/pass"],"answers":"works"}"#);
     commit(&root, "fixture"); let initial = git(&root, &["rev-parse", "HEAD"]).trim().to_string();
-    for i in ["test", "cover"] { addressed(&proofs, &proof(&root, i, &initial, 1, "fail")); }
+    addressed(&proofs, &proof(&root, "test", &initial, 1, "fail"));
     commit(&root, "proofs at HEAD");
     assert!(cli(&root, &["prune"]).contains("0 proofs"), "HEAD selection works without origin/main");
     commit(&root, "old proofs"); git(&root, &["push", "-u", "origin", "main"]);
@@ -79,7 +78,6 @@ fn prune_preserves_evidence_and_all_readers_share_validation() {
     // Different nanoseconds in the same second must order chronologically; exact ties all survive.
     let work = git(&root, &["rev-parse", "HEAD"]).trim().to_string();
     let at = before / 1_000_000_000 * 1_000_000_000 - 2;
-    addressed(&proofs, &proof(&root, "cover", &work, at + 1, "pass"));
     let fail = addressed(&proofs, &proof(&root, "test", &work, at, "fail"));
     let pass = addressed(&proofs, &proof(&root, "test", &work, at + 1, "pass"));
     let mut tied = proof(&root, "test", &work, at + 1, "pass"); tied["output_tail"] = "tied evidence".into(); let tie = addressed(&proofs, &tied);
@@ -112,7 +110,7 @@ fn prune_preserves_evidence_and_all_readers_share_validation() {
         assert!(cli(&root, &["prove", "g"]).contains(" pass ")); commit(&root, "branch proof");
         git(&root, &["checkout", "main"]); git(&root, &["merge", "--squash", "squash"]); commit(&root, "squash landing"); git(&root, &["branch", "-D", "squash"]);
         assert!(cli(&root, &["prove", "g"]).contains(" pass ")); commit(&root, "main proof"); git(&root, &["push"]);
-        cli(&root, &["prune"]); assert_eq!(paths(&proofs).len(), 2, "squash {n}: one per goal and instrument"); commit(&root, "pruned");
+        cli(&root, &["prune"]); assert_eq!(paths(&proofs).len(), 1, "squash {n}: one per goal and instrument"); commit(&root, "pruned");
     }
     // Eight old MiB blobs reduce to five; recent writes survive collection.
     let blobs = root.join(".git/whosaidso/blobs");

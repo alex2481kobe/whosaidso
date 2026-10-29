@@ -129,10 +129,9 @@ fn prune_recovers_and_instruments_execute_exact_arguments() {
     assert!(paths(&r.join("instruments")).is_empty());
     for n in 0..10 {
         write(&r.join("goals/g.json"), &goal);
-        write(&instrument, json!({"run":["true"],"answers":"works","gaps":[{"what":"coverage","why":"required","covered_by":"cover"}]}).to_string());
-        write(&r.join("instruments/cover.json"), json!({"run":["true",n.to_string()],"answers":"coverage","gaps":[{"what":"nested","why":"required","covered_by":"last"}]}).to_string());
-        write(&r.join("instruments/last.json"), json!({"run":["true","last"],"answers":"nested"}).to_string()); commit(&root);
-        cli(&root, &["prune"]); assert_eq!(paths(&r.join("instruments")).len(), 3, "transitive gap instruments survive");
+        write(&instrument, json!({"run":["true"],"answers":"works"}).to_string());
+        write(&r.join("instruments/extra.json"), json!({"run":["true",n.to_string()],"answers":"unused"}).to_string()); commit(&root);
+        cli(&root, &["prune"]); assert_eq!(paths(&r.join("instruments")).len(), 1, "only the goal's check instrument survives");
         fs::remove_file(r.join("goals/g.json")).unwrap(); commit(&root); cli(&root, &["prune"]);
         assert!(paths(&r.join("instruments")).is_empty(), "batch {n}: unused instruments do not accumulate"); commit(&root);
     }

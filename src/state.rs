@@ -1,18 +1,30 @@
 // Goal states derived from Git history and recorded proofs.
 use crate::{git, record::{Proof, Store}};
-use std::{collections::{HashMap, HashSet}, path::Path, sync::OnceLock, time::{SystemTime, UNIX_EPOCH}};
+use std::{collections::{HashMap, HashSet}, path::Path, sync::Mutex, time::{SystemTime, UNIX_EPOCH}};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum State { Open, Active, Idle, Landed, Failing, Done, Stale }
+impl State {
+    // A landed or done goal has nothing left to claim.
+    pub fn settled(self) -> bool { matches!(self, State::Landed | State::Done) }
+}
 #[derive(Clone, serde::Serialize)]
 pub struct Branch { pub name: String, pub author: String, pub time: i64, pub worktree: Option<String> }
 pub struct GoalState { pub id: String, pub state: State, pub active_branches: Vec<String>, pub branches: Vec<Branch>, pub proof: Option<usize> }
+// A command reads one clock snapshot, so its output is self-consistent; the viewer takes a new one per derivation.
+static NOW: Mutex<Option<Result<i64, String>>> = Mutex::new(None);
+pub fn clock() -> Result<i64, String> {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|t| t.as_secs() as i64).map_err(|e| e.to_string())
+}
 pub fn now() -> Result<i64, String> {
     // Prune compares repeated state reads, so one command needs one clock snapshot.
-    static NOW: OnceLock<Result<i64, String>> = OnceLock::new();
-    NOW.get_or_init(|| SystemTime::now().duration_since(UNIX_EPOCH).map(|t| t.as_secs() as i64).map_err(|e| e.to_string())).clone()
+    NOW.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(clock).clone()
 }
-pub fn active(time: i64, now: i64) -> bool { now.saturating_sub(time) < 72 * 3600 }
+// Starts a new snapshot; a long-running process calls this before each derivation.
+pub fn renew() { *NOW.lock().unwrap_or_else(|e| e.into_inner()) = None; }
+// The instant a branch's last commit stops counting as active work.
+pub fn lapse(time: i64) -> i64 { time.saturating_add(72 * 3600) }
+pub fn active(time: i64, now: i64) -> bool { now < lapse(time) }
 pub fn age(time: i64) -> String {
     let seconds = now().unwrap_or(time).saturating_sub(time).max(0);
     let (n, unit) = if seconds < 86400 { (seconds / 3600, "h") } else { (seconds / 86400, "d") };
@@ -102,34 +114,13 @@ pub fn states(root: &Path, store: &Store) -> Result<Vec<GoalState>, String> {
     for goal in &store.goals {
         let proof = newest_proof(store, &commits, &goal.id, &goal.check);
         let proof_index = proof.and_then(|p| store.proofs.iter().position(|item| std::ptr::eq(item, p)));
-        let mut state = None;
-        if let Some(proof) = proof {
-            state = Some(if proof.exit_code != 0 { State::Failing } else {
-                if stale(root, proof, &goal.id, format, &tip)? { State::Stale } else { State::Done }
-            });
-        }
-        if state != Some(State::Failing) {
-            let mut pending = vec![goal.check.as_str()];
-            let mut seen = HashSet::new();
-            while let Some(id) = pending.pop() {
-                if !seen.insert(id) { continue; }
-                if let Some(instrument) = store.instruments.iter().find(|i| i.id == id) {
-                    for gap in &instrument.gaps {
-                        pending.push(&gap.covered_by);
-                        let covered = match newest_proof(store, &commits, &goal.id, &gap.covered_by) {
-                            Some(p) if p.exit_code != 0 => Some(State::Failing),
-                            Some(p) if !stale(root, p, &goal.id, format, &tip)? => Some(State::Done),
-                            _ => None,
-                        };
-                        if covered == Some(State::Failing) { state = Some(State::Failing); break; }
-                        if covered != Some(State::Done) && (matches!(state, Some(State::Done | State::Stale | State::Landed)) || trailers(&main).any(|g| g == goal.id)) { state = Some(State::Landed); }
-                    }
-                }
-                if state == Some(State::Failing) { break; }
-            }
-        }
         let bs = branches.get(&goal.id);
-        let state = state.unwrap_or_else(|| if trailers(&main).any(|g| g == goal.id) { State::Landed } else if let Some(bs) = bs { if bs.iter().any(|b| active(b.time, now)) { State::Active } else { State::Idle } } else { State::Open });
+        let state = match proof {
+            Some(p) if p.exit_code != 0 => State::Failing,
+            Some(p) => if stale(root, p, &goal.id, format, &tip)? { State::Stale } else { State::Done },
+            None if trailers(&main).any(|g| g == goal.id) => State::Landed,
+            None => match bs { Some(bs) if bs.iter().any(|b| active(b.time, now)) => State::Active, Some(_) => State::Idle, None => State::Open },
+        };
         let mut active_branches: Vec<String> = bs.into_iter().flatten().map(|b| b.name.clone()).collect();
         active_branches.sort();
         result.push(GoalState { id: goal.id.clone(), state, active_branches, branches: bs.cloned().unwrap_or_default(), proof: proof_index });

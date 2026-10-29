@@ -17,9 +17,7 @@ pub struct Phase { #[serde(skip)] pub id: String, pub title: String, pub order: 
 #[derive(Deserialize, Serialize)] #[serde(deny_unknown_fields)]
 pub struct Goal { #[serde(skip)] pub id: String, pub title: String, pub done_when: String, pub check: String, pub broader: String, }
 #[derive(Deserialize, Serialize)] #[serde(deny_unknown_fields)]
-pub struct Instrument { #[serde(skip)] pub id: String, pub run: Vec<String>, pub answers: String, #[serde(default)] pub gaps: Vec<Gap>, }
-#[derive(Deserialize, Serialize)] #[serde(deny_unknown_fields)]
-pub struct Gap { pub what: String, pub why: String, pub covered_by: String, }
+pub struct Instrument { #[serde(skip)] pub id: String, pub run: Vec<String>, pub answers: String, }
 #[derive(Deserialize, Serialize)] #[serde(deny_unknown_fields)]
 pub struct Proof {
     #[serde(skip)] pub sha: String, pub goal: String, pub instrument: String, pub commit: String, pub exit_code: i64, pub output_sha256: String, pub output_tail: String, pub ran_at: i64,
@@ -188,22 +186,6 @@ fn validate(root: &Path, s: &mut Store) {
                 std::env::var_os("PATH").is_some_and(|paths| std::env::split_paths(&paths).any(|p| root.join(p).join(word).is_file()))
             };
             if !resolved { s.errors.push(format!("unresolved tool {}: {}", i.id, word)); }
-            for gap in &i.gaps {
-                if gap.why.is_empty() { s.errors.push(format!("gap without why {}", i.id)); }
-                if gap.covered_by.is_empty() { s.errors.push(format!("gap without covered_by {}", i.id)); }
-                else if gap.covered_by == i.id { s.errors.push(format!("gap covered by itself {}", i.id)); }
-                else if !instruments.contains_key(gap.covered_by.as_str()) { if rejected.insert(gap.covered_by.clone()) { s.errors.push(format!("missing instrument file .whosaidso/instruments/{}.json", gap.covered_by)); } bad.insert(i.id.clone()); }
-            }
-            let mut pending = vec![i.id.as_str()]; let mut seen = HashSet::new();
-            while let Some(id) = pending.pop() {
-                if !seen.insert(id) { continue; }
-                if let Some(current) = instruments.get(id) {
-                    for gap in &current.gaps {
-                        if gap.covered_by == i.id { s.errors.push(format!("instrument {}: gap cycle", i.id)); }
-                        else { pending.push(&gap.covered_by); }
-                    }
-                }
-            }
             if s.errors.len() != before { bad.insert(i.id.clone()); }
         }
         if bad.is_empty() { break; }

@@ -26,7 +26,7 @@ pub fn start(root: &Path, cwd: &Path, id: &str) -> Result<(), String> {
         match state::states(root, &store) { Ok(states) => Some(states), Err(e) if e == "no local branch main" => None, Err(e) => return Err(e) }
     };
     if id != "none" {
-        let settled = states.as_ref().and_then(|s| s.iter().find(|g| g.id == id)).is_some_and(|g| matches!(g.state, state::State::Landed | state::State::Done));
+        let settled = states.as_ref().and_then(|s| s.iter().find(|g| g.id == id)).is_some_and(|g| g.state.settled());
         claims::claim(root, cwd, id, settled)?;
     }
     claims::release(root, cwd, if id == "none" { "" } else { id })?;

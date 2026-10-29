@@ -145,13 +145,10 @@ fn caller(mut node: Node<'_>, bytes: &[u8]) -> String {
     }
     String::new()
 }
-pub fn parse(parser: &mut Parser, queries: &mut HashMap<&'static str, Query>, path: &str, bytes: &[u8], parsing: &mut std::time::Duration, extracting: &mut std::time::Duration) -> Result<Parsed, String> {
-    let start = std::time::Instant::now();
+pub fn parse(parser: &mut Parser, queries: &mut HashMap<&'static str, Query>, path: &str, bytes: &[u8]) -> Result<Parsed, String> {
     let Some((language, source)) = grammar(path) else { return Ok(Parsed::default()); };
     parser.set_language(&language).map_err(|e| e.to_string())?;
     let tree = parser.parse(bytes, None).ok_or("tree-sitter failed to parse")?;
-    *parsing += start.elapsed();
-    let start = std::time::Instant::now();
     if !queries.contains_key(source) { queries.insert(source, Query::new(&language, source).map_err(|e| e.to_string())?); }
     let query = &queries[source];
     let mut cursor = QueryCursor::new();
@@ -188,6 +185,5 @@ pub fn parse(parser: &mut Parser, queries: &mut HashMap<&'static str, Query>, pa
             }
         }
     }
-    *extracting += start.elapsed();
     Ok(result)
 }

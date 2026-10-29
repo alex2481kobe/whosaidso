@@ -38,15 +38,15 @@ fn reviewed_proofs_records_history_and_cache() {
     write(&records.join("phases/p.json"), br#"{"title":"Phase","order":1}"#);
     write(&records.join("goals/g.json"), br#"{"title":"Goal","done_when":"done","check":"test","broader":"p"}"#);
     let instrument = records.join("instruments/test.json");
-    write(&instrument, br#"{"run":["sh","-c","printf ready > .whosaidso/cache/ready; sleep 2; ./test; rc=$?; sleep 2; exit \"$rc\""],"answers":"works"}"#);
-    write(&root.join("test"), b"#!/bin/sh\nprintf A > .whosaidso/cache/ran\nexit 1\n");
+    write(&instrument, br#"{"run":["sh","-c","printf ready > .git/ready; sleep 2; ./test; rc=$?; sleep 2; exit \"$rc\""],"answers":"works"}"#);
+    write(&root.join("test"), b"#!/bin/sh\nprintf A > .git/ran\nexit 1\n");
     fs::set_permissions(root.join("test"), fs::Permissions::from_mode(0o755)).unwrap();
     write(&root.join("dir/child.rs"), b"fn directoryneedle() {}\n");
     cli(&root, &["find", "directoryneedle"]);
     git(&root, &["add", "."]); git(&root, &["commit", "-m", "baseline"]);
     let a = git(&root, &["rev-parse", "HEAD"]).trim().to_owned();
     git(&root, &["checkout", "-b", "alternate"]);
-    write(&root.join("test"), b"#!/bin/sh\nprintf B > .whosaidso/cache/ran\nexit 0\n");
+    write(&root.join("test"), b"#!/bin/sh\nprintf B > .git/ran\nexit 0\n");
     git(&root, &["add", "test"]); git(&root, &["commit", "-m", "spectraltamarind"]);
     let b = git(&root, &["rev-parse", "HEAD"]).trim().to_owned();
     git(&root, &["checkout", "main"]);
@@ -54,9 +54,9 @@ fn reviewed_proofs_records_history_and_cache() {
 
     // 1: A -> B -> A is clean at both ends, but B's result cannot prove A.
     let child = command(&root, env!("CARGO_BIN_EXE_whosaidso"), &["prove", "g"]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
-    wait(&records.join("cache/ready")); git(&root, &["checkout", "alternate"]);
-    wait(&records.join("cache/ran")); git(&root, &["checkout", "main"]);
-    assert_eq!(fs::read(records.join("cache/ran")).unwrap(), b"B");
+    wait(&root.join(".git/ready")); git(&root, &["checkout", "alternate"]);
+    wait(&root.join(".git/ran")); git(&root, &["checkout", "main"]);
+    assert_eq!(fs::read(root.join(".git/ran")).unwrap(), b"B");
     let out = child.wait_with_output().unwrap();
     assert_eq!(out.status.code(), Some(1), "1: {out:?}");
     assert!(String::from_utf8_lossy(&out.stderr).contains("HEAD reflog changed"), "1: {out:?}");
@@ -116,7 +116,7 @@ fn reviewed_proofs_records_history_and_cache() {
     assert!(cli(&root, &["grep", "replacementneedle"]).contains("dir:1"));
 
     // 6: Old meanings are discarded even when their cached fingerprints still match.
-    let db_path = records.join("cache/index.db");
+    let db_path = root.join(".git/whosaidso/cache/index.db");
     let db = Connection::open(&db_path).unwrap();
     db.execute_batch("PRAGMA user_version=1; UPDATE text_fts SET body='stalecacheneedle' WHERE path='dir'; CREATE TABLE obsolete(value);").unwrap();
     drop(db);

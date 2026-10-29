@@ -1,4 +1,4 @@
-// SCIP decoding, atomic import, and fresh precise graph answers.
+// SCIP decoding, atomic import, and fresh precise answers.
 use crate::{cache, tree};
 use rusqlite::{Connection, params, TransactionBehavior};
 use std::{collections::{HashMap, HashSet}, fs, path::Path};
@@ -147,17 +147,16 @@ fn offset(line: &[u8], column: usize, encoding: u64) -> Option<usize> {
     }
     (units == column).then_some(line.len())
 }
-fn check(d: &Doc, bytes: &[u8], diagnostic: bool) -> (bool, usize, usize) {
+fn check(d: &Doc, bytes: &[u8]) -> bool {
     let mut lines: Vec<_> = bytes.split(|&b| b == b'\n').collect();
     if bytes.is_empty() || bytes.ends_with(b"\n") { lines.pop(); }
     let locals: HashMap<_, _> = d.syms.iter().map(|(s, n)| (s.as_str(), n.as_str())).collect();
     let range = |o: &Occ| (o.line, o.end, o.start, o.stop);
     // Macro expansions may define identifiers whose spelling is absent from the source.
     let macros: HashSet<_> = d.occ.iter().filter(|o| o.symbol.ends_with('!')).map(range).collect();
-    let (mut valid, mut checked, mut total) = (true, 0, 0);
+    let (mut valid, mut checked) = (true, 0);
     for o in &d.occ {
         valid &= o.line <= lines.len() as i64 && o.end <= lines.len() as i64;
-        total += 1;
         let expected = if o.symbol.starts_with("local ") { locals.get(o.symbol.as_str()).copied().unwrap_or("").to_owned() } else { name(&o.symbol) };
         if !identifier(&expected) || macros.contains(&range(o)) { continue; }
         if !o.def && unchecked_reference(&o.symbol, &expected) { continue; }
@@ -165,12 +164,10 @@ fn check(d: &Doc, bytes: &[u8], diagnostic: bool) -> (bool, usize, usize) {
         let selected = lines.get(o.line as usize - 1).and_then(|line| line.get(offset(line, o.start, d.encoding)?..offset(line, o.stop, d.encoding)?));
         let matches = o.line == o.end && selected == Some(expected.as_bytes());
         valid &= matches;
-        if diagnostic && !matches { eprintln!("scip mismatch: {}:{} {:?} expected {:?}, bytes {:?}", d.path, o.line, o.symbol, expected, selected); }
     }
-    (valid && checked > 0, checked, total)
+    valid && checked > 0
 }
 pub fn import(root: &Path, file: &Path) -> Result<(), String> {
-    let phase = cache::timer("scip decode");
     let data = fs::read(file).map_err(|e| format!("{}: {e}", file.display()))?;
     let mut docs = Vec::new(); let mut metadata = false;
     for (n, v) in fields(&data)? { match n {
@@ -180,9 +177,6 @@ pub fn import(root: &Path, file: &Path) -> Result<(), String> {
     }}
     if !metadata { return Err(malformed()); }
     let docs = merge_paths(docs)?;
-    drop(phase);
-    let phase = cache::timer("scip content check");
-    let diagnostic = std::env::var("WHOSAIDSO_TIMING").as_deref() == Ok("1");
     let files = tree::files(root)?;
     let paths: HashSet<_> = docs.iter().map(|d| d.path.as_str()).collect();
     let mut blobs = tree::blobs(&files);
@@ -192,14 +186,10 @@ pub fn import(root: &Path, file: &Path) -> Result<(), String> {
         blobs.remove(&file.path);
         if let Some(bytes) = bytes {
             let d = by_path[file.path.as_str()];
-            let (valid, checked, total) = check(d, &bytes, diagnostic);
-            if diagnostic { eprintln!("scip check: {}: {checked}/{total} occurrences, {}", d.path, if valid { "fresh" } else if checked == 0 { "uncheckable" } else { "stale" }); }
-            if valid { blobs.insert(file.path.clone(), file.blob.clone()); }
+            if check(d, &bytes) { blobs.insert(file.path.clone(), file.blob.clone()); }
         }
         Ok(())
     })?;
-    drop(phase);
-    let _phase = cache::timer("scip database write");
     let mut db = cache::db(root)?; schema(&db)?;
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate).map_err(err)?;
     // Rebuild secondary indexes once, rather than maintaining them for millions of imported rows.
@@ -223,7 +213,6 @@ pub fn import(root: &Path, file: &Path) -> Result<(), String> {
     println!("scip: {} documents, {count} occurrences, {} symbols, {stale} stale documents", docs.len(), symbols.len()); Ok(())
 }
 pub fn answers(db: &Connection, files: &tree::Files, value: &str, def: bool, answers: &mut super::query::Answers) -> Result<HashSet<String>, String> {
-    let phase = crate::cache::timer("precise freshness");
     schema(db)?;
     let qualified = super::query::parts(value).len() > 1;
     let leaf = super::query::leaf(value);
@@ -234,11 +223,8 @@ pub fn answers(db: &Connection, files: &tree::Files, value: &str, def: bool, ans
     let mut stmt = db.prepare(&sql).map_err(err)?;
     let blobs: HashMap<String, Option<String>> = stmt.query_map(params![leaf, def], |r| Ok((r.get(0)?, r.get(1)?))).map_err(err)?.collect::<Result<_, _>>().map_err(err)?;
     let fresh: HashSet<String> = files.entries.iter().filter(|f| blobs.get(&f.path).is_some_and(|b| b.as_ref() == Some(&f.blob))).map(|f| f.path.clone()).collect();
-    drop(phase);
-    let phase = crate::cache::timer("precise query");
     let mut stmt = db.prepare(&format!("SELECT o.path,o.line,o.symbol FROM scip_occ o JOIN scip_syms s ON s.symbol=o.symbol WHERE {column}=?1 AND o.is_def=?2 ORDER BY o.path,o.line")).map_err(err)?;
     let rows = stmt.query_map(params![leaf, def], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, String>(2)?))).map_err(err)?;
     for row in rows { let (path, line, symbol) = row.map_err(err)?; if fresh.contains(&path) && (!qualified || descriptors(&symbol).iter().map(String::as_str).collect::<Vec<_>>().ends_with(&super::query::parts(value))) { answers.push(|| format!("{path}:{line}  [precise]")); } }
-    drop(phase);
     Ok(fresh)
 }

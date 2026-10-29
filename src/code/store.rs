@@ -1,4 +1,4 @@
-// Transactional incremental storage of the graph for tracked Git blobs.
+// Transactional incremental storage of the code index for tracked Git blobs.
 use crate::{cache, tree};
 use super::parse;
 use rusqlite::{Connection, params};
@@ -13,7 +13,7 @@ pub fn open(root: &Path) -> Result<Connection, String> {
         CREATE INDEX IF NOT EXISTS defs_name ON defs(name);
         CREATE INDEX IF NOT EXISTS calls_callee ON calls(callee);
         CREATE INDEX IF NOT EXISTS includes_target ON includes(target);").map_err(|e| e.to_string())?;
-    // Old syntax rows lack enclosing scopes; rebuild only this disposable graph.
+    // Old syntax rows lack enclosing scopes; rebuild only this disposable index.
     let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(|e| e.to_string())?;
     let qualified: i64 = tx.query_row("SELECT count(*) FROM pragma_table_info('defs') WHERE name='qualified'", [], |r| r.get(0)).map_err(|e| e.to_string())?;
     if qualified == 0 {
@@ -26,23 +26,13 @@ pub fn open(root: &Path) -> Result<Connection, String> {
     Ok(db)
 }
 pub fn index(root: &Path) -> Result<((usize, usize, usize, usize), tree::Files), String> {
-    let start = std::time::Instant::now();
     let mut db = open(root)?;
-    let setup = start.elapsed();
-    let mut parsing = std::time::Duration::ZERO;
-    let mut extracting = std::time::Duration::ZERO;
-    let mut parse_wall = std::time::Duration::ZERO;
-    let start = std::time::Instant::now();
     let mut files = tree::files(root)?;
     let mut parsed_stamps = HashMap::new();
-    let listing = start.elapsed();
-    let mut n = tree::reconcile(root, &mut db, &files, "files", parse::supported, tree::BATCH_BYTES, clear, |tx, batch| {
+    let n = tree::reconcile(root, &mut db, &files, "files", parse::supported, tree::BATCH_BYTES, clear, |tx, batch| {
         for (file, _) in &batch { parsed_stamps.insert(file.path.clone(), file.blob.clone()); }
         let (pairs, blobs): (Vec<_>, Vec<_>) = batch.into_iter().map(|(file, bytes)| ((file.path, file.blob), bytes)).unzip();
-        let start = std::time::Instant::now();
-        let (data, p, e) = parse_blobs(&pairs, &blobs)?;
-        parse_wall += start.elapsed();
-        parsing += p; extracting += e;
+        let data = parse_blobs(&pairs, &blobs)?;
         let mut parsed = 0; let mut skipped = 0;
         for ((path, blob), data) in pairs.into_iter().zip(data) {
             let Some(data) = data else { tree::skip(tx, "files", &tree::File { path, blob, on_disk: false })?; skipped += 1; continue; };
@@ -56,13 +46,7 @@ pub fn index(root: &Path) -> Result<((usize, usize, usize, usize), tree::Files),
     })?;
     // Reconciliation may read newer bytes than the initial listing stamped.
     for file in &mut files.entries { if let Some(blob) = parsed_stamps.remove(&file.path) { file.blob = blob; } }
-    n.listing = listing;
-    if std::env::var("WHOSAIDSO_TIMING").as_deref() == Ok("1") {
-        for (name, time) in [("listing files", n.listing), ("reading blobs", n.reading), ("parsing (worker time)", parsing), ("extracting (worker time)", extracting), ("writing database", n.writing.saturating_sub(parse_wall) + setup)] { eprintln!("code timing: {name}: {} ms", time.as_millis()); }
-    }
-    let phase = crate::cache::timer("code database close");
     drop(db);
-    drop(phase);
     Ok(((n.indexed, n.unchanged, n.removed, n.skipped), files))
 }
 
@@ -73,8 +57,8 @@ fn clear(tx: &rusqlite::Transaction<'_>, path: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn parse_blobs(files: &[(String, String)], blobs: &[Option<Vec<u8>>]) -> Result<(Vec<Option<parse::Parsed>>, std::time::Duration, std::time::Duration), String> {
-    if files.is_empty() { return Ok((Vec::new(), Default::default(), Default::default())); }
+fn parse_blobs(files: &[(String, String)], blobs: &[Option<Vec<u8>>]) -> Result<Vec<Option<parse::Parsed>>, String> {
+    if files.is_empty() { return Ok(Vec::new()); }
     let workers = std::thread::available_parallelism().map_or(1, |n| n.get()).min(files.len());
     let chunk = files.len().div_ceil(workers);
     std::thread::scope(|scope| {
@@ -83,26 +67,20 @@ fn parse_blobs(files: &[(String, String)], blobs: &[Option<Vec<u8>>]) -> Result<
             handles.push(scope.spawn(move || -> Result<_, String> {
                 let mut parser = tree_sitter::Parser::new();
                 let mut queries = HashMap::new();
-                let mut parsing = std::time::Duration::ZERO;
-                let mut extracting = std::time::Duration::ZERO;
                 let mut results = Vec::with_capacity(files.len());
                 for ((path, _), bytes) in files.iter().zip(blobs) {
                     let Some(bytes) = bytes else { results.push(None); continue; };
                     if std::str::from_utf8(bytes).is_err() { results.push(None); }
-                    else { results.push(Some(parse::parse(&mut parser, &mut queries, path, bytes, &mut parsing, &mut extracting)?)); }
+                    else { results.push(Some(parse::parse(&mut parser, &mut queries, path, bytes)?)); }
                 }
-                Ok((results, parsing, extracting))
+                Ok(results)
             }));
         }
         let mut results = Vec::with_capacity(files.len());
-        let mut parsing = std::time::Duration::ZERO;
-        let mut extracting = std::time::Duration::ZERO;
         for handle in handles {
-            let (mut part, p, e) = handle.join().map_err(|_| "code parsing thread failed")??;
+            let mut part = handle.join().map_err(|_| "code parsing thread failed")??;
             results.append(&mut part);
-            parsing += p;
-            extracting += e;
         }
-        Ok((results, parsing, extracting))
+        Ok(results)
     })
 }

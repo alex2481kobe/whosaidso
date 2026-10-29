@@ -2,14 +2,14 @@
 use crate::{git, record};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior};
 use sha2::{Digest, Sha256};
-use std::{collections::{HashMap, HashSet}, fs, io::Read, path::Path, time::{Duration, Instant}};
+use std::{collections::{HashMap, HashSet}, fs, io::Read, path::Path};
 
 pub const BATCH_BYTES: usize = 64 * 1024 * 1024;
 #[derive(Clone)]
 pub struct File { pub path: String, pub blob: String, pub on_disk: bool }
 pub struct Files { pub entries: Vec<File>, pub skipped: usize }
 #[derive(Default)]
-pub struct Counts { pub indexed: usize, pub unchanged: usize, pub removed: usize, pub skipped: usize, pub listing: Duration, pub reading: Duration, pub writing: Duration }
+pub struct Counts { pub indexed: usize, pub unchanged: usize, pub removed: usize, pub skipped: usize }
 fn err(e: impl std::fmt::Display) -> String { e.to_string() }
 pub fn temporary(path: &Path) -> bool {
     path.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with(".tmp-"))
@@ -68,14 +68,12 @@ fn linked(root: &Path, path: &Path, dirs: &mut HashMap<std::path::PathBuf, Optio
 }
 pub fn files(root: &Path) -> Result<Files, String> { files_in(root, |_| true) }
 pub fn files_in(root: &Path, include: impl Fn(&str) -> bool) -> Result<Files, String> {
-    let _time = crate::cache::timer("visible files");
     std::thread::scope(|scope| {
         let changed = scope.spawn(|| git::run_bytes(root, &["diff-files", "--name-only", "-z"]));
         let untracked = scope.spawn(|| git::run_bytes(root, &["ls-files", "-o", "--exclude-standard", "-z"]));
         let listing = git::run_bytes(root, &["ls-files", "-s", "-z"])?;
         let changed = changed.join().map_err(|_| "git listing thread failed")??;
         let mut links = HashMap::new();
-        let phase = crate::cache::timer("classify visible files");
         let changed: HashSet<&[u8]> = changed.split(|b| *b == 0).filter(|p| !p.is_empty()).collect();
         let mut entries = Vec::new(); let mut skipped = 0;
         for entry in listing.split(|b| *b == 0).filter(|e| !e.is_empty()) {
@@ -99,7 +97,6 @@ pub fn files_in(root: &Path, include: impl Fn(&str) -> bool) -> Result<Files, St
             if linked(root, Path::new(path), &mut links)? { skipped += 1; continue; }
             if root.join(path).is_file() { entries.push(File { path: path.into(), blob: disk_stamp(root, path)?, on_disk: true }); }
         }
-        drop(phase);
         Ok(Files { entries, skipped })
     })
 }
@@ -138,7 +135,6 @@ pub fn reconcile(root: &Path, db: &mut Connection, files: &Files, table: &str, s
         return Ok(Counts { unchanged, skipped, ..Counts::default() });
     }
     let version: i64 = db.pragma_query_value(None, "data_version", |r| r.get(0)).map_err(err)?;
-    let phase = crate::cache::timer("reconcile stamps");
     let skipped: HashMap<String, String> = {
         let mut stmt = db.prepare("SELECT path,blob FROM tree_skips WHERE source=?1").map_err(err)?;
         stmt.query_map([table], |r| Ok((r.get(0)?, r.get(1)?))).map_err(err)?.collect::<Result<_, _>>().map_err(err)?
@@ -156,14 +152,11 @@ pub fn reconcile(root: &Path, db: &mut Connection, files: &Files, table: &str, s
         if old.get(&f.path) == Some(&f.blob) { count.unchanged += 1; false }
         else if skipped.get(&f.path) == Some(&f.blob) { count.skipped += 1; false } else { true }
     }).collect();
-    drop(phase);
 
     let expected: HashMap<_, _> = changed.iter().map(|f| (f.path.as_str(), f.blob.as_str())).collect();
     let mut stable = true;
     let mut first = true;
-    let mut write_time = Duration::ZERO;
     let mut flush = |batch: Vec<(File, Option<Vec<u8>>)>| -> Result<(), String> {
-        let start = Instant::now();
         let tx = db.transaction_with_behavior(TransactionBehavior::Immediate).map_err(err)?;
         tx.execute("DELETE FROM tree_warm WHERE source=?1", [table]).map_err(err)?;
         if first {
@@ -178,12 +171,10 @@ pub fn reconcile(root: &Path, db: &mut Connection, files: &Files, table: &str, s
         }
         let (indexed, skipped) = write(&tx, batch)?;
         tx.commit().map_err(err)?;
-        write_time += start.elapsed();
         count.indexed += indexed; count.skipped += skipped;
         Ok(())
     };
     let mut batch = Vec::new(); let mut size = 0;
-    let start = Instant::now();
     read(root, &changed, max_bytes.min(BATCH_BYTES), |file, bytes| {
         stable &= expected.get(file.path.as_str()) == Some(&file.blob.as_str());
         let n = bytes.as_ref().map_or(0, Vec::len);
@@ -194,8 +185,6 @@ pub fn reconcile(root: &Path, db: &mut Connection, files: &Files, table: &str, s
     })?;
     flush(batch)?;
     drop(flush);
-    count.reading = start.elapsed().saturating_sub(write_time);
-    count.writing = write_time;
     // Publish only a complete snapshot, with no intervening writer or changed read buffer.
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate).map_err(err)?;
     if stable && tx.pragma_query_value(None, "data_version", |r| r.get::<_, i64>(0)).map_err(err)? == version {

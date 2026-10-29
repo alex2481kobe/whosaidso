@@ -1,14 +1,10 @@
-// Project menus, theme and routing ported from v0.2.1 internal/ui/ui-shell.js.
+// Project menu, theme, routing between the two screens, and the change poll that keeps them current.
 import { main, state, el, api, icon } from "./ui.js";
-import { pageFrame, message } from "./ui-components.js";
+import { message } from "./ui-components.js";
 import { place } from "./ui-parts.js";
-import { renderOverview } from "./ui-overview.js";
-import { renderBrowser } from "./ui-browser.js";
-import { renderDetail } from "./ui-detail.js";
-import { renderGallery } from "./ui-gallery.js";
-import { renderActivity } from "./ui-activity.js";
+import { goalsScreen } from "./ui-goals.js";
+import { galleryScreen } from "./ui-gallery.js";
 const toggle = document.getElementById("theme-toggle");
-const names = {gallery:"Gallery", overview:"Overview", goals:"Goals", records:"Records", record:"Record", activity:"Activity"};
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   toggle.replaceChildren(icon(theme === "dark" ? "sun" : "moon"));
@@ -80,68 +76,54 @@ function initMenu() {
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !menu.hidden) { e.preventDefault(); closeMenu(true); } });
 }
 async function select(id) {
-  state.project = id; state.renders++;
+  state.project = id;
   try { sessionStorage.setItem("whosaidso-project", id); } catch {}
-  state.screens = [];
-  const selected = state.project;
-  let screens;
-  try { screens = (await api("/api/overview")).screens; }
-  catch { screens = ["gallery","overview","goals","records","activity"]; }
-  if (selected !== state.project) return;
-  state.screens = screens;
-  for (const a of document.querySelectorAll("[data-nav]")) a.hidden = !state.screens.includes(a.dataset.nav);
-  location.hash = "#/" + (state.screens.includes("gallery") ? "gallery" : state.screens.includes("overview") ? "overview" : "records");
-  route();
+  await route();
 }
 const positions = new Map();
-let last = "";
+let current = null, seen = null, last = "", checking = false;
 if ("scrollRestoration" in history) history.scrollRestoration = "manual";
 async function route() {
-  const mine = ++state.renders, key = state.project + location.hash;
-  const [path] = location.hash.replace(/^#/, "").split("?");
-  let parts;
-  try { parts = path.split("/").filter(Boolean).map(decodeURIComponent); } catch { parts = []; }
-  const screen = parts[0] || (state.screens.includes("gallery") ? "gallery" : "overview");
+  const mine = ++state.renders;
+  const screen = location.hash.replace(/^#\//, "").split("?")[0] === "gallery" ? "gallery" : "goals";
   for (const a of document.querySelectorAll("[data-nav]")) {
-    if (a.dataset.nav === (screen === "record" ? "records" : screen)) a.setAttribute("aria-current", "page");
-    else a.removeAttribute("aria-current");
+    if (a.dataset.nav === screen) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   }
   renderMenu();
-  const show = node => {
-    if (mine !== state.renders) return;
-    main.replaceChildren(pageFrame(node, names[screen] || "Overview"));
-    last = key; main.scrollTop = positions.get(key) || 0;
-  };
-  if (!state.project) { show(message("No workspace is available.")); return; }
-  show(message("Loading " + (names[screen] || "workspace").toLowerCase() + "…", "loading"));
+  current = null;
+  if (!state.project) { main.replaceChildren(message("No workspace is available.")); return; }
+  const shown = screen === "gallery" ? galleryScreen() : goalsScreen(), key = state.project + screen;
+  main.replaceChildren(shown.node);
+  try { seen = await shown.load(); }
+  catch (error) { if (mine === state.renders) main.replaceChildren(message(error.message, "error")); return; }
+  if (mine !== state.renders) return;
+  current = shown; last = key; main.scrollTop = positions.get(key) || 0;
+}
+// Ask the server for its cheap change token; load a screen again only when it moved.
+async function poll() {
+  if (document.hidden || !current || checking) return;
+  checking = true;
+  const mine = state.renders, shown = current;
   try {
-    let node;
-    if (screen === "goals" || screen === "records") node = await renderBrowser(screen);
-    else if (screen === "record") node = await renderDetail(parts[1], parts[2]);
-    else if (screen === "gallery") node = await renderGallery();
-    else if (screen === "activity") node = await renderActivity();
-    else node = await renderOverview();
-    show(node);
-  } catch (error) {
-    const retry = el("button", "button", icon("refresh"), "Refresh"); retry.addEventListener("click", route);
-    show(el("div", "screen", message(error.message, "error"), retry));
-  }
+    const { version } = await api("/api/version");
+    document.getElementById("offline").hidden = true;
+    if (version !== seen) {
+      const next = await shown.load();
+      if (mine === state.renders) seen = next;
+    }
+  } catch (e) { document.getElementById("offline").hidden = !!e.status; }
+  finally { checking = false; }
 }
 export async function startViewer() {
   main.addEventListener("scroll", () => { if (last) positions.set(last, main.scrollTop); }, {passive:true});
   initTheme(); initMenu();
-  for (const a of document.querySelectorAll("[data-nav]")) a.hidden = true;
   const list = await api("/api/projects"); state.projects = list.projects;
   let remembered;
   try { remembered = sessionStorage.getItem("whosaidso-project"); } catch {}
   const usable = id => state.projects.some(p => p.id === id && p.available);
   state.project = usable(remembered) ? remembered : usable(list.current) ? list.current : state.projects.find(p => p.available)?.id || "";
   window.addEventListener("hashchange", route);
-  if (state.project) {
-    const hash = location.hash;
-    try { state.screens = (await api("/api/overview")).screens; } catch { state.screens = ["gallery","overview","goals","records","activity"]; }
-    for (const a of document.querySelectorAll("[data-nav]")) a.hidden = !state.screens.includes(a.dataset.nav);
-    if (!hash) { location.hash = "#/" + (state.screens.includes("gallery") ? "gallery" : state.screens.includes("overview") ? "overview" : "records"); return; }
-  }
+  setInterval(poll, 2500);
+  document.addEventListener("visibilitychange", poll);
   await route();
 }

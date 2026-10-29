@@ -30,7 +30,6 @@ commit() {
 }
 cd "$repo"
 mkdir -p .whosaidso/phases .whosaidso/goals .whosaidso/instruments
-printf 'cache/\n' > .whosaidso/.gitignore
 printf '{"title":"Renderer","order":1}\n' > .whosaidso/phases/renderer.json
 printf '{"title":"Physics","order":2}\n' > .whosaidso/phases/physics.json
 printf '{"title":"Netcode","order":3}\n' > .whosaidso/phases/netcode.json
@@ -183,5 +182,13 @@ commit Sam 21600 -m 'Reconcile predicted player movement' -m 'Goal: prediction'
 cd "$repo"
 g remote add origin "$base/remote-engine"
 g fetch -q origin
+# Claim refs as `whosaidso start` writes them: two held in this clone, one published by another clone.
+claim() { # Ages are in seconds; a claim older than 72 hours has lapsed and is not shown.
+    oid=$(printf 'worker %s\nbranch %s\npath %s\nauthor %s\nsince %s\n' "$2" "$3" "$4" "$5" "$((now - $6))" | g hash-object -w --stdin)
+    g update-ref "refs/whosaidso/$1" "$oid"
+}
+claim claims/shadows 0000000000000000000000000000000a render/shadows "$base/shadow-work" Avery 7200
+claim claims/broadphase 0000000000000000000000000000000b physics/broadphase "$base/physics-work" Jordan 216000
+claim origin-claims/prediction 0000000000000000000000000000000c net/prediction "$base/remote-engine" Sam 21600
 "$WHOSAIDSO" check >/dev/null
 printf '%s\n' "$repo"

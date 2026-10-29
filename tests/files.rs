@@ -25,7 +25,7 @@ fn bounded(root: &Path, args: &[&str]) -> Output {
     out
 }
 fn stamps(root: &Path) {
-    let db = Connection::open(root.join(".whosaidso/cache/index.db")).unwrap();
+    let db = Connection::open(root.join(".git/whosaidso/cache/index.db")).unwrap();
     let mut stmt = db.prepare("SELECT f.blob,t.body FROM text_files f JOIN text_fts t ON f.path=t.path WHERE f.path IN ('filtered.rs','race.rs')").unwrap();
     let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))).unwrap();
     for row in rows { let (stamp, body) = row.unwrap(); assert_eq!(stamp, digest(body.as_bytes()), "10: stamp must hash indexed bytes"); }
@@ -46,24 +46,14 @@ fn files_are_safe_exact_and_bounded() {
     assert_eq!(bad.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&bad.stderr).contains("root is not UTF-8"), "18: {:?}", bad);
     }
-    // 1: an older outside database must survive all three symlink placements.
-    let records = root.join(".whosaidso"); fs::remove_dir_all(&records).unwrap();
+    // 1 and 17: the disposable cache lives in the git dir, so searching writes nothing into the working tree and nothing can redirect it.
+    let records = root.join(".whosaidso");
     let outside = home.join("outside"); fs::create_dir(&outside).unwrap();
-    let db = Connection::open(outside.join("index.db")).unwrap();
-    db.execute_batch("CREATE TABLE sentinel(value); INSERT INTO sentinel VALUES (42);").unwrap(); drop(db);
-    for (link, target) in [(records.clone(), outside.clone()), (records.join("cache"), outside.clone()), (records.join("cache/index.db"), outside.join("index.db"))] {
-        fs::create_dir_all(link.parent().unwrap()).unwrap(); symlink(target, &link).unwrap();
-        let o = run(&root, env!("CARGO_BIN_EXE_whosaidso"), &["grep", "localheading"]);
-        assert_eq!(o.status.code(), Some(1), "1: {}", link.display());
-        assert!(String::from_utf8_lossy(&o.stderr).contains("symlink"), "1: {:?}", o);
-        let db = Connection::open(outside.join("index.db")).unwrap();
-        assert_eq!(db.query_row("SELECT value FROM sentinel", [], |r| r.get::<_, i64>(0)).unwrap(), 42, "1");
-        fs::remove_file(link).unwrap();
-    }
-    // 17: preserve existing ignore content, including a missing last newline.
-    write(&records.join(".gitignore"), b"other/\n# preserved"); cli(&root, &["grep", "batchneedle"]);
-    assert_eq!(fs::read(records.join(".gitignore")).unwrap(), b"other/\n# preserved\ncache/\n", "17");
-    assert!(!git(&root, &["ls-files", "-o", "--exclude-standard"]).contains("cache/"), "17");
+    cli(&root, &["grep", "batchneedle"]);
+    assert!(!records.exists(), "17: searching must not create .whosaidso");
+    assert!(root.join(".git/whosaidso/cache/index.db").is_file(), "1");
+    assert_eq!(git(&root, &["status", "--porcelain", "--ignored"]), "", "17");
+    fs::create_dir_all(&records).unwrap();
     // 14 and 12: records and local files remain searchable without main; partial publications do not.
     write(&records.join("phases/p1.json"), br#"{"title":"recordneedle","order":1}"#);
     assert!(cli(&root, &["find", "localneedle"]).contains("localneedle.md"), "14");
@@ -77,10 +67,10 @@ fn files_are_safe_exact_and_bounded() {
     write(&root.join("filtered.rs"), b"fn hello() {}\n");
     git(&root, &["add", ".gitattributes", "filtered.rs"]); git(&root, &["commit", "-m", "filter"]);
     write(&root.join("filtered.rs"), b"fn hello() {} // edit\n"); cli(&root, &["grep", "batchneedle"]); stamps(&root);
-    let db = Connection::open(records.join("cache/index.db")).unwrap();
+    let db = Connection::open(root.join(".git/whosaidso/cache/index.db")).unwrap();
     let before: String = db.query_row("SELECT blob FROM text_files WHERE path='filtered.rs'", [], |r| r.get(0)).unwrap(); drop(db);
     write(&root.join("filtered.rs"), b"FN HELLO() {} // EDIT\n"); cli(&root, &["grep", "batchneedle"]); stamps(&root);
-    let db = Connection::open(records.join("cache/index.db")).unwrap();
+    let db = Connection::open(root.join(".git/whosaidso/cache/index.db")).unwrap();
     let after: String = db.query_row("SELECT blob FROM text_files WHERE path='filtered.rs'", [], |r| r.get(0)).unwrap(); drop(db);
     assert_ne!(before, after, "10: raw case edits must invalidate stamps");
     // Intercept Git between listing stamps and reading bodies; each indexed buffer hashes itself.
@@ -125,7 +115,7 @@ fn files_are_safe_exact_and_bounded() {
     let o = bounded(&root, &["code", "defs", "fresh"]);
     assert!(String::from_utf8_lossy(&o.stdout).contains("none recorded"), "16: {:?}", o);
     assert!(cli(&root, &["grep", "batchneedle", "--in", "batch000.rs"]).contains("batch000.rs:1"), "16: all batches must persist");
-    let db = Connection::open(records.join("cache/index.db")).unwrap();
+    let db = Connection::open(root.join(".git/whosaidso/cache/index.db")).unwrap();
     for table in ["files", "text_files"] { assert_eq!(db.query_row(&format!("SELECT count(*) FROM {table} WHERE path GLOB 'batch*.rs'"), [], |r| r.get::<_, i64>(0)).unwrap(), 160); }
     drop(db);
     fs::remove_dir_all(home).unwrap();

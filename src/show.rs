@@ -25,13 +25,9 @@ pub fn show(root: &Path, id: &str) -> Result<(), String> {
         for ask in asks.iter().take(5) { lines.push(format!("ask: {}", ask.said)); }
         let revisions = git::run(root, &["rev-list", &git::main_tip(root)?])?;
         let commits = revisions.lines().collect();
-        let mut pending = vec![goal.check.as_str()]; let mut seen = std::collections::HashSet::new();
-        while let Some(id) = pending.pop() {
-            if !seen.insert(id) { continue; }
-            if let Some(p) = state::newest_proof(&store, &commits, &goal.id, id) { lines.push(format!("proof: {} · {id}", proof(p))); }
-            else { lines.push(format!("instrument: {id} · no eligible proof")); }
-            if let Some(i) = store.instruments.iter().find(|i| i.id == id) { pending.extend(i.gaps.iter().rev().map(|g| g.covered_by.as_str())); }
-        }
+        let check = goal.check.as_str();
+        if let Some(p) = state::newest_proof(&store, &commits, &goal.id, check) { lines.push(format!("proof: {} · {check}", proof(p))); }
+        else { lines.push(format!("instrument: {check} · no eligible proof")); }
         if let Some(i) = record::newest_media(&store, id) { lines.push(format!("media: {}", i.shows)); }
         for child in goals::children(&store.goals, id) {
             if let Some(s) = states.iter().find(|s| s.id == child.id) { lines.push(format!("{} {}  {}", goals::label(s.state), child.id, child.title)); }
@@ -46,7 +42,6 @@ pub fn show(root: &Path, id: &str) -> Result<(), String> {
     } else if let Some(i) = store.instruments.iter().find(|i| i.id == id) {
         lines.push(format!("{}: {}", i.id, serde_json::to_string(&i.run).map_err(|e| e.to_string())?));
         lines.push(format!("answers: {}", i.answers));
-        for gap in &i.gaps { lines.push(format!("gap: {} (covered by {}: {})", gap.what, gap.covered_by, gap.why)); }
         for g in store.goals.iter().filter(|g| g.check == id) { lines.push(format!("goal: {}  {}", g.id, g.title)); }
     } else { return Err(format!("show: no record {id}")); }
     for line in lines.iter().flat_map(|line| line.lines()).take(40) { println!("{line}"); }

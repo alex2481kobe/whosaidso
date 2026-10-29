@@ -27,7 +27,6 @@ fn remember(tx: &Transaction<'_>, source: &str, value: &str, key: &str) -> Resul
     Ok(())
 }
 pub fn sync(root: &Path) -> Result<(), String> {
-    let phase = crate::cache::timer("sync setup");
     let mut db = cache::db(root)?;
     db.execute_batch("CREATE TABLE IF NOT EXISTS docs(id INTEGER PRIMARY KEY,kind TEXT,key TEXT UNIQUE,title TEXT,body TEXT);
         CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(kind,title,body,content='docs',content_rowid='id',tokenize='unicode61 remove_diacritics 2');
@@ -35,9 +34,7 @@ pub fn sync(root: &Path) -> Result<(), String> {
         CREATE TABLE IF NOT EXISTS source_docs(source TEXT PRIMARY KEY,key TEXT);
         CREATE VIRTUAL TABLE IF NOT EXISTS vocab USING fts5vocab(docs_fts, 'row');").map_err(err)?;
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate).map_err(err)?;
-    drop(phase);
     let mut seen = HashSet::new();
-    let phase = crate::cache::timer("sync records");
     for (path, mut value) in record::load(root)?.records {
         let kind = record::kind(&path).to_owned();
         let relative = path.strip_prefix(root).map_err(err)?.to_string_lossy();
@@ -64,9 +61,7 @@ pub fn sync(root: &Path) -> Result<(), String> {
         put(&tx, &kind, &key, &title, &body)?;
         remember(&tx, &source, &hash, &key)?;
     }
-    drop(phase);
     let files = tree::files_in(root, |path| !path.starts_with(".whosaidso/"))?;
-    let phase = crate::cache::timer("sync file stamps");
     let snapshot = tree::fingerprint(&files);
     let same_files = stamp(&tx, "tree:files")?.as_deref() == Some(&snapshot);
     let mut changed = Vec::new();
@@ -95,8 +90,6 @@ pub fn sync(root: &Path) -> Result<(), String> {
         }
         if stable { tx.prepare_cached("INSERT OR REPLACE INTO manifest VALUES ('tree:files',?1)").map_err(err)?.execute([&snapshot]).map_err(err)?; }
     }
-    drop(phase);
-    let phase = crate::cache::timer("sync history");
     let head = git::run(root, &["rev-parse", "--verify", "refs/heads/main"]).ok().map(|s| s.trim().to_owned());
     let old = stamp(&tx, "git:main")?;
     let ancestor = match (&old, &head) {
@@ -123,15 +116,12 @@ pub fn sync(root: &Path) -> Result<(), String> {
             tx.prepare_cached("INSERT OR REPLACE INTO manifest VALUES ('git:main',?1)").map_err(err)?.execute([head]).map_err(err)?;
         }
     }
-    drop(phase);
-    let phase = crate::cache::timer("sync deletions");
     let sources: Vec<(String,String)> = tx.prepare("SELECT source,key FROM source_docs WHERE ?1=0 OR source NOT LIKE 'file:%'").map_err(err)?.query_map([same_files], |r| Ok((r.get(0)?,r.get(1)?))).map_err(err)?.collect::<Result<_,_>>().map_err(err)?;
     for (source,key) in sources { if !seen.contains(&source) {
         remove(&tx, &key)?;
         tx.prepare_cached("DELETE FROM manifest WHERE source=?1").map_err(err)?.execute([&source]).map_err(err)?;
         tx.prepare_cached("DELETE FROM source_docs WHERE source=?1").map_err(err)?.execute([&source]).map_err(err)?;
     }}
-    drop(phase);
     tx.commit().map_err(err)?;
     Ok(())
 }

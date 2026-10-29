@@ -70,7 +70,6 @@ pub fn find(root: &Path, args: &[String]) -> Result<(), String> {
     let words=if content.is_empty() {all} else {content};
     if words.is_empty() { return Err("find: needs words".into()); }
     index::sync(root)?;
-    let phase = crate::cache::timer("find query");
     let db = cache::db(root)?;
     let corrected=correct(&db,&words)?;
     let expressions: Vec<String> = words.iter().zip(&corrected).map(|(original,(word,_))| {
@@ -108,6 +107,5 @@ pub fn find(root: &Path, args: &[String]) -> Result<(), String> {
         println!("{}", crate::text::cut(&line, 200));
     }
     println!("shown {} of {total}",hits.len().min(limit));
-    drop(phase);
     Ok(())
 }

@@ -84,14 +84,11 @@ fn release_records_are_bound_bounded_and_durable() {
     assert_eq!(suffixes, 1, "serialized trimming retains the UTF-8 suffix");
     assert!(cli(&root, &["check"]).contains("check: ok"));
     fs::remove_dir_all(&proofs).unwrap();
-    write(&instrument, br#"{"run":["true"],"answers":"works","gaps":[{"what":"coverage","why":"required","covered_by":"cover"}]}"#);
-    let cover = records.join("instruments/cover.json");
-    write(&cover, br#"{"run":["sh","-c","printf dirty > dirty"],"answers":"coverage","gaps":[{"what":"nested","why":"required","covered_by":"last"}]}"#);
-    write(&records.join("instruments/last.json"), br#"{"run":["sh","-c","printf last > .whosaidso/cache/last"],"answers":"nested coverage"}"#); commit(&root);
+    write(&instrument, br#"{"run":["sh","-c","printf dirty > dirty"],"answers":"works"}"#); commit(&root);
     bad(&root, &["prove", "g"], "working tree changed during instrument");
-    assert_eq!(paths(&proofs).len(), 1); assert!(!records.join("cache/last").exists()); fs::remove_file(root.join("dirty")).unwrap();
-    write(&cover, br#"{"run":["sh","-c","true # cover"],"answers":"coverage","gaps":[{"what":"nested","why":"required","covered_by":"last"}]}"#); commit(&root);
-    assert_eq!(cli(&root, &["prove", "g"]).lines().count(), 3); assert!(cli(&root, &["goals"]).contains("done    g"));
+    assert!(!proofs.exists() || paths(&proofs).is_empty()); fs::remove_file(root.join("dirty")).unwrap();
+    write(&instrument, br#"{"run":["sh","-c","true # clean"],"answers":"works"}"#); commit(&root);
+    assert_eq!(cli(&root, &["prove", "g"]).lines().count(), 1); assert!(cli(&root, &["goals"]).contains("done    g"));
     let media = records.join("cache/shot.png"); write(&media, common::png(vec![b'x'; 20000]));
     let blobs = records.join("cache/external blobs"); fs::create_dir_all(&blobs).unwrap();
     let sha = hash(&common::png(vec![b'x'; 20000])); let blob = blobs.join(format!("{sha}.png"));

@@ -89,11 +89,6 @@ fn precise_bytes_locals_and_exact_titles_are_correct() {
     }
     assert!(cli(&root, &["code", "defs", "unicode"]).lines().all(|l| l.ends_with("[precise]")));
     assert_eq!(cli(&root, &["code", "defs", "fallback"]), "unchecked.cpp:1  function fallback  [syntactic]\n");
-    let output = command(&root, env!("CARGO_BIN_EXE_whosaidso"), &["code", "import-scip", "index.scip"]).env("WHOSAIDSO_TIMING", "1").output().unwrap();
-    assert!(output.status.success());
-    let coverage = String::from_utf8(output.stderr).unwrap();
-    assert!(coverage.contains("real.cpp: 4/11 occurrences, fresh"), "{coverage}");
-    assert!(coverage.contains("unchecked.cpp: 0/1 occurrences, uncheckable"), "{coverage}");
     write(&root, "real.cpp", fs::read_to_string(root.join("real.cpp")).unwrap().replace("method", "edited"));
     fs::copy(root.join("index.scip"), root.join("copied.scip")).unwrap();
     assert!(cli(&root, &["code", "import-scip", "copied.scip"]).contains("2 stale documents"));

@@ -52,12 +52,7 @@ fn prune(root: &Path, trees: &[PathBuf]) {
     }
     let before = cli(root, &["goals"]); let shown: BTreeMap<_, _> = values(&r.join("goals")).iter().map(|(p, _)| { let id = p.file_stem().unwrap().to_str().unwrap().to_owned(); let show = cli(root, &["show", &id]); (id, show) }).collect(); let clean = command(root, env!("CARGO_BIN_EXE_whosaidso"), &["check"]).output().unwrap().status.success(); let held = protected(root, trees);
     for p in paths(&blobs).into_iter().chain(paths(&blobs.join("trash"))) { if p.extension().is_some_and(|e| e == "png") { fs::File::options().write(true).open(p).unwrap().set_times(fs::FileTimes::new().set_modified(SystemTime::now() - Duration::from_secs(15 * 86400))).unwrap(); } }
-    let goals: BTreeSet<_> = values(&r.join("goals")).into_iter().map(|(p, _)| p.file_stem().unwrap().to_str().unwrap().to_owned()).collect(); let mut required = BTreeSet::new(); let mut pending: Vec<_> = values(&r.join("goals")).into_iter().map(|(_, v)| v["check"].as_str().unwrap().to_owned()).collect();
-    while let Some(id) = pending.pop() {
-        if required.insert(id.clone()) { let v: Value = serde_json::from_slice(&fs::read(r.join(format!("instruments/{id}.json"))).unwrap()).unwrap();
-            if let Some(gaps) = v["gaps"].as_array() { pending.extend(gaps.iter().map(|g| g["covered_by"].as_str().unwrap().to_owned())); }
-        }
-    }
+    let goals: BTreeSet<_> = values(&r.join("goals")).into_iter().map(|(p, _)| p.file_stem().unwrap().to_str().unwrap().to_owned()).collect(); let required: BTreeSet<_> = values(&r.join("goals")).into_iter().map(|(_, v)| v["check"].as_str().unwrap().to_owned()).collect();
     let main: BTreeSet<_> = git(root, &["rev-list", "refs/heads/main"]).lines().map(str::to_owned).collect(); let reachable: BTreeSet<_> = git(root, &["rev-list", "--branches", "--tags", "HEAD"]).lines().map(str::to_owned).collect(); let proofs = values(&r.join("proofs")); let mut latest: BTreeMap<_, (i64, &PathBuf)> = BTreeMap::new(); let mut commits: BTreeMap<_, (i64, &PathBuf)> = BTreeMap::new();
     for (p, v) in &proofs {
         let (goal, instrument, at) = (v["goal"].as_str().unwrap(), v["instrument"].as_str().unwrap(), v["commit"].as_str().unwrap()); let rank = (v["ran_at"].as_i64().unwrap(), p); commits.entry((goal, instrument, at)).and_modify(|r| *r = (*r).max(rank)).or_insert(rank); let current = fs::read(r.join(format!("instruments/{instrument}.json"))).ok().map(|b| hash(&b));
@@ -102,11 +97,9 @@ fn fixture(home: &Path) {
     let root = home.join("project"); let r = root.join(".whosaidso"); write(&r.join(".gitignore"), "cache/\n"); write(&r.join("phases/p.json"), json!({"title":"Phase","order":1}).to_string());
     for n in 0..4 {
         let id = format!("g{n}"); let check = format!("i{n}");
-        write(&r.join(format!("instruments/{check}.json")), json!({"run":["sh","-c",format!("test -f .whosaidso/cache/pass # {n}")],"answers":"works","gaps":[{"what":"coverage","why":"required","covered_by":"cover-a"}]}).to_string());
+        write(&r.join(format!("instruments/{check}.json")), json!({"run":["sh","-c",format!("test -f .whosaidso/cache/pass # {n}")],"answers":"works"}).to_string());
         let g = json!({"title":id,"done_when":"done","check":check,"broader":"p"}).to_string(); write(&r.join(format!("goals/{id}.json")), &g);
     }
-    write(&r.join("instruments/cover-a.json"), json!({"run":["sh","-c","true # cover-a"],"answers":"coverage","gaps":[{"what":"nested","why":"required","covered_by":"cover-b"}]}).to_string());
-    write(&r.join("instruments/cover-b.json"), json!({"run":["sh","-c","true # cover-b"],"answers":"nested"}).to_string());
     cli(&root, &["install-hooks"]); commit(&root); git(&root, &["push", "-u", "origin", "main"]);
  }
 fn sequence(seed: u64, fixture: &Path) {
@@ -216,10 +209,7 @@ fn sequence(seed: u64, fixture: &Path) {
             },
             _ => (), }
         for (p, _) in values(&r.join("instruments")) { catalog.insert(p.file_stem().unwrap().to_str().unwrap().to_owned(), fs::read(p).unwrap()); }
-        let mut pending: Vec<_> = values(&r.join("goals")).into_iter().map(|(_,v)| v["check"].as_str().unwrap().to_owned()).collect(); let mut seen = BTreeSet::new();
-        while let Some(id) = pending.pop() { if seen.insert(id.clone()) {
-            let p = r.join(format!("instruments/{id}.json")); if !p.exists() { write(&p, &catalog[&id]); } let v: Value = serde_json::from_slice(&fs::read(&p).unwrap()).unwrap(); if let Some(gaps) = v["gaps"].as_array() { pending.extend(gaps.iter().map(|g| g["covered_by"].as_str().unwrap().to_owned())); }
-        } }
+        for (_, g) in values(&r.join("goals")) { let id = g["check"].as_str().unwrap(); let p = r.join(format!("instruments/{id}.json")); if !p.exists() { write(&p, &catalog[id]); } }
         if step % 25 == 24 { prune(&root, &trees); }
     }
     prune(&root, &trees); assert!(cli(&root, &["check"]).contains("check: ok")); eprintln!("invariant seed {seed:#x}: {steps} steps passed"); fs::remove_dir_all(home).unwrap();

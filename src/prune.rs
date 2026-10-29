@@ -3,14 +3,7 @@ use crate::{blob, gallery, git, goals, publish, tree, record::{self, Proof, Stor
 use std::{collections::{BTreeMap, HashMap, HashSet}, fs, io::Write, os::unix::fs::MetadataExt, path::{Path, PathBuf}, time::SystemTime};
 
 fn required(store: &Store) -> HashSet<&str> {
-    let mut pending: Vec<_> = store.goals.iter().map(|g| g.check.as_str()).collect();
-    let mut required = HashSet::new();
-    while let Some(id) = pending.pop() {
-        if required.insert(id) {
-            if let Some(i) = store.instruments.iter().find(|i| i.id == id) { pending.extend(i.gaps.iter().map(|g| g.covered_by.as_str())); }
-        }
-    }
-    required
+    store.goals.iter().map(|g| g.check.as_str()).collect()
 }
 pub fn proofs_to_remove<'a>(root: &Path, store: &'a Store) -> Result<Vec<&'a Proof>, String> {
     let required = required(store);

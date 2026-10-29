@@ -1,4 +1,4 @@
-// Workstation visibility, worktree coordination and activity through the real binary.
+// Workstation visibility and worktree coordination through the real binary.
 use std::{fs, path::Path, process::{Command, Output}, time::{SystemTime, UNIX_EPOCH}};
 fn run(root: &Path, program: &str, args: &[&str]) -> Output {
     let mut c = Command::new(program);
@@ -32,7 +32,7 @@ fn row<'a>(output: &'a str, id: &str, state: &str) -> &'a str {
     assert_eq!(row.split_whitespace().next(), Some(state), "{output}"); row
 }
 #[test]
-fn workstations_worktrees_and_timeline() {
+fn workstations_and_worktrees() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/e2e-tmp").join(format!("team-{}-{}", std::process::id(), SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
     fs::create_dir_all(&root).unwrap();
     git(&root, &["init", "--bare", "origin.git"]);
@@ -53,7 +53,6 @@ fn workstations_worktrees_and_timeline() {
     git(&b, &["push", "-u", "origin", "b-work"]); git(&a, &["fetch"]);
     let output = cli(&a, &["goals"]);
     assert!(row(&output, "remote", "idle").contains("origin/b-work (Builder B, "), "{output}");
-    assert!(cli(&a, &["log"]).contains("2000-02-29 12:34 commit remote"));
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
     dated(&b, &format!("@{} +0000", now - 3 * 3600), true);
     git(&b, &["push", "--force"]); git(&a, &["fetch"]);
@@ -68,12 +67,8 @@ fn workstations_worktrees_and_timeline() {
     git(&a, &["branch", "b-work", "main"]);
     let output = cli(&a, &["goals"]);
     assert!(!row(&output, "remote", "open").contains("origin/b-work"), "local branch wins even at an older tip: {output}");
-    assert!(!cli(&a, &["log"]).contains("B implements remote goal"), "log shares branch selection");
     git(&a, &["branch", "-D", "b-work"]);
-    // One SHA on two in-flight branches is still one activity event.
     git(&a, &["branch", "copy", "origin/b-work"]);
-    let output = cli(&a, &["log"]);
-    assert_eq!(output.matches("B implements remote goal").count(), 1, "{output}");
     let warning = cli(&a, &["start", "remote"]);
     assert!(warning.starts_with("start: remote\n"), "{warning}");
     assert!(warning.contains("warning: remote is active on origin/b-work (Builder B, 3h ago); coordinate before working on it"), "{warning}");
@@ -109,23 +104,9 @@ fn workstations_worktrees_and_timeline() {
     assert_eq!(cli(&a, &["start", "remote"]), "start: remote\n", "landed work has no competing branch");
     assert_eq!(cli(&a, &["start", "none"]), "start: none\n");
     assert!(cli(&a, &["prove", "remote"]).contains("prove: remote pass"));
-    let proof = cli(&a, &["log"]);
-    assert_eq!(proof.matches("B implements remote goal").count(), 1, "{proof}");
-    assert!(proof.find(" proof remote test exit 0 ").unwrap() < proof.find("B implements remote goal").unwrap(), "proof follows the commit in time, newest first: {proof}");
     write(&a.join(".whosaidso/cache/shot.pdf"), b"%PDF-1.7\n%%EOF\n");
     assert!(cli(&a, &["media", "remote", ".whosaidso/cache/shot.pdf", "team evidence"]).contains("media: remote"));
     assert!(cli(&a, &["ask", "remote", "first line\nsecond line"]).contains("ask: remote"));
-    let output = cli(&a, &["log"]);
-    assert!(output.contains(" media remote team evidence\n"), "{output}");
-    assert!(output.contains(" ask remote first line\n") && !output.contains("second line"), "{output}");
-    assert_eq!(cli(&a, &["log", "--limit", "1"]).lines().count(), 1);
-    for n in 0..31 { assert!(cli(&a, &["ask", "remote", &format!("decision {n}")]).contains("ask: remote")); }
-    assert_eq!(cli(&a, &["log"]).lines().count(), 30);
-    for args in [vec!["log", "--limit"], vec!["log", "--limit", "0"], vec!["log", "--limit", "-1"], vec!["log", "--limit", "bad"], vec!["log", "extra"]] {
-        let out = run(&a, env!("CARGO_BIN_EXE_whosaidso"), &args);
-        assert_eq!(out.status.code(), Some(1), "{args:?}: {out:?}");
-        assert!(String::from_utf8_lossy(&out.stderr).contains("log:"));
-    }
     assert_eq!(cli(&a, &["check"]).lines().filter(|l| l.starts_with("check: ok")).count(), 1);
     fs::remove_dir_all(root).unwrap();
 }

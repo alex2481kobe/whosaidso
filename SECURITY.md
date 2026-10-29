@@ -13,8 +13,8 @@ than a finished exploit.
 ## What WhoSaidSo touches
 
 WhoSaidSo is a local command line tool. It reads project files and Git objects,
-writes JSON records under `.whosaidso/`, and keeps disposable indexes and HTML in
-`.whosaidso/cache/`. Image bytes live in the Git common directory’s
+writes JSON records under `.whosaidso/`, and keeps disposable indexes in
+the worktree's own Git directory (`whosaidso/cache/`). Image bytes live in the Git common directory’s
 `whosaidso/blobs` folder, or `WHOSAIDSO_BLOBS` when set. It has no network client
 or server and does not use a home ledger.
 

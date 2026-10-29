@@ -88,7 +88,7 @@ fn prune_state_order_caps_and_blob_publication() {
     let expected: Vec<_> = asks.iter().take(5).map(|(_, s)| format!("ask: {s}")).collect();
     let shown: Vec<_> = cli(&root, &["show", "g"]).lines().filter(|l| l.starts_with("ask:")).map(str::to_owned).collect();
     assert_eq!(shown, expected, "ask ties use record hash");
-    let page = ui(&mut command(&root, env!("CARGO_BIN_EXE_whosaidso"), &[]), "/api/goal?id=g");
+    let page = ui(&mut command(&root, env!("CARGO_BIN_EXE_whosaidso"), &[]), "/api/goals");
     let positions: Vec<_> = asks.iter().take(3).map(|(_, s)| page.find(s).unwrap()).collect(); assert!(positions.windows(2).all(|w| w[0] < w[1]));
     commit(&root); cli(&root, &["prune"]);
     let mut kept: Vec<_> = asks.iter().take(5).map(|((_, p), _)| p.clone()).collect(); kept.sort(); assert_eq!(paths(&r.join("asks")), kept);

@@ -14,7 +14,6 @@ pub fn run_bytes(dir: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
     if immutable {
         if let Some(bytes) = reads.lock().map_err(|e| e.to_string())?.get(&key) { return Ok(bytes.clone()); }
     }
-    let _time = crate::cache::timer("git process");
     let out = Command::new("git")
         .args(args)
         .current_dir(dir)

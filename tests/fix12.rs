@@ -82,8 +82,6 @@ fn evidence_media_is_typed_rendered_and_archived_without_loss() {
         let answer: Value = serde_json::from_str(&ui(&mut command(&root, exe, &[]), "/api/gallery")).unwrap();
         let entry = answer["entries"].as_array().unwrap().iter().find(|e| e["ext"] == *ext).unwrap();
         assert_eq!(entry["shows"], format!("{ext} <evidence>")); assert_eq!(entry["tag"], *tag); assert_eq!(entry["mime"], *mime);
-        let detail: Value = serde_json::from_str(&ui(&mut command(&root, exe, &[]), "/api/goal?id=a")).unwrap();
-        assert!(detail["media"].as_array().unwrap().iter().any(|e| e["ext"] == *ext && e["tag"] == *tag && e["mime"] == *mime));
         let source = ui(&mut command(&root, exe, &[]), "/ui-gallery-media.js");
         assert!(!source.contains("autoplay")); assert!(source.contains("controls:true") && source.contains("preload:\"metadata\""));
         records.push((path, value));

@@ -55,7 +55,7 @@ fn checkpoint(root: &Path, states: [&str; 3], expected: &Bytes, local_media: &By
     for (goal, state) in GOALS.into_iter().zip(states) {
         let details = cli(root, &["show", goal], &format!("state: {state}\n")); assert_eq!(details.lines().filter(|l| l.starts_with("state:")).collect::<Vec<_>>(), [format!("state: {state}")]); let row = tree.lines().find(|line| line.split_whitespace().nth(1) == Some(goal)).unwrap(); assert_eq!(row.split_whitespace().next(), Some(state), "{tree}");
     }
-    let proof_count = expected.keys().filter(|p| p.starts_with(".whosaidso/proofs/")).count(); let checked = cli(root, &["check"], &format!("check: ok (1 phases, 3 goals, 2 instruments, {proof_count} proofs)")); let mut warnings = Vec::new();
+    let proof_count = expected.keys().filter(|p| p.starts_with(".whosaidso/proofs/")).count(); let checked = cli(root, &["check"], &format!("check: ok (1 phases, 3 goals, 1 instruments, {proof_count} proofs)")); let mut warnings = Vec::new();
     for goal in GOALS {
         let count = expected.iter().filter(|(p, b)| p.starts_with(".whosaidso/asks/") && serde_json::from_slice::<Value>(b).unwrap()["goal"] == goal).count();
         if count > 5 { warnings.push(format!("warning: goal {goal}: asks cap 5: count {count}; run whosaidso prune")); }
@@ -87,13 +87,13 @@ fn prune(root: &Path, before: &Bytes, states: [&str; 3], local: &Bytes) -> Bytes
     let after = retained(before); let removed = |kind: &str| before.keys().filter(|p| p.starts_with(&format!(".whosaidso/{kind}/")) && !after.contains_key(*p)).count(); let line = format!("prune: 0 proofs, {} asks, {} media archived\n", removed("asks"), removed("media")); assert_eq!(cli(root, &["prune"], &line), line); checkpoint(root, states, &after, local);
     after
 }
-fn publish(root: &Path, goal: &str, states: [&str; 3], local: &mut Bytes, fail_cover: bool) -> Bytes {
+fn publish(root: &Path, goal: &str, states: [&str; 3], local: &mut Bytes, fail_check: bool) -> Bytes {
     let mut expected = records(root);
-    if fail_cover { write(&root.join(".whosaidso/cache/fail-cover"), b"cover failed"); }
-    let answer = cli(root, &["prove", goal], &format!("prove: {goal} pass ")); assert_eq!(answer.lines().count(), 2); assert!(answer.lines().nth(1).unwrap().starts_with(&format!("prove: {goal} {} ", if fail_cover { "fail" } else { "pass" }))); let added = records(root); keep(&expected, &added); assert_eq!(added.len(), expected.len() + 2);
+    if fail_check { write(&root.join(".whosaidso/cache/fail-check"), b"check failed"); }
+    let answer = cli(root, &["prove", goal], &format!("prove: {goal} {} ", if fail_check { "fail" } else { "pass" })); assert_eq!(answer.lines().count(), 1); let added = records(root); keep(&expected, &added); assert_eq!(added.len(), expected.len() + 1);
     let head = git(root, &["rev-parse", "HEAD"]);
     for (path, bytes) in added.iter().filter(|(p, _)| !expected.contains_key(*p)) {
-        let v: Value = serde_json::from_slice(bytes).unwrap(); assert!(path.starts_with(".whosaidso/proofs/")); assert_eq!(v["goal"], goal); assert_eq!(v["commit"], head.trim()); assert_eq!(v["exit_code"], if v["instrument"] == "cover" && fail_cover { 1 } else { 0 }); assert_eq!(v["output_sha256"], hash(v["output_tail"].as_str().unwrap().as_bytes())); let result = if v["exit_code"] == 0 { "pass" } else { "fail" }; let sha = Path::new(path).file_stem().unwrap().to_str().unwrap(); assert!(answer.lines().any(|l| l == format!("prove: {goal} {result} {}", &sha[..12])));
+        let v: Value = serde_json::from_slice(bytes).unwrap(); assert!(path.starts_with(".whosaidso/proofs/")); assert_eq!(v["goal"], goal); assert_eq!(v["commit"], head.trim()); assert_eq!(v["instrument"], "test"); assert_eq!(v["exit_code"], if fail_check { 1 } else { 0 }); assert_eq!(v["output_sha256"], hash(v["output_tail"].as_str().unwrap().as_bytes())); let result = if v["exit_code"] == 0 { "pass" } else { "fail" }; let sha = Path::new(path).file_stem().unwrap().to_str().unwrap(); assert!(answer.lines().any(|l| l == format!("prove: {goal} {result} {}", &sha[..12])));
     }
     expected = added; checkpoint(root, states, &expected, local);
     for n in 0..6 {
@@ -139,10 +139,9 @@ fn team_landings_retry_rejected_push_without_losing_evidence() {
     write(&team.join(".whosaidso/.gitignore"), "cache/\n");
     write(&team.join(".whosaidso/phases/p.json"), json!({"title":"Team","order":1}).to_string());
     for goal in GOALS {
-        write(&team.join(format!(".whosaidso/goals/{goal}.json")), json!({"title":goal,"done_when":"check and cover pass","check":"test","broader":"p"}).to_string());
+        write(&team.join(format!(".whosaidso/goals/{goal}.json")), json!({"title":goal,"done_when":"check passes","check":"test","broader":"p"}).to_string());
     }
-    write(&team.join(".whosaidso/instruments/test.json"), json!({"run":["sh","-c","printf 'unit evidence\\n'"],"answers":"unit tests","gaps":[{"what":"integration","why":"unit checks are incomplete","covered_by":"cover"}]}).to_string());
-    write(&team.join(".whosaidso/instruments/cover.json"), json!({"run":["sh","-c","printf 'coverage evidence\\n'; test ! -f .whosaidso/cache/fail-cover"],"answers":"integration"}).to_string());
+    write(&team.join(".whosaidso/instruments/test.json"), json!({"run":["sh","-c","printf 'unit evidence\\n'; test ! -f .whosaidso/cache/fail-check"],"answers":"unit tests"}).to_string());
     cli(&team, &["install-hooks"], "hooks: installed\n");
     cli(&team, &["start", "none"], "start: none\n");
     commit(&team, "Create engineering ledger");

@@ -59,7 +59,7 @@ fn proofs_and_images_must_support_the_claims() {
     git(&root, &home, &["add", ".whosaidso"]); git(&root, &home, &["commit", "-m", "initial"]);
     git(&root, &home, &["branch", "-m", "feature"]);
     let no_main = run(&root, &home, env!("CARGO_BIN_EXE_whosaidso"), &["goals"]);
-    let no_view = ui(&mut request(&root, &home), "/api/overview");
+    let no_view = ui(&mut request(&root, &home), "/api/goals");
     assert!(!no_main.status.success()); assert!(no_view.contains("no local branch main"));
     git(&root, &home, &["branch", "-m", "main"]);
     git(&root, &home, &["push", "-u", "origin", "main"]);
@@ -93,7 +93,8 @@ fn proofs_and_images_must_support_the_claims() {
     proof["commit"] = unlanded.into(); proof["ran_at"] = 2.into(); proof["exit_code"] = 1.into(); addressed(&records.join("proofs"), &proof);
     assert!(cli(&root, &home, &["goals"]).contains("done    goal"));
     let shown = cli(&root, &home, &["show", "goal"]); assert!(shown.contains(&landed[..7]), "{shown}");
-    let detail: serde_json::Value = serde_json::from_str(&ui(&mut request(&root, &home), "/api/goal?id=goal")).unwrap(); assert_eq!(detail["proof"]["commit"], landed);
+    let goals: serde_json::Value = serde_json::from_str(&ui(&mut request(&root, &home), "/api/goals")).unwrap();
+    let detail = goals["goals"].as_array().unwrap().iter().find(|g| g["id"] == "goal").unwrap(); assert_eq!(detail["proof"]["commit"], landed);
     let image = serde_json::json!({"goal":"goal","shows":"A valid image title","media_sha256":"../../etc/passwd","ext":"png","byte_size":0,"commit":landed,"ran_at":3});
     let path = addressed(&records.join("media"), &image);
     write(&records.join("etc/passwd.png"), b"outside");
@@ -102,6 +103,6 @@ fn proofs_and_images_must_support_the_claims() {
     let mut invalid_ext = image.clone(); invalid_ext["media_sha256"] = "0".repeat(64).into(); invalid_ext["ext"] = "../bad".into();
     addressed(&records.join("media"), &invalid_ext);
     ui(&mut request(&root, &home), "/api/gallery"); bad(&root, &home, &["check"], "media: bad media type ../bad");
-    for path in ["/api/gallery", "/api/goal?id=goal"] { assert!(!ui(&mut request(&root, &home), path).contains("../../etc/passwd")); }
+    for path in ["/api/gallery", "/api/goals"] { assert!(!ui(&mut request(&root, &home), path).contains("../../etc/passwd")); }
     fs::remove_dir_all(home).unwrap();
 }

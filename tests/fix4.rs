@@ -71,12 +71,8 @@ fn proofs_precise_references_records_and_includers_are_honest() {
         }
         let mut index = field(1, &[]); index.extend(field(2, &doc));
         write(&root, ".whosaidso/cache/index.scip", index);
-        let out = command(&root, env!("CARGO_BIN_EXE_whosaidso"), &["code", "import-scip", ".whosaidso/cache/index.scip"])
-            .env("WHOSAIDSO_TIMING", "1").output().unwrap();
-        let coverage = String::from_utf8(out.stderr.clone()).unwrap();
-        let imported = success(out);
+        let imported = cli(&root, &["code", "import-scip", ".whosaidso/cache/index.scip"]);
         assert!(imported.contains(&format!("{role} stale documents")), "reference exemptions: {imported}");
-        assert!(coverage.contains(if role == 0 { "implicit.cpp: 1/5 occurrences, fresh" } else { "implicit.cpp: 5/5 occurrences, stale" }), "{coverage}");
         let answer = cli(&root, &["code", "defs", "anchor"]);
         assert_eq!(answer, if role == 0 { "implicit.cpp:1  [precise]\n" } else { "implicit.cpp:1  function anchor  [syntactic]\n" });
     }
@@ -94,7 +90,7 @@ fn proofs_precise_references_records_and_includers_are_honest() {
     write(&root, "include.cpp", "#include \"dir/target.h\"\n");
     assert_eq!(cli(&root, &["code", "includers", "target.h"]), "included by include.cpp:1  [syntactic, by name]\n");
     // Populate only this fixture's disposable cache; a warm query must bound its answer storage.
-    let db = rusqlite::Connection::open(root.join(".whosaidso/cache/index.db")).unwrap();
+    let db = rusqlite::Connection::open(root.join(".git/whosaidso/cache/index.db")).unwrap();
     db.execute_batch("CREATE INDEX fix4_includes_order ON includes(path,line);
         WITH RECURSIVE n(i) AS (VALUES(2) UNION ALL SELECT i+1 FROM n WHERE i<400000)
         INSERT INTO includes SELECT 'include.cpp','dir/target.h',i FROM n;").unwrap();

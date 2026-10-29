@@ -1,4 +1,4 @@
-// Read and format syntactic graph answers.
+// Read and format code answers.
 use super::store;
 use std::path::Path;
 

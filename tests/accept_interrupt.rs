@@ -1,4 +1,4 @@
-//! Release acceptance: SIGKILL during multi-instrument proofs, media and pruning.
+//! Release acceptance: SIGKILL during proofs, media and pruning.
 mod common;
 #[path = "common/command.rs"]
 mod commands;
@@ -74,7 +74,7 @@ fn checkpoint(root: &Path, states: [&str; 2], expected: &Bytes, media: &Bytes, w
     for (goal, state) in ["g", "kept"].into_iter().zip(states) {
         let shown = cli(root, &["show", goal], &format!("state: {state}\n")); assert_eq!(shown.lines().filter(|l| l.starts_with("state:")).collect::<Vec<_>>(), [format!("state: {state}")]); assert_eq!(tree.lines().find(|l| l.split_whitespace().nth(1) == Some(goal)).unwrap().split_whitespace().next(), Some(state));
     }
-    let proofs = expected.keys().filter(|p| p.starts_with(".whosaidso/proofs/")).count(); let checked = cli(root, &["check"], &format!("check: ok (1 phases, 2 goals, 2 instruments, {proofs} proofs)")); let mut actual: Vec<_> = checked.lines().filter(|l| l.starts_with("warning:")).map(str::to_owned).collect(); let mut wanted = warnings.to_vec(); actual.sort(); wanted.sort(); assert_eq!(actual, wanted, "check must report exactly the documented warnings");
+    let proofs = expected.keys().filter(|p| p.starts_with(".whosaidso/proofs/")).count(); let checked = cli(root, &["check"], &format!("check: ok (1 phases, 2 goals, 1 instruments, {proofs} proofs)")); let mut actual: Vec<_> = checked.lines().filter(|l| l.starts_with("warning:")).map(str::to_owned).collect(); let mut wanted = warnings.to_vec(); actual.sort(); wanted.sort(); assert_eq!(actual, wanted, "check must report exactly the documented warnings");
 }
 fn add_image(root: &Path, goal: &str, bytes: &[u8], title: &str, media: &mut Bytes) {
     write(&root.join(".whosaidso/cache/shot.png"), bytes); cli(root, &["media", goal, ".whosaidso/cache/shot.png", title], &format!("media: {goal} ")); media.insert(format!("{}.png", hash(bytes)), bytes.to_vec());
@@ -92,20 +92,19 @@ fn killed_publications_and_prune_can_be_retried_without_evidence_loss() {
     write(&r.join(".gitignore"), "cache/\n");
     write(&r.join("phases/p.json"), json!({"title":"Interruptions","order":1}).to_string());
     for goal in ["g", "kept"] {
-        write(&r.join(format!("goals/{goal}.json")), json!({"title":goal,"done_when":"both instruments pass","check":"test","broader":"p"}).to_string());
+        write(&r.join(format!("goals/{goal}.json")), json!({"title":goal,"done_when":"check passes","check":"test","broader":"p"}).to_string());
     }
-    write(&r.join("instruments/test.json"), json!({"run":["sh","-c","printf 'check evidence\\n'"],"answers":"check","gaps":[{"what":"coverage","why":"required","covered_by":"cover"}]}).to_string());
-    // The FIFO is ignored cache data. It pauses the second real instrument, after the check proof has been published, without changing tracked files.
-    write(&r.join("instruments/cover.json"), json!({"run":["sh","-c","printf 'cover evidence\\n'; if test -p .whosaidso/cache/cover.fifo; then printf ready > .whosaidso/cache/cover.lock; read token < .whosaidso/cache/cover.fifo; fi"],"answers":"coverage"}).to_string());
+    // The FIFO is ignored cache data. It pauses the instrument before its proof is published, without changing tracked files.
+    write(&r.join("instruments/test.json"), json!({"run":["sh","-c","printf 'check evidence\\n'; if test -p .whosaidso/cache/check.fifo; then printf ready > .whosaidso/cache/check.lock; read token < .whosaidso/cache/check.fifo; fi"],"answers":"check"}).to_string());
     cli(&root, &["install-hooks"], "hooks: installed\n");
     cli(&root, &["start", "none"], "start: none\n");
     commit(&root, "Create interruption fixture");
     let empty = Bytes::new();
     checkpoint(&root, ["open", "open"], &empty, &empty, &[]);
     let result = cli(&root, &["prove", "kept"], "prove: kept pass ");
-    assert_eq!(result.lines().count(), 2);
+    assert_eq!(result.lines().count(), 1);
     let mut expected = records(&root);
-    assert_eq!(expected.len(), 2);
+    assert_eq!(expected.len(), 1);
     checkpoint(&root, ["open", "done"], &expected, &empty, &[]);
     cli(&root, &["ask", "kept", "retain this decision through every crash"], "ask: kept ");
     let mut media = Bytes::new();
@@ -122,35 +121,33 @@ fn killed_publications_and_prune_can_be_retried_without_evidence_loss() {
     git(&root, &["push", "-u", "origin", "main"]);
     checkpoint(&root, ["landed", "done"], &expected, &media, &[]);
     let work_head = git(&root, &["rev-parse", "HEAD"]).trim().to_owned();
-    // SIGKILL prove after one proof, while the required covering proof is unknown.
-    fs::remove_file(blobs.join(".lock")).unwrap();
-    output(command(&root, "mkfifo", &[cache.join("cover.fifo").to_str().unwrap()]).output().unwrap(), 0, "");
+    // SIGKILL prove while its instrument runs: no proof is published.
+    output(command(&root, "mkfifo", &[cache.join("check.fifo").to_str().unwrap()]).output().unwrap(), 0, "");
     let mut proving = Running::spawn(command(&root, exe, &["prove", "g"]));
-    wait_for(&mut proving, &blobs.join(".lock"));
-    wait_for(&mut proving, &cache.join("cover.lock"));
-    let partial = records(&root);
-    keep(&expected, &partial);
-    assert_eq!(partial.len(), expected.len() + 1);
-    let (partial_path, partial_bytes) = partial.iter().find(|(p, _)| !expected.contains_key(*p)).unwrap();
-    let partial_path = partial_path.clone();
-    proof(partial_bytes, "test", &work_head, "check evidence\n");
+    wait_for(&mut proving, &cache.join("check.lock"));
+    keep(&expected, &records(&root));
+    assert_eq!(records(&root).len(), expected.len());
     proving.kill();
     // Release and reap the instrument's pipe before collecting the killed CLI.
-    output(command(&root, "sh", &["-c", "printf go > .whosaidso/cache/cover.fifo"]).output().unwrap(), 0, "");
-    let killed = proving.finish("prove: g pass ");
-    assert_eq!(String::from_utf8_lossy(&killed.stdout).lines().count(), 1);
-    fs::remove_file(cache.join("cover.fifo")).unwrap();
-    checkpoint(&root, ["landed", "done"], &partial, &media, &[]);
+    output(command(&root, "sh", &["-c", "printf go > .whosaidso/cache/check.fifo"]).output().unwrap(), 0, "");
+    let killed = proving.finish("");
+    assert!(killed.stdout.is_empty());
+    fs::remove_file(cache.join("check.fifo")).unwrap();
+    checkpoint(&root, ["landed", "done"], &expected, &media, &[]);
+    // Two retried proofs of the same commit: the older one is superseded.
     let result = cli(&root, &["prove", "g"], "prove: g pass ");
-    assert_eq!(result.lines().count(), 2);
+    assert_eq!(result.lines().count(), 1);
+    let first = records(&root);
+    keep(&expected, &first);
+    assert_eq!(first.len(), expected.len() + 1);
+    let (partial_path, partial_bytes) = first.iter().find(|(p, _)| !expected.contains_key(*p)).unwrap();
+    let partial_path = partial_path.clone();
+    proof(partial_bytes, "test", &work_head, "check evidence\n");
+    cli(&root, &["prove", "g"], "prove: g pass ");
     expected = records(&root);
-    keep(&partial, &expected);
-    assert_eq!(expected.len(), partial.len() + 2);
-    for (_, bytes) in expected.iter().filter(|(p, _)| !partial.contains_key(*p)) {
-        let v: Value = serde_json::from_slice(bytes).unwrap();
-        let instrument = v["instrument"].as_str().unwrap();
-        proof(bytes, instrument, &work_head, if instrument == "test" { "check evidence\n" } else { "cover evidence\n" });
-    }
+    keep(&first, &expected);
+    assert_eq!(expected.len(), first.len() + 1);
+    for (_, bytes) in expected.iter().filter(|(p, _)| !first.contains_key(*p)) { proof(bytes, "test", &work_head, "check evidence\n"); }
     let superseded = "warning: 1 superseded proofs; run whosaidso prune".to_owned();
     checkpoint(&root, ["done", "done"], &expected, &media, std::slice::from_ref(&superseded));
     commit(&root, "Commit complete retried proof and interrupted check evidence");

@@ -1,5 +1,6 @@
-// Loopback HTTP transport; screen answers and embedded assets live under ui/.
+// Loopback HTTP transport; screen answers, the change token and embedded assets live under ui/.
 mod api;
+mod version;
 use crate::{git, projects};
 use std::{collections::HashMap, fs, io::{BufRead, BufReader, Read, Write}, net::{TcpListener, TcpStream}, path::{Path, PathBuf}, process::{Command, Stdio}, sync::{Arc, Mutex}, time::Duration};
 
@@ -21,7 +22,12 @@ pub fn serve(cwd: &Path, args: &[String]) -> Result<(), String> {
         }
     }
     let current = git::root(cwd).ok();
-    if let Some(root) = &current { projects::register_viewer(root)?; }
+    if let Some(root) = &current {
+        projects::register_viewer(root)?;
+        // Derive the goals once now, so the first page load finds them ready.
+        let root = root.clone();
+        std::thread::spawn(move || api::warm(&root));
+    }
     let listener = TcpListener::bind(("127.0.0.1", port)).map_err(|e| format!("ui: listen on 127.0.0.1:{port}: {e}"))?;
     let host = listener.local_addr().map_err(|e| e.to_string())?.to_string();
     let server = Arc::new(Server { current, token: secret()?, session: secret()?, cookie: format!("whosaidso-{}", listener.local_addr().map_err(|e| e.to_string())?.port()), host, spent: Mutex::new(false) });
@@ -140,5 +146,5 @@ fn write_reply(stream: &mut TcpStream, reply: Reply) -> std::io::Result<()> {
 }
 fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
     macro_rules! assets { ($($name:literal),+) => { match path { "/" => Some(("text/html; charset=utf-8", include_bytes!("ui/index.html").as_slice())), $(concat!("/", $name) => Some((if $name.ends_with(".css") { "text/css; charset=utf-8" } else { "text/javascript; charset=utf-8" }, include_bytes!(concat!("ui/", $name)).as_slice())),)+ _ => None } }; }
-    assets!("ui.css", "ui-screens.css", "ui-gallery.css", "ui.js", "ui-icons.js", "ui-components.js", "ui-parts.js", "ui-shell.js", "ui-overview.js", "ui-browser.js", "ui-detail.js", "ui-gallery.js", "ui-gallery-media.js", "ui-gallery-actions.js", "ui-gallery-inspect.js", "ui-activity.js")
+    assets!("ui.css", "ui-gallery.css", "ui.js", "ui-icons.js", "ui-components.js", "ui-parts.js", "ui-shell.js", "ui-goals.js", "ui-gallery.js", "ui-gallery-media.js", "ui-gallery-actions.js", "ui-gallery-inspect.js")
 }

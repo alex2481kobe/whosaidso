@@ -1,28 +1,19 @@
 <!doctype html>
-<!-- Viewer shell only. Data and authenticated requests remain in the existing ES modules. -->
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WhoSaidSo</title>
-
-<link rel="stylesheet" href="/ui.css"><link rel="stylesheet" href="/ui-screens.css"><link rel="stylesheet" href="/ui-gallery.css">
+<link rel="stylesheet" href="/ui.css"><link rel="stylesheet" href="/ui-gallery.css">
 <script type="module" src="/ui.js"></script>
 </head>
 <body>
-<header class="topbar">
-<div class="wordmark">WhoSaidSo</div>
-<div class="project"><button id="project-button" class="project-button" type="button" aria-haspopup="listbox" aria-controls="project-menu" aria-label="Choose workspace" aria-expanded="false"><svg class="icon workspace-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v13H3zM3 7V4h7l3 3"/></svg><span id="project-name">Workspace</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button><div id="project-menu" class="menu" role="listbox" aria-label="Workspaces" hidden></div></div>
+<aside class="side">
+<div class="project"><button id="project-button" class="project-button" type="button" aria-haspopup="listbox" aria-controls="project-menu" aria-label="Choose workspace" aria-expanded="false"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v13H3zM3 7V4h7l3 3"/></svg><span id="project-name">Workspace</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button><div id="project-menu" class="menu" role="listbox" aria-label="Workspaces" hidden></div></div>
 <nav class="tabstrip" aria-label="Screens">
-<a data-nav="gallery" href="#/gallery"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>Gallery</a>
-<a data-nav="overview" href="#/overview"><svg class="icon" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8v10H3Z M9 21v-7h6v7"/></svg>Overview</a>
 <a data-nav="goals" href="#/goals"><svg class="icon" viewBox="0 0 24 24"><path d="m3 6 2 2 4-4m-6 9 2 2 4-4m-6 9 2 2 4-4M13 6h8M13 13h8M13 20h8"/></svg>Goals</a>
-<a data-nav="records" href="#/records"><svg class="icon" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6"/></svg>Records</a>
-<a data-nav="activity" href="#/activity"><svg class="icon" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v5h5M12 8v4l3 2"/></svg>Activity</a>
+<a data-nav="gallery" href="#/gallery"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>Gallery</a>
 </nav>
-<div class="sidebar-bottom"><span id="offline" class="offline" hidden>Viewer stopped. Run whosaidso ui again.</span></div>
-</header>
-<div class="theme-control" hidden>
-<button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false"></button>
-</div>
+<div class="side-bottom"><span id="offline" class="offline" hidden>Viewer stopped. Run whosaidso ui again.</span><button id="theme-toggle" class="icon-button" type="button" aria-label="Switch to dark mode" aria-pressed="false"></button></div>
+</aside>
 <main id="main" class="page" aria-live="polite"></main>
 </body></html>

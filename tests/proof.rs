@@ -62,13 +62,13 @@ fn queries_batch_git_reads_and_rebuild_only_disposable_text() {
     assert_eq!(cli(&root, &["grep", "abcd", "--in", "needle.txt"]), "needle.txt:1: abcd exact\nnot searched: 1 files (over 1 MiB, binary, not UTF-8, symlink or submodule)\n");
     assert_eq!(cli(&root, &["grep", "😀éxw"]), "needle.txt:3: 😀éxW unicode\nnot searched: 1 files (over 1 MiB, binary, not UTF-8, symlink or submodule)\n");
     assert_eq!(cli(&root, &["grep", "\"needle\""]), "needle.txt:4: quote \"needle\"\nnot searched: 1 files (over 1 MiB, binary, not UTF-8, symlink or submodule)\n");
-    let db = rusqlite::Connection::open(root.join(".whosaidso/cache/index.db")).unwrap();
+    let db = rusqlite::Connection::open(root.join(".git/whosaidso/cache/index.db")).unwrap();
     db.execute_batch("CREATE TABLE sentinel(value); INSERT INTO sentinel VALUES (42);
         DROP TABLE text_fts; CREATE VIRTUAL TABLE text_fts USING fts5(path UNINDEXED,body,tokenize='trigram');
         INSERT INTO text_fts VALUES ('needle.txt','outdated cached content');").unwrap(); drop(db);
     assert_eq!(cli(&root, &["grep", "abcd", "--in", "needle.txt"]), "needle.txt:1: abcd exact\nnot searched: 1 files (over 1 MiB, binary, not UTF-8, symlink or submodule)\n");
     assert_eq!(cli(&root, &["grep", "outdated cached content"]), "grep: no match\nnot searched: 1 files (over 1 MiB, binary, not UTF-8, symlink or submodule)\n");
-    let db = rusqlite::Connection::open(root.join(".whosaidso/cache/index.db")).unwrap();
+    let db = rusqlite::Connection::open(root.join(".git/whosaidso/cache/index.db")).unwrap();
     assert_eq!(db.query_row("SELECT value FROM sentinel", [], |r| r.get::<_, i64>(0)).unwrap(), 42); drop(db);
     git(&root, &["add", ".whosaidso"]); git(&root, &["commit", "-m", "evidence"]);
     assert!(cli(&root, &["prune"]).contains("11 proofs")); assert_eq!(cli(&root, &["show", "g"]), shown);
