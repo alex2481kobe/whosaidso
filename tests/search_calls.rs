@@ -31,6 +31,33 @@ fn source_evidence_survives_data_floods_and_generated_code() {
 }
 
 #[test]
+fn show_accepts_printed_locations_and_rejects_invalid_selectors() {
+    let f = Fixture::empty();
+    write(
+        &f.root.join("lib.rs"),
+        "// leading comment\nfn selected() { let answer = 42; }\n",
+    );
+    let printed = cli(&f.root, &["find", "selected"]);
+    for selector in [
+        "lib.rs:selected",
+        "lib.rs:2:selected",
+        "lib.rs::selected",
+        printed.lines().next().unwrap(),
+    ] {
+        let body = cli(&f.root, &["code", "show", selector]);
+        assert!(body.contains("let answer = 42"), "{selector}: {body}");
+    }
+    for selector in [
+        "lib.rs:0:selected",
+        "lib.rs:x:selected",
+        "lib.rs:2:",
+        "lib.rs:",
+    ] {
+        bad(&f.root, &["code", "show", selector], "invalid selector");
+    }
+}
+
+#[test]
 fn partial_lexical_evidence_does_not_bury_the_semantic_head() {
     let Some(model) = std::env::var_os("WHOSAIDSO_TEST_MODEL") else {
         eprintln!("SKIP semantic head: set WHOSAIDSO_TEST_MODEL to pinned potion-base-8M");

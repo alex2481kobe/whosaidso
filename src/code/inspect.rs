@@ -32,7 +32,7 @@ pub(super) fn location(row: &Row) -> String {
 }
 pub(super) fn answer(snapshot: &Snapshot, command: &str, value: &str) -> Result<String, String> {
     let rows = if command == "show" {
-        snapshot.select(value)?
+        select(snapshot, value)?
     } else {
         snapshot.outline(value)?
     };
@@ -116,4 +116,61 @@ pub(super) fn answer(snapshot: &Snapshot, command: &str, value: &str) -> Result<
         out.push(format!("gaps: {} omitted", gaps.len() - GAP_LIMIT));
     }
     Ok(out.join("\n"))
+}
+
+fn select(snapshot: &Snapshot, value: &str) -> Result<Vec<Row>, String> {
+    let value = value.trim();
+    let value = value
+        .strip_prefix("symbol ")
+        .or_else(|| value.strip_prefix("symbol:"))
+        .unwrap_or(value);
+    let value = value.split(" [").next().unwrap_or(value);
+    if value.starts_with(&format!("{}:", snapshot.project)) {
+        return snapshot.select(value);
+    }
+    let value = value.strip_prefix("./").unwrap_or(value);
+    let invalid = || {
+        format!(
+            "code show: invalid selector {value:?}; use name, path:name, path:line:name, path::name or symbol id"
+        )
+    };
+    if let Some((path, rest)) = snapshot
+        .files
+        .entries
+        .iter()
+        .filter_map(|f| {
+            value
+                .strip_prefix(&f.path)
+                .and_then(|s| s.strip_prefix(':'))
+                .map(|s| (f.path.as_str(), s))
+        })
+        .max_by_key(|(p, _)| p.len())
+    {
+        let (name, line) = if let Some(name) = rest.strip_prefix(':') {
+            (name, None)
+        } else if let Some((line, name)) = rest.split_once(':').filter(|(_, n)| !n.starts_with(':'))
+        {
+            let line = line
+                .parse::<i64>()
+                .ok()
+                .filter(|n| *n > 0)
+                .ok_or_else(invalid)?;
+            (name, Some(line))
+        } else {
+            (rest, None)
+        };
+        if name.is_empty() {
+            return Err(invalid());
+        }
+        return Ok(snapshot
+            .definitions(name)?
+            .rows
+            .into_iter()
+            .filter(|r| r.path == path && line.is_none_or(|n| r.range.line == n))
+            .collect());
+    }
+    if value.is_empty() || value.replace("::", "").contains(':') {
+        return Err(invalid());
+    }
+    snapshot.select(value)
 }
