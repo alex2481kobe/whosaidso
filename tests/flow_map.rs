@@ -76,6 +76,17 @@ fn top_counts_the_effective_precise_definitions_and_falls_back_after_an_edit() {
     .unwrap();
     assert_eq!(layer["nodes"].as_array().unwrap().len(), 1);
     assert_eq!(layer["nodes"][0]["evidence"], "precise");
+    assert!(
+        cli(
+            &f.root,
+            &[
+                "code",
+                "show",
+                layer["nodes"][0]["symbol"].as_str().unwrap()
+            ]
+        )
+        .contains("[precise]")
+    );
     write(
         &f.root.join("app.rs"),
         "fn newer() {}\nfn syntax_only() {}\n",
