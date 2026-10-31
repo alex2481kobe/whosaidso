@@ -34,6 +34,7 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     lock.lock().map_err(|e| e.to_string())?;
     worktree::hook(root, "lock")?;
+    worktree::resume_unfold(root, &dir)?;
     let attempts = attempt::pending(root, &dir)?;
     let mut head = git::run(root, &["rev-parse", "HEAD"])?.trim().to_owned();
     clean(root)?;
@@ -111,7 +112,7 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
             return Err(notes.join("\n"));
         }
         git::run(root, &["merge", "--no-edit", &baseline])?;
-        worktree::unfold_unpublished(root, &baseline)?;
+        worktree::unfold_unpublished(root, &dir, &baseline)?;
         head = git::run(root, &["rev-parse", "HEAD"])?.trim().into();
         let candidate = head.clone();
         worktree::hook(root, "merge")?;

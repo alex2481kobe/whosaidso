@@ -200,3 +200,55 @@ fn changing_selection_keeps_claims_for_unpublished_work() {
     cli(&lane, &["land", "--reason", "shared check"]);
     assert!(git(&lane, &["ls-remote", "origin", "refs/whosaidso/claims/*"]).is_empty());
 }
+
+#[test]
+fn interrupted_unfolding_resumes_before_the_cleanliness_check() {
+    let f = Fixture::new();
+    f.remote();
+    let lane = f.worktree("worker");
+    work(&lane, "feature", "g");
+    failure(
+        command(&lane, BIN, &["land", "--reason", "shared check"])
+            .env(
+                "WHOSAIDSO_LAND_HOOK",
+                "[ \"$WHOSAIDSO_LAND_STEP\" != before-push ]",
+            )
+            .output()
+            .unwrap(),
+        "before-push",
+    );
+    work(&f.root, "other", "none");
+    git(&f.root, &["push", "origin", "main"]);
+    let real = success(
+        command(&lane, "sh", &["-c", "command -v git"])
+            .output()
+            .unwrap(),
+    );
+    let bin = f.root.join(".git/fault-bin");
+    executable(
+        &bin.join("git"),
+        "#!/bin/sh\nif [ \"$1\" = add ]; then\n for p in \"$@\"; do\n  if [ \"$p\" = .whosaidso/done/g.jsonl ]; then kill -KILL \"$PPID\"; exit 1; fi\n done\nfi\nexec \"$REAL_GIT\" \"$@\"\n",
+    );
+    let out = command(&lane, BIN, &["land", "--reason", "shared check"])
+        .env("REAL_GIT", real.trim())
+        .env(
+            "PATH",
+            format!("{}:{}", bin.display(), tool_path().to_string_lossy()),
+        )
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    assert!(!git(&lane, &["status", "--porcelain"]).is_empty());
+    failure(
+        command(&lane, BIN, &["land", "--reason", "shared check"])
+            .env(
+                "WHOSAIDSO_LAND_HOOK",
+                "[ \"$WHOSAIDSO_LAND_STEP\" != unfold-committed ]",
+            )
+            .output()
+            .unwrap(),
+        "unfold-committed",
+    );
+    cli(&lane, &["land", "--reason", "shared check"]);
+    assert!(git(&lane, &["status", "--porcelain"]).is_empty());
+}
