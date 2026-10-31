@@ -6,7 +6,7 @@ use super::{
 };
 use crate::code::facts::{Snapshot, edges::Graph, reads::Row};
 use serde_json::{Value, json};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 // A roll-up never lets planned or authored work mask an inconclusive scan.
 pub fn rollup<'a>(states: impl IntoIterator<Item = &'a str>) -> &'static str {
@@ -104,7 +104,7 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<(Value, Graph), Strin
             super::hops::compare(flow, step, &nodes, &owners, &graph, snapshot)?,
         );
     }
-    let unplanned = unplanned(flow, &graph, &owners);
+    let unplanned = super::code::unplanned(flow, &graph, &owners);
     for item in &unplanned {
         let state = item["state"].as_str().unwrap_or("unplanned");
         if let Some(ids) = item["from"].as_str().and_then(|s| owners.get(s)) {
@@ -205,58 +205,4 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<(Value, Graph), Strin
         "unknown":gaps,"progress":{"built":built,"total":leaves.len()},"goal":flow.goal,"goal_effect":"progress only"}),
         graph,
     ))
-}
-fn unplanned(flow: &Flow, graph: &Graph, owners: &BTreeMap<&str, Vec<&str>>) -> Vec<Value> {
-    let mut seen = BTreeSet::new();
-    let mut rows = vec![];
-    for edge in &graph.edges {
-        let from = edge.source.as_deref().and_then(|s| owners.get(s));
-        let boundary = |ids: &Vec<&str>| {
-            ids.iter()
-                .any(|id| flow.covers.boundaries.iter().any(|b| flow.contains(id, b)))
-        };
-        let touches_boundary = from.is_some_and(boundary)
-            || edge
-                .targets
-                .iter()
-                .any(|target| owners.get(target.as_str()).is_some_and(boundary));
-        if !inside(flow, &edge.occurrence.path) && !touches_boundary {
-            continue;
-        }
-        for target in &edge.targets {
-            let to = owners.get(target.as_str());
-            let crossing = match (from, to) {
-                (Some(a), Some(b)) => a.iter().any(|a| {
-                    b.iter().any(|b| {
-                        a != b
-                            && ((!flow.contains(a, b) && !flow.contains(b, a))
-                                || flow.covers.boundaries.iter().any(|id| id == b)
-                                || flow.nodes.iter().any(|n| {
-                                    n.id == *b
-                                        && ["service", "store", "external"]
-                                            .contains(&n.r#type.as_str())
-                                }))
-                    })
-                }),
-                _ => true,
-            };
-            if !crossing {
-                continue;
-            }
-            let planned = from.zip(to).is_some_and(|(a, b)| {
-                flow.steps.iter().any(|s| {
-                    a.iter().any(|id| flow.contains(id, &s.from))
-                        && b.iter().any(|id| flow.contains(id, &s.to))
-                })
-            });
-            if !planned && seen.insert((edge.source.clone(), target.clone())) {
-                rows.push(json!({"from":edge.source,"to":target,"path":edge.occurrence.path,"state":"unplanned","evidence":strength(edge.occurrence.layer)}));
-            }
-        }
-        // An unresolved call cannot establish whether an unplanned boundary exists.
-        if edge.targets.is_empty() {
-            rows.push(json!({"from":edge.source,"to":edge.occurrence.name,"path":edge.occurrence.path,"state":"unknown"}));
-        }
-    }
-    rows
 }

@@ -1,9 +1,11 @@
+use super::map::strength;
 use super::{
     model::{Flow, Node},
     pattern::{literal, matches},
 };
 use crate::code::facts::{Snapshot, coverage::Coverage, edges::Graph, reads::Row};
-use std::collections::BTreeSet;
+use serde_json::{Value, json};
+use std::collections::{BTreeMap, BTreeSet};
 
 // The scope includes anchors and both sides of declared boundaries, while target
 // candidates stay global so a narrow plan cannot conceal name ambiguity.
@@ -64,4 +66,58 @@ pub fn selected(node: &Node, row: &Row) -> bool {
                 .iter()
                 .any(|s| s == &row.symbol || s == &row.name || s == &row.qualified))
         && (!node.paths.is_empty() || !node.symbols.is_empty())
+}
+pub fn unplanned(flow: &Flow, graph: &Graph, owners: &BTreeMap<&str, Vec<&str>>) -> Vec<Value> {
+    let mut seen = BTreeSet::new();
+    let mut rows = vec![];
+    for edge in &graph.edges {
+        let from = edge.source.as_deref().and_then(|s| owners.get(s));
+        let boundary = |ids: &Vec<&str>| {
+            ids.iter()
+                .any(|id| flow.covers.boundaries.iter().any(|b| flow.contains(id, b)))
+        };
+        let touches_boundary = from.is_some_and(boundary)
+            || edge
+                .targets
+                .iter()
+                .any(|target| owners.get(target.as_str()).is_some_and(boundary));
+        if !inside(flow, &edge.occurrence.path) && !touches_boundary {
+            continue;
+        }
+        for target in &edge.targets {
+            let to = owners.get(target.as_str());
+            let crossing = match (from, to) {
+                (Some(a), Some(b)) => a.iter().any(|a| {
+                    b.iter().any(|b| {
+                        a != b
+                            && ((!flow.contains(a, b) && !flow.contains(b, a))
+                                || flow.covers.boundaries.iter().any(|id| id == b)
+                                || flow.nodes.iter().any(|n| {
+                                    n.id == *b
+                                        && ["service", "store", "external"]
+                                            .contains(&n.r#type.as_str())
+                                }))
+                    })
+                }),
+                _ => true,
+            };
+            if !crossing {
+                continue;
+            }
+            let planned = from.zip(to).is_some_and(|(a, b)| {
+                flow.steps.iter().any(|s| {
+                    a.iter().any(|id| flow.contains(id, &s.from))
+                        && b.iter().any(|id| flow.contains(id, &s.to))
+                })
+            });
+            if !planned && seen.insert((edge.source.clone(), target.clone())) {
+                rows.push(json!({"from":edge.source,"to":target,"path":edge.occurrence.path,"state":"unplanned","evidence":strength(edge.occurrence.layer)}));
+            }
+        }
+        // An unresolved call cannot establish whether an unplanned boundary exists.
+        if edge.targets.is_empty() {
+            rows.push(json!({"from":edge.source,"to":edge.occurrence.name,"path":edge.occurrence.path,"state":"unknown"}));
+        }
+    }
+    rows
 }
