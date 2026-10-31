@@ -56,6 +56,19 @@ fn collect(hits: &mut HashMap<String, Hit>, rows: Vec<Hit>) {
         }
     }
 }
+fn enough(
+    hits: &HashMap<String, Hit>,
+    words: &[String],
+    corrected: &[(String, usize)],
+    limit: usize,
+) -> bool {
+    hits.values().any(|h| exactness(h, words, corrected) == 2)
+        || hits
+            .values()
+            .filter(|h| h.priority >= crate::index::features::SOURCE)
+            .count()
+            >= limit
+}
 pub(crate) fn search(
     root: &Path,
     words: &[String],
@@ -77,20 +90,13 @@ pub(crate) fn search(
     // Exact titles must reach reranking even when BM25 fills the candidate pool.
     collect(&mut hits, pool.fetch(&db, &all, Some(&words.join(" ")))?);
     collect(&mut hits, pool.fetch(&db, &all, None)?);
-    if hits.len() < limit
-        && !hits
-            .values()
-            .any(|hit| exactness(hit, words, &corrected) == 2)
-    {
+    if !enough(&hits, words, &corrected, limit) {
         corrected = correct(&db, words)?;
         pool = Pool::new(words, &corrected, kinds, candidates);
         let all = pool.terms.join(" AND ");
         collect(&mut hits, pool.fetch(&db, &all, None)?);
     }
-    let widened = hits.len() < limit
-        && !hits
-            .values()
-            .any(|hit| exactness(hit, words, &corrected) == 2);
+    let widened = !enough(&hits, words, &corrected, limit);
     if widened {
         let any = pool.terms.join(" OR ");
         collect(&mut hits, pool.fetch(&db, &any, None)?);
@@ -109,10 +115,16 @@ pub(crate) fn search(
         .map(|hit| (exactness(&hit, words, &corrected), hit))
         .collect();
     ranked.sort_by(|(ae, a), (be, b)| {
-        b.matched
-            .cmp(&a.matched)
+        (be == &2)
+            .cmp(&(ae == &2))
+            .then(b.priority.cmp(&a.priority))
+            .then(b.matched.cmp(&a.matched))
             .then(a.edits.cmp(&b.edits))
             .then(be.cmp(ae))
+            .then(
+                (a.text_bytes / index::features::SIZE_BUCKET)
+                    .cmp(&(b.text_bytes / index::features::SIZE_BUCKET)),
+            )
             .then_with(|| b.bm.total_cmp(&a.bm))
             .then_with(|| a.key.cmp(&b.key))
     });
@@ -120,6 +132,11 @@ pub(crate) fn search(
     if let Ok(model) = &model {
         hits = super::fusion::fuse(&db, words, kinds, hits, model, candidates)?;
     }
+    hits.sort_by(|a, b| {
+        (exactness(b, words, &corrected) == 2)
+            .cmp(&(exactness(a, words, &corrected) == 2))
+            .then(b.priority.cmp(&a.priority))
+    });
     let hits = merge(hits);
     total = total.max(hits.len() as i64);
     Ok(Results {

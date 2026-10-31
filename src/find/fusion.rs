@@ -24,7 +24,9 @@ pub(super) fn fuse(
         ranked.insert(hit.key.clone(), (contribution(rank + 1), hit));
     }
     let mut stmt = db
-        .prepare("SELECT kind,key,title,source FROM docs WHERE id=?1 ORDER BY key")
+        .prepare(
+            "SELECT kind,key,title,source,priority,text_bytes FROM docs WHERE id=?1 ORDER BY key",
+        )
         .map_err(|e| e.to_string())?;
     let mut seen = std::collections::HashSet::new();
     let mut rank = 0;
@@ -40,6 +42,8 @@ pub(super) fn fuse(
                     edits: 0,
                     bm: 0.0,
                     method: Some("embedding"),
+                    priority: r.get(4)?,
+                    text_bytes: r.get(5)?,
                 })
             })
             .map_err(|e| e.to_string())?;
