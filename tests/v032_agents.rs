@@ -193,3 +193,6 @@ fn broken_installed_executable_fails_open() {
             .success()
     );
 }
+
+#[path = "v032_agents/gate.rs"]
+mod gate;

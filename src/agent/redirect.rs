@@ -16,6 +16,9 @@ pub(super) fn response(input: &Value) -> Option<Value> {
     let tool = input.get("tool_input")?;
     let command = tool.get("command")?.as_str()?;
     let commands = shell::commands(command)?;
+    if let Some(response) = super::gate::response(&commands, command) {
+        return Some(response);
+    }
     let concerned = commands.iter().any(|words| shell::search_or_read(words));
     if !concerned {
         return None;

@@ -1,7 +1,9 @@
 // Agent integration boundary. Hook errors deliberately leave the original tool call intact.
+mod gate;
 mod install;
 mod redirect;
 mod run;
+mod runners;
 mod shell;
 
 use serde_json::{Value, json};

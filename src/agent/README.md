@@ -45,3 +45,40 @@ Vendor references: [Claude Code hooks](https://code.claude.com/docs/en/hooks) an
 not proof that a particular installed client has executed it. See the fixture
 integration tests for handler behavior; live client verification also needs a
 trusted hook and an authenticated, reachable model provider.
+
+## Reasons and test scope
+
+`WHOSAIDSO_ESCAPE='why the index cannot answer' COMMAND` permits a shell
+search/read that cannot be translated. It does not disable the test gate.
+`FULL_SUITE='why the full suite is needed' COMMAND` permits an unscoped test run.
+An empty or whitespace-only reason does not count. Reasons are also accepted
+from the hook process environment, or an initial literal `export`/assignment
+in the same shell input. Per-command assignments do not leak to later commands.
+Effective overrides append JSON lines to `$HOME/.whosaidso/agent-escapes.jsonl`;
+the tool feedback names the override and never claims index completeness.
+A log write failure is reported in feedback and fails open.
+
+The same policy applies to both clients:
+
+| Runner | Unscoped examples | Scoped examples |
+| --- | --- | --- |
+| Cargo | `cargo test`, `cargo +stable t`, package/features/jobs only, `--skip` only | named filter, `--test NAME`, `--bin NAME`, `--example NAME`, `--bench NAME`, `--lib`, `--doc` |
+| Go | `go test`, `go test ./...` | named package, nontrivial `-run` pattern |
+| npm | `npm test`, `npm run test`, aliases `t`/`tst`, runner options alone | workspace or positional test target |
+| pytest | `pytest`, `python3 -m pytest`, root or `tests/` only | named path/node, `-k` expression, `-m` marker |
+
+Help, collection/listing, and build-only forms do not run tests and pass.
+Npm scripts decide what their forwarded target means; this gate does not inspect
+package scripts. Go regular expressions and pytest expressions can still select
+all tests. This is a scope guardrail, not proof that a selector is narrow.
+
+The lexer recognizes simple command chains, redirections, literal environment
+assignments, common executable wrappers, and literal `sh`/`bash`/`zsh -c` bodies.
+It is not a shell interpreter. Scripts, shell aliases/functions, `eval`, `xargs`,
+`rustup run`, heredocs, quoted command substitutions, dynamically constructed
+commands and runner plugins are coverage gaps. Unrecognized runner options
+conservatively require an override instead of treating their values as selectors.
+Unknown syntax is not proof that no full run occurred. A broken payload or
+handler never blocks unrelated work. Use explicit reasons for wrappers the
+hook cannot inspect, and verify enforcement on the actual host before relying
+on it. Test-run denials contain one line explaining how to scope or override.
