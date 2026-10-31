@@ -1,115 +1,127 @@
 const NS = "http://www.w3.org/2000/svg";
 const svg = (tag, attrs = {}, text) => {
-  const n = document.createElementNS(NS, tag);
-  for (const [key, value] of Object.entries(attrs)) n.setAttribute(key, value);
+  const n = document.createElementNS(NS,tag);
+  for (const [k,v] of Object.entries(attrs)) n.setAttribute(k,v);
   if (text != null) n.textContent = text;
   return n;
 };
-export const attention = {planned:"not built yet", authored:"not checked", drifted:"changed", missing:"missing", unplanned:"not in plan", unknown:"not checked", ambiguous:"not checked", broken:"not checked"};
-function wrap(text, width, size = 18) {
-  const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d");
-  ctx.font = `550 ${size}px system-ui`;
-  const lines = []; let line = "";
+export const attention = {planned:"not built yet",authored:"not checked",drifted:"changed",missing:"missing",unplanned:"not in plan",unknown:"not checked",ambiguous:"not checked",broken:"not checked"};
+const ctx = document.createElement("canvas").getContext("2d");
+const measure = (text,size=16) => {ctx.font=`550 ${size}px system-ui`; return ctx.measureText(text).width;};
+function wrap(text,width,size=16) {
+  const rows=[]; let row="";
   for (const word of String(text).split(/\s+/)) {
-    if (line && ctx.measureText(line + " " + word).width > width) { lines.push(line); line = ""; }
-    for (const char of (line ? " " : "") + word) {
-      if (ctx.measureText(line + char).width > width) { lines.push(line); line = ""; }
-      line += char;
-    }
+    if (row && measure(row+" "+word,size)>width) {rows.push(row);row="";}
+    for (const c of (row ? " " : "")+word) {if (measure(row+c,size)>width) {rows.push(row);row="";} row+=c;}
   }
-  if (line) lines.push(line);
-  return lines;
+  if (row) rows.push(row); return rows;
 }
-// Remove only DFS back-edges from ranking; they remain arrows in the picture.
-function layout(nodes, edges, width) {
-  const ids = new Set(nodes.map(n => n.id)), marks = new Map(), order = [], forward = [];
-  const visit = id => {
-    marks.set(id, 1);
-    for (const e of edges.filter(e => e.from === id && ids.has(e.to))) {
-      if (marks.get(e.to) === 1) continue;
-      forward.push(e); if (!marks.has(e.to)) visit(e.to);
-    }
-    marks.set(id, 2); order.unshift(id);
-  };
-  nodes.forEach(n => { if (!marks.has(n.id)) visit(n.id); });
-  const rank = new Map(nodes.map(n => [n.id, 0]));
-  for (const id of order) for (const e of forward.filter(e => e.from === id)) rank.set(e.to, Math.max(rank.get(e.to), rank.get(id) + 1));
-  const columns = Math.max(1, Math.floor((width - 72) / 260)), boxWidth = Math.min(280, (width - 72 - (columns - 1) * 40) / columns);
-  const returns = new Map();
-  for (const e of edges) if (rank.has(e.to) && rank.get(e.to) <= rank.get(e.from)) returns.set(e.to,(returns.get(e.to) || 0)+1);
-  const lanes = Math.max(0,...returns.values()), gap = Math.max(92,44+lanes*18);
-  const points = new Map(); let y = 72+lanes*18, row = 0;
-  for (const level of [...new Set(rank.values())].sort((a,b) => a-b)) {
-    const group = nodes.filter(n => rank.get(n.id) === level);
-    for (let i = 0; i < group.length; i += columns) {
-      const chunk = group.slice(i, i + columns), heights = chunk.map(n => Math.max(92, wrap(n.name, boxWidth - 44).length * 24 + 60));
-      const height = Math.max(...heights), left = (width - chunk.length * boxWidth - (chunk.length - 1) * 40) / 2;
-      chunk.forEach((n,j) => points.set(n.id, {x:left + j * (boxWidth + 40), y, w:boxWidth, h:heights[j], floor:y+height, row}));
-      y += height + gap; row++;
-    }
+function layout(nodes,edges,width) {
+  const byId=new Map(nodes.map(n=>[n.id,n])), mark=new Map(),order=[],forward=[],back=new Set();
+  const visit=id=>{mark.set(id,1);for(const e of edges.filter(e=>e.from===id&&byId.has(e.to))){if(mark.get(e.to)===1){back.add(e.key);continue;}forward.push(e);if(!mark.has(e.to))visit(e.to);}mark.set(id,2);order.unshift(id);};
+  nodes.forEach(n=>{if(!mark.has(n.id))visit(n.id);});
+  const rank=new Map(nodes.map(n=>[n.id,0]));
+  for(const id of order)for(const e of forward.filter(e=>e.from===id))rank.set(e.to,Math.max(rank.get(e.to),rank.get(id)+1));
+  const units=nodes.map(n=>{
+    const returns=edges.filter(e=>e.from===n.id&&back.has(e.key)).map(e=>({...e,rows:wrap(`↩ ${e.when ? e.when+" · " : ""}${byId.get(e.to).name}`,132,11)}));
+    returns.forEach(e=>{e.h=Math.max(24,e.rows.length*14+8);});
+    const rw=Math.max(0,...returns.map(e=>Math.max(...e.rows.map(s=>measure(s,11)))+16)),rh=returns.reduce((h,e)=>h+e.h,0);
+    const w=Math.min(width-48,Math.max(112,Math.min(168,measure(n.name)+36))),rows=wrap(n.name,w-36),h=56+(rows.length-1)*20+(attention[n.state]?18:0);
+    const below=w+12+rw>width-48||rh>h;
+    return {n,w,h,rows,returns,rw,rh,below,uw:below?Math.max(w,rw):w+(rw?12+rw:0),uh:below?h+(rh?12+rh:0):Math.max(h,rh)};
+  });
+  const levels=[...new Set(rank.values())].sort((a,b)=>a-b).map(r=>units.filter(u=>rank.get(u.n.id)===r));
+  const labels=new Map(forward.map(e=>[e.key,wrap(e.when||"",112,11)])),out=new Map(),incoming=new Map();
+  for(const e of forward){const h=labels.get(e.key).length?labels.get(e.key).length*14+8:0;out.set(e.from,(out.get(e.from)||0)+h);incoming.set(e.to,(incoming.get(e.to)||0)+h);}
+  const widths=levels.map(group=>Math.max(...group.map(u=>u.uw))),need=widths.reduce((a,b)=>a+b,0)+32*(levels.length-1)+48;
+  const horizontal=levels.length>1&&need<=width,points=new Map(),gap=Math.max(56,Math.max(0,...incoming.values())+28);
+  let height=0;
+  const place=(u,x,y,row,floor)=>{const bx=x+(u.below?(u.uw-u.w)/2:0),by=y+(!u.below?(u.uh-u.h)/2:0);points.set(u.n.id,{...u,x:bx,y:by,left:x,bottom:y+u.uh,row,floor,rx:u.below?x+(u.uw-u.rw)/2:bx+u.w+12,ry:u.below?by+u.h+12:y+(u.uh-u.rh)/2});};
+  const band=horizontal?Math.max(0,...out.values())+16:0;
+  if(horizontal){
+    height=Math.max(...levels.map(g=>g.reduce((h,u)=>h+u.uh,0)+(g.length-1)*28))+band+48;
+    let x=24;const spacing=(width-48-widths.reduce((a,b)=>a+b,0))/(levels.length-1);
+    levels.forEach((group,i)=>{let y=band+24+(height-band-48-group.reduce((h,u)=>h+u.uh,0)-(group.length-1)*28)/2;group.forEach(u=>{place(u,x,y,i,y+u.uh);y+=u.uh+28;});x+=widths[i]+spacing;});
+  }else{
+    let y=24,row=0;
+    for(const group of levels){let chunk=[],used=0;const flush=()=>{if(!chunk.length)return;const h=Math.max(...chunk.map(u=>u.uh));let x=(width-used)/2;for(const u of chunk){place(u,x,y,row,y+h);x+=u.uw+28;}y+=h+gap;row++;chunk=[];used=0;};for(const u of group){if(used+u.uw+(chunk.length?28:0)>width-48)flush();used+=u.uw+(chunk.length?28:0);chunk.push(u);}flush();}
+    height=Math.max(120,y-gap+24);
   }
-  return {points, height:Math.max(180, y + 24)};
-}
-export function diagram(onGo, onDetails) {
-  const root = svg("svg", {class:"flow-diagram", role:"group", "aria-label":"Flowchart"});
-  const defs = svg("defs"), marker = svg("marker", {id:"flow-arrow", viewBox:"0 0 10 10", refX:9, refY:5, markerWidth:7, markerHeight:7, orient:"auto-start-reverse"});
-  marker.append(svg("path", {d:"M 1 1 L 9 5 L 1 9", fill:"none", stroke:"currentColor", "stroke-width":1.5})); defs.append(marker);
-  const lines = svg("g", {class:"flow-arrows"}), boxes = svg("g", {class:"flow-boxes"}); root.append(defs, lines, boxes);
-  const items = new Map(), arrows = new Map(); let latest, selected = "", shape = "", points;
-  const redraw = () => {
-    if (!latest) return;
-    const width = Math.max(220, root.parentElement?.clientWidth || 960);
-    const nodes = latest.nodes || [], edges = (latest.steps || []).flatMap((s,i) => (Array.isArray(s.to) ? s.to : [s.to]).map((to,j) => ({...s,to,key:`${s.id || i}:${j}`})));
-    const signature = JSON.stringify([width,nodes.map(n => [n.id,n.name]),edges.map(e => [e.key,e.from,e.to,e.when])]);
-    const moved = signature !== shape;
-    if (moved) { const plan = layout(nodes,edges,width); points = plan.points; root.setAttribute("viewBox", `0 0 ${width} ${plan.height}`); root.style.height = `${plan.height}px`; shape = signature; }
-    const keep = new Set();
-    for (const n of nodes) {
-      keep.add(n.id); let item = items.get(n.id);
-      if (!item) {
-        const g = svg("g", {class:"flow-box", "data-node":n.id}), a = svg("a"), rect = svg("rect", {rx:16}), title = svg("text", {class:"flow-name"}), state = svg("text", {class:"flow-word"}), deeper = svg("text", {class:"flow-deeper"}, "›");
-        a.append(rect,title,state,deeper);
-        const info = svg("g", {class:"flow-info", role:"button", tabindex:0}), hit = svg("rect", {width:62,height:26,rx:7}), label = svg("text", {x:31,y:18,"text-anchor":"middle"}, "Details"); info.append(hit,label); g.append(a,info); boxes.append(g);
-        item = {g,a,rect,title,state,deeper,info}; items.set(n.id,item);
-        a.addEventListener("click", e => {e.preventDefault(); onGo(item.data);});
-        const detail = e => { e.preventDefault(); e.stopPropagation(); onDetails(item.data); };
-        info.addEventListener("click",detail); info.addEventListener("keydown",e => {if (["Enter"," "].includes(e.key)) detail(e);});
-      }
-      item.data = n; const p = points.get(n.id);
-      item.g.setAttribute("transform",`translate(${p.x} ${p.y})`); item.g.dataset.state = n.state;
-      item.g.classList.toggle("selected",n.id === selected);
-      item.a.setAttribute("href",onGo(n,true)); item.a.setAttribute("aria-label",`Open ${n.name}`);
-      item.rect.setAttribute("width",p.w); item.rect.setAttribute("height",p.h);
-      if (moved) { const rows = wrap(n.name,p.w-44); item.title.replaceChildren(...rows.map((line,i) => svg("tspan",{x:22,y:32+i*24},line))); }
-      item.state.setAttribute("x",22); item.state.setAttribute("y",p.h-19); item.state.textContent = attention[n.state] || "";
-      item.deeper.setAttribute("x",p.w-23); item.deeper.setAttribute("y",32); item.deeper.style.display = n.children ? "" : "none";
-      item.info.setAttribute("transform",`translate(${p.w-70} ${p.h+5})`); item.info.setAttribute("aria-label",`Details for ${n.name}`);
+  const labelOffsets=new Map(),routes=[],stems=new Map();
+  for(const e of forward){
+    const a=points.get(e.from),b=points.get(e.to);let stem,path;
+    if(horizontal){const j=a.left+a.uw+(width-48-widths.reduce((a,b)=>a+b,0))/(levels.length-1)/2,sy=a.y+a.h/2,ty=b.y+b.h/2;
+      stem=a.below&&a.returns.length?[[a.x,sy],[a.left-12,sy],[a.left-12,a.bottom+12],[j,a.bottom+12],[j,sy]]:a.returns.length?[[a.x+a.w/2,a.y+a.h],[a.x+a.w/2,a.bottom+12],[j,a.bottom+12],[j,sy]]:[[a.x+a.w,sy],[j,sy]];
+      path=b.row===a.row+1?[[j,sy],[j,ty],[b.x,ty]]:[[j,sy],[j,band+8],[b.x-16,band+8],[b.x-16,ty],[b.x,ty]];
+    }else{const j=a.floor+gap/2,c=a.x+a.w/2,t=b.x+b.w/2;
+      stem=a.below&&a.returns.length?[[a.x,a.y+a.h/2],[a.left-12,a.y+a.h/2],[a.left-12,j],[c,j]]:[[c,a.y+a.h],[c,j]];
+      path=b.row===a.row+1?[[c,j],[t,j],[t,b.y]]:[[c,j],[width-12,j],[width-12,b.y-gap/2],[t,b.y-gap/2],[t,b.y]];
     }
-    for (const [id,item] of items) if (!keep.has(id)) {item.g.remove(); items.delete(id);}
-    const used = new Set();
-    const returnSlots = new Map();
-    edges.forEach((e,i) => {
-      const a = points.get(e.from), b = points.get(e.to); if (!a || !b) return;
-      used.add(e.key); let item = arrows.get(e.key);
-      if (!item) {const g = svg("g"), path = svg("path", {"marker-end":"url(#flow-arrow)"}), label = svg("text", {"text-anchor":"middle"}); g.append(path,label); lines.append(g); item={g,path,label}; arrows.set(e.key,item);}
-      item.g.dataset.state = e.state;
-      if (!moved) return;
-      const slot = returnSlots.get(e.to) || 0; if (b.row <= a.row) returnSlots.set(e.to,slot+1);
-      const ax=a.x+a.w/2, ay=a.y+a.h, bx=b.x+b.w/2, by=b.y, lane=14+(b.row<=a.row ? slot : i%3)*18;
-      let d, lx, ly;
-      if (b.row === a.row && a !== b) {
-        const y=Math.max(a.floor,b.floor)+22+lane; d=`M ${ax} ${ay} V ${y} H ${bx} V ${b.y+b.h}`; lx=(ax+bx)/2; ly=y-7;
-      } else if (b.row > a.row && b.row === a.row+1) {
-        const mid=(ay+by)/2; d=`M ${ax} ${ay} V ${mid} H ${bx} V ${by}`; lx=(ax+bx)/2; ly=mid-7;
-      } else {
-        const x=b.row<=a.row ? Math.min(lane,width*.12) : width-Math.min(lane,width*.12);
-        d=`M ${ax} ${ay} V ${a.floor+12+lane} H ${x} V ${b.y-24-lane} H ${bx} V ${by}`; lx=bx; ly=b.y-32-lane;
+    const lines=labels.get(e.key),lh=lines.length*14+8,key=horizontal?e.from:e.to,offset=labelOffsets.get(key)||0;labelOffsets.set(key,offset+(lines.length?lh:0));
+    const cx=horizontal?(a.left+a.uw+b.x)/2:b.x+b.w/2,cy=horizontal?8+offset+lh/2:b.y-gap+12+offset+lh/2;
+    const lw=Math.max(0,...lines.map(s=>measure(s,11)))+12;
+    let label=lines.length?{x:Math.max(8,Math.min(width-lw-8,cx-lw/2)),y:cy-lh/2,w:lw,h:lh,rows:lines}:null;
+    if(horizontal&&label){
+      const mid=(a.left+a.uw+b.x)/2,ty=b.y+b.h/2,j=a.left+a.uw+(width-48-widths.reduce((a,b)=>a+b,0))/(levels.length-1)/2;
+      const obstacles=[...points.values()].flatMap(p=>[{x:p.x,y:p.y,w:p.w,h:p.h},...(p.returns.length?[{x:p.rx,y:p.ry,w:p.rw,h:p.rh}]:[])]).concat(routes.flatMap(e=>e.label?[e.label]:[]));
+      const safeY=ty<a.y+a.h/2?Math.min(ty,a.y-lh/2-8):Math.max(ty,a.y+a.h+lh/2+8);
+      for(const [x,y]of [[mid,ty],[mid,a.y-lh/2-8],[mid,a.y+a.h+lh/2+8],[j-7-lw/2,ty],[j-7-lw/2,safeY],[cx,cy]]){
+        const r={...label,x:Math.max(8,Math.min(width-lw-8,x-lw/2)),y:y-lh/2};
+        if(r.y>=8&&!obstacles.some(b=>r.x<b.x+b.w+3&&r.x+r.w>b.x-3&&r.y<b.y+b.h+3&&r.y+r.h>b.y-3)){label=r;break;}
       }
-      item.path.setAttribute("d",d); item.label.setAttribute("x",lx); item.label.setAttribute("y",ly);
-      item.label.replaceChildren(...wrap(e.when || "",Math.max(100,Math.min(220,width-80)),12).map((line,j) => svg("tspan",{x:lx,dy:j ? 15 : 0},line)));
-    });
-    for (const [key,item] of arrows) if (!used.has(key)) {item.g.remove(); arrows.delete(key);}
+    }
+    if(!stems.has(e.from))stems.set(e.from,{key:`stem:${e.from}`,from:e.from,path:stem});
+    routes.push({...e,path,label});
+  }
+  const stemList=[...stems.values()],allPaths=[...routes,...stemList];
+  if(horizontal){const lift=Math.min(...[...points.values()].map(p=>p.y-8),...routes.flatMap(e=>e.label?[e.label.y]:[]),...allPaths.flatMap(e=>e.path.map(p=>p[1])))-16;for(const p of points.values()){p.y-=lift;p.bottom-=lift;p.floor-=lift;p.ry-=lift;}for(const e of allPaths){e.path=e.path.map(([x,y])=>[x,y-lift]);if(e.label)e.label.y-=lift;}height=Math.max(...[...points.values()].map(p=>p.bottom),...routes.flatMap(e=>e.label?[e.label.y+e.label.h]:[]))+24;}
+  return {points,routes,stems:stemList,back,height,horizontal};
+}
+// Split strokes at label backgrounds, then round only the remaining visible bends.
+function stroke(points,labels) {
+  const pieces=[];let piece=[];
+  for(let i=1;i<points.length;i++){
+    const a=points[i-1],b=points[i],dx=b[0]-a[0],dy=b[1]-a[1],length=Math.abs(dx||dy);if(!length)continue;
+    let intervals=[[0,1]];
+    for(const r of labels){const cross=dx?(a[1]>=r.y-2&&a[1]<=r.y+r.h+2):(a[0]>=r.x-2&&a[0]<=r.x+r.w+2);if(!cross)continue;
+      const t=[((dx?r.x-2:r.y-2)-(dx?a[0]:a[1]))/(dx||dy),((dx?r.x+r.w+2:r.y+r.h+2)-(dx?a[0]:a[1]))/(dx||dy)].sort((a,b)=>a-b);
+      intervals=intervals.flatMap(([l,h])=>t[1]<=l||t[0]>=h?[[l,h]]:[[l,Math.min(h,t[0])],[Math.max(l,t[1]),h]].filter(([x,y])=>y>x));
+    }
+    for(const [l,h]of intervals){const start=[a[0]+dx*l,a[1]+dy*l],end=[a[0]+dx*h,a[1]+dy*h];if(piece.length&&piece.at(-1).some((v,j)=>Math.abs(v-start[j])>.01)){pieces.push(piece);piece=[];}if(!piece.length)piece.push(start);piece.push(end);}
+  }
+  if(piece.length)pieces.push(piece);
+  return pieces.map(p=>{let d=`M ${p[0].join(" ")}`;for(let i=1;i<p.length-1;i++){const a=p[i-1],b=p[i],c=p[i+1],r=Math.min(6,Math.hypot(b[0]-a[0],b[1]-a[1])/2,Math.hypot(c[0]-b[0],c[1]-b[1])/2);const near=(v)=>b.map((n,j)=>n+(v[j]-n)*r/(Math.hypot(v[0]-b[0],v[1]-b[1])||1));d+=` L ${near(a).join(" ")} Q ${b.join(" ")} ${near(c).join(" ")}`;}return {d:d+` L ${p.at(-1).join(" ")}`,end:p.at(-1)};});
+}
+export function diagram(onGo,onDetails,onSelect=()=>{}) {
+  const root=svg("svg",{class:"flow-diagram",role:"group","aria-label":"Flowchart"}),defs=svg("defs"),lines=svg("g",{class:"flow-arrows"}),boxes=svg("g",{class:"flow-boxes"});
+  for(const active of [false,true]){const m=svg("marker",{id:active?"flow-arrow-active":"flow-arrow",viewBox:"0 0 10 10",refX:9,refY:5,markerWidth:5,markerHeight:5,orient:"auto"});m.append(svg("path",{class:active?"flow-head active":"flow-head",d:"M 2 2 L 8 5 L 2 8"}));defs.append(m);}root.append(defs,lines,boxes);
+  const items=new Map(),arrows=new Map();let latest,selected="",hovered="",shape="",plan;
+  const highlight=()=>{for(const [id,item]of items)item.g.classList.toggle("selected",id===selected);for(const item of arrows.values()){const active=[selected,hovered].some(id=>id&&(item.from===id||item.to===id||item.targets?.includes(id)));item.g.classList.toggle("active",active);for(const path of item.heads||[])path.setAttribute("marker-end",active?"url(#flow-arrow-active)":"url(#flow-arrow)");}};
+  const choose=id=>{selected=id;highlight();onSelect(id);items.get(id)?.a.focus({preventScroll:true});items.get(id)?.g.scrollIntoView({block:"nearest",inline:"nearest"});};
+  const redraw=()=>{
+    if(!latest)return;const width=Math.max(180,root.parentElement?.clientWidth||960),nodes=latest.nodes||[],edges=(latest.steps||[]).flatMap((s,i)=>(Array.isArray(s.to)?s.to:[s.to]).map((to,j)=>({...s,to,key:`edge:${s.id||i}:${j}`})));
+    const signature=JSON.stringify([width,nodes.map(n=>[n.id,n.name,!!attention[n.state]]),edges.map(e=>[e.key,e.from,e.to,e.when])]),moved=signature!==shape;
+    if(moved){plan=layout(nodes,edges,width);shape=signature;root.setAttribute("viewBox",`0 0 ${width} ${plan.height}`);root.style.height=`${plan.height}px`;root.dataset.direction=plan.horizontal?"horizontal":"vertical";}
+    const keep=new Set();
+    for(const n of nodes){keep.add(n.id);let item=items.get(n.id);
+      if(!item){const g=svg("g",{class:"flow-box","data-node":n.id}),a=svg("a"),rect=svg("rect",{rx:12}),title=svg("text",{class:"flow-name","text-anchor":"middle"}),state=svg("text",{class:"flow-word","text-anchor":"middle"}),deeper=svg("text",{class:"flow-deeper"},"›"),info=svg("g",{class:"flow-info",role:"button",tabindex:0});info.append(svg("rect",{width:24,height:20,rx:6}),svg("text",{x:12,y:13,"text-anchor":"middle"},"..."));a.append(rect,title,state,deeper);g.append(a,info);boxes.append(g);item={g,a,rect,title,state,deeper,info};items.set(n.id,item);
+        a.addEventListener("click",e=>{e.preventDefault();onGo(item.data);});g.addEventListener("mouseenter",()=>{hovered=n.id;highlight();});g.addEventListener("mouseleave",()=>{hovered="";highlight();});a.addEventListener("focus",()=>{hovered=n.id;highlight();});a.addEventListener("blur",()=>{hovered="";highlight();});const detail=e=>{e.preventDefault();e.stopPropagation();onDetails(item.data);};info.addEventListener("click",detail);info.addEventListener("keydown",e=>{if(["Enter"," "].includes(e.key))detail(e);});
+      }
+      const p=plan.points.get(n.id);item.data=n;item.g.setAttribute("transform",`translate(${p.x} ${p.y})`);item.g.dataset.state=n.state;item.a.setAttribute("href",onGo(n,true));item.a.setAttribute("aria-label",`Open ${n.name}`);item.rect.setAttribute("width",p.w);item.rect.setAttribute("height",p.h);
+      if(moved){const y=(p.h-p.rows.length*20-(attention[n.state]?18:0))/2+15;item.title.replaceChildren(...p.rows.map((s,i)=>svg("tspan",{x:p.w/2,y:y+i*20},s)));item.state.setAttribute("x",p.w/2);item.state.setAttribute("y",y+p.rows.length*20);}
+      item.state.textContent=attention[n.state]||"";item.deeper.setAttribute("x",p.w-14);item.deeper.setAttribute("y",p.h/2+5);item.deeper.style.display=n.children?"":"none";item.info.setAttribute("transform",`translate(${p.w-20} -8)`);item.info.setAttribute("aria-label",`Details for ${n.name}`);
+    }
+    for(const [id,item]of items)if(!keep.has(id)){item.g.remove();items.delete(id);}
+    const used=new Set(),labels=plan.routes.flatMap(e=>e.label?[e.label]:[]);
+    const entry=(key,from,to,kind)=>{used.add(key);let item=arrows.get(key);if(!item){const g=svg("g");lines.append(g);item={g};arrows.set(key,item);}Object.assign(item,{from,to,targets:(kind==="stem"?plan.routes:kind==="return"?edges.filter(e=>plan.back.has(e.key)):[]).filter(e=>e.from===from).map(e=>e.to)});item.g.dataset.kind=kind;item.g.dataset.from=from;if(to)item.g.dataset.to=to;return item;};
+    const paths=(item,points,head)=>{item.heads=[];return stroke(points,labels).map(p=>{const n=svg("path",{d:p.d});if(head&&p.end.every((v,j)=>Math.abs(v-points.at(-1)[j])<.01))item.heads.push(n);return n;});};
+    for(const e of [...plan.stems,...plan.routes]){const item=entry(e.key,e.from,e.to,e.label===undefined?"stem":"forward");if(moved){const children=paths(item,e.path,e.label!==undefined);if(e.label){const r=e.label,g=svg("g",{class:"flow-label",transform:`translate(${r.x} ${r.y})`});g.append(svg("rect",{width:r.w,height:r.h,rx:5}),svg("text",{"text-anchor":"middle"}));g.children[1].append(...r.rows.map((s,i)=>svg("tspan",{x:r.w/2,y:14+i*14},s)));children.push(g);}item.g.replaceChildren(...children);}}
+    for(const p of plan.points.values())if(p.returns.length){
+      if(p.below){const stem=entry(`return:${p.n.id}`,p.n.id,null,"return");if(moved)stem.g.replaceChildren(svg("path",{d:`M ${p.x+p.w/2} ${p.y+p.h} L ${p.x+p.w/2} ${p.ry}`}));}
+      let y=p.ry;for(const e of p.returns){const item=entry(e.key,e.from,e.to,"return-link");if(moved){item.heads=[];const a=svg("a",{class:"flow-return",href:"#",role:"button",tabindex:0,transform:`translate(${p.rx} ${y})`,"aria-label":`Select ${nodes.find(n=>n.id===e.to).name}`});a.append(svg("rect",{width:p.rw,height:e.h,rx:8}),svg("text",{"text-anchor":"middle"}));a.children[1].append(...e.rows.map((s,i)=>svg("tspan",{x:p.rw/2,y:15+i*14},s)));const select=event=>{event.preventDefault();choose(e.to);};a.addEventListener("click",select);a.addEventListener("keydown",event=>{if(event.key===" ")select(event);});item.g.replaceChildren(...(p.below?[]:[svg("path",{d:`M ${p.x+p.w} ${y+e.h/2} L ${p.rx} ${y+e.h/2}`})]),a);}y+=e.h;}
+    }
+    for(const [key,item]of arrows)if(!used.has(key)){item.g.remove();arrows.delete(key);}highlight();
   };
-  const observer = new ResizeObserver(redraw);
-  return {node:root, update(data, pick = "") {latest=data; selected=pick; redraw(); if (root.isConnected) observer.observe(root.parentElement);}, disconnect() {observer.disconnect();}};
+  const observer=new ResizeObserver(redraw);
+  return {node:root,update(data,pick=""){latest=data;selected=pick;redraw();if(root.isConnected)observer.observe(root.parentElement);},disconnect(){observer.disconnect();}};
 }

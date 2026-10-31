@@ -9,6 +9,7 @@ export function flowsScreen() {
   const toolbar = el("div", "toolbar flow-toolbar"), crumbs = el("nav", "flow-crumbs"), choices = el("div", "flow-choices"), body = el("div", "flow-canvas"), pages = el("div", "toolbar"), panel = el("aside", "flow-panel card");
   crumbs.setAttribute("aria-label","Breadcrumb"); panel.hidden = true; panel.setAttribute("aria-label","Details");
   const node = el("div", "screen flow-screen", toolbar,body,pages,panel); toolbar.append(crumbs,choices);
+  let layer = parent; const collapsed = new Set();
   let data, returnFocus, selected = null, navKey = "", detailKey = "", cardsKey = "";
   const link = (name, target = id, layer = "", page = 0) => Object.assign(el("a", "flow-link", name), {href:route(target,layer,branch,page)});
   const go = (n, href = false) => {
@@ -16,7 +17,9 @@ export function flowsScreen() {
     if (href) return path;
     location.hash = path;
   };
-  const chart = diagram(go,n => show(n.id));
+  const chart = diagram(go,n => show(n.id),pick => {
+    selected = pick; if (!panel.hidden) details(); chart.update(data,selected);
+  });
   if (id) body.append(chart.node);
   const close = () => {
     const old = selected; selected = null; panel.hidden = true; chart.update(data);
@@ -55,20 +58,31 @@ export function flowsScreen() {
     const a = link(title,target); a.className = "flow-card card";
     const preview = document.createElementNS("http://www.w3.org/2000/svg","svg"); preview.setAttribute("viewBox","0 0 180 42"); preview.setAttribute("aria-hidden","true");
     for (let i=0;i<3;i++) {const r=document.createElementNS(preview.namespaceURI,"rect"); for (const [k,v] of Object.entries({x:i*66+1,y:5,width:44,height:30,rx:8})) r.setAttribute(k,v); preview.append(r); if(i<2){const p=document.createElementNS(preview.namespaceURI,"path");p.setAttribute("d",`M ${i*66+45} 20 h 20 m -5 -4 l 5 4 -5 4`);preview.append(p);}}
-    a.replaceChildren(preview,el("strong","",title),progress && el("span","muted",`${progress.built} of ${progress.total} built`)); return a;
+    a.replaceChildren(preview,el("strong","",title),...(progress ? [el("span","muted",`${progress.built} of ${progress.total} built`)] : [])); return a;
   }
   return {node, dispose:chart.disconnect, async load() {
-    data = await api("/api/flows",{id,parent,offset,branch}); node.dataset.revision = data.revision || "";
+    data = await api("/api/flows",{id,parent:layer,offset,branch});
+    const visited = new Set([layer]);
+    for (;;) {
+      const only = data.nodes?.length === 1 ? data.nodes[0] : null;
+      if (!id || offset || data.next != null || !only?.children || only.note || only.goal || only.refs?.length || only.risks?.length || ["steps","risks","unknown","unplanned","problems"].some(k => data[k]?.length)) break;
+      const next = only.target || only.id;
+      if (visited.has(next)) break;
+      const child = await api("/api/flows",{id,parent:next,offset:0,branch});
+      if (!child.nodes?.length) break;
+      collapsed.add(next); visited.add(next); layer = next; data = child;
+    }
+    node.dataset.revision = data.revision || "";
     const nav = JSON.stringify([data.breadcrumbs,data.branches,data.committed_only,data.next]);
     if (nav !== navKey) {
       navKey = nav;
       const trail = [link("Flows", "")];
       if (id) trail.push(link(id === "$map" ? "Code map" : id.replace(/[-_]/g," ").replace(/^./,c => c.toUpperCase())));
-      for (const c of data.breadcrumbs || []) trail.push(link(c.name,id,c.id));
+      for (const c of (data.breadcrumbs || []).filter(c => c.id === layer || !collapsed.has(c.id))) trail.push(link(c.name,id,c.id));
       crumbs.replaceChildren(...trail.flatMap((a,i) => i ? [el("span","muted",">"),a] : [a]));
-      const details = el("button","flow-link","Details"); details.type="button"; details.onclick=() => show("$screen");
+      const details = el("button","flow-link","Details"); details.type="button"; details.onclick=() => show(selected || "$screen");
       choices.replaceChildren(...[id && details,data.branches?.length && dropdown({options:[["","Worktree"],...data.branches.map(b => [b,b])],value:branch,onPick:b => {location.hash=route(id,"",b);}}),data.committed_only && el("span","muted","committed only")].filter(Boolean));
-      pages.replaceChildren(...[offset > 0 && link("Previous",id,parent,Math.max(0,offset-20)),data.next != null && link("Next",id,parent,data.next)].filter(Boolean));
+      pages.replaceChildren(...[offset > 0 && link("Previous",id,layer,Math.max(0,offset-20)),data.next != null && link("Next",id,layer,data.next)].filter(Boolean));
     }
     if (!id) {
       const key=JSON.stringify(data.flows);

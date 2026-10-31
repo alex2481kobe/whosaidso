@@ -2,7 +2,7 @@
 :root {
   --bg: #edf0f8; --surface: rgba(255,255,255,.91); --surface-2: #f1f3fa; --line: rgba(161,171,198,.28); --line-2: rgba(161,171,198,.16);
   --text: #252d44; --muted: #535e76; --scroll: rgba(15,23,42,.18); --hover: rgba(15,23,42,.05); --tint: 11%;
-  --blue: #5a48b6; --green: #216c55; --red: #a63751; --amber: #805719; --purple: #7050a2; --slate: #535e76;
+  --flow-wire: #aab0bb; --blue: #5a48b6; --green: #216c55; --red: #a63751; --amber: #805719; --purple: #7050a2; --slate: #535e76;
   --shadow: 0 4px 24px #445a8220, inset 0 1px 0 #fff9;
   --ground: radial-gradient(ellipse at 80% 5%,#dddcf9 0,transparent 50%),radial-gradient(ellipse at 5% 65%,#dfedf1 0,transparent 50%),#f1f2f8;
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
@@ -11,7 +11,7 @@
 :root[data-theme="dark"] {
   --bg: #151824; --surface: rgba(31,35,51,.95); --surface-2: #252b3e; --line: #ffffff16; --line-2: #ffffff0c;
   --text: #e7eaf7; --muted: #bac2d8; --scroll: rgba(255,255,255,.16); --hover: rgba(255,255,255,.06); --tint: 17%;
-  --blue: #c0b4ff; --green: #83d9ba; --red: #ffa4b4; --amber: #efcc83; --purple: #ccb6f5; --slate: #aab5ce;
+  --flow-wire: #737d8c; --blue: #c0b4ff; --green: #83d9ba; --red: #ffa4b4; --amber: #efcc83; --purple: #ccb6f5; --slate: #aab5ce;
   --shadow: 0 8px 32px #00000018, inset 0 1px 0 #ffffff08;
   --ground: radial-gradient(ellipse at 80% 0,#30304c 0,transparent 55%),radial-gradient(ellipse at 0% 80%,#1d3340 0,transparent 55%),#171b28;
   color-scheme: dark;
@@ -136,27 +136,33 @@ h1, h2, h3, p { margin: 0; }
 .flow-canvas[data-empty]:not([data-empty=""])::after { content: attr(data-empty); display: block; padding: 20px; color: var(--muted); text-align: center; }
 .flow-canvas[data-empty]:not([data-empty=""]) .flow-diagram { display: none; }
 .flow-diagram { width: 100%; display: block; overflow: visible; font-family: inherit; }
-.flow-box > a > rect { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; filter: drop-shadow(0 3px 5px #252d4410); }
-.flow-box[data-state="planned"] > a > rect { stroke-dasharray: 6 5; }
-.flow-box.selected > a > rect { fill: var(--surface-2); stroke: var(--blue); }
-.flow-box > a:hover > rect { fill: var(--surface-2); }
-.flow-name { font-size: 18px; font-weight: 550; fill: var(--text); }
-.flow-word { font-size: 12px; fill: var(--muted); }
-.flow-deeper { fill: var(--blue); font-size: 22px; }
+.flow-diagram { --flow-wire: #aab0bb; }
+:root[data-theme="dark"].flow-diagram { --flow-wire: #737d8c; }
+.flow-box > a > rect { fill: var(--surface); stroke: var(--line); stroke-width: 1.25; filter: drop-shadow(0 2px 4px #252d440c); }
+.flow-box[data-state="planned"] > a > rect { stroke-dasharray: 5 4; }
+.flow-box:is([data-state="drifted"], [data-state="missing"], [data-state="unplanned"]) > a > rect { stroke: #dd9a45; stroke-width: 1.5; }
+.flow-box:is([data-state="drifted"], [data-state="missing"], [data-state="unplanned"]) text:last-of-type { fill: #b5701c; }
+.flow-box.selected > a > rect, .flow-box > a:hover > rect, .flow-box > a:focus-visible > rect { fill: var(--surface-2); stroke: var(--blue); }
+.flow-name { font-size: 16px; font-weight: 550; fill: var(--text); }
+.flow-word { font-size: 11px; fill: var(--muted); }
+.flow-deeper { fill: var(--muted); font-size: 17px; }
 .flow-info { cursor: pointer; opacity: 0; }
 .flow-box:hover .flow-info, .flow-box:focus-within .flow-info { opacity: 1; }
-.flow-info rect { fill: var(--surface-2); }
+.flow-info rect { fill: var(--surface-2); stroke: var(--line); }
 .flow-info text { fill: var(--muted); font-size: 11px; }
-.flow-diagram marker path { stroke: var(--blue); }
-.flow-arrows path { stroke: var(--blue); stroke-width: 1.4; fill: none; stroke-linejoin: round; stroke-linecap: round; }
-.flow-arrows [data-state="planned"] path, .flow-arrows [data-state="authored"] path { stroke-dasharray: 5 4; }
-.flow-arrows text { fill: var(--muted); font-size: 12px; paint-order: stroke; stroke: var(--surface); stroke-width: 6px; stroke-linejoin: round; }
+.flow-head, .flow-arrows path { stroke: var(--flow-wire); stroke-width: 1.25; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.flow-head.active, .flow-arrows .active path { stroke: var(--blue); }
+.flow-label rect { fill: var(--surface); }
+.flow-label text, .flow-return text { fill: var(--muted); font-size: 11px; font-weight: 550; }
+.flow-return rect { fill: var(--surface-2); stroke: var(--line); stroke-width: 1; }
+.flow-return:hover rect, .flow-return:focus-visible rect, .active .flow-return rect { stroke: var(--blue); }
+.flow-return { cursor: pointer; }
 .flow-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(100%,220px),1fr)); gap: 14px; }
 .flow-card { display: flex; flex-direction: column; gap: 8px; padding: 20px; }
 .flow-card:hover { background: var(--surface-2); }
 .flow-card svg { width: 150px; height: 42px; max-width: 100%; }
 .flow-card rect { fill: var(--surface); stroke: var(--line); }
-.flow-card path { stroke: var(--blue); fill: none; }
+.flow-card path { stroke: var(--flow-wire); fill: none; }
 .flow-panel { position: fixed; z-index: 25; right: 20px; top: 70px; width: min(340px,calc(100vw - 24px)); max-height: calc(100dvh - 90px); overflow: auto; padding: 16px; }
 .flow-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .flow-panel h2 { font-size: 16px; overflow-wrap: anywhere; }
