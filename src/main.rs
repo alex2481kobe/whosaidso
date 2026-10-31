@@ -3,7 +3,7 @@ mod blob;
 mod cache;
 mod check;
 mod claims;
-mod code;
+pub mod code;
 mod config;
 mod find;
 mod flow;
