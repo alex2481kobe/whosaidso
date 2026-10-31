@@ -50,21 +50,25 @@ pub fn compare(
         .edges
         .iter()
         .filter(|e| {
-            e.source
-                .as_deref()
-                .and_then(|s| owners.get(s))
-                .is_some_and(|ids| ids.iter().any(|id| flow.contains(id, &step.from)))
-                && e.targets.iter().any(|s| {
-                    owners
-                        .get(s.as_str())
-                        .is_some_and(|ids| ids.iter().any(|id| flow.contains(id, &step.to)))
-                })
+            super::code::source_owners(flow, owners, e)
+                .iter()
+                .any(|id| flow.contains(id, &step.from))
+                && super::code::target_owners(owners, e)
+                    .iter()
+                    .any(|id| flow.contains(id, &step.to))
         })
         .collect();
     if let Some(edge) = edges.first() {
+        let certain = edges.iter().find(|e| {
+            e.targets.iter().all(|target| {
+                owners
+                    .get(target.as_str())
+                    .is_some_and(|ids| ids.iter().any(|id| flow.contains(id, &step.to)))
+            })
+        });
         return Ok(
-            json!({"state":if edges.iter().any(|e| e.targets.len()!=1) {"ambiguous"} else {"built"},
-            "evidence":strength(edge.occurrence.layer)}),
+            json!({"state":if certain.is_some() {"built"} else {"ambiguous"},
+            "evidence":strength(certain.copied().unwrap_or(edge).occurrence.layer)}),
         );
     }
     let states = [

@@ -146,3 +146,51 @@ pub(super) fn forget(tx: &Transaction<'_>, source: &str) -> Result<(), String> {
     .map_err(err)?;
     Ok(())
 }
+
+// Membership is published under this same writer lock, including other worktrees.
+pub(super) fn collect(tx: &Transaction<'_>) -> Result<(), String> {
+    tx.execute("DELETE FROM blob_templates WHERE address NOT IN (SELECT stamp FROM stamps WHERE source LIKE 'file:%')", []).map_err(err)?;
+    tx.execute_batch("CREATE TEMP TABLE discarded(id INTEGER PRIMARY KEY);
+        INSERT INTO discarded SELECT id FROM payloads WHERE id NOT IN (SELECT payload FROM members);").map_err(err)?;
+    let removed: i64 = tx
+        .query_row("SELECT count(*) FROM discarded", [], |r| r.get(0))
+        .map_err(err)?;
+    if removed == 0 {
+        return Ok(());
+    }
+    tx.execute_batch(
+        "INSERT INTO docs_fts(docs_fts,rowid,kind,title,body)
+        SELECT 'delete',id,kind,title,body FROM payloads WHERE id IN (SELECT id FROM discarded);
+        DELETE FROM file_features WHERE payload IN (SELECT id FROM discarded);",
+    )
+    .map_err(err)?;
+    for table in ["vectors", "vector_coverage"] {
+        let exists: bool = tx
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name=?1)",
+                [table],
+                |r| r.get(0),
+            )
+            .map_err(err)?;
+        if exists {
+            tx.execute(
+                &format!("DELETE FROM {table} WHERE payload IN (SELECT id FROM discarded)"),
+                [],
+            )
+            .map_err(err)?;
+        }
+    }
+    tx.execute(
+        "DELETE FROM payloads WHERE id IN (SELECT id FROM discarded)",
+        [],
+    )
+    .map_err(err)?;
+    super::words::collect(tx)?;
+    // Merge deletion markers now, so discarded postings do not grow with revisions.
+    tx.execute_batch(
+        "INSERT INTO docs_fts(docs_fts) VALUES('optimize');
+        INSERT INTO search_trigrams(search_trigrams) VALUES('optimize');",
+    )
+    .map_err(err)?;
+    Ok(())
+}

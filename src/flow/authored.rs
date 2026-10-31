@@ -73,11 +73,18 @@ pub fn layer(
     result["parent"] = json!(parent);
     result["revision"] = json!(format!("{revision}:{}", snapshot.id));
     result["breadcrumbs"] = json!(breadcrumbs);
-    for field in ["state", "progress", "unplanned", "unknown"] {
+    for field in [
+        "state",
+        "progress",
+        "unplanned",
+        "unknown",
+        "unowned",
+        "totals",
+    ] {
         result[field] = comparison[field].clone();
     }
     // Secondary records are bounded separately and available only in the details panel.
-    for field in ["unplanned", "unknown"] {
+    for field in ["unplanned", "unknown", "unowned"] {
         result[field] = json!(
             result[field]
                 .as_array()
@@ -93,6 +100,7 @@ pub fn layer(
         .unwrap()
         .len()
         .max(comparison["unknown"].as_array().unwrap().len())
+        .max(comparison["unowned"].as_array().unwrap().len())
         .max(layer.risks.len());
     if offset + map::PAGE < detail_total {
         result["next"] = json!(offset + map::PAGE);

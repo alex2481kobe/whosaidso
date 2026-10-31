@@ -36,9 +36,7 @@ fn gallery_screen(root: &Path) -> Result<Value, String> {
     // The version is read before the records, so a change in between shows up on the next poll.
     let token = current_version(root)?;
     let store = record::load(root)?;
-    let entries = gallery::newest(&store)
-        .into_iter()
-        .take(gallery::LIVE_MEDIA)
+    let entries = gallery::visible(&store)
         .map(|m| media(root, m, &store))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(json!({"version":token,"entries":entries}))
