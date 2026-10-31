@@ -15,8 +15,10 @@ whosaidso code help coverage
 ## Syntax support
 
 1. Pin the grammar in `Cargo.toml` beside the other `tree-sitter-*` lines, with an
-   exact `=` version. Use the `tree-sitter-<language>` crate published by the
-   language's grammar project.
+   exact `=` version, and commit `Cargo.lock` with it. Use the
+   `tree-sitter-<language>` crate published by the language's grammar project, in a
+   release that depends on `tree-sitter-language` or a `tree-sitter` no newer than
+   ours. `cargo info <crate>` shows this and downloads it.
 2. In `src/code/languages.rs`, add a query const and a `Registration`:
 
 ```rust
@@ -35,8 +37,8 @@ Registration {
 
    `@def` marks definitions, `@call` marks calls, and `@include` marks imports; a
    language with no import syntax can leave that one out. Node names come from the
-   grammar's `src/node-types.json`, in the crate under `~/.cargo/registry/src`. Write
-   the gaps honestly: they are shown beside every answer.
+   grammar's `queries/tags.scm` and `src/node-types.json`, in the crate under
+   `~/.cargo/registry/src`. Write the gaps honestly: they are shown beside every answer.
 3. Add a row to the table in `tests/v032_index/languages.rs`: the language's name, an
    extension, and a two-function source where `caller` calls `target`.
 4. Run the test. It fails until the query finds both functions and the call, and it
@@ -51,7 +53,7 @@ Then try one real file:
 ```text
 cargo build --release
 cd <a project with that language>
-<path to the build>/whosaidso code defs <a function name>
+<this checkout>/target/release/whosaidso code defs <a function name>
 ```
 
 Answers are labelled `[syntactic]`: they match names, so the gaps above apply.
@@ -62,9 +64,10 @@ Most grammars need nothing more. Two rare exceptions need one line of code, and 
 a bump of `EXTRACTOR_VERSION` in `src/code/store.rs`, because code changes do not reach
 cached projects by themselves:
 
-- `code defs` finds nothing: the node has no `name` field, or its kind does not end in
-  function, method, class, module, struct, enum, trait or interface. Add it to
-  `definition` in `src/code/names.rs`.
+- `code defs` finds nothing: the node has no `name` field, or its kind is not a word
+  such as function, method, class, module, struct, enum, trait or interface, alone or
+  ending in `_declaration`, `_definition` or `_item`. Add it to `definition` in
+  `src/code/names.rs`.
 - `code callers` misses `object.target()`: the grammar keeps the called name in a field
   `call_target` in `src/code/parse.rs` does not read. Add the field there.
 
