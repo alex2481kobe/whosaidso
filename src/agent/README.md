@@ -3,9 +3,18 @@
 `whosaidso install-agent claude` merges a command hook into `$HOME/.claude/settings.json`.
 `whosaidso install-agent codex` merges one into `$HOME/.codex/hooks.json`.
 Use `--uninstall` to remove only the owned entry. Restart the client after installation;
-Codex also requires reviewing the hook with `/hooks`. Existing hooks and other settings remain.
+Codex hooks do not run until trusted in `/hooks`. Existing hooks and other settings remain.
 The installer records the current executable path, so reinstall after moving the binary.
 For a fixture, set `HOME` before installing. The installer does not change project settings.
+
+Both clients support skills. Installation also writes five embedded skills to
+`$HOME/.claude/skills/whosaidso-*/SKILL.md` or
+`$HOME/.codex/skills/whosaidso-*/SKILL.md`; a checkout is not required. Reinstalling
+identical files is a no-op. A different file at an owned skill path causes a
+refusal before hooks change: move it aside and retry. Uninstall removes only
+unchanged embedded skills and empty skill directories, preserving other files.
+The success message points to the short “Using WhoSaidSo” section in this repository's
+AGENTS.md; the installer never edits project instructions.
 
 Both hooks consume `PreToolUse` JSON with `tool_name: "Bash"` and
 `tool_input.command`. Rewrites return `hookSpecificOutput.updatedInput`, retaining

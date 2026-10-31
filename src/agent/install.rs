@@ -19,13 +19,19 @@ pub(super) fn command(args: &[String]) -> Result<String, String> {
     };
     let home = PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?);
     let path = home.join(relative);
+    let skills = path
+        .parent()
+        .ok_or("missing client directory")?
+        .join("skills");
+    super::skills::check(&skills)?;
     let previous = match fs::read(&path) {
         Ok(bytes) => Some(bytes),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
         Err(e) => return Err(e.to_string()),
     };
     if uninstall && previous.is_none() {
-        return Ok("No agent hook installed".into());
+        super::skills::apply(&skills, true)?;
+        return Ok("Agent skills removed; no agent hook installed".into());
     }
     let mut config: Value = match &previous {
         Some(bytes) => {
@@ -70,18 +76,19 @@ pub(super) fn command(args: &[String]) -> Result<String, String> {
     }
     let mut bytes = serde_json::to_vec_pretty(&config).map_err(|e| e.to_string())?;
     bytes.push(b'\n');
+    super::skills::apply(&skills, uninstall)?;
     if previous.as_deref() != Some(&bytes) {
         fs::create_dir_all(path.parent().ok_or("missing configuration directory")?)
             .map_err(|e| e.to_string())?;
         fs::write(&path, bytes).map_err(|e| e.to_string())?;
     }
     Ok(if uninstall {
-        "Agent hook removed".into()
+        "Agent hook and skills removed".into()
     } else {
         format!(
-            "Agent hook installed for {client}; restart the client{}",
+            "Agent hook and skills installed for {client}; see WhoSaidSo's AGENTS.md#using-whosaidso; restart the client{}.",
             if client == "codex" {
-                " and review it with /hooks"
+                " and trust the hook in /hooks before it will run"
             } else {
                 ""
             }
