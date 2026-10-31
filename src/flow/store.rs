@@ -32,35 +32,83 @@ pub fn load(root: &Path, selected: Option<&str>) -> Result<Vec<Record>, String> 
     let mut records = vec![];
     for path in files {
         let id = path.file_stem().unwrap().to_string_lossy().into_owned();
-        let mut problems = vec![];
-        if !validate::valid_id(&id) {
-            problems.push("invalid flow filename id".into());
-        }
-        let mut revision = String::new();
-        let flow = match fs::read(&path)
-            .map_err(|e| e.to_string())
-            .and_then(|bytes| {
-                revision = crate::record::sha256_hex(&bytes);
-                serde_json::from_slice(&bytes).map_err(|e| e.to_string())
-            }) {
-            Ok(value) => {
-                let (flow, schema_errors) = schema::decode(&value);
-                problems.extend(schema_errors);
-                problems.extend(validate::validate(&flow));
-                Some(flow)
-            }
-            Err(e) => {
-                problems.push(e);
-                None
-            }
-        };
-        records.push(Record {
-            id,
-            flow,
-            problems,
-            revision,
-        });
+        records.push(decode(id, fs::read(&path).map_err(|e| e.to_string())));
     }
+    Ok(records)
+}
+
+fn decode(id: String, bytes: Result<Vec<u8>, String>) -> Record {
+    let mut problems = vec![];
+    if !validate::valid_id(&id) {
+        problems.push("invalid flow filename id".into());
+    }
+    let mut revision = String::new();
+    let flow = match bytes.and_then(|bytes| {
+        revision = crate::record::sha256_hex(&bytes);
+        serde_json::from_slice(&bytes).map_err(|e| e.to_string())
+    }) {
+        Ok(value) => {
+            let (flow, schema_errors) = schema::decode(&value);
+            problems.extend(schema_errors);
+            problems.extend(validate::validate(&flow));
+            Some(flow)
+        }
+        Err(e) => {
+            problems.push(e);
+            None
+        }
+    };
+    Record {
+        id,
+        flow,
+        problems,
+        revision,
+    }
+}
+
+pub fn committed(root: &Path, commit: &str, selected: Option<&str>) -> Result<Vec<Record>, String> {
+    if let Some(id) = selected
+        && !validate::valid_id(id)
+    {
+        return Err("invalid flow id".into());
+    }
+    let tree = crate::git::run_bytes(root, &["ls-tree", "-rz", commit, "--", ".whosaidso/flows"])?;
+    let mut ids = vec![];
+    let mut names = vec![];
+    for entry in tree.split(|b| *b == 0).filter(|s| !s.is_empty()) {
+        let text = std::str::from_utf8(entry).map_err(|e| e.to_string())?;
+        let (meta, path) = text.split_once('\t').ok_or("invalid flow tree")?;
+        let Some(id) = path
+            .strip_prefix(".whosaidso/flows/")
+            .and_then(|s| s.strip_suffix(".json"))
+        else {
+            continue;
+        };
+        if id.contains('/') || selected.is_some_and(|wanted| wanted != id) {
+            continue;
+        }
+        if !meta.starts_with("100644 blob ") && !meta.starts_with("100755 blob ") {
+            return Err("flow is not a regular file".into());
+        }
+        ids.push(id.to_owned());
+        names.push(format!("{commit}:{path}"));
+    }
+    if selected.is_some() && ids.is_empty() {
+        return Err("unknown flow on branch".into());
+    }
+    let mut records = vec![];
+    crate::git::read_objects(
+        root,
+        &names,
+        crate::record::MAX_RECORD_BYTES as usize,
+        |i, bytes, _| {
+            records.push(decode(
+                ids[i].clone(),
+                bytes.ok_or_else(|| "flow missing or too large".into()),
+            ));
+            Ok(())
+        },
+    )?;
     Ok(records)
 }
 

@@ -38,6 +38,7 @@ const STEP: &[Field] = &[
     ("from", Shape::Text),
     ("to", Shape::Text),
     ("when", Shape::Text),
+    ("literal", Shape::Text),
 ];
 const COVERS: &[Field] = &[("paths", Shape::Texts), ("boundaries", Shape::Texts)];
 const FLOW: &[Field] = &[

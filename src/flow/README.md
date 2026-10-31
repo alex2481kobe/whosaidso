@@ -55,3 +55,41 @@ Writes validate the complete result before atomic publication and serialize
 writers through a worktree-local lock in Git's private directory. Failed
 validation leaves the original bytes unchanged. Independent flows stay in
 separate files for merging; conflicting edits still require Git reconciliation.
+
+## Code map and comparison
+
+`flow map [<file-id>]` derives a file/function map from `code::facts` without
+creating a plan. `flow compare <flow>` compares anchored nodes and steps in one
+index snapshot. Both commands accept `--branch <revision>` for committed code.
+`flow view [<flow> [<parent> [<offset>]]]` returns the same bounded layers as the
+viewer; `$map` selects the derived map. The viewer includes a Flows screen and
+expands one layer at a time, at most 100 nodes, steps and risks per response.
+`next` is an offset, `revision` identifies the snapshot, and `frontier` counts
+hidden descendants and remaining layer items. Branch views read the plan and
+code at one commit and are labelled `committed_only`.
+
+Node paths use slash-separated globs (`*`, `**`, `?`, and character classes).
+Symbols match names, qualified names or snapshot symbol ids; paths constrain
+symbol selection. Missing planned anchors stay `planned`; other absent anchors
+are `missing`; partial anchors are `drifted`. Multiple symbol candidates are
+`ambiguous`. Unextracted files and unresolved calls inside `covers` remain
+`unknown`. Calls crossing parts without a planned step are `unplanned`.
+Calls within a part and calls outside `covers` are not judged; declared
+boundaries include their incoming and outgoing crossings without path globs. Parent mappings
+do not create extra parts inside children; a step can cover descendant calls.
+
+Steps use indexed call evidence labelled `precise` or `syntactic`. An optional
+`literal` string checks only that text in the caller's indexed body, labelled
+`literal`. It does not prove execution or a remote response. Removing that text
+drifts the step. An unanchored part is `authored`, never code evidence. Roll-up
+retains drift, missing, unplanned, ambiguity and unknown coverage ahead of
+planned work. Progress counts built leaf bindings, separately from hop verdicts.
+Goal links report progress only and never change goal state. Goal and note
+mitigation links remain syntax-checked ids, permitting a plan before records.
+
+`flow drift-check` runs structural checks and comparison, refusing every result
+except `built` or `planned`. Landing can call
+`flow::check::check_drift(root)` for this same check. The viewer polls once per
+second; code edits, plan changes and precise freshness move its change token.
+Precise evidence is labelled stale after an edit while syntax updates. Timing
+on large projects depends on index refresh cost.
