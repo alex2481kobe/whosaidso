@@ -77,7 +77,8 @@ Node paths use slash-separated globs (`*`, `**`, `?`, and character classes).
 Symbols match names, qualified names or snapshot symbol ids; paths constrain
 symbol selection. Missing planned anchors stay `planned`; other absent anchors
 are `missing`; partial anchors are `drifted`. Multiple symbol candidates are
-`ambiguous`. Unextracted files and unresolved calls inside `covers` remain
+`ambiguous`. HTML and HTM are documents like CSS; inline script is not read.
+Unextracted files and unresolved calls inside `covers` remain
 `unknown`. Calls crossing parts without a planned step are `unplanned`.
 Calls within a part and calls outside `covers` are not judged; declared
 boundaries include their incoming and outgoing crossings without path globs. Parent mappings

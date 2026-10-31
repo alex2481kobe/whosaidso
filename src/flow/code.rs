@@ -68,8 +68,7 @@ pub fn inside(flow: &Flow, path: &str) -> bool {
     flow.covers.paths.iter().any(|p| matches(p, path))
 }
 pub fn known_coverage(c: &Coverage) -> bool {
-    // These files contain data, not callable code. Unrecognized languages and
-    // markup with possible inline code still need extraction.
+    // Documents and styles have no extracted calls.
     c.syntax == "indexed"
         || c.precise == "fresh"
         || std::path::Path::new(&c.path)
@@ -77,7 +76,8 @@ pub fn known_coverage(c: &Coverage) -> bool {
             .and_then(|s| s.to_str())
             .is_some_and(|s| {
                 [
-                    "md", "txt", "css", "csv", "tsv", "json", "toml", "yaml", "yml", "lock",
+                    "md", "txt", "css", "html", "htm", "csv", "tsv", "json", "toml", "yaml", "yml",
+                    "lock",
                 ]
                 .contains(&s)
             })
