@@ -59,7 +59,10 @@ pub(super) fn payload(
     .execute(params![address, kind, title, body, detail])
     .map_err(err)?;
     let id = tx.last_insert_rowid();
-    tx.prepare_cached("INSERT INTO docs_fts(rowid,kind,title,body) SELECT id,kind,title,body FROM payloads WHERE id=?1").map_err(err)?.execute([id]).map_err(err)?;
+    tx.prepare_cached("INSERT INTO docs_fts(rowid,kind,title,body) VALUES (?1,?2,?3,?4)")
+        .map_err(err)?
+        .execute(params![id, kind, title, body])
+        .map_err(err)?;
     super::words::touch(tx, id)?;
     Ok(id)
 }

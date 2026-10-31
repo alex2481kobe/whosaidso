@@ -65,7 +65,7 @@ impl Unicode {
                 let n = c as u32 - 0xac00;
                 out.push(char::from_u32(0x1100 + n / 588).expect("Hangul"));
                 out.push(char::from_u32(0x1161 + (n % 588) / 28).expect("Hangul"));
-                if n % 28 != 0 {
+                if !n.is_multiple_of(28) {
                     out.push(char::from_u32(0x11a7 + n % 28).expect("Hangul"));
                 }
             } else {
