@@ -3,11 +3,17 @@ name: whosaidso-goals
 description: Track goals, decisions and evidence in Git with WhoSaidSo.
 ---
 
+Check `whosaidso --version` reports the installed build you expect before using these commands.
+
 Use this when recording what needs doing, why a choice was made, or what actually
 worked. Work inside a Git project. Records live in `.whosaidso`; commit them.
 A goal is done when it has real evidence on main: a successful command the tool
 ran or an attached file. Children finishing does not supply a milestone's own
 evidence. Unknown is neither success nor failure.
+
+Create a goal by writing `.whosaidso/goals/<id>.json`, as below; `goals` lists
+goals and does not create them. Use an id of 1–64 lowercase letters, digits or
+hyphens (`none` is reserved). Run `whosaidso check` and commit the record.
 
 Worked example: record an existing report and the decision to keep plain text.
 Start on main with a nonempty, committed `report.txt`.
@@ -37,6 +43,9 @@ git commit -m 'Keep the report check result' -m 'Goal: none'
 whosaidso show report
 ```
 
+`prove report` runs the goal's committed `check` and records the result. A check
+proves only what it tests: `test -s report.txt` establishes nonempty content,
+not that the report is correct. Choose a check that reaches the requirement.
 Checks are argument arrays, without shell parsing unless you explicitly run a
 shell. Read the result: recording a failed run can itself exit successfully.
 An early run on a feature branch becomes completion evidence only when landed.

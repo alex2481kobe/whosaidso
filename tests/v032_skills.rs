@@ -82,7 +82,8 @@ fn installation_and_uninstall_refuse_to_overwrite_changed_skills() {
 
 fn example_fixture(skill: &str, retry: bool) -> Fixture {
     let f = Fixture::sources(&[("lib.rs", "pub fn report() {}\nfn main() { report(); }\n")]);
-    if skill != "whosaidso-goals" {
+    // Each worked example must create any goal it needs without fixture help.
+    if retry {
         records::put(
             &f.root,
             "goals",

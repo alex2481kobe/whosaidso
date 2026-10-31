@@ -3,15 +3,27 @@ name: whosaidso-gallery
 description: Attach files as goal evidence, share them, and retrieve gallery media with WhoSaidSo.
 ---
 
+Check `whosaidso --version` reports the installed build you expect before using these commands.
+
 Use this for screenshots, videos, documents or reports that show actual work.
 Run inside the Git project. Attachments are claims about files; they do not
 prove that a command ran. A goal is done when it has real evidence on main:
 a successful command the tool ran or an attached file.
 
-Worked example: a committed goal `report` and a real `report.txt` exist. Attach
-the report and share its bytes with the configured remote.
+Worked example: a real `report.txt` exists. Create and commit the goal file
+below, then attach the report and share its bytes with the configured remote.
+The filename supplies the goal id; `goals` only lists goals. If `report` already
+exists, inspect it with `whosaidso show report` and keep its requirement instead
+of overwriting it. This goal uses an attachment rather than a command check.
 
 ```sh
+mkdir -p .whosaidso/goals
+cat > .whosaidso/goals/report.json <<'JSON'
+{"title":"Keep a readable report","done_when":"The report contains the requested result","parent":null,"order":1,"after":[]}
+JSON
+whosaidso check
+git add .whosaidso/goals/report.json
+git commit -m 'Record the report requirement' -m 'Goal: none'
 whosaidso evidence add report report.txt 'The generated report contains the requested result'
 git add .whosaidso/media
 git commit -m 'Attach the generated report' -m 'Goal: none'

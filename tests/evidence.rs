@@ -4,6 +4,18 @@ use common::{records as r, *};
 use std::fs;
 
 #[test]
+fn unknown_evidence_goal_explains_how_to_create_it() {
+    let f = Fixture::sources(&[("report.txt", "measured report\n")]);
+    let out = bad(
+        &f.root,
+        &["evidence", "add", "report", "report.txt", "Measured output"],
+        "unknown goal report",
+    );
+    assert!(out.contains("create .whosaidso/goals/report.json"), "{out}");
+    assert!(out.contains("USAGE.md#goals"), "{out}");
+}
+
+#[test]
 fn paired_runs_keep_results_and_restore_the_shared_scratch() {
     let f = Fixture::new();
     let root = &f.root;
