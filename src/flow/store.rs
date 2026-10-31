@@ -32,36 +32,28 @@ pub fn load(root: &Path, selected: Option<&str>) -> Result<Vec<Record>, String> 
     let mut records = vec![];
     for path in files {
         let id = path.file_stem().unwrap().to_string_lossy().into_owned();
-        let mut problems = vec![];
-        if !validate::valid_id(&id) {
-            problems.push("invalid flow filename id".into());
-        }
-        let mut revision = String::new();
-        let flow = match fs::read(&path)
-            .map_err(|e| e.to_string())
-            .and_then(|bytes| {
-                revision = crate::record::sha256_hex(&bytes);
-                serde_json::from_slice(&bytes).map_err(|e| e.to_string())
-            }) {
-            Ok(value) => {
-                let (flow, schema_errors) = schema::decode(&value);
-                problems.extend(schema_errors);
-                problems.extend(validate::validate(&flow));
-                Some(flow)
-            }
-            Err(e) => {
-                problems.push(e);
-                None
-            }
-        };
-        records.push(Record {
-            id,
-            flow,
-            problems,
-            revision,
-        });
+        records.push(decode(id, fs::read(&path).map_err(|e| e.to_string())));
     }
     Ok(records)
+}
+
+fn decode(id: String, bytes: Result<Vec<u8>,String>) -> Record {
+    let mut problems = vec![];
+    if !validate::valid_id(&id) { problems.push("invalid flow filename id".into()); }
+    let mut revision = String::new();
+    let flow = match bytes.and_then(|bytes| {
+        revision = crate::record::sha256_hex(&bytes);
+        serde_json::from_slice(&bytes).map_err(|e| e.to_string())
+    }) {
+        Ok(value) => {
+            let (flow, schema_errors) = schema::decode(&value);
+            problems.extend(schema_errors);
+            problems.extend(validate::validate(&flow));
+            Some(flow)
+        }
+        Err(e) => { problems.push(e); None }
+    };
+    Record { id,flow,problems,revision }
 }
 
 pub fn change(root: &Path, id: &str, change: super::author::Change) -> Result<(), String> {
