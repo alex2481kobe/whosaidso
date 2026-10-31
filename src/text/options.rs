@@ -77,27 +77,27 @@ pub(super) fn parse(args: &[String]) -> Result<Options, String> {
     if out.files && (!out.pattern.is_empty() || out.matching_files) {
         return Err("grep: --files takes no pattern or -l".into());
     }
-    let escapes = escapes(&out.pattern);
-    if !out.regex && !explicit_literal && escapes.iter().any(|c| "bB|()dwWsS".contains(*c)) {
+    let escaped = escapes(&out.pattern, true);
+    if !out.regex && !explicit_literal && escaped.iter().any(|c| "bB|()dwWsS".contains(*c)) {
         return Err("grep: literal mode; --regex uses Git extended regex: | for alternation, [[:digit:]] for digits, (^|[^[:alnum:]_])word([^[:alnum:]_]|$) for boundaries; --literal searches backslashes".into());
     }
     if out.regex {
-        if escapes.contains(&'|') {
+        if escapes(&out.pattern, false).contains(&'|') {
             return Err("grep: unsupported basic-regex \\| form in Git extended regex; use | for alternation or [|] for a literal pipe".into());
         }
-        if out.pattern.contains("(?") || escapes.iter().any(|c| "bBdDwWsSpPQKE".contains(*c)) {
+        if out.pattern.contains("(?") || escaped.iter().any(|c| "bBdDwWsSpPQKE".contains(*c)) {
             return Err("grep: unsupported Perl regex form in portable Git extended regex; use [[:digit:]] for digits and (^|[^[:alnum:]_]) / ([^[:alnum:]_]|$) for word boundaries".into());
         }
     }
     Ok(out)
 }
 
-fn escapes(pattern: &str) -> Vec<char> {
+fn escapes(pattern: &str, include_classes: bool) -> Vec<char> {
     let (mut escaped, mut class) = (false, false);
     let mut out = Vec::new();
     for c in pattern.chars() {
         if escaped {
-            if !class {
+            if include_classes || !class {
                 out.push(c);
             }
             escaped = false;

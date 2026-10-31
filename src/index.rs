@@ -22,6 +22,7 @@ pub fn sync(root: &Path, model: Option<&embedding::Model>) -> Result<Connection,
     let tx = db
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(err)?;
+    let changes = tx.total_changes();
     let vocabulary = words::init(&tx)?;
     let mut seen = HashSet::new();
     records::sync(root, &tx, &mut seen)?;
@@ -35,6 +36,9 @@ pub fn sync(root: &Path, model: Option<&embedding::Model>) -> Result<Connection,
         }
     }
     words::finish(&tx, vocabulary)?;
+    if tx.total_changes() != changes {
+        store::collect(&tx)?;
+    }
     if let Some(model) = model {
         embedding::sync(&tx, model, &snapshot.change_token)?;
     }

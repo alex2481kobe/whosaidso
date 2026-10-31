@@ -41,6 +41,21 @@ pub fn grep(root: &Path, args: &[String]) -> Result<(), String> {
     let (rows, total) = search::run(root, &options)?;
     if total == 0 {
         writeln!(out, "grep: no matches").map_err(|e| e.to_string())?;
+        if !options.regex
+            && !options.files
+            && options
+                .pattern
+                .starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+            && options
+                .pattern
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            eprintln!(
+                "hint: try whosaidso find {0} or whosaidso code defs {0}",
+                options.pattern
+            );
+        }
         return out.flush().map_err(|e| e.to_string());
     }
     let shown = total.saturating_sub(options.offset).min(options.limit);
