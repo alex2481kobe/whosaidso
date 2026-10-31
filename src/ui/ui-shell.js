@@ -17,7 +17,7 @@ function initTheme() {
   let saved;
   try { saved = localStorage.getItem("whosaidso-theme"); } catch {}
   toggle.addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
-  setTheme(["light","dark"].includes(saved) ? saved : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  setTheme(["light","dark"].includes(saved) ? saved : "light");
 }
 function renderMenu() {
   const chosen = state.projects.find(p => p.id === state.project);

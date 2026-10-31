@@ -136,13 +136,13 @@ h1, h2, h3, p { margin: 0; }
 .flow-canvas[data-empty]:not([data-empty=""])::after { content: attr(data-empty); display: block; padding: 20px; color: var(--muted); text-align: center; }
 .flow-canvas[data-empty]:not([data-empty=""]) .flow-diagram { display: none; }
 .flow-diagram { width: 100%; display: block; overflow: visible; font-family: inherit; }
-.flow-diagram { --flow-wire: #aab0bb; }
-:root[data-theme="dark"].flow-diagram { --flow-wire: #737d8c; }
 .flow-box > a > rect { fill: var(--surface); stroke: var(--line); stroke-width: 1.25; filter: drop-shadow(0 2px 4px #252d440c); }
 .flow-box[data-state="planned"] > a > rect { stroke-dasharray: 5 4; }
 .flow-box:is([data-state="drifted"], [data-state="missing"], [data-state="unplanned"]) > a > rect { stroke: #dd9a45; stroke-width: 1.5; }
 .flow-box:is([data-state="drifted"], [data-state="missing"], [data-state="unplanned"]) text:last-of-type { fill: #b5701c; }
 .flow-box.selected > a > rect, .flow-box > a:hover > rect, .flow-box > a:focus-visible > rect { fill: var(--surface-2); stroke: var(--blue); }
+.flow-box.dimmed { opacity: .4; }
+.flow-more { opacity: .65; }
 .flow-name { font-size: 16px; font-weight: 550; fill: var(--text); }
 .flow-word { font-size: 11px; fill: var(--muted); }
 .flow-deeper { fill: var(--muted); font-size: 17px; }
