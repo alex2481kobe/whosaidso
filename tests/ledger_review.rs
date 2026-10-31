@@ -146,3 +146,27 @@ fn folded_check_survives_removal_of_its_old_script() {
     cli(&f.root, &["check"]);
     assert!(cli(&f.root, &["goals"]).contains("done    g"));
 }
+
+#[test]
+fn gate_remembers_both_sides_after_a_clean_note_merge() {
+    let f = Fixture::new();
+    let note = "---\n{\"type\":\"decision\",\"status\":\"open\",\"title\":\"Choice\",\"goal\":\"g\"}\n---\nfirst\n\nlast\n";
+    let file = ".whosaidso/notes/choice.md";
+    write(&f.root.join(file), note);
+    commit(&f.root);
+    let branch = f.worktree("worker");
+    write(&branch.join(file), note.replace("first", "ours"));
+    commit(&branch);
+    write(&f.root.join(file), note.replace("last", "theirs"));
+    commit(&f.root);
+    let revision = hash(&std::fs::read(f.root.join(file)).unwrap());
+    git(&branch, &["merge", "-q", "main"]);
+    bad(&branch, &["gate"], "note reconcile choice");
+    let current = hash(&std::fs::read(branch.join(file)).unwrap());
+    cli(
+        &branch,
+        &["note", "reconcile", "choice", &current, &revision],
+    );
+    commit(&branch);
+    cli(&branch, &["gate"]);
+}

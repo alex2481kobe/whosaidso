@@ -9,7 +9,9 @@ pub fn gate(root: &Path, base: &str) -> Result<(), String> {
         return Err(reopen.join("\n"));
     }
     let merge_base = git::run(root, &["merge-base", &base, "HEAD"])?;
-    let note_problems = crate::note::reconcile::required(root, merge_base.trim(), "HEAD", &base)?;
+    let mut note_problems =
+        crate::note::reconcile::required(root, merge_base.trim(), "HEAD", &base)?;
+    note_problems.extend(crate::note::reconcile::history(root, &base, "HEAD")?);
     if !note_problems.is_empty() {
         return Err(note_problems.join("\n"));
     }
