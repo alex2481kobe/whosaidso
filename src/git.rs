@@ -170,9 +170,13 @@ pub fn root(dir: &Path) -> Result<std::path::PathBuf, String> {
 }
 
 pub fn main_tip(root: &Path) -> Result<String, String> {
-    run(root, &["rev-parse", "--verify", "refs/heads/main"])
-        .map(|s| s.trim().to_owned())
-        .map_err(|_| "no local branch main".into())
+    let name = crate::config::main(root)?;
+    run(
+        root,
+        &["rev-parse", "--verify", &format!("refs/heads/{name}")],
+    )
+    .map(|s| s.trim().to_owned())
+    .map_err(|_| format!("no local branch {name}"))
 }
 pub fn local_revision(root: &Path, revision: &str) -> Result<String, String> {
     let end = revision.find(['~', '^']).unwrap_or(revision.len());

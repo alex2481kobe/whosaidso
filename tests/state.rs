@@ -103,7 +103,7 @@ fn unlanded_or_wrong_check_proofs_cannot_replace_selected_evidence() {
     );
     v["instrument"] = "other".into();
     r::put(root, "proofs", "", &v);
-    assert!(cli(root, &["goals"]).contains("done    g"));
+    assert!(bad(root, &["goals"], "missing instrument at").contains("done    g"));
     assert!(cli(root, &["show", "g"]).contains(&at[..7]));
 }
 

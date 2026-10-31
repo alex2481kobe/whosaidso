@@ -5,6 +5,7 @@ mod cache;
 mod check;
 mod claims;
 mod code;
+mod config;
 mod find;
 mod flow;
 mod gallery;
@@ -32,6 +33,12 @@ fn run() -> Result<(), String> {
         println!("whosaidso {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
+    if args.as_slice() == ["help"] || args.as_slice() == ["--help"] || args.as_slice() == ["-h"] {
+        println!(
+            "WhoSaidSo: goals and evidence in Git\n\ncheck | goals | show <id> | start <goal> | prove <goal> | gate [base] | prune\nmedia <goal> <file> <title> | sync [remote] | note | flow | find | grep | code | ui\n\nUse short end-to-end checks of real behavior. Run a full suite only when needed. See USAGE.md for formats and options."
+        );
+        return Ok(());
+    }
     let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
     let root = if args.first().is_some_and(|cmd| cmd == "ui") {
         cwd.clone()
@@ -52,7 +59,7 @@ fn run() -> Result<(), String> {
         "sync [<remote>]", [cmd, rest @ ..] if cmd == "sync" && rest.len() <= 1 => sync::sync(&root, rest.first().map_or("origin", String::as_str));
         "install-hooks", [cmd] if cmd == "install-hooks" => { hooks::install(&root)?; projects::register(&root) };
         "start <goal-id>", [cmd, id] if cmd == "start" => hooks::start(&root, &cwd, id);
-        "gate [<base>]", [cmd, rest @ ..] if cmd == "gate" && rest.len() <= 1 => gate::gate(&root, rest.first().map_or("main", String::as_str));
+        "gate [<base>]", [cmd, rest @ ..] if cmd == "gate" && rest.len() <= 1 => gate::gate(&root, rest.first().map(String::as_str).unwrap_or(&config::main(&root)?));
         "ask <goal-id> <words...>", [cmd, id, words @ ..] if cmd == "ask" => ask::ask(&root, id, words);
         "show <id>", [cmd, id] if cmd == "show" => show::show(&root, id);
         "goals", [cmd] if cmd == "goals" => goals::goals(&root);

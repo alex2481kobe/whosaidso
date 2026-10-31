@@ -67,3 +67,36 @@ fn state_queries_batch_git_reads_and_oversized_text_fetches_metadata_only() {
     assert!(requests.contains(&format!("info {}\n", large.trim())));
     assert!(!requests.contains(&format!("contents {}\n", large.trim())));
 }
+
+#[test]
+fn help_and_default_branch_work_in_a_master_repository() {
+    let f = Fixture::new();
+    let root = &f.root;
+    assert!(cli(root, &["help"]).contains("prove"));
+    git(root, &["branch", "-m", "master"]);
+    records::put(root, "", "config", &serde_json::json!({"main":"master"}));
+    // Config belongs directly under .whosaidso, not a record collection.
+    assert!(cli(root, &["goals"]).contains("open    g"));
+    cli(root, &["install-hooks"]);
+    commit(root);
+    cli(root, &["start", "g"]);
+    work(root, "work", "g");
+    cli(root, &["gate"]);
+    cli(root, &["prove", "g"]);
+    commit(root);
+    cli(root, &["prune"]);
+    git(root, &["update-ref", "refs/remotes/origin/master", "HEAD"]);
+    git(
+        root,
+        &[
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/master",
+        ],
+    );
+    write(
+        &root.join(".whosaidso/config.json"),
+        "{\"main\":\"missing\"}",
+    );
+    assert!(cli(root, &["goals"]).contains("done    g"));
+}

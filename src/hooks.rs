@@ -32,7 +32,7 @@ pub fn start(root: &Path, cwd: &Path, id: &str) -> Result<(), String> {
     } else {
         match state::states(root, &store) {
             Ok(states) => Some(states),
-            Err(e) if e == "no local branch main" => None,
+            Err(e) if e.starts_with("no local branch ") => None,
             Err(e) => return Err(e),
         }
     };

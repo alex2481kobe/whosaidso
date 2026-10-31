@@ -64,7 +64,7 @@ pub fn prune(root: &Path) -> Result<String, String> {
 }
 fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<String, String> {
     git::main_tip(root)?;
-    if git::run(root, &["branch", "--show-current"])?.trim() != "main" {
+    if git::run(root, &["branch", "--show-current"])?.trim() != crate::config::main(root)? {
         return Err("prune: run on main after merging".into());
     }
     fs::hard_link(&journal.token, &journal.index).map_err(|e| e.to_string())?;

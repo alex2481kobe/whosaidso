@@ -87,6 +87,7 @@ pub fn branch_refs(root: &Path) -> Result<Vec<(String, String)>, String> {
             "refs/remotes",
         ],
     )?;
+    let main = crate::config::main(root)?;
     let local: HashSet<_> = refs
         .lines()
         .filter_map(|r| r.strip_prefix("refs/heads/"))
@@ -94,7 +95,7 @@ pub fn branch_refs(root: &Path) -> Result<Vec<(String, String)>, String> {
     let mut selected = Vec::new();
     for reference in refs.lines() {
         let name = if let Some(name) = reference.strip_prefix("refs/heads/") {
-            if name == "main" {
+            if name == main {
                 continue;
             }
             name
@@ -102,7 +103,7 @@ pub fn branch_refs(root: &Path) -> Result<Vec<(String, String)>, String> {
             let Some((_, branch)) = name.split_once('/') else {
                 continue;
             };
-            if branch == "HEAD" || branch == "main" || local.contains(branch) {
+            if branch == "HEAD" || branch == main || local.contains(branch) {
                 continue;
             }
             name
