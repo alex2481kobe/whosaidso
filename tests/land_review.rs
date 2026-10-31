@@ -85,3 +85,41 @@ fn queued_work_reruns_checks_for_an_already_done_goal() {
         "queued check failed for g",
     );
 }
+
+#[test]
+fn resuming_a_receipt_publishes_media_to_the_current_remote() {
+    let f = Fixture::new();
+    f.remote();
+    let lane = f.worktree("worker");
+    work(&lane, "feature", "g");
+    attach(&lane, "landing measurement");
+    commit(&lane);
+    failure(
+        command(&lane, BIN, &["land", "--reason", "shared check"])
+            .env(
+                "WHOSAIDSO_LAND_HOOK",
+                "[ \"$WHOSAIDSO_LAND_STEP\" != before-push ]",
+            )
+            .output()
+            .unwrap(),
+        "before-push",
+    );
+    let replacement = f.root.parent().unwrap().join("replacement.git");
+    git(
+        &f.root,
+        &["init", "--bare", "-q", replacement.to_str().unwrap()],
+    );
+    git(&f.root, &["push", replacement.to_str().unwrap(), "main"]);
+    git(
+        &lane,
+        &["remote", "set-url", "origin", replacement.to_str().unwrap()],
+    );
+    cli(&lane, &["land", "--reason", "shared check"]);
+    assert!(!git(&lane, &["ls-remote", "origin", "refs/whosaidso/blobs"]).is_empty());
+    let other = f.root.parent().unwrap().join("reader");
+    git(&f.root, &["clone", "-q", replacement.to_str().unwrap(), other.to_str().unwrap()]);
+    cli(&other, &["sync"]);
+    let check = cli(&other, &["check"]);
+    assert!(!check.contains("missing"), "{check}");
+    assert!(other.join(format!(".git/whosaidso/blobs/{}.png", hash(&png("landing measurement")))).is_file());
+}

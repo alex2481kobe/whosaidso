@@ -87,6 +87,7 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
         }) {
             receipt::check_range(root, &format!("{}..{}", a.candidate, head))?;
             if git::run(root, &["merge-base", "--is-ancestor", &baseline, &head]).is_ok() {
+                prepare::media(root, remote, &baseline, &record::load(root)?)?;
                 match push(root, remote, &push_ref, &head) {
                     Ok(()) => {
                         let mut a = a.clone();
