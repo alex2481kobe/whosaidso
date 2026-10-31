@@ -206,3 +206,6 @@ mod native;
 
 #[path = "v032_agents/help.rs"]
 mod help;
+
+#[path = "v032_agents/indexer.rs"]
+mod indexer;

@@ -117,7 +117,7 @@ fn run() -> Result<(), String> {
         "context <topic...> [--budget N]", [cmd, words @ ..] if cmd == "context" => context::command(&root, words);
         "find <words...> [--limit N]", [cmd, words @ ..] if cmd == "find" => find::find(&root, words);
         "code import-scip <file>", [cmd, sub, file] if cmd == "code" && sub == "import-scip" => code::import_scip(&root, &cwd.join(file));
-        "code defs|refs|deps|includers|show|outline|index|callers|callees|affected <value>; help coverage", [cmd, rest @ ..] if cmd == "code" => code::command(&root, rest);
+        "code defs|refs|deps|includers|show|outline|index|callers|callees|affected <value>; index <language> [--timeout <seconds>]; help coverage", [cmd, rest @ ..] if cmd == "code" => code::command(&root, rest);
     }
 }
 fn main() {
