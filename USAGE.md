@@ -79,4 +79,12 @@ Landing: pull, prune, commit the deletions, push, `whosaidso sync`. If the push 
 
 ## Tests
 
-The invariant suite runs two recorded seeds for 200 steps. `WHOSAIDSO_SEEDS=all` runs every seed; `WHOSAIDSO_LONG=1 cargo test --release --offline --test invariant` runs all seeds at 2,000 steps.
+Run the default end-to-end suite in debug mode with `cargo test --locked`. Its fixed fault seeds exercise every prune fault hook and verify that the hook ran before checking recovery.
+
+When claim or landing code changes, run the named manual fault sweep:
+
+```sh
+WHOSAIDSO_SEEDS=all cargo test --locked --test invariant manual_all_recorded_fault_seeds -- --ignored --nocapture
+```
+
+Large indexing and result-memory fixtures are separate manual checks: `cargo test --locked --test search_scale -- --ignored`. Large output and media-boundary fixtures use `cargo test --locked --test output_scale -- --ignored`. These manual runs are outside CI.
