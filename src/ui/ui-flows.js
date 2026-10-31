@@ -73,7 +73,7 @@ export function flowsScreen() {
       collapsed.add(next); visited.add(next); layer = next; data = child;
     }
     node.dataset.revision = data.revision || "";
-    const nav = JSON.stringify([data.breadcrumbs,data.branches,data.committed_only,data.next]);
+    const nav = JSON.stringify([data.breadcrumbs,data.branches,data.committed_only,data.next,data.previous]);
     if (nav !== navKey) {
       navKey = nav;
       const trail = [link("Flows", "")];
@@ -82,7 +82,7 @@ export function flowsScreen() {
       crumbs.replaceChildren(...trail.flatMap((a,i) => i ? [el("span","muted",">"),a] : [a]));
       const details = el("button","flow-link","Details"); details.type="button"; details.onclick=() => show(selected || "$screen");
       choices.replaceChildren(...[id && details,data.branches?.length && dropdown({options:[["","Worktree"],...data.branches.map(b => [b,b])],value:branch,onPick:b => {location.hash=route(id,"",b);}}),data.committed_only && el("span","muted","committed only")].filter(Boolean));
-      pages.replaceChildren(...[offset > 0 && link("Previous",id,layer,Math.max(0,offset-20)),data.next != null && link("Next",id,layer,data.next)].filter(Boolean));
+      pages.replaceChildren(...[data.previous != null && link("Previous",id,layer,data.previous),data.next != null && link("Next",id,layer,data.next)].filter(Boolean));
     }
     if (!id) {
       const key=JSON.stringify(data.flows);

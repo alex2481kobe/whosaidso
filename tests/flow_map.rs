@@ -32,7 +32,7 @@ fn derives_a_bounded_map_without_authored_records() {
 }
 
 #[test]
-fn file_layer_keeps_global_name_ambiguity_with_connected_candidates() {
+fn function_layer_keeps_global_name_ambiguity_with_connected_candidates() {
     let f = Fixture::sources(&[
         ("app.rs", "fn show() { same(); }\n"),
         ("a.rs", "fn same() {}\n"),
@@ -50,12 +50,18 @@ fn file_layer_keeps_global_name_ambiguity_with_connected_candidates() {
         .iter()
         .find(|n| n["path"] == "app.rs")
         .unwrap();
-    let layer: Value = serde_json::from_str(&cli(
+    let functions: Value = serde_json::from_str(&cli(
         &f.root,
         &["flow", "map", file["id"].as_str().unwrap()],
     ))
     .unwrap();
-    assert_eq!(layer["nodes"][0]["path"], "app.rs");
+    assert_eq!(functions["nodes"].as_array().unwrap().len(), 1);
+    assert_eq!(functions["nodes"][0]["path"], "app.rs");
+    let layer: Value = serde_json::from_str(&cli(
+        &f.root,
+        &["flow", "map", functions["nodes"][0]["id"].as_str().unwrap()],
+    ))
+    .unwrap();
     assert_eq!(layer["steps"][0]["state"], "ambiguous");
     assert_eq!(layer["steps"].as_array().unwrap().len(), 2);
     for edge in layer["steps"].as_array().unwrap() {

@@ -17,6 +17,10 @@ fn key(kind: &str, value: &str) -> String {
 pub fn file_id(path: &str) -> String {
     key("file", path)
 }
+// Variables and modules are facts about code, not boxes a reader follows.
+fn boxed(row: &Row) -> bool {
+    !matches!(row.kind.as_str(), "local" | "namespace" | "mod")
+}
 fn identities(definitions: &[Row]) -> BTreeMap<String, String> {
     let mut ordered: Vec<_> = definitions.iter().collect();
     ordered.sort_by(|a, b| {
@@ -105,7 +109,7 @@ pub fn linked(
     let coverage = snapshot.coverage_in(&paths)?;
     let nodes = paths.iter().map(|path| json!({"id":file_id(path),"name":path.rsplit('/').next().unwrap(),"type":"file","path":path,
         "state":if coverage.iter().any(|c| &c.path==path && (c.syntax=="indexed" || c.precise=="fresh")){"built"}else{"unknown"},
-        "children":graph.definitions.iter().filter(|r| &r.path==path).count()})).collect();
+        "children":graph.definitions.iter().filter(|r| &r.path==path && boxed(r)).count()})).collect();
     Ok(page(snapshot, nodes, vec![], None, offset, vec![]))
 }
 fn code_layer(
@@ -114,11 +118,6 @@ fn code_layer(
     offset: usize,
     scope: Option<&[String]>,
 ) -> Result<Value, String> {
-    if parent.starts_with("call-") {
-        let mut result = page(snapshot, vec![], vec![], Some(parent), offset, vec![]);
-        result["state"] = json!("unknown");
-        return Ok(result);
-    }
     let paths: Vec<_> = snapshot
         .files
         .entries
@@ -151,16 +150,15 @@ fn code_layer(
         None
     };
     let path = source;
-    let mut nodes: Vec<_> = graph.definitions.iter().filter(|r| {
-        if let Some(function)=function { r.symbol==function.symbol || graph.edges.iter().any(|e| e.source.as_deref()==Some(&function.symbol) && e.targets.contains(&r.symbol)) } else { &r.path==path || graph.edges.iter().any(|e| &e.occurrence.path==path && e.targets.contains(&r.symbol)) }
+    let nodes: Vec<_> = graph.definitions.iter().filter(|r| boxed(r) && {
+        if let Some(function)=function { r.symbol==function.symbol || graph.edges.iter().any(|e| e.source.as_deref()==Some(&function.symbol) && e.targets.contains(&r.symbol)) } else { &r.path==path }
     }).map(|r| json!({"id":ids[&r.symbol],"name":r.name,"type":"function","path":r.path,"line":r.range.line,"symbol":r.symbol,"state":"built","evidence":strength(r.layer),"children":graph.edges.iter().filter(|e| e.source.as_deref()==Some(&r.symbol)).count()})).collect();
     // Retain each ambiguous candidate. Endpoints are stable box identities, never names.
     let id = |symbol: &str| {
-        graph
-            .definitions
+        nodes
             .iter()
-            .find(|r| r.symbol == symbol)
-            .map(|r| ids[&r.symbol].clone())
+            .find(|n| n["symbol"] == symbol)
+            .map(|n| n["id"].as_str().unwrap().to_owned())
     };
     let mut steps = Vec::new();
     for (i, e) in graph
@@ -175,11 +173,10 @@ fn code_layer(
         let Some(from) = e.source.as_deref().and_then(id) else {
             continue;
         };
-        let mut to: Vec<_> = e.targets.iter().filter_map(|s| id(s)).collect();
+        let to: Vec<_> = e.targets.iter().filter_map(|s| id(s)).collect();
+        // A call that leaves this layer or was never resolved has no box to point at.
         if to.is_empty() {
-            let target = key("call", &format!("{}:{i}", e.occurrence.path));
-            nodes.push(json!({"id":target,"name":e.occurrence.name,"type":"call","state":"unknown","path":e.occurrence.path,"line":e.occurrence.range.line,"children":0}));
-            to.push(target);
+            continue;
         }
         steps.push(json!({"id":format!("call-{i}"),"from":from,"to":to,"state":if e.targets.is_empty(){"unknown"}else if e.targets.len()>1{"ambiguous"}else{"built"},"evidence":strength(e.occurrence.layer)}));
     }
@@ -241,5 +238,5 @@ pub fn page(
         }
     }
     json!({"id":"derived","parent":parent,"revision":snapshot.id,"change_token":snapshot.change_token,"nodes":visible,"steps":links,"breadcrumbs":breadcrumbs,
-        "next":(offset+PAGE<total).then_some(offset+PAGE),"frontier":total.saturating_sub(offset+PAGE)})
+        "next":(offset+PAGE<total).then_some(offset+PAGE),"previous":(offset>0).then(|| offset.saturating_sub(PAGE)),"frontier":total.saturating_sub(offset+PAGE)})
 }

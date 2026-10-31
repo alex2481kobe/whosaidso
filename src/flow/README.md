@@ -58,7 +58,7 @@ separate files for merging; conflicting edits still require Git reconciliation.
 
 ## Code map and comparison
 
-`flow map [<layer-id>]` derives an area/file/function/call map from `code::facts` without
+`flow map [<layer-id>]` derives an area/file/function map from `code::facts` without
 creating a plan. `flow compare <flow>` compares anchored nodes and steps in one
 index snapshot. Both commands accept `--branch <revision>` for committed code.
 `flow view [<flow> [<parent> [<offset>]]]` returns the same bounded layers as the
