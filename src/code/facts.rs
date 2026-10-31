@@ -5,9 +5,9 @@ use rusqlite::Connection;
 use std::path::Path;
 
 mod bodies;
-pub mod files;
 pub mod coverage;
 pub mod edges;
+pub mod files;
 pub mod impact;
 mod imports;
 pub mod reads;

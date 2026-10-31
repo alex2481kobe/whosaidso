@@ -25,7 +25,7 @@ pub fn screen(
                 json!({"id":id,"revision":format!("{}:{}",record.revision,snapshot.id),"state":"unknown","problems":record.problems,"nodes":[],"steps":[]})
             } else {
                 let flow = record.flow.ok_or("unreadable flow")?;
-                let (comparison,graph) = compare::compare(&flow, &snapshot)?;
+                let (comparison, graph) = compare::compare(&flow, &snapshot)?;
                 let layer = view::layer(&flow, parent)?;
                 let mut nodes: Vec<_> = layer
                     .nodes

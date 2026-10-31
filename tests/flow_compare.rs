@@ -123,3 +123,36 @@ fn declared_boundaries_define_the_comparison_universe_without_path_globs() {
     f.write("feature", &flow);
     assert_eq!(compare(&f)["state"], "built");
 }
+
+#[test]
+fn narrow_comparison_keeps_candidates_outside_its_paths_and_boundary_callers() {
+    let f = Fixture::sources(&[
+        ("app.rs", "fn screen() { server(); }\n"),
+        ("api.rs", "fn server() {}\n"),
+        ("other.rs", "fn server() {}\n"),
+    ]);
+    f.write(
+        "feature",
+        &json!({"covers":{"paths":["app.rs"]},"nodes":[
+        {"id":"screen","type":"screen","paths":["app.rs"]},
+        {"id":"api","type":"service","paths":["api.rs"],"note":"Local test"}
+    ],"steps":[{"id":"call","from":"screen","to":"api","when":"ready"}]}),
+    );
+    let v = compare(&f);
+    assert_eq!(v["steps"]["call"]["state"], "ambiguous");
+    assert!(!v["unplanned"].as_array().unwrap().is_empty());
+    f.write(
+        "feature",
+        &json!({"covers":{"boundaries":["api"]},"nodes":[
+        {"id":"api","type":"service","paths":["api.rs"],"note":"Local test"}
+    ],"steps":[]}),
+    );
+    let v = compare(&f);
+    assert!(
+        v["unplanned"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["path"] == "app.rs")
+    );
+}
