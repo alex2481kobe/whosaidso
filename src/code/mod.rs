@@ -1,6 +1,7 @@
 // Code search commands; parsing, storage and presentation live in their own modules.
 mod contracts;
 pub mod facts;
+mod inspect;
 mod languages;
 mod parse;
 mod precise;
@@ -17,4 +18,16 @@ pub fn import_scip(root: &Path, file: &Path) -> Result<(), String> {
     let report = precise::storage::import(root, file)?;
     println!("{report}");
     Ok(())
+}
+
+pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
+    match args {
+        [sub, value] if ["show", "outline"].contains(&sub.as_str()) => {
+            let snapshot = facts::Snapshot::current(root)?;
+            println!("{}", inspect::answer(&snapshot, sub, value)?);
+            Ok(())
+        }
+        [sub, value] => query(root, sub, value),
+        _ => Err("usage: code defs|refs|deps|includers|show|outline <value>".into()),
+    }
 }

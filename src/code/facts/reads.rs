@@ -11,6 +11,7 @@ pub enum Layer {
     Precise,
     Syntactic,
 }
+#[derive(Clone)]
 pub struct Range {
     pub encoding: i64,
     pub line: i64,

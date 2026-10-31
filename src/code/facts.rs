@@ -4,6 +4,7 @@ use crate::tree;
 use rusqlite::Connection;
 use std::path::Path;
 
+mod bodies;
 pub mod coverage;
 pub mod edges;
 mod imports;

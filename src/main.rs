@@ -70,7 +70,7 @@ fn run() -> Result<(), String> {
         "grep [--regex] [-i|-s] [-C N] [-g glob] [--in prefix] [--limit N] [--offset N] [-l|--files] [pattern...]", [cmd, words @ ..] if cmd == "grep" => text::grep(&root, words);
         "find <words...> [--limit N]", [cmd, words @ ..] if cmd == "find" => find::find(&root, words);
         "code import-scip <file>", [cmd, sub, file] if cmd == "code" && sub == "import-scip" => code::import_scip(&root, &cwd.join(file));
-        "code defs|refs <name> / code deps|includers <path>", [cmd, sub, value] if cmd == "code" && ["defs", "refs", "deps", "includers"].contains(&sub.as_str()) => code::query(&root, sub, value);
+        "code <command> [<args>...]", [cmd, rest @ ..] if cmd == "code" => code::command(&root, rest);
     }
 }
 fn main() {
