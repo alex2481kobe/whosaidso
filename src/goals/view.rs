@@ -58,6 +58,7 @@ pub fn screen(root: &Path, store: &Store) -> Result<(Value, i64), String> {
         // The eligible proof that decided the state; with none, the newest one for the goal, marked as not current.
         let proof = s.and_then(|s| s.proof).map(|i| (&store.proofs[i], true)).or_else(|| proofs.get(g.id.as_str()).map(|p| (*p, false)));
         json!({
+            "work":claims::view::work(s.map_or(&[], |s| s.branches.as_slice()), held.get(&g.id)),
             "id":g.id, "title":g.title, "done_when":g.done_when,
             "parent":g.parent, "milestone":crate::goal_tree::milestone(g, &store.goals),
             "check_changed":s.is_some_and(|s| s.check_changed), "state":s.map(|s| goals::label(s.state)), "branches":s.map(|s| &s.branches), "claim":held.get(&g.id), "check":g.check,

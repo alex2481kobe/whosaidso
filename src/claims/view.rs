@@ -65,3 +65,57 @@ pub fn held(root: &Path, states: &[state::GoalState], now: i64) -> Result<Vec<He
         })
         .collect())
 }
+
+// Claim identity and worktree matching are shared rules, not client-side guesses.
+#[derive(serde::Serialize)]
+pub struct Work<'a> {
+    pub name: &'a str,
+    pub author: &'a str,
+    pub time: i64,
+    pub path: Option<&'a str>,
+    pub claimed: bool,
+}
+pub fn work<'a>(branches: &'a [state::Branch], claim: Option<&'a Held>) -> Vec<Work<'a>> {
+    let held = claim.and_then(|c| {
+        branches.iter().position(|b| {
+            (b.name == c.branch || b.name.ends_with(&format!("/{}", c.branch)))
+                && b.worktree
+                    .as_deref()
+                    .is_none_or(|p| p.is_empty() || p == c.path)
+        })
+    });
+    let mut work: Vec<_> = branches
+        .iter()
+        .enumerate()
+        .map(|(i, b)| {
+            let claimed = held == Some(i);
+            let path = if claimed {
+                b.worktree
+                    .as_deref()
+                    .filter(|p| !p.is_empty())
+                    .or_else(|| claim.map(|c| c.path.as_str()))
+            } else {
+                b.worktree.as_deref()
+            };
+            Work {
+                name: &b.name,
+                author: &b.author,
+                time: b.time,
+                path,
+                claimed,
+            }
+        })
+        .collect();
+    if held.is_none()
+        && let Some(c) = claim
+    {
+        work.push(Work {
+            name: &c.branch,
+            author: &c.author,
+            time: c.since,
+            path: Some(&c.path),
+            claimed: true,
+        });
+    }
+    work
+}
