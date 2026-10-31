@@ -15,6 +15,7 @@ pub(super) struct Pool {
     coverage: String,
     edits: String,
     pub terms: Vec<String>,
+    kinds: Vec<String>,
 }
 impl Pool {
     pub fn new(
@@ -64,6 +65,7 @@ impl Pool {
         }
         Self {
             values,
+            kinds: kinds.iter().map(|s| s.to_string()).collect(),
             coverage: coverage.join("+"),
             edits: if edits.is_empty() {
                 "0".into()
@@ -84,7 +86,19 @@ impl Pool {
         )
     }
     fn bind(&mut self, terms: &str) {
-        self.values[0] = Value::Text(format!("{{title body}} : ({terms})"));
+        let kind = if self.kinds.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " AND kind : ({})",
+                self.kinds
+                    .iter()
+                    .map(|k| format!("\"{}\"", k.replace('"', "\"\"")))
+                    .collect::<Vec<_>>()
+                    .join(" OR ")
+            )
+        };
+        self.values[0] = Value::Text(format!("{{title body}} : ({terms}){kind}"));
     }
     pub fn fetch(
         &mut self,
@@ -100,29 +114,42 @@ impl Pool {
         } else {
             self.coverage.clone()
         };
-        let sql = format!(
-            "SELECT docs.kind,docs.key,docs.title,({}) AS matched,({}) AS edits,bm25(docs_fts,0,1,1) AS bm,docs.source {} AND (?5 IS NULL OR docs.title=?5 COLLATE NOCASE) ORDER BY matched DESC,edits,bm,docs.id LIMIT CASE WHEN ?5 IS NULL THEN ?2 ELSE -1 END",
-            matched,
-            self.edits,
-            self.source(!all)
-        );
-        let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
-        let mut rows = stmt
-            .query_map(
-                params_from_iter(if all { &self.values[..5] } else { &self.values }),
-                |r| {
-                    Ok(Hit {
-                        source: r.get(6)?,
-                        method: None,
-                        kind: r.get(0)?,
-                        key: r.get(1)?,
-                        title: r.get(2)?,
-                        matched: r.get::<_, i64>(3)? as usize,
-                        edits: r.get::<_, i64>(4)? as usize,
-                        bm: r.get(5)?,
-                    })
-                },
+        let sql = if exact_title.is_some() {
+            format!(
+                "SELECT docs.kind,docs.key,docs.title,({}) AS matched,({}) AS edits,bm25(docs_fts,0,1,1) AS bm,docs.source {} AND (?5 IS NULL OR docs.title=?5 COLLATE NOCASE) ORDER BY matched DESC,edits,bm,docs.id LIMIT CASE WHEN ?5 IS NULL THEN ?2 ELSE -1 END",
+                matched,
+                self.edits,
+                self.source(!all)
             )
+        } else {
+            let coverage = matched.replace("docs.id", "docs_fts.rowid");
+            let edits = self.edits.replace("docs.id", "docs_fts.rowid");
+            let floor = if all {
+                String::new()
+            } else {
+                format!(" AND ({coverage})>=?3")
+            };
+            // Rank only postings and compact membership keys. Fetch source-sized
+            // payload rows after LIMIT, not once for every partial match.
+            format!(
+                "WITH ranked AS MATERIALIZED (SELECT docs_fts.rowid AS id,m.key,m.source,({coverage}) AS matched,({edits}) AS edits,bm25(docs_fts,0,1,1) AS bm FROM docs_fts CROSS JOIN members m INDEXED BY member_lookup WHERE docs_fts MATCH ?1 AND m.worktree=(SELECT worktree FROM selection) AND m.payload=docs_fts.rowid{floor} ORDER BY matched DESC,edits,bm,id LIMIT ?2) SELECT p.kind,r.key,CASE WHEN p.kind='file' THEN substr(r.key,6) ELSE p.title END,r.matched,r.edits,r.bm,r.source FROM ranked r JOIN payloads p ON p.id=r.id ORDER BY r.matched DESC,r.edits,r.bm,r.id"
+            )
+        };
+        let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
+        let count = stmt.parameter_count();
+        let mut rows = stmt
+            .query_map(params_from_iter(&self.values[..count]), |r| {
+                Ok(Hit {
+                    source: r.get(6)?,
+                    method: None,
+                    kind: r.get(0)?,
+                    key: r.get(1)?,
+                    title: r.get(2)?,
+                    matched: r.get::<_, i64>(3)? as usize,
+                    edits: r.get::<_, i64>(4)? as usize,
+                    bm: r.get(5)?,
+                })
+            })
             .map_err(|e| e.to_string())?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())?;
@@ -140,13 +167,8 @@ impl Pool {
         } else {
             self.coverage.replace("docs.id", "docs_fts.rowid")
         };
-        let kind = if matches!(self.values[3], Value::Null) {
-            String::new()
-        } else {
-            " AND payload IN (SELECT id FROM payloads WHERE instr(?4,'|'||kind||'|')>0)".into()
-        };
         let sql = format!(
-            "SELECT count(DISTINCT CASE WHEN source LIKE 'file:%' THEN source ELSE key END) FROM members INDEXED BY member_lookup WHERE worktree=(SELECT worktree FROM selection) AND payload IN (SELECT rowid FROM docs_fts WHERE docs_fts MATCH ?1 AND ({coverage})>=?3){kind}"
+            "SELECT count(DISTINCT CASE WHEN source LIKE 'file:%' THEN source ELSE key END) FROM members INDEXED BY member_lookup WHERE worktree=(SELECT worktree FROM selection) AND payload IN (SELECT rowid FROM docs_fts WHERE docs_fts MATCH ?1 AND ({coverage})>=?3)"
         );
         {
             let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;

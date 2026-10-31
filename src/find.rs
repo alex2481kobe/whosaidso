@@ -66,8 +66,13 @@ pub fn find(root: &Path, args: &[String]) -> Result<(), String> {
     for hit in results.hits.iter().take(limit) {
         println!("{}", crate::text::cut(&label(hit), 200));
     }
+    let bound = if results.notice.is_none() {
+        "at least "
+    } else {
+        ""
+    };
     println!(
-        "shown {} of {}",
+        "shown {} of {bound}{}",
         results.hits.len().min(limit),
         results.total
     );

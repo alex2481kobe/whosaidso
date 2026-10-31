@@ -104,10 +104,11 @@ pub(crate) fn search(
     let mut hits: Vec<_> = ranked.into_iter().map(|(_, hit)| hit).collect();
     if let Ok(model) = &model {
         hits = super::fusion::fuse(&db, words, kinds, hits, model, candidates)?;
-        total = total.max(hits.len() as i64);
     }
+    let hits = merge(hits);
+    total = total.max(hits.len() as i64);
     Ok(Results {
-        hits: merge(hits),
+        hits,
         total,
         notice,
         db,
