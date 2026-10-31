@@ -92,3 +92,69 @@ fn duplicate_document_local_ids_keep_independent_occurrences() {
         "locals.rs:2  [precise]\n"
     );
 }
+
+#[test]
+fn definition_body_on_a_reference_does_not_reject_the_index() {
+    let f = Fixture::empty();
+    use common::scip::*;
+    write(
+        &f.root.join("a.rs"),
+        "fn area() {}\nfn caller() { area(); }\n",
+    );
+    let symbol = "rust-analyzer cargo example 0.1.0 area().";
+    let mut d = field(1, b"a.rs");
+    for (range, role) in [([0, 3, 7], 1), ([1, 14, 18], 0)] {
+        let mut o = field(1, &range);
+        o.extend(field(2, symbol.as_bytes()));
+        o.extend([24, role]);
+        // rust-analyzer emits the definition body even at references elsewhere.
+        o.extend(field(7, &[0, 0, 12]));
+        d.extend(field(2, &o));
+    }
+    let report = import(&f.root, &[field(2, &d)]);
+    assert!(report.contains("0 stale documents"), "{report}");
+    assert_eq!(
+        cli(&f.root, &["code", "refs", "area"]),
+        "a.rs:2  [precise]\n"
+    );
+}
+
+#[test]
+fn rust_module_and_operator_ranges_keep_bound_sources_precise() {
+    let f = Fixture::empty();
+    use common::scip::*;
+    write(
+        &f.root.join("a.rs"),
+        "fn area() -> Option<i32> { Some(1)?; Some(1) }\nfn caller() { area(); }\n",
+    );
+    let mut d = field(1, b"a.rs");
+    for (symbol, range, role) in [
+        ("rust-analyzer cargo example 0.1.0 a/", vec![0, 0, 2, 0], 1),
+        (
+            "rust-analyzer cargo core 0 ops/Try#branch().",
+            vec![0, 33, 34],
+            0,
+        ),
+        (
+            "rust-analyzer cargo example 0.1.0 a/area().",
+            vec![0, 3, 7],
+            1,
+        ),
+        (
+            "rust-analyzer cargo example 0.1.0 a/area().",
+            vec![1, 14, 18],
+            0,
+        ),
+    ] {
+        let mut o = field(1, &range);
+        o.extend(field(2, symbol.as_bytes()));
+        o.extend([24, role]);
+        d.extend(field(2, &o));
+    }
+    let report = import(&f.root, &[field(2, &d)]);
+    assert!(report.contains("0 stale documents"), "{report}");
+    assert_eq!(
+        cli(&f.root, &["code", "refs", "area"]),
+        "a.rs:2  [precise]\n"
+    );
+}

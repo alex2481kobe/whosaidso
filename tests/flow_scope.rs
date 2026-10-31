@@ -36,10 +36,17 @@ fn unread_name_candidates_cannot_become_a_false_pass() {
     use common::flow::FlowFixture;
     let f = Fixture::sources(&[
         ("app.rs", "fn entry() { same(); }\nfn same() {}\n"),
+        ("api.rs", "fn same() {}\n"),
         ("outside.rs", "fn same() {}\n"),
     ]);
-    f.write("app", &serde_json::json!({"covers":{"paths":["app.rs"]},"nodes":[{"id":"entry","type":"function","paths":["app.rs"]}],"steps":[]}));
-    bad(&f.root, &["flow", "drift-check"], "unknown: narrow scan");
+    f.write(
+        "app",
+        &serde_json::json!({"covers":{"paths":["app.rs","api.rs"]},"nodes":[
+        {"id":"entry","type":"function","paths":["app.rs"]},
+        {"id":"api","type":"function","paths":["api.rs"]}
+    ],"steps":[]}),
+    );
+    bad(&f.root, &["flow", "drift-check"], "app ");
     let comparison: serde_json::Value =
         serde_json::from_str(&cli(&f.root, &["flow", "compare", "app"])).unwrap();
     assert_ne!(comparison["state"], "built");

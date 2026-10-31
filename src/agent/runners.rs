@@ -20,6 +20,7 @@ pub(super) fn unscoped(words: &[&str]) -> bool {
         }
         "go" => args.first() == Some(&"test") && !go::scoped(&args[1..]),
         "npm" => {
+            let all = args;
             let args = after_options(
                 args,
                 &[
@@ -31,12 +32,20 @@ pub(super) fn unscoped(words: &[&str]) -> bool {
                     "-w",
                 ],
             );
+            let options = &all[..all.len() - args.len()];
             let args = if args.first() == Some(&"run") || args.first() == Some(&"run-script") {
                 &args[1..]
             } else {
                 args
             };
-            matches!(args.first(), Some(&"test" | &"t" | &"tst")) && !npm::scoped(&args[1..])
+            matches!(args.first(), Some(&"test" | &"t" | &"tst"))
+                && !npm::scoped(
+                    &options
+                        .iter()
+                        .chain(&args[1..])
+                        .copied()
+                        .collect::<Vec<_>>(),
+                )
         }
         "pytest" | "pytest-3" => !pytest::scoped(args),
         "python" | "python3" if args.starts_with(&["-m", "pytest"]) => !pytest::scoped(&args[2..]),

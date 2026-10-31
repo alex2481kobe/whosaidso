@@ -110,8 +110,8 @@ without loading the repository's symbol graph.
 
 Landing refreshes only covered paths and explicit path anchors. When unread source
 could supply global name candidates, symbol-only anchors or incoming boundary calls,
-the narrow scan reports unknown and refuses landing. It never treats a partial scan
-as proof that those candidates are absent. Existing covered symlinks and ignored
+landing rescans every source before judging. It never treats a partial scan as proof
+that those candidates are absent. Existing covered symlinks and ignored
 files absent from the manifest also report unknown; inspection visits at most 4096
 entries under cover prefixes and reports unknown if it cannot finish. Future globs
 with no matching files remain allowed.

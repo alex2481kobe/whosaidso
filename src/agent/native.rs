@@ -1,6 +1,7 @@
 // Native tool refusals suggest commands without changing the original tool's meaning.
 mod read;
 mod scope;
+mod session;
 use super::{install::quote, redirect::deny};
 use scope::Scope;
 use serde_json::Value;
@@ -24,12 +25,17 @@ pub(super) fn response(input: &Value) -> Option<Value> {
     }
     let scope = Scope::from_input(input)?;
     let args = input.get("tool_input")?;
+    let kind = match name {
+        "Read" | "read_file" => "Read",
+        "Grep" | "grep_files" => "Grep",
+        _ => "Glob",
+    };
     let reason = match name {
-        "Read" | "read_file" => read::nudge(&scope, input, args),
+        "Read" | "read_file" => read::nudge(&scope, args),
         "Grep" | "grep_files" => grep(&scope, args),
         _ => glob(&scope, args),
     }?;
-    Some(deny(&reason))
+    session::first_hint(input, kind, &reason).then(|| deny(&reason))
 }
 fn string<'a>(args: &'a Value, key: &str) -> Option<&'a str> {
     args.get(key)?
@@ -102,6 +108,9 @@ fn grep(scope: &Scope, args: &Value) -> Option<String> {
         None
     })?;
     let relative = scope.relative(&path)?;
+    if args.get("path").is_some() && !scope.searchable(&path) {
+        return None;
+    }
     if !relative.is_empty() {
         if args
             .get("glob")

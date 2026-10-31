@@ -44,7 +44,7 @@ fn compares_coverage_and_rolls_up_without_judging_outside() {
         "fn ready() {}\nfn duplicate() {}\nfn surprise() {}\nfn ready2() { surprise(); }\n",
     );
     let v = compare(&f);
-    assert!(!v["unplanned"].as_array().unwrap().is_empty(), "{v}");
+    assert!(v["unowned"].to_string().contains("app.rs"), "{v}");
 }
 
 #[test]
@@ -148,13 +148,8 @@ fn narrow_comparison_keeps_candidates_outside_its_paths_and_boundary_callers() {
     ],"steps":[]}),
     );
     let v = compare(&f);
-    assert!(
-        v["unplanned"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|e| e["path"] == "app.rs")
-    );
+    assert_eq!(v["state"], "built");
+    assert!(v["unplanned"].as_array().unwrap().is_empty());
 }
 
 #[test]

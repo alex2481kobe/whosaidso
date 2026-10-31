@@ -94,7 +94,7 @@ fn occurrence(data: &[u8]) -> Result<Occ, String> {
     if r.iter().chain(&range).any(|&n| n > i32::MAX as u64) {
         return Err(malformed());
     }
-    let enclosing = enclosing.or(match enclosed.as_slice() {
+    let mut enclosing = enclosing.or(match enclosed.as_slice() {
         [l, s, e] => Some([*l, *s, *l, *e]),
         [l, s, el, e] => Some([*l, *s, *el, *e]),
         _ => None,
@@ -103,11 +103,14 @@ fn occurrence(data: &[u8]) -> Result<Occ, String> {
         return Err(malformed());
     }
     if let Some(e) = enclosing
-        && (e.iter().any(|&n| n > i32::MAX as u64)
-            || (e[0], e[1]) > (r[0], r[1])
-            || (e[2], e[3]) < (r[2], r[3]))
+        && (e.iter().any(|&n| n > i32::MAX as u64) || (e[0], e[1]) > (e[2], e[3]))
     {
         return Err(malformed());
+    }
+    // rust-analyzer also attaches the definition body to references outside it.
+    // Such a range is not a containing body for this occurrence.
+    if enclosing.is_some_and(|e| (e[0], e[1]) > (r[0], r[1]) || (e[2], e[3]) < (r[2], r[3])) {
+        enclosing = None;
     }
     Ok(Occ {
         symbol,

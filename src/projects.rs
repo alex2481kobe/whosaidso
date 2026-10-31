@@ -15,7 +15,7 @@ fn registry() -> Result<PathBuf, String> {
     Ok(std::env::current_dir()
         .map_err(|e| e.to_string())?
         .join(home)
-        .join("projects"))
+        .join("projects.list"))
 }
 pub fn register_viewer(root: &Path) -> Result<(), String> {
     let mut ancestor = registry()?;
@@ -24,9 +24,9 @@ pub fn register_viewer(root: &Path) -> Result<(), String> {
             return Err("invalid projects registry path".into());
         }
     }
-    if fs::canonicalize(ancestor)
-        .map_err(|e| e.to_string())?
-        .starts_with(fs::canonicalize(root).map_err(|e| e.to_string())?)
+    if fs::canonicalize(&ancestor)
+        .map_err(|e| format!("{}: {e}", ancestor.display()))?
+        .starts_with(fs::canonicalize(root).map_err(|e| format!("{}: {e}", root.display()))?)
     {
         return Err(
             "ui: projects registry must be outside the repository (HOME or WHOSAIDSO_HOME)".into(),
@@ -43,24 +43,28 @@ pub fn register(root: &Path) -> Result<(), String> {
         return Err("projects: repository path contains a newline".into());
     }
     let path = registry()?;
-    fs::create_dir_all(path.parent().ok_or("invalid registry path")?).map_err(|e| e.to_string())?;
+    let parent = path.parent().ok_or("invalid registry path")?;
+    fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
     let mut file = fs::File::options()
         .create(true)
         .truncate(false)
         .read(true)
         .write(true)
-        .open(path)
-        .map_err(|e| e.to_string())?;
-    file.lock().map_err(|e| e.to_string())?;
+        .open(&path)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    file.lock()
+        .map_err(|e| format!("{}: {e}", path.display()))?;
     let mut entries = String::new();
     file.read_to_string(&mut entries)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("{}: {e}", path.display()))?;
     if !entries.lines().any(|p| p == text) {
-        file.seek(SeekFrom::End(0)).map_err(|e| e.to_string())?;
+        file.seek(SeekFrom::End(0))
+            .map_err(|e| format!("{}: {e}", path.display()))?;
         if !entries.is_empty() && !entries.ends_with('\n') {
-            file.write_all(b"\n").map_err(|e| e.to_string())?;
+            file.write_all(b"\n")
+                .map_err(|e| format!("{}: {e}", path.display()))?;
         }
-        writeln!(file, "{text}").map_err(|e| e.to_string())?;
+        writeln!(file, "{text}").map_err(|e| format!("{}: {e}", path.display()))?;
     }
     Ok(())
 }
@@ -72,10 +76,11 @@ pub struct Project {
     pub reason: String,
 }
 pub fn list() -> Result<Vec<Project>, String> {
-    let entries = match fs::read_to_string(registry()?) {
+    let path = registry()?;
+    let entries = match fs::read_to_string(&path) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(e) => return Err(e.to_string()),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
     };
     let mut seen = std::collections::HashSet::new();
     let mut projects = Vec::new();

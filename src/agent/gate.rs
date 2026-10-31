@@ -141,7 +141,11 @@ fn inspect(
             })
             .collect::<Vec<_>>();
         normalized[0].text = args[0].to_owned();
-        if shell::search_or_read(&normalized) {
+        if depth == 0
+            && commands.len() == 1
+            && commands[0].iter().all(|w| w.literal)
+            && shell::search_or_read(&normalized)
+        {
             if use_reason("WHOSAIDSO_ESCAPE", &reasons, used) {
                 continue;
             }

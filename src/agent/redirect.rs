@@ -19,7 +19,10 @@ pub(super) fn response(input: &Value) -> Option<Value> {
     if let Some(response) = super::gate::response(&commands, command) {
         return Some(response);
     }
-    let concerned = commands.iter().any(|words| shell::search_or_read(words));
+    if commands.len() != 1 || !commands[0].iter().all(|w| w.literal) {
+        return None;
+    }
+    let concerned = shell::search_or_read(&commands[0]);
     if !concerned {
         return None;
     }

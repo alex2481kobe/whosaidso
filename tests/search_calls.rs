@@ -147,6 +147,7 @@ fn show_accepts_printed_locations_and_rejects_invalid_selectors() {
     for selector in [
         "lib.rs:selected",
         "lib.rs:2:selected",
+        "lib.rs:2",
         "lib.rs::selected",
         printed.lines().next().unwrap(),
     ] {

@@ -72,7 +72,13 @@ pub(super) fn check(d: &Doc, bytes: &[u8]) -> bool {
         .collect();
     let (mut valid, mut checked) = (enclosing_valid, 0);
     for o in &d.occ {
-        valid &= o.line <= lines.len() as i64 && o.end <= lines.len() as i64;
+        let in_source = |line: i64, column: usize| {
+            source_lines
+                .get(line as usize - 1)
+                .and_then(|l| offset(l, column, d.encoding))
+                .is_some()
+        };
+        valid &= in_source(o.line, o.start) && in_source(o.end, o.stop);
         let expected = if o.symbol.starts_with("local ") {
             locals
                 .get(o.symbol.as_str())
@@ -82,7 +88,8 @@ pub(super) fn check(d: &Doc, bytes: &[u8]) -> bool {
         } else {
             name(&o.symbol)
         };
-        if !identifier(&expected) || macros.contains(&range(o)) {
+        // Rust module definitions select the entire file, including its final empty line.
+        if o.symbol.ends_with('/') || !identifier(&expected) || macros.contains(&range(o)) {
             continue;
         }
         if !o.def && unchecked_reference(&o.symbol, &expected) {
@@ -92,8 +99,52 @@ pub(super) fn check(d: &Doc, bytes: &[u8]) -> bool {
         let selected = lines.get(o.line as usize - 1).and_then(|line| {
             line.get(offset(line, o.start, d.encoding)?..offset(line, o.stop, d.encoding)?)
         });
-        let matches = o.line == o.end && selected == Some(expected.as_bytes());
+        // Implicit Rust trait calls do not spell the method name at their source range.
+        let implicit = !o.def
+            && o.symbol.starts_with("rust-analyzer ")
+            && (rust_operator(&expected)
+                || (o.symbol.contains("/impl#") && selected == Some(b"Self")));
+        let matches = (o.line == o.end && selected == Some(expected.as_bytes())) || implicit;
         valid &= matches;
     }
     valid && checked > 0
+}
+
+// These Rust trait calls select operators, punctuation, or multiline expressions.
+fn rust_operator(method: &str) -> bool {
+    matches!(
+        method,
+        "eq" | "ne"
+            | "lt"
+            | "le"
+            | "gt"
+            | "ge"
+            | "add"
+            | "add_assign"
+            | "sub"
+            | "sub_assign"
+            | "neg"
+            | "mul"
+            | "mul_assign"
+            | "div"
+            | "div_assign"
+            | "rem"
+            | "rem_assign"
+            | "bitand"
+            | "bitand_assign"
+            | "bitor"
+            | "bitor_assign"
+            | "bitxor"
+            | "bitxor_assign"
+            | "shl"
+            | "shl_assign"
+            | "shr"
+            | "shr_assign"
+            | "not"
+            | "deref"
+            | "deref_mut"
+            | "index"
+            | "index_mut"
+            | "branch"
+    )
 }

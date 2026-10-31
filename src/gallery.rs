@@ -58,6 +58,10 @@ pub fn newest(store: &record::model::Store) -> Vec<&Media> {
     publish::newest(store.media.iter().map(|m| (m, m.ran_at, m.sha.as_str())))
 }
 
+pub fn visible(store: &record::model::Store) -> impl Iterator<Item = &Media> {
+    newest(store).into_iter().take(LIVE_MEDIA)
+}
+
 pub fn restore(root: &Path, sha: &str) -> Result<(), String> {
     use std::io::Write;
     let bytes = archive::read::restore(root, sha)?;

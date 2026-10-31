@@ -3,12 +3,12 @@ use crate::code::facts::Snapshot;
 use std::path::Path;
 
 pub fn check_drift(root: &Path) -> Result<(), String> {
-    check(root, None)
+    check(root, None, false)
 }
 pub fn check_drift_against(root: &Path, destination: &str) -> Result<(), String> {
-    check(root, Some(destination))
+    check(root, Some(destination), false)
 }
-fn check(root: &Path, destination: Option<&str>) -> Result<(), String> {
+fn check(root: &Path, destination: Option<&str>, every_source: bool) -> Result<(), String> {
     let records = store::load(root, None)?;
     if records.is_empty() {
         return Ok(());
@@ -23,12 +23,13 @@ fn check(root: &Path, destination: Option<&str>) -> Result<(), String> {
         .filter_map(|r| r.flow.as_ref())
         .collect();
     let include = |path: &str| {
-        flows.iter().any(|f| {
-            super::code::inside(f, path)
-                || f.nodes
-                    .iter()
-                    .any(|n| n.paths.iter().any(|p| super::pattern::matches(p, path)))
-        })
+        every_source
+            || flows.iter().any(|f| {
+                super::code::inside(f, path)
+                    || f.nodes
+                        .iter()
+                        .any(|n| n.paths.iter().any(|p| super::pattern::matches(p, path)))
+            })
     };
     let outside = Snapshot::sources_outside(root, include)?;
     let snapshot = Snapshot::current_in(root, include)?;
@@ -69,7 +70,7 @@ fn check(root: &Path, destination: Option<&str>) -> Result<(), String> {
                 }
             }
         }
-        // A partial scan cannot certify global syntax candidates or incoming boundaries.
+        // A narrow scan is a shortcut: global syntax candidates and incoming boundaries need every source.
         let needs_global = !flow.covers.boundaries.is_empty()
             || flow
                 .nodes
@@ -80,11 +81,7 @@ fn check(root: &Path, destination: Option<&str>) -> Result<(), String> {
                 .iter()
                 .any(|e| e.occurrence.layer == crate::code::facts::reads::Layer::Syntactic);
         if outside && needs_global {
-            faults.push(format!(
-                "{} unknown: narrow scan cannot resolve outside candidates or boundary callers",
-                record.id
-            ));
-            continue;
+            return check(root, destination, true);
         }
         let state = report["state"].as_str().ok_or("flow has no verdict")?;
         if !["built", "planned"].contains(&state) {

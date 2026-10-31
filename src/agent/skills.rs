@@ -35,7 +35,7 @@ pub(super) fn check(folder: &Path) -> Result<(), String> {
                 }
                 Ok(_) => {}
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => return Err(e.to_string()),
+                Err(e) => return Err(format!("{}: {e}", path.display())),
             }
         }
         match fs::read(&file) {
@@ -47,7 +47,7 @@ pub(super) fn check(folder: &Path) -> Result<(), String> {
             }
             Ok(_) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(e.to_string()),
+            Err(e) => return Err(format!("{}: {e}", file.display())),
         }
     }
     Ok(())
@@ -61,19 +61,19 @@ pub(super) fn apply(folder: &Path, uninstall: bool) -> Result<(), String> {
             match fs::remove_file(&file) {
                 Ok(()) => {}
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-                Err(e) => return Err(e.to_string()),
+                Err(e) => return Err(format!("{}: {e}", file.display())),
             }
             // Extra files belong to the user; only remove an empty skill directory.
             if fs::read_dir(&dir)
-                .map_err(|e| e.to_string())?
+                .map_err(|e| format!("{}: {e}", dir.display()))?
                 .next()
                 .is_none()
             {
-                fs::remove_dir(dir).map_err(|e| e.to_string())?;
+                fs::remove_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
             }
         } else if !file.exists() {
-            fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-            fs::write(file, content).map_err(|e| e.to_string())?;
+            fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+            fs::write(&file, content).map_err(|e| format!("{}: {e}", file.display()))?;
         }
     }
     Ok(())

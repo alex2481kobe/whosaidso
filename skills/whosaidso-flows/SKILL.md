@@ -11,6 +11,24 @@ boxes for parts such as Accounts, Server or Database, arrows for what happens
 between them, then smaller boxes inside each part down to functions. `parent`
 puts a box inside another; steps connect box ids and name their condition.
 
+`flow put <flow> <json>` accepts `covers`, `nodes`, `steps`, and optional `goal`.
+Incremental puts accept `covers`, `node`, or `step`. Fields are:
+
+- Covers: `paths` (path globs), `boundaries` (node ids).
+- Node: `id`, `type`, `parent`, `paths`, `symbols`, `status`, `note`, `refs`,
+  `goal`, `shared`, `risks`. `type` can be a project-specific word. `status`
+  defaults to `planned`; accepted values are `planned`, `built`, `drifted`,
+  `missing`, `unplanned`, `ambiguous`, `unknown`, and `authored`. Status is an
+  authoring intent; comparison derives the result from code.
+- Step: `id`, `from`, `to`, `when`, optional `literal`.
+- Risk: `id`, `note`, `mitigation` with exactly one of `step`, `goal`, `note`.
+
+Ids use lowercase letters, digits and hyphens, at most 64 characters; `none` is
+reserved. Node, step and risk ids must be distinct. There is no `title` field.
+Use `paths` with bare or qualified function names in `symbols`, a
+`path/to/file.rs::function` anchor, or an exact symbol id from `code defs`.
+Paths and symbols together select their intersection.
+
 Worked example: plan Report, then its Generate and Save parts. Run in a Git
 project; the future files need not exist. Each put replaces the whole named item,
 so include fields you want to retain.
@@ -54,6 +72,15 @@ source files, even if a plan exists. Code queries index supported sources on
 demand; an empty map is not evidence of implementation. Flows are boxes and
 arrows at each layer.
 Flow progress never completes a goal: that needs real evidence on main.
+
+Comparison judges calls between different named boxes, grouped by directed box
+pair with a count and an example. An arrow between those boxes or their
+ancestors covers their calls. Calls within one box and unresolved external
+names add no crossing. Syntactic name matches are labelled; candidates in
+different boxes remain inconclusive. Indexed code not owned by a box is
+reported once per file as `not in any box` without blocking landing. A file
+added under a box's path glob belongs to that box and its crossings are judged.
+Unreadable or unindexed covered files remain `unknown` and block landing.
 
 If landing refuses drift, inspect comparison, fix the code or deliberately
 update the plan, then rerun the drift check. Never mark something built just to

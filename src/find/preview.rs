@@ -1,12 +1,12 @@
 // Search answers carry a source declaration without turning into context packs.
 use super::{label, pool::Hit, query::Results};
 use crate::text::prefix;
-const ROW_BYTES: usize = 384;
+pub(super) const ROW_BYTES: usize = 384;
 const ANSWER_BYTES: usize = 4096;
 
 fn row(results: &Results, hit: &Hit) -> Result<String, String> {
     let label = label(hit);
-    let label = if label.len() + 1 > ROW_BYTES {
+    let label = if hit.kind != "symbol" && label.len() + 1 > ROW_BYTES {
         format!("{}... [label truncated]", prefix(&label, ROW_BYTES - 24))
     } else {
         label

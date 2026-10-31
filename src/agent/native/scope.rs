@@ -22,6 +22,28 @@ impl Scope {
         let path = fs::canonicalize(path).ok()?;
         path.starts_with(&self.root).then_some(path)
     }
+    pub fn searchable(&self, path: &Path) -> bool {
+        let Some(relative) = self.relative(path) else {
+            return false;
+        };
+        let Ok(paths) = crate::git::run(
+            &self.root,
+            &[
+                "ls-files",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "-z",
+                "--",
+                &format!(":(literal){relative}"),
+            ],
+        ) else {
+            return false;
+        };
+        paths
+            .split('\0')
+            .any(|p| !p.is_empty() && (path.is_dir() || p == relative))
+    }
     pub fn relative<'a>(&self, path: &'a Path) -> Option<&'a str> {
         path.strip_prefix(&self.root)
             .ok()?

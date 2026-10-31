@@ -93,12 +93,7 @@ fn each_redirect_preserves_arguments_bytes_and_exit_status() {
 fn unsupported_forms_are_explicit_and_unrelated_or_bad_payloads_fail_open() {
     let f = Fixture::empty();
     for client in ["claude", "codex"] {
-        for input in [
-            "rg -i alpha .",
-            "cat a b",
-            "cat x | wc -l",
-            "grep -n -F -- alpha '$HOME/file' ; echo ok",
-        ] {
+        for input in ["rg -i alpha .", "cat a b"] {
             let r = hook(&f, client, input);
             assert_eq!(
                 r["hookSpecificOutput"]["permissionDecision"], "deny",
@@ -209,3 +204,23 @@ mod help;
 
 #[path = "v032_agents/indexer.rs"]
 mod indexer;
+
+#[test]
+fn shell_operations_and_uncertain_retrieval_are_never_refused() {
+    let f = Fixture::empty();
+    for text in [
+        "sed -i.bak s/old/new/ file.txt",
+        "sed 'w output.txt' file.txt",
+        "awk 'BEGIN { print 42 }'",
+        "awk '{ print > \"out\" }' file.txt",
+        "cat x | wc -l",
+        "rg needle . > matches.txt",
+        "cat \"$(echo file.txt)\"",
+        "cat $FILE",
+        "grep needle file; echo done",
+        "sed -n '1,20p' file.txt",
+        "awk '{print $1}' file.txt",
+    ] {
+        assert_eq!(hook(&f, "claude", text), json!({}), "{text}");
+    }
+}

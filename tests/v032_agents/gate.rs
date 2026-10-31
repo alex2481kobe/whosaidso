@@ -103,9 +103,10 @@ fn effective_reasons_are_logged_without_claiming_index_completeness() {
             "deny"
         );
     }
-    assert_eq!(
-        hook(&f, "claude", "FULL_SUITE=merge cargo test; rg -i x .")["hookSpecificOutput"]["permissionDecision"],
-        "deny"
+    assert!(
+        hook(&f, "claude", "FULL_SUITE=merge cargo test; rg -i x .")["hookSpecificOutput"]
+            .get("permissionDecision")
+            .is_none()
     );
     let log = std::fs::read_to_string(
         f.root
@@ -118,7 +119,7 @@ fn effective_reasons_are_logged_without_claiming_index_completeness() {
         .lines()
         .map(|l| serde_json::from_str(l).unwrap())
         .collect();
-    assert_eq!(rows.len(), 10, "{log}");
+    assert_eq!(rows.len(), 11, "{log}");
     assert!(
         rows.iter()
             .all(|v| v["complete"] == false && !v["reason"].as_str().unwrap().trim().is_empty())
@@ -136,5 +137,20 @@ fn shell_blind_spots_are_not_claimed_as_enforced() {
         "python3 <<'EOF'\ncargo test\nEOF",
     ] {
         assert_eq!(hook(&f, "codex", text), json!({}), "{text}");
+    }
+}
+
+#[test]
+fn npm_workspace_scope_is_independent_of_argument_position() {
+    let f = Fixture::empty();
+    for text in [
+        "npm --workspace web test",
+        "npm test --workspace web",
+        "npm --workspace=web run test",
+        "npm run test --workspace=web",
+        "npm -w web run-script test",
+        "npm run-script test -w web",
+    ] {
+        assert_eq!(hook(&f, "claude", text), json!({}), "{text}");
     }
 }

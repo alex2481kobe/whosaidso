@@ -1,5 +1,6 @@
 // Budgeted presentation for symbol bodies and file structure.
-use super::contracts::{DEFAULT_LIMIT, GAP_LIMIT, ROW_BYTES};
+mod outline;
+use super::contracts::{GAP_LIMIT, ROW_BYTES};
 const BODY_LINES: usize = 100;
 const BODY_BYTES: usize = 16_384;
 const SHOW_LIMIT: usize = 3;
@@ -31,12 +32,24 @@ pub(super) fn location(row: &Row) -> String {
         r.stop.unwrap_or(0)
     )
 }
-pub(super) fn answer(snapshot: &Snapshot, command: &str, value: &str) -> Result<String, String> {
-    let rows = if command == "show" {
-        select(snapshot, value)?
+pub(super) fn answer(
+    snapshot: &Snapshot,
+    command: &str,
+    args: &[String],
+) -> Result<String, String> {
+    let (value, filter, offset, limit) = if command == "outline" {
+        outline::parse(args)?
     } else {
-        snapshot.outline(value)?
+        (args.join(" "), None, 0, SHOW_LIMIT)
     };
+    let mut rows = if command == "show" {
+        select(snapshot, &value)?
+    } else {
+        snapshot.outline(&value)?
+    };
+    if let Some(part) = filter {
+        rows.retain(|row| row.qualified.contains(&part));
+    }
     let mut out = Vec::new();
     if rows.is_empty() {
         let coverage = snapshot.coverage()?;
@@ -69,13 +82,8 @@ pub(super) fn answer(snapshot: &Snapshot, command: &str, value: &str) -> Result<
             rows.len()
         ));
     }
-    let limit = if command == "show" {
-        SHOW_LIMIT
-    } else {
-        DEFAULT_LIMIT
-    };
     let (mut lines_left, mut bytes_left) = (BODY_LINES, BODY_BYTES);
-    for row in rows.iter().take(limit) {
+    for row in rows.iter().skip(offset).take(limit) {
         out.push(crate::text::cut(
             &format!(
                 "{} {} {} [{}]{}",
@@ -116,7 +124,13 @@ pub(super) fn answer(snapshot: &Snapshot, command: &str, value: &str) -> Result<
             }
         }
     }
-    if rows.len() > limit {
+    let shown = rows.len().saturating_sub(offset).min(limit);
+    if command == "outline" && (offset > 0 || shown < rows.len()) {
+        out.push(format!(
+            "shown {shown} of {} rows; offset {offset}; limit {limit}",
+            rows.len()
+        ));
+    } else if rows.len() > limit {
         out.push(format!("shown {limit} of {}", rows.len()));
     }
     let gaps = snapshot.blind_spots(&rows)?;
@@ -139,7 +153,7 @@ fn select(snapshot: &Snapshot, value: &str) -> Result<Vec<Row>, String> {
     let value = value.strip_prefix("./").unwrap_or(value);
     let invalid = || {
         format!(
-            "code show: invalid selector {value:?}; use name, path:name, path:line:name, path::name or symbol id"
+            "code show: invalid selector {value:?}; use name, path:name, path:line, path:line:name, path::name or symbol id"
         )
     };
     if value.ends_with(" [label truncated]") {
@@ -157,10 +171,19 @@ fn select(snapshot: &Snapshot, value: &str) -> Result<Vec<Row>, String> {
         })
         .max_by_key(|(p, _)| p.len())
     {
-        let (name, line) = if let Some(name) = rest.strip_prefix(':') {
+        let location = rest.split(" [").next().unwrap_or(rest);
+        let (name, line) = if let Ok(line) = location.parse::<i64>() {
+            if line <= 0 {
+                return Err(invalid());
+            }
+            ("", Some(line))
+        } else if let Some(name) = rest.strip_prefix(':') {
             (name, None)
         } else if let Some((line, name)) = rest.split_once(':').filter(|(_, n)| !n.starts_with(':'))
         {
+            if name.is_empty() {
+                return Err(invalid());
+            }
             let line = line
                 .parse::<i64>()
                 .ok()
@@ -170,7 +193,7 @@ fn select(snapshot: &Snapshot, value: &str) -> Result<Vec<Row>, String> {
         } else {
             (rest, None)
         };
-        if name.is_empty() {
+        if name.is_empty() && line.is_none() {
             return Err(invalid());
         }
         let mut name = name;

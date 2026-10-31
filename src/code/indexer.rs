@@ -18,16 +18,21 @@ pub(super) fn run(root: &Path, language: &str, args: &[String]) -> Result<String
     let deadline = process::Deadline::new(args)?;
     let dir = crate::git::run(root, &["rev-parse", "--absolute-git-dir"])?;
     let cache = Path::new(dir.trim_end_matches('\n')).join("whosaidso");
-    fs::create_dir_all(&cache).map_err(|e| e.to_string())?;
+    fs::create_dir_all(&cache).map_err(|e| format!("{}: {e}", cache.display()))?;
+    let lock_path = cache.join("index.lock");
     let lock = fs::OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
         .truncate(false)
-        .open(cache.join("index.lock"))
-        .map_err(|e| e.to_string())?;
-    lock.try_lock()
-        .map_err(|e| format!("indexer busy or lock unavailable: {e}"))?;
+        .open(&lock_path)
+        .map_err(|e| format!("{}: {e}", lock_path.display()))?;
+    lock.try_lock().map_err(|e| {
+        format!(
+            "{}: indexer busy or lock unavailable: {e}",
+            lock_path.display()
+        )
+    })?;
     let entry = languages::for_name(language).ok_or("language not indexed")?;
     let adapter = entry
         .indexer
@@ -37,25 +42,31 @@ pub(super) fn run(root: &Path, language: &str, args: &[String]) -> Result<String
         .map_err(|e| e.to_string())?
         .as_nanos();
     let run = Run(cache.join(format!("cache/index-{}-{nonce}", std::process::id())));
-    fs::create_dir_all(&run.0).map_err(|e| e.to_string())?;
+    fs::create_dir_all(&run.0).map_err(|e| format!("{}: {e}", run.0.display()))?;
     let artifact = run.0.join("index.scip");
     let log_path = run.0.join("index.log");
-    let log = fs::File::create(&log_path).map_err(|e| e.to_string())?;
+    let log = fs::File::create(&log_path).map_err(|e| format!("{}: {e}", log_path.display()))?;
     let version_path = run.0.join("version.log");
     let version = deadline.run(
         Command::new(adapter.tool)
             .arg("--version")
             .current_dir(root)
             .stdin(Stdio::null())
-            .stdout(fs::File::create(&version_path).map_err(|e| e.to_string())?)
-            .stderr(log.try_clone().map_err(|e| e.to_string())?),
+            .stdout(
+                fs::File::create(&version_path)
+                    .map_err(|e| format!("{}: {e}", version_path.display()))?,
+            )
+            .stderr(
+                log.try_clone()
+                    .map_err(|e| format!("{}: {e}", log_path.display()))?,
+            ),
     )?;
     let mut actual = String::new();
     fs::File::open(&version_path)
-        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("{}: {e}", version_path.display()))?
         .take(16385)
         .read_to_string(&mut actual)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("{}: {e}", version_path.display()))?;
     if actual.len() > 16384 {
         return Err("indexer version output exceeds 16 KiB".into());
     }
@@ -91,7 +102,10 @@ pub(super) fn run(root: &Path, language: &str, args: &[String]) -> Result<String
         .arg("--output")
         .arg(&artifact)
         .stdin(Stdio::null())
-        .stdout(log.try_clone().map_err(|e| e.to_string())?)
+        .stdout(
+            log.try_clone()
+                .map_err(|e| format!("{}: {e}", log_path.display()))?,
+        )
         .stderr(log);
     let status = deadline.run(&mut command)?;
     if !status.success() {
@@ -112,11 +126,15 @@ pub(super) fn run(root: &Path, language: &str, args: &[String]) -> Result<String
     ))
 }
 fn tail(path: &Path) -> Result<String, String> {
-    let mut file = fs::File::open(path).map_err(|e| e.to_string())?;
-    let len = file.metadata().map_err(|e| e.to_string())?.len();
+    let mut file = fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let len = file
+        .metadata()
+        .map_err(|e| format!("{}: {e}", path.display()))?
+        .len();
     file.seek(SeekFrom::Start(len.saturating_sub(4096)))
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("{}: {e}", path.display()))?;
     let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+    file.read_to_end(&mut bytes)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(crate::text::cut(&String::from_utf8_lossy(&bytes), 1000))
 }
