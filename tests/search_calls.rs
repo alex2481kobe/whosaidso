@@ -64,7 +64,11 @@ fn grep_diagnoses_regex_forms_instead_of_claiming_absence() {
         "cat\nconcatenate\nleft|right\n\\b\n",
     );
     commit(&f.root);
-    bad(&f.root, &["grep", r"\bcat\b"], "literal mode");
+    let hint = bad(&f.root, &["grep", r"\bcat\b"], "literal mode");
+    assert!(
+        hint.contains("[^[:alnum:]_]"),
+        "first error must give a supported replacement: {hint}"
+    );
     bad(
         &f.root,
         &["grep", "--regex", r"left\|right"],

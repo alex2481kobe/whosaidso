@@ -79,7 +79,7 @@ pub(super) fn parse(args: &[String]) -> Result<Options, String> {
     }
     let escapes = escapes(&out.pattern);
     if !out.regex && !explicit_literal && escapes.iter().any(|c| "bB|()dwWsS".contains(*c)) {
-        return Err("grep: literal mode; regex escapes need --regex (Git extended regex); use --literal to search literal backslashes".into());
+        return Err("grep: literal mode; --regex uses Git extended regex: | for alternation, [[:digit:]] for digits, (^|[^[:alnum:]_])word([^[:alnum:]_]|$) for boundaries; --literal searches backslashes".into());
     }
     if out.regex {
         if escapes.contains(&'|') {
