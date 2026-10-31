@@ -36,18 +36,26 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
     worktree::hook(root, "lock")?;
     let attempts = attempt::pending(root, &dir)?;
     let mut head = git::run(root, &["rev-parse", "HEAD"])?.trim().to_owned();
-    if attempts.iter().any(|a| a.released && a.receipt == head) {
-        println!("land: already published; claims released");
-        return Ok(());
-    }
     clean(root)?;
     let main = config::main(root)?;
-    let remote = "origin";
+    let remote = config::remote(root)?.ok_or("land: no destination remote")?;
+    let remote = remote.as_str();
     git::run(root, &["remote", "get-url", remote])
         .map_err(|_| "land: no destination remote".to_owned())?;
     let main_destination = format!("refs/heads/{main}");
+    for attempt in &attempts {
+        if attempt.released
+            && attempt.receipt == head
+            && attempt.remote == remote
+            && attempt.destination == main_destination
+            && attempt.published(root)?
+        {
+            println!("land: already published; claims released");
+            return Ok(());
+        }
+    }
     for _ in 0..20 {
-        let tracking = "refs/whosaidso/land-main";
+        let tracking = config::destination_ref(remote, &main_destination);
         git::run(
             root,
             &[
@@ -57,8 +65,9 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
                 &format!("+{main_destination}:{tracking}"),
             ],
         )?;
-        let baseline = git::run(root, &["rev-parse", tracking])?.trim().to_owned();
-        let destination = if config::load(root)?.land == Some(config::Land::Branch) {
+        let baseline = git::run(root, &["rev-parse", &tracking])?.trim().to_owned();
+        let destination = main_destination.clone();
+        let push_ref = if config::load(root)?.land == Some(config::Land::Branch) {
             format!(
                 "refs/heads/land/{}",
                 goals(root, &baseline)?
@@ -70,28 +79,30 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
         };
         worktree::hook(root, "fetch")?;
         // Resume only an exact, unpublished receipt. Later edits get a fresh candidate and run.
-        if let Some(a) = attempts
-            .iter()
-            .find(|a| a.receipt == head && a.destination == destination && a.remote == remote)
-        {
+        if let Some(a) = attempts.iter().find(|a| {
+            a.receipt == head
+                && a.destination == destination
+                && a.push_ref == push_ref
+                && a.remote == remote
+        }) {
             receipt::check_range(root, &format!("{}..{}", a.candidate, head))?;
             if git::run(root, &["merge-base", "--is-ancestor", &baseline, &head]).is_ok() {
-                match push(root, remote, &destination, &head) {
+                match push(root, remote, &push_ref, &head) {
                     Ok(()) => {
-                        let mut a = Attempt { ..clone_attempt(a) };
-                        a.release(root, &dir)?;
-                        return Ok(());
+                        let mut a = a.clone();
+                        worktree::hook(root, "published")?;
+                        return finish(root, &dir, &mut a);
                     }
                     Err(e) if rejected(&e) => (),
                     Err(e) => return Err(e),
                 }
             }
         }
-        let reopen = record::fold::reopen::required(root, &baseline)?;
+        let base = git::run(root, &["merge-base", &head, &baseline])?;
+        let reopen = record::fold::reopen::before_merge(root, &baseline, base.trim(), &head)?;
         if !reopen.is_empty() {
             return Err(reopen.join("\n"));
         }
-        let base = git::run(root, &["merge-base", &head, &baseline])?;
         let notes = crate::note::reconcile::required(root, base.trim(), &head, &baseline)?;
         if !notes.is_empty() {
             return Err(notes.join("\n"));
@@ -103,6 +114,7 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
         worktree::hook(root, "merge")?;
         crate::gate::gate(root, &baseline)?;
         crate::flow::command(root, &["check".into()])?;
+        // Merge integration: crate::flow::check::check_drift(root)?;
         limits(root, &baseline, line_override)?;
         let store = record::load(root)?;
         let problems = crate::check::budgets::problems(root, &store)?;
@@ -119,9 +131,10 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
         let mut a = Attempt {
             candidate: candidate.clone(),
             destination: destination.clone(),
+            push_ref: push_ref.clone(),
             remote: remote.into(),
             receipt: String::new(),
-            claims: attempt::claims(root, &goals)?,
+            claims: crate::claims::publication::snapshot(root, &goals)?,
             released: false,
         };
         a.save(&dir)?;
@@ -145,13 +158,10 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
         git::run(root, &["merge", "--ff-only", &a.receipt])?;
         head = a.receipt.clone();
         worktree::hook(root, "before-push")?;
-        match push(root, remote, &destination, &head) {
+        match push(root, remote, &push_ref, &head) {
             Ok(()) => {
                 worktree::hook(root, "published")?;
-                a.release(root, &dir)?;
-                worktree::hook(root, "released")?;
-                println!("land: published {}", &head[..12]);
-                return Ok(());
+                return finish(root, &dir, &mut a);
             }
             Err(e) if rejected(&e) => {
                 println!("land: destination advanced; merging and testing again");
@@ -161,15 +171,15 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
     }
     Err("land: destination kept advancing; run land again".into())
 }
-fn clone_attempt(a: &Attempt) -> Attempt {
-    Attempt {
-        candidate: a.candidate.clone(),
-        destination: a.destination.clone(),
-        remote: a.remote.clone(),
-        receipt: a.receipt.clone(),
-        claims: a.claims.clone(),
-        released: a.released,
+fn finish(root: &Path, dir: &Path, attempt: &mut Attempt) -> Result<(), String> {
+    if attempt.push_ref == attempt.destination {
+        attempt.release(root, dir)?;
+        worktree::hook(root, "released")?;
+        println!("land: published {}", &attempt.receipt[..12]);
+    } else {
+        println!("land: queued {}", &attempt.receipt[..12]);
     }
+    Ok(())
 }
 fn push(root: &Path, remote: &str, destination: &str, tip: &str) -> Result<(), String> {
     git::run(
@@ -180,11 +190,22 @@ fn push(root: &Path, remote: &str, destination: &str, tip: &str) -> Result<(), S
             remote,
             &format!("{tip}:{destination}"),
         ],
-    )
-    .map(|_| ())
+    )?;
+    git::run(
+        root,
+        &[
+            "update-ref",
+            &config::destination_ref(remote, destination),
+            tip,
+        ],
+    )?;
+    Ok(())
 }
 fn rejected(e: &str) -> bool {
-    e.contains("[rejected]") || e.contains("non-fast-forward") || e.contains("fetch first")
+    e.contains("[rejected]")
+        || e.contains("non-fast-forward")
+        || e.contains("fetch first")
+        || (e.contains("failed to update ref") && e.contains("but expected"))
 }
 fn clean(root: &Path) -> Result<(), String> {
     if !git::run(root, &["status", "--porcelain", "--untracked-files=all"])?.is_empty() {

@@ -1,7 +1,7 @@
 // Reachability applies to the evidence record as well as the commit it describes.
 use crate::{git, record};
 use std::{collections::HashSet, path::Path};
-pub(super) fn landed(root: &Path, tip: &str) -> Result<HashSet<String>, String> {
+pub(crate) fn landed(root: &Path, tip: &str) -> Result<HashSet<String>, String> {
     let paths = git::run(
         root,
         &[

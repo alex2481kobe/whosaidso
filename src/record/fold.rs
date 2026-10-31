@@ -52,7 +52,8 @@ pub fn decode(milestone: &str, bytes: &[u8]) -> Result<Bundle, String> {
 pub fn bundles(root: &Path) -> Result<Vec<Bundle>, String> {
     scan(root)?.into_iter().map(|(_, bundle)| bundle).collect()
 }
-fn scan(root: &Path) -> Result<Vec<(String, Result<Bundle, String>)>, String> {
+type Scanned = Vec<(String, Result<Bundle, String>)>;
+fn scan(root: &Path) -> Result<Scanned, String> {
     publish::record_dir(root, "done")?;
     let mut paths = match fs::read_dir(root.join(".whosaidso/done")) {
         Ok(paths) => paths
@@ -183,4 +184,39 @@ pub fn encode(entries: &[Entry]) -> Result<Vec<u8>, String> {
         bytes.push(b'\n');
     }
     Ok(bytes)
+}
+
+// Reconciliation follows a note's exact bytes into an immutable destination bundle.
+pub fn at(root: &Path, revision: &str, path: &str) -> Result<Option<Vec<u8>>, String> {
+    let paths = crate::git::run(
+        root,
+        &[
+            "ls-tree",
+            "-r",
+            "--name-only",
+            revision,
+            "--",
+            ".whosaidso/done",
+        ],
+    )?;
+    let entries: Vec<_> = paths.lines().collect();
+    let names: Vec<_> = entries.iter().map(|p| format!("{revision}:{p}")).collect();
+    let mut found = None;
+    crate::git::read_objects(root, &names, usize::MAX - 1, |i, bytes, _| {
+        let id = Path::new(entries[i])
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
+        if let Some(bytes) = bytes
+            && let Ok(bundle) = decode(id, &bytes)
+        {
+            for entry in bundle.entries {
+                if entry.path == path {
+                    found = Some(entry.content.into_bytes());
+                }
+            }
+        }
+        Ok(())
+    })?;
+    Ok(found)
 }

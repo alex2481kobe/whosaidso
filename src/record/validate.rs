@@ -1,6 +1,5 @@
 // Structural and historical integrity. Diagnostics never remove a record.
-use super::{MAX_OUTPUT_TAIL_BYTES, MAX_RECORD_BYTES, hex, model::Store};
-use crate::git;
+use super::{MAX_OUTPUT_TAIL_BYTES, hex, model::Store};
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
@@ -69,16 +68,7 @@ pub(super) fn validate(root: &Path, store: &mut Store) -> Result<(), String> {
         .collect();
     names.sort();
     names.dedup();
-    let mut historical = HashMap::new();
-    git::read_objects(root, &names, MAX_RECORD_BYTES as usize, |i, bytes, _| {
-        historical.insert(
-            names[i].clone(),
-            bytes
-                .and_then(|b| serde_json::from_slice::<super::model::Goal>(&b).ok())
-                .and_then(|g| g.check),
-        );
-        Ok(())
-    })?;
+    let historical = super::historical::checks(root, &names)?;
     for proof in &store.proofs {
         let mut errors = Vec::new();
         if !goals.contains_key(proof.goal.as_str()) {

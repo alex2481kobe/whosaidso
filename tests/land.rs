@@ -19,7 +19,8 @@ fn ready() -> (Fixture, std::path::PathBuf) {
 #[test]
 fn land_tests_candidate_folds_and_releases_its_claim() {
     let (f, lane) = ready();
-    cli(&lane, &["land"]);
+    let text = cli(&lane, &["land"]);
+    assert!(text.contains("g check changed"));
     let tip = git(&f.root, &["rev-parse", "origin/main"]);
     assert_eq!(tip.trim(), head(&lane));
     assert!(lane.join(".whosaidso/done/g.jsonl").exists());
@@ -30,17 +31,18 @@ fn land_tests_candidate_folds_and_releases_its_claim() {
 
 #[test]
 fn broken_main_does_not_block_the_fix() {
-    let (f, lane) = ready();
-    write(&f.root.join(".whosaidso/flows/bad.json"), "{}");
-    commit(&f.root);
-    git(&f.root, &["push", "origin", "main"]);
-    git(&lane, &["fetch", "origin"]);
-    git(&lane, &["merge", "-q", "origin/main"]);
-    fs::remove_file(lane.join(".whosaidso/flows/bad.json")).unwrap();
-    commit(&lane);
-    cli(&lane, &["land"]);
+    for path in [".whosaidso/flows/bad.json", ".whosaidso/done/g.jsonl"] {
+        let (f, lane) = ready();
+        write(&f.root.join(path), "{}");
+        commit(&f.root);
+        git(&f.root, &["push", "origin", "main"]);
+        git(&lane, &["fetch", "origin"]);
+        git(&lane, &["merge", "-q", "origin/main"]);
+        fs::remove_file(lane.join(path)).unwrap();
+        commit(&lane);
+        cli(&lane, &["land"]);
+    }
 }
-
 #[test]
 fn receipt_cannot_change_code_even_with_a_valid_trailer() {
     let (_f, lane) = ready();
@@ -78,11 +80,8 @@ fn a_rejected_push_retests_the_new_combination() {
     );
 }
 
-#[test]
-fn crashes_before_receipt_resume_without_dirty_records() {
-    for step in [
-        "lock", "fetch", "merge", "gate", "check", "media", "receipt",
-    ] {
+fn crash_at(steps: &[&str]) {
+    for step in steps {
         let (_f, lane) = ready();
         let script = format!("[ \"$WHOSAIDSO_LAND_STEP\" != {step} ] || kill -KILL $PPID");
         assert!(
@@ -96,6 +95,19 @@ fn crashes_before_receipt_resume_without_dirty_records() {
         cli(&lane, &["land"]);
         assert!(git(&lane, &["status", "--porcelain"]).is_empty());
     }
+}
+
+#[test]
+fn crashes_while_merging_resume() {
+    crash_at(&["lock", "fetch", "merge"]);
+}
+#[test]
+fn crashes_while_checking_resume() {
+    crash_at(&["gate", "check", "media"]);
+}
+#[test]
+fn crashes_around_the_receipt_resume() {
+    crash_at(&["receipt", "before-push"]);
 }
 
 #[test]
@@ -168,4 +180,13 @@ fn clean_note_merge_still_requires_reconciliation_at_landing() {
     commit(&f.root);
     git(&f.root, &["push", "-q", "origin", "main"]);
     bad(&lane, &["land"], "note reconcile choice");
+}
+
+#[test]
+fn published_receipts_do_not_hide_uncommitted_edits() {
+    let (_f, lane) = ready();
+    cli(&lane, &["land"]);
+    write(&lane.join("later"), "new work");
+    bad(&lane, &["land"], "commit your changes");
+    assert_eq!(fs::read_to_string(lane.join("later")).unwrap(), "new work");
 }

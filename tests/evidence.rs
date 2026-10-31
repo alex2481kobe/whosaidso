@@ -34,9 +34,9 @@ fn paired_runs_keep_results_and_restore_the_shared_scratch() {
     let p = value(&paths(&root.join(".whosaidso/proofs"))[0]);
     assert_eq!(p["main"]["exit_code"], 0);
     assert_eq!(p["reason"], "behavior unchanged");
+    commit(root);
     assert!(cli(root, &["goals"]).contains("behavior unchanged"));
     assert!(cli(root, &["show", "g"]).contains("ran"));
-    commit(root);
     let scratch = root.join(".git/whosaidso/prove/worktree");
     write(&scratch.join("dirt"), "left by an interrupted check");
     write(&scratch.join(".whosaidso/goals/g.json"), "corrupted");
@@ -92,8 +92,6 @@ fn a_new_check_can_fail_on_main_and_still_prove_the_candidate() {
     commit(root);
     git(root, &["checkout", "-q", "main"]);
     git(root, &["merge", "-q", "worker"]);
-    assert!(!cli(root, &["goals"]).contains("done    g"));
-    commit(root);
     assert!(cli(root, &["goals"]).contains("done    g"));
 }
 

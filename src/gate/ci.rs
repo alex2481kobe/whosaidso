@@ -34,9 +34,13 @@ pub fn check(root: &Path, range: &str) -> Result<(), String> {
         .iter()
         .filter(|s| s.state == state::State::Done && !done.contains(&s.id))
     {
-        if let Some(index) = goal.proof {
-            let proof = &after.proofs[index];
-            let run = crate::prove::verify_at(&tree, &tip, &proof.check)?;
+        if let Some(check) = after
+            .goals
+            .iter()
+            .find(|g| g.id == goal.id)
+            .and_then(|g| g.check.as_deref())
+        {
+            let run = crate::prove::verify_at(&tree, &tip, check)?;
             if run.exit_code != 0 || run.timed_out {
                 return Err(format!(
                     "gate --ci: queued check failed for {}: {}",

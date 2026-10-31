@@ -58,9 +58,6 @@ pub(super) fn at(root: &Path, oid: Option<&str>) -> Option<Claim> {
 pub(super) fn read(root: &Path, reference: &str) -> Option<Claim> {
     at(root, ref_oid(root, reference).as_deref())
 }
-pub(super) fn shared(root: &Path) -> bool {
-    git::run(root, &["remote", "get-url", "origin"]).is_ok()
-}
 pub(super) fn warn(notices: &mut Vec<String>, what: &str, e: &str) {
     notices.push(format!(
         "warning: {what}: {}",
@@ -68,6 +65,14 @@ pub(super) fn warn(notices: &mut Vec<String>, what: &str, e: &str) {
     ));
 }
 pub(super) fn sync(root: &Path, notices: &mut Vec<String>) {
+    let remote = match crate::config::remote(root) {
+        Ok(Some(remote)) => remote,
+        Ok(None) => return,
+        Err(e) => {
+            warn(notices, "claims not synced", &e);
+            return;
+        }
+    };
     if let Err(e) = git::run(
         root,
         &[
@@ -75,11 +80,11 @@ pub(super) fn sync(root: &Path, notices: &mut Vec<String>) {
             "-q",
             "--no-tags",
             "--prune",
-            "origin",
+            &remote,
             &format!("+{LOCAL}*:{ORIGIN}*"),
         ],
     ) {
-        warn(notices, "claims not synced with origin", &e);
+        warn(notices, "claims not synced with destination remote", &e);
     }
 }
 pub(super) fn describe(c: &Claim) -> String {

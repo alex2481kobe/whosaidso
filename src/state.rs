@@ -1,5 +1,5 @@
 mod branches;
-mod evidence;
+pub(crate) mod evidence;
 mod rules;
 // Goal states derived from Git history and recorded proofs.
 use crate::{
@@ -110,8 +110,8 @@ fn select_proof<'a>(
         .proofs
         .iter()
         .filter(|p| {
-            eligible(&p.sha)
-                && p.goal == goal
+            p.goal == goal
+                && eligible(&p.sha)
                 && Some(p.check.as_slice()) == check
                 && !store
                     .broken
@@ -172,15 +172,15 @@ fn derive(root: &Path, store: &Store, tip: &str, pending: bool) -> Result<Vec<Go
     };
 
     let format = "--format=%H%x09%(trailers:key=Goal,valueonly,separator=%x2C)";
-    let revisions = git::run(root, &["rev-list", &tip])?;
+    let revisions = git::run(root, &["rev-list", tip])?;
     if store.goals.is_empty() {
         return Ok(Vec::new());
     }
     let commits: HashSet<_> = revisions.lines().collect();
-    let main = work_log(root, &["log", &tip, "--no-merges", format])?;
+    let main = work_log(root, &["log", tip, "--no-merges", format])?;
     let now = now()?;
-    let branches = branches::collect(root, store, &tip)?;
-    let changed = rules::changed(root, &tip, store)?;
+    let branches = branches::collect(root, store, tip)?;
+    let changed = rules::changed(root, tip, store)?;
     let mut result = Vec::new();
     for goal in &store.goals {
         let eligible = |sha: &str| landed.as_ref().is_none_or(|set| set.contains(sha));
@@ -198,7 +198,7 @@ fn derive(root: &Path, store: &Store, tip: &str, pending: bool) -> Result<Vec<Go
             match proof {
                 Some(p) if p.exit_code != 0 => State::Failing,
                 Some(p) => {
-                    if stale(root, p, &goal.id, format, &tip)? {
+                    if stale(root, p, &goal.id, format, tip)? {
                         State::Stale
                     } else {
                         State::Done

@@ -13,6 +13,11 @@ fn at(root: &Path, revision: &str, path: &str) -> Result<Option<Vec<u8>>, String
             Ok(())
         },
     )?;
+    if bytes.is_none()
+        && let Some(path) = path.strip_prefix(".whosaidso/")
+    {
+        return record::fold::at(root, revision, path);
+    }
     Ok(bytes)
 }
 pub fn required(

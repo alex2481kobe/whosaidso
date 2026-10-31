@@ -41,6 +41,8 @@ pub fn command(root: &Path, program: &str, args: &[&str]) -> Command {
         .env("GIT_COMMITTER_NAME", "Test")
         .env("GIT_COMMITTER_EMAIL", "test@example.com");
     for name in [
+        "WHOSAIDSO_LAND_HOOK",
+        "WHOSAIDSO_AGENT",
         "WHOSAIDSO_BLOBS",
         "WHOSAIDSO_ARCHIVE",
         "WHOSAIDSO_HOME",

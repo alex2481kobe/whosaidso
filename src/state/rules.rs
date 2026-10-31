@@ -3,7 +3,7 @@ use super::{GoalState, State};
 use crate::{
     git,
     note::model::{Kind, Status},
-    record::model::{Goal, Store},
+    record::model::Store,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -85,25 +85,13 @@ pub(super) fn changed(root: &Path, tip: &str, store: &Store) -> Result<HashSet<S
     let entries: Vec<_> = first.into_iter().collect();
     let names: Vec<_> = entries.iter().map(|(_, name)| name.clone()).collect();
     let mut changed = HashSet::new();
-    git::read_objects(
-        root,
-        &names,
-        crate::record::MAX_RECORD_BYTES as usize,
-        |i, bytes, _| {
-            if let Some(bytes) = bytes {
-                let Ok(goal) = serde_json::from_slice::<Goal>(&bytes) else {
-                    return Ok(());
-                };
-                if store
-                    .goals
-                    .iter()
-                    .any(|g| g.id == entries[i].0 && g.check != goal.check)
-                {
-                    changed.insert(entries[i].0.to_owned());
-                }
-            }
-            Ok(())
-        },
-    )?;
+    let checks = crate::record::historical::checks(root, &names)?;
+    for (id, name) in entries {
+        if let Some(check) = checks.get(&name)
+            && store.goals.iter().any(|g| g.id == id && g.check != *check)
+        {
+            changed.insert(id.to_owned());
+        }
+    }
     Ok(changed)
 }

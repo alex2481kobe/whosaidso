@@ -31,6 +31,34 @@ pub fn reopen(root: &Path, id: &str, revision: &str) -> Result<(), String> {
     Ok(())
 }
 pub fn required(root: &Path, destination: &str) -> Result<Vec<String>, String> {
+    inspect(root, destination, None)
+}
+pub fn before_merge(
+    root: &Path,
+    destination: &str,
+    base: &str,
+    tip: &str,
+) -> Result<Vec<String>, String> {
+    let changed = git::run(
+        root,
+        &["diff", "--name-only", base, tip, "--", ".whosaidso"],
+    )?;
+    let work = git::run(
+        root,
+        &[
+            "log",
+            "--no-merges",
+            "--format=%(trailers:key=Goal,valueonly)",
+            &format!("{base}..{tip}"),
+        ],
+    )?;
+    inspect(root, destination, Some((&changed, &work)))
+}
+fn inspect(
+    root: &Path,
+    destination: &str,
+    edits: Option<(&str, &str)>,
+) -> Result<Vec<String>, String> {
     let paths = git::run(
         root,
         &[
@@ -49,7 +77,24 @@ pub fn required(root: &Path, destination: &str) -> Result<Vec<String>, String> {
             .and_then(|s| s.to_str())
             .ok_or("invalid bundle id")?;
         let bytes = git::run_bytes(root, &["show", &format!("{destination}:{p}")])?;
-        let Bundle { entries, .. } = decode(id, &bytes)?;
+        // An unreadable main bundle cannot forbid its own repair. Candidate validation still runs.
+        let Ok(Bundle { entries, .. }) = decode(id, &bytes) else {
+            continue;
+        };
+        if let Some((changed, work)) = edits {
+            let touched = entries.iter().any(|e| {
+                changed
+                    .lines()
+                    .any(|p| p == format!(".whosaidso/{}", e.path))
+                    || e.path
+                        .strip_prefix("goals/")
+                        .and_then(|p| p.strip_suffix(".json"))
+                        .is_some_and(|id| work.lines().any(|g| g == id))
+            });
+            if !touched {
+                continue;
+            }
+        }
         let same = fs::read(root.join(p)).is_ok_and(|current| current == bytes);
         let live = entries
             .iter()

@@ -2,10 +2,11 @@
 use crate::{git, publish};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path};
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Attempt {
     pub candidate: String,
     pub destination: String,
+    pub push_ref: String,
     pub remote: String,
     pub receipt: String,
     pub claims: Vec<(String, String)>,
@@ -22,10 +23,7 @@ impl Attempt {
         if self.receipt.is_empty() {
             return Ok(false);
         }
-        let reference = format!(
-            "refs/whosaidso/land-published/{}",
-            crate::record::sha256_hex(format!("{}:{}", self.remote, self.destination).as_bytes())
-        );
+        let reference = crate::config::destination_ref(&self.remote, &self.destination);
         git::run(
             root,
             &[
@@ -42,25 +40,7 @@ impl Attempt {
         .is_ok())
     }
     pub fn release(&mut self, root: &Path, dir: &Path) -> Result<(), String> {
-        for (reference, oid) in &self.claims {
-            let remote = git::run(root, &["ls-remote", &self.remote, reference])?;
-            if remote.split_whitespace().next() == Some(oid) {
-                git::run(
-                    root,
-                    &[
-                        "push",
-                        "--no-verify",
-                        &format!("--force-with-lease={reference}:{oid}"),
-                        &self.remote,
-                        &format!(":{reference}"),
-                    ],
-                )?;
-            }
-            if git::run(root, &["rev-parse", "--verify", reference]).is_ok_and(|s| s.trim() == oid)
-            {
-                git::run(root, &["update-ref", "-d", reference, oid])?;
-            }
-        }
+        crate::claims::publication::release(root, &self.remote, &self.claims)?;
         self.released = true;
         self.save(dir)
     }
@@ -74,27 +54,16 @@ pub fn pending(root: &Path, dir: &Path) -> Result<Vec<Attempt>, String> {
         }
         let mut a: Attempt = serde_json::from_slice(&fs::read(path).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
+        if git::run(root, &["remote", "get-url", &a.remote]).is_err()
+            && let Some(remote) = crate::config::remote(root)?
+        {
+            a.remote = remote;
+            a.save(dir)?;
+        }
         if !a.released && a.published(root)? {
             a.release(root, dir)?;
         }
         attempts.push(a);
     }
     Ok(attempts)
-}
-pub fn claims(root: &Path, goals: &[String]) -> Result<Vec<(String, String)>, String> {
-    let worker = crate::claims::identity(root)?;
-    let branch = git::run(root, &["branch", "--show-current"])?;
-    let mut result = Vec::new();
-    for goal in goals {
-        let reference = format!("refs/whosaidso/claims/{goal}");
-        if let Ok(oid) = git::run(root, &["rev-parse", "--verify", &reference]) {
-            let text = git::run(root, &["cat-file", "blob", oid.trim()])?;
-            if text.lines().any(|s| {
-                s == format!("worker {worker}") || s == format!("worker branch:{}", branch.trim())
-            }) {
-                result.push((reference, oid.trim().into()));
-            }
-        }
-    }
-    Ok(result)
 }
