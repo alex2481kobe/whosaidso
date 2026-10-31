@@ -4,7 +4,7 @@ use common::process::*;
 use common::*;
 
 #[test]
-fn fresh_precise_rows_override_syntax_and_expire_per_document() {
+fn fresh_precise_rows_override_syntax_and_expire_with_inputs() {
     let f = Fixture::empty();
     let root = &f.root;
 
@@ -22,7 +22,7 @@ fn fresh_precise_rows_override_syntax_and_expire_per_document() {
     assert_eq!(cli(root, &["code", "refs", "area"]), "b.rs:1  [precise]\n");
     write(&root.join("b.rs"), "// edit\nfn caller() { area(); }\n");
     assert!(cli(root, &["code", "refs", "area"]).contains("[syntactic]"));
-    assert!(cli(root, &["code", "defs", "area"]).contains("[precise]"));
+    assert!(cli(root, &["code", "defs", "area"]).contains("[syntactic]"));
 }
 
 #[test]

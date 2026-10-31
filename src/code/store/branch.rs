@@ -41,8 +41,11 @@ pub fn open_snapshot(root: &Path, branch: &str) -> Result<Connection, String> {
     let mut db = open(root)?;
     db.execute_batch("DETACH DATABASE precise; ATTACH DATABASE ':memory:' AS precise")
         .map_err(err)?;
-    db.execute("UPDATE selection SET worktree=NULL,branch=?1", [branch])
-        .map_err(err)?;
+    db.execute(
+        "UPDATE selection SET worktree=NULL,branch=?1",
+        [commit.trim()],
+    )
+    .map_err(err)?;
     index_files(root, &mut db, tree::Files { entries, skipped })?;
     Ok(db)
 }

@@ -1,11 +1,10 @@
 // Visible files, byte stamps and shared incremental reconciliation.
-use crate::{git, record};
+use crate::git;
 use rusqlite::{Connection, Transaction};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, HashSet},
     fs,
-    io::Read,
     path::Path,
 };
 
@@ -185,27 +184,8 @@ pub fn read(
     type Each<'a> = dyn FnMut(&File, Option<Vec<u8>>) -> Result<(), String> + 'a;
     let read_disk = |each: &mut Each| {
         for file in files.iter().filter(|f| f.on_disk) {
-            let mut input = open(root, &file.path)?;
-            let mut bytes = Vec::with_capacity(
-                (input.metadata().map_err(err)?.len() as usize).min(max_bytes + 1),
-            );
-            Read::by_ref(&mut input)
-                .take(max_bytes as u64 + 1)
-                .read_to_end(&mut bytes)
-                .map_err(err)?;
-            let mut file = file.clone();
-            // Hash this very buffer, after reading: filters and later edits cannot change its stamp.
-            if bytes.len() <= max_bytes {
-                file.blob = record::sha256_hex(&bytes);
-            }
-            each(
-                &file,
-                if bytes.len() > max_bytes {
-                    None
-                } else {
-                    Some(bytes)
-                },
-            )?;
+            let (file, bytes) = disk::read(root, file, max_bytes)?;
+            each(&file, bytes)?;
         }
         Ok(())
     };
@@ -255,7 +235,9 @@ pub fn skip(tx: &Transaction<'_>, table: &str, file: &File) -> Result<(), String
 pub fn fingerprint(files: &Files) -> String {
     let mut hash = Sha256::new();
     hash.update(files.skipped.to_le_bytes());
-    for file in &files.entries {
+    let mut entries: Vec<_> = files.entries.iter().collect();
+    entries.sort_unstable_by(|a, b| a.path.cmp(&b.path));
+    for file in entries {
         hash.update(file.path.len().to_le_bytes());
         hash.update(file.path.as_bytes());
         hash.update(file.blob.as_bytes());

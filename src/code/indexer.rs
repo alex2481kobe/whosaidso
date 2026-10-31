@@ -36,6 +36,7 @@ pub(super) fn run(root: &Path, language: &str) -> Result<String, String> {
     }
     let before = Snapshot::current(root)?;
     let input = crate::tree::fingerprint(&before.files);
+    let context = precise::binding::context();
     drop(before);
     let dir = crate::git::run(root, &["rev-parse", "--absolute-git-dir"])?;
     let nonce = SystemTime::now()
@@ -81,7 +82,7 @@ pub(super) fn run(root: &Path, language: &str) -> Result<String, String> {
         return Err("sources changed during indexing; old index retained".into());
     }
     drop(after);
-    let report = precise::storage::import_run(root, &artifact, Some(&input))?;
+    let report = precise::storage::import_run(root, &artifact, Some((&input, &context)))?;
     Ok(format!(
         "{report}\nindexer: {} {}",
         adapter.tool, adapter.version

@@ -78,7 +78,7 @@ fn stale_and_out_of_bounds_ranges_fall_back_without_colliding_local_ids() {
         .unwrap()
         .set_times(fs::FileTimes::new().set_modified(written + Duration::from_secs(1)))
         .unwrap();
-    let imported = cli(root, &["code", "import-scip", ".git/index.scip"]);
+    let imported = bound(root, ".git/index.scip");
 
     // 6: Neither newer sources nor out-of-bounds ranges suppress syntax.
     let changed = cli(root, &["code", "defs", "current_name"]);

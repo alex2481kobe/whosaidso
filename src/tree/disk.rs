@@ -59,3 +59,37 @@ pub(super) fn linked(
         .as_ref()
         .is_none_or(|links| path.file_name().is_some_and(|name| links.contains(name))))
 }
+
+pub(super) fn read(
+    root: &Path,
+    file: &super::File,
+    max_bytes: usize,
+) -> Result<(super::File, Option<Vec<u8>>), String> {
+    let mut input = open(root, &file.path)?;
+    let mut bytes =
+        Vec::with_capacity((input.metadata().map_err(err)?.len() as usize).min(max_bytes + 1));
+    let mut hash = Sha256::new();
+    let mut buf = [0; 8192];
+    let mut size = 0u64;
+    loop {
+        let n = input.read(&mut buf).map_err(err)?;
+        if n == 0 {
+            break;
+        }
+        hash.update(&buf[..n]);
+        size += n as u64;
+        if size <= max_bytes as u64 {
+            bytes.extend_from_slice(&buf[..n]);
+        }
+    }
+    let mut file = file.clone();
+    file.blob = hash.finalize().iter().map(|b| format!("{b:02x}")).collect();
+    Ok((
+        file,
+        if size > max_bytes as u64 {
+            None
+        } else {
+            Some(bytes)
+        },
+    ))
+}

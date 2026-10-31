@@ -55,7 +55,7 @@ pub fn import(root: &Path, file: &Path) -> Result<Report, String> {
 pub(in crate::code) fn import_run(
     root: &Path,
     file: &Path,
-    expected: Option<&str>,
+    expected: Option<(&str, &str)>,
 ) -> Result<Report, String> {
     let data = fs::read(file).map_err(|e| format!("{}: {e}", file.display()))?;
     let mut docs = Vec::new();
@@ -85,7 +85,9 @@ pub(in crate::code) fn import_run(
     }
     let docs = merge_paths(docs)?;
     let (_, mut files) = super::super::store::index(root)?;
-    if expected.is_some_and(|stamp| tree::fingerprint(&files) != stamp) {
+    if expected.is_some_and(|(stamp, context)| {
+        tree::fingerprint(&files) != stamp || super::binding::context() != context
+    }) {
         return Err("sources changed during indexing; old index retained".into());
     }
     let paths: HashSet<_> = docs.iter().map(|d| d.path.as_str()).collect();
@@ -114,7 +116,9 @@ pub(in crate::code) fn import_run(
             f.blob = blob;
         }
     }
-    if expected.is_some_and(|stamp| tree::fingerprint(&files) != stamp) {
+    if expected.is_some_and(|(stamp, context)| {
+        tree::fingerprint(&files) != stamp || super::binding::context() != context
+    }) {
         return Err("sources changed during indexing; old index retained".into());
     }
     let mut db = super::super::store::open(root)?;
@@ -136,28 +140,33 @@ pub(in crate::code) fn import_run(
             |r| r.get(0),
         )
         .map_err(err)?;
-    let metadata = fields(&data)?
-        .into_iter()
-        .find(|(n, _)| *n == 1)
-        .ok_or_else(malformed)?
-        .1;
-    let context = crate::record::sha256_hex(bytes(metadata)?);
+    let context = super::binding::context();
     tx.execute(
         "INSERT INTO scip_run VALUES (?1,?2,?3,?4)",
-        params![worktree, tree::fingerprint(&files), context, artifact],
+        params![
+            worktree,
+            expected.map(|(input, _)| input),
+            expected.map(|_| context),
+            artifact
+        ],
     )
     .map_err(err)?;
     let mut symbols = HashMap::new();
     let mut count = 0;
     let mut stale = 0;
+    let mut unknown = 0;
     let mut insert_doc = tx
         .prepare("INSERT INTO scip_docs VALUES (?1,?2)")
         .map_err(err)?;
     for d in &docs {
-        let blob = blobs.get(&d.path);
-        if blob.is_none() {
+        let checked = blobs.get(&d.path);
+        if checked.is_none() {
             stale += 1;
         }
+        if expected.is_none() && checked.is_some() {
+            unknown += 1;
+        }
+        let blob = checked.filter(|_| expected.is_some());
         insert_doc.execute(params![d.path, blob]).map_err(err)?;
         for o in &d.occ {
             super::details::occurrence(&tx, d, o)?;
@@ -211,6 +220,7 @@ pub(in crate::code) fn import_run(
         occurrences: count,
         symbols: symbols.len(),
         stale,
+        unknown,
     })
 }
 
@@ -219,13 +229,14 @@ pub struct Report {
     pub occurrences: usize,
     pub symbols: usize,
     pub stale: usize,
+    pub unknown: usize,
 }
 impl std::fmt::Display for Report {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "scip: {} documents, {} occurrences, {} symbols, {} stale documents",
-            self.documents, self.occurrences, self.symbols, self.stale
+            "scip: {} documents, {} occurrences, {} symbols, {} stale documents, {} unknown documents",
+            self.documents, self.occurrences, self.symbols, self.stale, self.unknown
         )
     }
 }
