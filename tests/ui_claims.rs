@@ -62,6 +62,8 @@ fn viewer_keeps_a_claim_until_its_goal_is_done() {
     assert_eq!(work.as_array().unwrap().len(), 2);
     assert_eq!(work[0]["claimed"], false);
     assert_eq!(work[1]["claimed"], true);
+    // Git reports resolved paths, and a claim is recorded from Git.
+    let lane = std::fs::canonicalize(&lane).unwrap();
     let body = body.replace("/ghost/tree", lane.to_str().unwrap());
     let oid = input(root, &["hash-object", "-w", "--stdin"], body.as_bytes());
     git(root, &["update-ref", "refs/whosaidso/claims/g", &oid]);
