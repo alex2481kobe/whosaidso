@@ -45,6 +45,7 @@ pub(super) fn open(root: &Path) -> Result<Connection, String> {
         [precise.to_str().ok_or("non-UTF-8 cache path")?],
     )
     .map_err(err)?;
+    database::wal(&db, Some("precise"))?;
     Ok(db)
 }
 pub(super) fn select(db: &Connection) -> Result<(), String> {
