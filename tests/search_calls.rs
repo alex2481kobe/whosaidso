@@ -154,6 +154,13 @@ fn show_accepts_printed_locations_and_rejects_invalid_selectors() {
     ] {
         bad(&f.root, &["code", "show", selector], "invalid selector");
     }
+    write(
+        &f.root.join("nested [old]:unit.rs"),
+        "fn bracketed() { let bracket_body = 7; }\n",
+    );
+    let printed = cli(&f.root, &["find", "bracketed"]);
+    let body = cli(&f.root, &["code", "show", printed.lines().next().unwrap()]);
+    assert!(body.contains("bracket_body"), "{body}");
 }
 
 #[test]

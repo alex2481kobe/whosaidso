@@ -133,7 +133,6 @@ fn select(snapshot: &Snapshot, value: &str) -> Result<Vec<Row>, String> {
         .strip_prefix("symbol ")
         .or_else(|| value.strip_prefix("symbol:"))
         .unwrap_or(value);
-    let value = value.split(" [").next().unwrap_or(value);
     if value.starts_with(&format!("{}:", snapshot.project)) {
         return snapshot.select(value);
     }
@@ -143,6 +142,9 @@ fn select(snapshot: &Snapshot, value: &str) -> Result<Vec<Row>, String> {
             "code show: invalid selector {value:?}; use name, path:name, path:line:name, path::name or symbol id"
         )
     };
+    if value.ends_with(" [label truncated]") {
+        return Err(invalid());
+    }
     if let Some((path, rest)) = snapshot
         .files
         .entries
@@ -171,12 +173,23 @@ fn select(snapshot: &Snapshot, value: &str) -> Result<Vec<Row>, String> {
         if name.is_empty() {
             return Err(invalid());
         }
-        return Ok(snapshot
-            .definitions(name)?
-            .rows
-            .into_iter()
-            .filter(|r| r.path == path && line.is_none_or(|n| r.range.line == n))
-            .collect());
+        let mut name = name;
+        loop {
+            let rows: Vec<_> = snapshot
+                .definitions(name)?
+                .rows
+                .into_iter()
+                .filter(|r| r.path == path && line.is_none_or(|n| r.range.line == n))
+                .collect();
+            if !rows.is_empty() {
+                return Ok(rows);
+            }
+            let Some((without, _)) = name.rsplit_once(" [").filter(|(_, tag)| tag.ends_with(']'))
+            else {
+                return Ok(rows);
+            };
+            name = without;
+        }
     }
     if value.is_empty() || value.replace("::", "").contains(':') {
         return Err(invalid());
