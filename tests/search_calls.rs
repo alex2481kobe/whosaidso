@@ -31,6 +31,46 @@ fn source_evidence_survives_data_floods_and_generated_code() {
 }
 
 #[test]
+fn ambiguous_show_includes_bodies_with_a_shared_small_budget() {
+    let f = Fixture::empty();
+    for (name, marker) in [
+        ("a", "first_only"),
+        ("b", "second_only"),
+        ("c", "third_only"),
+        ("d", "fourth_only"),
+    ] {
+        write(
+            &f.root.join(format!("{name}.rs")),
+            format!("fn duplicate() {{ let {marker} = 42; }}\n"),
+        );
+    }
+    let out = cli(&f.root, &["code", "show", "duplicate"]);
+    for marker in [
+        "first_only",
+        "second_only",
+        "third_only",
+        "path:line:name",
+        "shown 3 of 4",
+    ] {
+        assert!(out.contains(marker), "{out}");
+    }
+    assert!(!out.contains("fourth_only"), "{out}");
+    write(
+        &f.root.join("a.rs"),
+        format!(
+            "fn duplicate() {{\n{}\n}}\n",
+            format!("let s = \"{}\";\n", "雪".repeat(1000)).repeat(120)
+        ),
+    );
+    let out = cli(&f.root, &["code", "show", "duplicate"]);
+    assert!(
+        out.len() < 20_000 && out.contains("body truncated"),
+        "{} bytes",
+        out.len()
+    );
+}
+
+#[test]
 fn show_accepts_printed_locations_and_rejects_invalid_selectors() {
     let f = Fixture::empty();
     write(

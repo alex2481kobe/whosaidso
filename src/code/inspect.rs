@@ -2,6 +2,7 @@
 use super::contracts::{DEFAULT_LIMIT, GAP_LIMIT, ROW_BYTES};
 const BODY_LINES: usize = 100;
 const BODY_BYTES: usize = 16_384;
+const SHOW_LIMIT: usize = 3;
 use super::facts::{
     Snapshot,
     reads::{Layer, Row},
@@ -64,11 +65,17 @@ pub(super) fn answer(snapshot: &Snapshot, command: &str, value: &str) -> Result<
     }
     if command == "show" && rows.len() != 1 {
         out.push(format!(
-            "ambiguous: {} definitions; use path::name or symbol id",
+            "ambiguous: {} definitions; use path:line:name or symbol id; bodies share 100 lines / 16384 bytes",
             rows.len()
         ));
     }
-    for row in rows.iter().take(DEFAULT_LIMIT) {
+    let limit = if command == "show" {
+        SHOW_LIMIT
+    } else {
+        DEFAULT_LIMIT
+    };
+    let (mut lines_left, mut bytes_left) = (BODY_LINES, BODY_BYTES);
+    for row in rows.iter().take(limit) {
         out.push(crate::text::cut(
             &format!(
                 "{} {} {} [{}]{}",
@@ -84,17 +91,19 @@ pub(super) fn answer(snapshot: &Snapshot, command: &str, value: &str) -> Result<
             ),
             ROW_BYTES,
         ));
-        if command == "show" && rows.len() == 1 {
+        if command == "show" {
             match snapshot.symbol_body(row)? {
                 Some((_, body)) => {
                     let text = String::from_utf8(body).map_err(|e| e.to_string())?;
                     let mut shown = String::new();
-                    for line in text.lines().take(BODY_LINES) {
-                        if shown.len() + line.len() + 1 > BODY_BYTES {
+                    for line in text.lines().take(lines_left) {
+                        if line.len() + 1 > bytes_left {
                             break;
                         }
                         shown.push_str(line);
                         shown.push('\n');
+                        lines_left -= 1;
+                        bytes_left -= line.len() + 1;
                     }
                     if shown.trim_end_matches('\n') != text.trim_end_matches('\n') {
                         shown.push_str("body truncated: budget 100 lines / 16384 bytes\n");
@@ -107,8 +116,8 @@ pub(super) fn answer(snapshot: &Snapshot, command: &str, value: &str) -> Result<
             }
         }
     }
-    if rows.len() > DEFAULT_LIMIT {
-        out.push(format!("shown {DEFAULT_LIMIT} of {}", rows.len()));
+    if rows.len() > limit {
+        out.push(format!("shown {limit} of {}", rows.len()));
     }
     let gaps = snapshot.blind_spots(&rows)?;
     out.extend(gaps.iter().take(GAP_LIMIT).map(|g| format!("gap: {g}")));
