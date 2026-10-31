@@ -151,9 +151,11 @@ fn bmff(bytes: &[u8]) -> Option<impl Iterator<Item = &[u8]>> {
     let brands = bytes.get(start..size)?;
     Some(
         brands
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .enumerate()
-            .filter_map(|(i, s)| (i != 1).then_some(s)),
+            .filter_map(|(i, s)| (i != 1).then_some(s.as_slice())),
     )
 }
 fn png(bytes: &[u8]) -> bool {

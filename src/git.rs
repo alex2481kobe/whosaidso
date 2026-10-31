@@ -139,7 +139,7 @@ pub fn read_objects(
             reader.read_exact(&mut bytes).map_err(|e| e.to_string())?;
             let mut newline = [0];
             reader.read_exact(&mut newline).map_err(|e| e.to_string())?;
-            if newline != [b'\n'] {
+            if newline != *b"\n" {
                 return Err("invalid git cat-file separator".into());
             }
             each(i, Some(bytes), true)?;
