@@ -139,3 +139,18 @@ fn shell_blind_spots_are_not_claimed_as_enforced() {
         assert_eq!(hook(&f, "codex", text), json!({}), "{text}");
     }
 }
+
+#[test]
+fn npm_workspace_scope_is_independent_of_argument_position() {
+    let f = Fixture::empty();
+    for text in [
+        "npm --workspace web test",
+        "npm test --workspace web",
+        "npm --workspace=web run test",
+        "npm run test --workspace=web",
+        "npm -w web run-script test",
+        "npm run-script test -w web",
+    ] {
+        assert_eq!(hook(&f, "claude", text), json!({}), "{text}");
+    }
+}
