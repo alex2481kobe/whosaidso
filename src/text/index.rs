@@ -75,7 +75,7 @@ pub(super) fn candidates(root: &Path, needle: &str) -> Result<Option<Vec<String>
         })
         .collect::<Vec<_>>()
         .join(" AND ");
-    let mut stmt = db.prepare("SELECT path FROM text_fts WHERE text_fts MATCH ?1 UNION SELECT path FROM tree_skips WHERE source='text_files'").map_err(err)?;
+    let mut stmt = db.prepare("SELECT path FROM text_files WHERE rowid IN (SELECT rowid FROM text_fts WHERE text_fts MATCH ?1) UNION SELECT path FROM tree_skips WHERE source='text_files'").map_err(err)?;
     let mut paths = stmt
         .query_map([expression], |r| r.get::<_, String>(0))
         .map_err(err)?
