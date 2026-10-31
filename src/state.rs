@@ -25,9 +25,9 @@ pub enum State {
     Stale,
 }
 impl State {
-    // A landed or done goal has nothing left to claim.
+    // Only completed work settles a claim; landed work may still need evidence.
     pub fn settled(self) -> bool {
-        matches!(self, State::Landed | State::Done)
+        self == State::Done
     }
 }
 #[derive(Clone, PartialEq, Eq, serde::Serialize)]

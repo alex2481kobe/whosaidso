@@ -65,3 +65,14 @@ fn a_bad_bundle_does_not_hide_other_children_or_live_questions() {
     assert!(!text.contains("done    live"), "{text}");
     assert!(cli(&f.root, &["note", "show", "question"]).contains("Needs an answer"));
 }
+
+#[test]
+fn landed_work_without_evidence_keeps_its_claim_exclusive() {
+    let f=Fixture::new();
+    cli(&f.root,&["install-hooks"]); commit(&f.root);
+    work(&f.root,"implementation","g");
+    success(command(&f.root,BIN,&["start","g"]).env("WHOSAIDSO_AGENT","first").output().unwrap());
+    for args in [vec!["start","g"],vec!["next"]] {
+        failure(command(&f.root,BIN,&args).env("WHOSAIDSO_AGENT","second").output().unwrap(),"claimed");
+    }
+}
