@@ -304,3 +304,42 @@ fn prune_recovery_preserves_edited_notes_and_generated_bundles() {
     write(&bundle, encoded);
     cli(&f.root, &["prune"]);
 }
+
+#[test]
+fn landing_uses_the_selected_remotes_default_branch() {
+    let f = Fixture::new();
+    let remote = f.remote();
+    let original = head(&f.root);
+    git(&f.root, &["push", "origin", "main:master"]);
+    git(
+        &f.root,
+        &["remote", "add", "upstream", remote.to_str().unwrap()],
+    );
+    git(&f.root, &["fetch", "upstream"]);
+    git(
+        &f.root,
+        &[
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+        ],
+    );
+    git(
+        &f.root,
+        &[
+            "symbolic-ref",
+            "refs/remotes/upstream/HEAD",
+            "refs/remotes/upstream/master",
+        ],
+    );
+    let lane = f.worktree("worker");
+    git(&lane, &["config", "branch.worker.remote", "upstream"]);
+    git(
+        &lane,
+        &["config", "branch.worker.merge", "refs/heads/master"],
+    );
+    work(&lane, "feature", "g");
+    cli(&lane, &["land", "--reason", "shared check"]);
+    assert_eq!(git(&remote, &["rev-parse", "main"]).trim(), original);
+    assert_eq!(git(&remote, &["rev-parse", "master"]).trim(), head(&lane));
+}
