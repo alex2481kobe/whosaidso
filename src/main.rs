@@ -14,6 +14,7 @@ mod goal_tree;
 mod goals;
 mod hooks;
 mod index;
+mod note;
 mod projects;
 mod prove;
 mod prune;
@@ -53,6 +54,7 @@ fn run() -> Result<(), String> {
         };
     }
     commands! {
+        "note <command> [<args>...]", [cmd, rest @ ..] if cmd == "note" => note::command(&root, rest);
         "flow <command> [<args>...]", [cmd, rest @ ..] if cmd == "flow" => flow::command(&root, rest);
         "check", [cmd] if cmd == "check" => sync::check(&root);
         "sync [<remote>]", [cmd, rest @ ..] if cmd == "sync" && rest.len() <= 1 => sync::sync(&root, rest.first().map_or("origin", String::as_str));

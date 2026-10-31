@@ -32,6 +32,7 @@ pub struct Proof {
 #[derive(Default)]
 pub struct Store {
     pub broken: Vec<(String, String)>,
+    pub notes: Vec<crate::note::model::Note>,
     pub goals: Vec<Goal>,
     pub proofs: Vec<Proof>,
     pub media: Vec<Media>,

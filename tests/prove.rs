@@ -61,7 +61,7 @@ fn spawn_errors_publish_no_proof() {
     }
     fs::remove_file(root.join("run")).unwrap();
     commit(root);
-    bad(root, &["prove", "g"], "unresolved tool");
+    bad(root, &["prove", "g"], "unresolved check");
 }
 
 #[test]
@@ -171,13 +171,13 @@ fn killed_check_does_not_publish_a_partial_proof() {
 }
 
 #[test]
-fn missing_or_non_blob_historical_instruments_cannot_replace_a_proof() {
+fn missing_or_non_blob_historical_checks_cannot_replace_a_proof() {
     let f = Fixture::new();
     let root = &f.root;
     let at = head(root);
     r::proof(root, &at, 1, 0);
     commit(root);
-    let path = root.join(".whosaidso/instruments/test.json");
+    let path = root.join(".whosaidso/goals/g.json");
     let bytes = fs::read(&path).unwrap();
     fs::remove_file(&path).unwrap();
     write(&path.join("wrong-kind"), "directory");
@@ -188,7 +188,7 @@ fn missing_or_non_blob_historical_instruments_cannot_replace_a_proof() {
     commit(root);
     r::proof(root, &wrong, 2, 1);
     r::proof(root, &"0".repeat(40), 3, 1);
-    assert!(cli(root, &["goals"]).contains("done    g"));
+    assert!(bad(root, &["goals"], "missing or different check").contains("done    g"));
     assert!(cli(root, &["show", "g"]).contains(&at[..7]));
-    bad(root, &["check"], "missing instrument at");
+    bad(root, &["check"], "missing or different check");
 }

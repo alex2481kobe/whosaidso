@@ -41,6 +41,24 @@ pub fn kind(path: &Path) -> &str {
 }
 pub fn load(root: &Path) -> Result<Store, String> {
     let mut store = read(root)?;
+    for record in crate::note::store::load(root)? {
+        let id = record.id;
+        match record.note {
+            Ok(note) => {
+                let mut value = serde_json::to_value(&note.header).map_err(|e| e.to_string())?;
+                value["body"] = serde_json::json!(note.body);
+                store.records.push((
+                    root.join(".whosaidso/notes").join(format!("{id}.md")),
+                    value,
+                ));
+                store.notes.push(note);
+            }
+            Err(error) => {
+                store.errors.push(format!("note {id}: {error}"));
+                store.broken.push(("note".into(), id));
+            }
+        }
+    }
     validate::validate(root, &mut store)?;
     Ok(store)
 }

@@ -116,6 +116,30 @@ pub(super) fn validate(root: &Path, store: &mut Store) -> Result<(), String> {
                 .push(format!("media: unknown goal {}", media.goal));
         }
     }
+    for note in &store.notes {
+        let mut errors = Vec::new();
+        if let Some(goal) = &note.header.goal
+            && !goals.contains_key(goal.as_str())
+        {
+            errors.push(format!("unknown goal {goal}"));
+        }
+        for reference in &note.header.evidence {
+            if !store.proofs.iter().any(|p| &p.sha == reference)
+                && !store
+                    .media
+                    .iter()
+                    .any(|m| &m.sha == reference || &m.media_sha256 == reference)
+            {
+                errors.push(format!("unknown evidence {reference}"));
+            }
+        }
+        if !errors.is_empty() {
+            store.broken.push(("note".into(), note.id.clone()));
+            store
+                .errors
+                .extend(errors.into_iter().map(|e| format!("note {}: {e}", note.id)));
+        }
+    }
     store.broken.sort();
     store.broken.dedup();
     Ok(())

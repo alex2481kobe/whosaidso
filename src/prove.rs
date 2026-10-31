@@ -52,6 +52,13 @@ pub fn prove(root: &Path, id: &str) -> Result<String, String> {
         return Err("prove: commit or stash your changes first".into());
     }
     let store = record::load(root)?;
+    if store
+        .broken
+        .iter()
+        .any(|(kind, name)| kind == "goal" && name == id)
+    {
+        return Err(store.errors.join("\n"));
+    }
     let goal = store.goals.iter().find(|g| g.id == id).ok_or_else(|| {
         if store.errors.is_empty() {
             format!("unknown goal {id}")

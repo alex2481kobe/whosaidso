@@ -37,6 +37,21 @@ Proofs in `.whosaidso/proofs` and media records in `.whosaidso/media` are named 
 
 State is derived. A goal with no work or evidence is `open`; branch work is `active` or `idle`; work on the destination branch without evidence is `landed`. A qualifying run on that branch is `done` when it passed, `failing` when it failed, and `stale` after later work on the same goal. Changing the check makes a previous run ineligible. Work that changes only records does not count as implementation.
 
+## Notes
+
+Keep one topic in `.whosaidso/notes/<slug>.md`. JSON front matter between `---` lines precedes ordinary Markdown:
+
+```text
+---
+{"type":"decision","status":"open","title":"Storage choice","goal":"export"}
+---
+Use an embedded database.
+```
+
+Types are `decision`, `idea`, `question`, `claim`, `said` and `doc`; statuses are `open`, `resolved` and `retired`. `goal` is optional. A claim must name a goal or cite evidence record hashes in `evidence`. `note show <slug>` prints the revision to use for an edit. `note put <slug> <revision|new> <file>` refuses stale revisions. `note open|resolve|retire <slug> <revision>` changes the lifecycle status. `note list` and `note history <slug>` show current topics and Git history; `find` searches the text.
+
+When both branches changed a topic since their merge base, `gate` requires explicit reconciliation, including when Git would merge the text cleanly. Review both versions, update the note, then use `note reconcile <slug> <revision> <destination-note-revision>` with the revision named by the refusal. Decisions and documents stay live until retired.
+
 ## Search and flows
 
 | Command | Behavior |
