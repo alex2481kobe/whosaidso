@@ -70,7 +70,7 @@ os.execv(os.environ['REAL_GIT'], [os.environ['REAL_GIT'], *sys.argv[1:]])
 }
 
 #[test]
-fn changed_header_invalidates_precise_rows_coverage_and_relationships() {
+fn changed_header_only_invalidates_that_documents_precise_rows() {
     let fixture = Fixture::sources(&[
         ("api.h", "inline void target() {}\n"),
         (
@@ -105,14 +105,13 @@ fn changed_header_invalidates_precise_rows_coverage_and_relationships() {
     let answer = cli(root, &["code", "refs", "target"]);
     assert!(
         answer.contains("caller.cpp:2")
-            && answer.contains("[syntactic]")
-            && answer.contains("precise documents are stale")
-            && !answer.contains("[precise]"),
+            && answer.contains("[precise]")
+            && !answer.contains("[syntactic]"),
         "{answer}"
     );
     let coverage = cli(root, &["code", "callers", "caller", "--implementations"]);
     assert!(
-        coverage.contains("precise=0") && coverage.contains("implementations: 0 recorded"),
+        coverage.contains("precise=1") && coverage.contains("implementations: 1 recorded"),
         "{coverage}"
     );
 }

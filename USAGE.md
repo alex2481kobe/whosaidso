@@ -109,7 +109,7 @@ A file's best matching symbol names its search hit. Hybrid results label BM25, e
 
 Model fetching needs system `curl`; `--from` selects an HTTPS or file download source while hashes stay pinned. `WHOSAIDSO_MODEL` overrides the read location. Search keeps lexical results with one diagnostic when the model is missing or invalid. Once fetched, inference is offline and needs no service.
 
-Search caches are disposable. Records remain the source of truth. Symlinks and submodules are not followed. Built-in code extraction is syntactic; precise results require a fresh SCIP index.
+Search caches are disposable. Records remain the source of truth. Symlinks and submodules are not followed. Built-in code extraction is syntactic; precise results require a bound SCIP index and unchanged document bytes. Records and unrelated files do not invalidate other documents. Edited documents fall back to syntax; unchanged callers are not re-resolved after dependency edits. Changes to the pinned build environment invalidate the run.
 
 ## Media and viewer
 

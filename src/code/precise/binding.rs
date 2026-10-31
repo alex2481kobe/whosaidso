@@ -1,6 +1,5 @@
-// Precise trust is decided once for the entire pinned input and build context.
+// The pinned build context gates the run; source bytes gate each document.
 use super::err;
-use crate::tree;
 use rusqlite::{Connection, OptionalExtension};
 use std::os::unix::ffi::OsStrExt;
 
@@ -37,7 +36,7 @@ pub(in crate::code) fn context(language: &str) -> String {
     crate::record::sha256_hex(&bytes)
 }
 
-pub(in crate::code) fn select(db: &Connection, files: &tree::Files) -> Result<String, String> {
+pub(in crate::code) fn select(db: &Connection) -> Result<String, String> {
     let binding: Option<(Option<String>, Option<String>, Option<String>)> = db.query_row(
         "SELECT r.input_manifest,r.build_context,r.language FROM scip_run r JOIN worktrees w ON w.token=r.worktree WHERE w.id=(SELECT worktree FROM selection)", [],
         |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
@@ -47,7 +46,7 @@ pub(in crate::code) fn select(db: &Connection, files: &tree::Files) -> Result<St
     let status = match binding {
         None => "not indexed",
         Some((Some(input), Some(build), Some(_))) if !input.is_empty() && !build.is_empty() => {
-            if input == tree::fingerprint(files) && build == context {
+            if build == context {
                 "fresh"
             } else {
                 "stale"

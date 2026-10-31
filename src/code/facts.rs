@@ -72,7 +72,7 @@ impl Snapshot {
             )
             .map_err(err)?;
         let files = store::reads::files(&db)?;
-        let freshness = precise::binding::select(&db, &files)?;
+        let freshness = precise::binding::select(&db)?;
         let change_token = format!("{stamp}:{run}:{freshness}");
         let project = db
             .query_row("SELECT token FROM project", [], |r| r.get(0))
