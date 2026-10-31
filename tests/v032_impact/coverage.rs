@@ -40,7 +40,7 @@ fn each_language_reports_applicable_blind_spots_as_unknowns() {
 
 #[test]
 fn unsupported_files_report_not_indexed_for_every_read_command() {
-    let fixture = Fixture::sources(&[("one.rb", "def target; end\n")]);
+    let fixture = Fixture::sources(&[("one.unindexed", "def target; end\n")]);
     for command in [
         "defs",
         "refs",
@@ -55,7 +55,7 @@ fn unsupported_files_report_not_indexed_for_every_read_command() {
         let value = if ["defs", "refs", "show"].contains(&command) {
             "target"
         } else {
-            "one.rb"
+            "one.unindexed"
         };
         let answer = cli(&fixture.root, &["code", command, value]);
         assert!(

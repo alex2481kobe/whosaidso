@@ -4,9 +4,9 @@ description: Add a programming language to WhoSaidSo so search, impact and flows
 ---
 
 Use this when a command says a language is not indexed. Work in a checkout of the
-WhoSaidSo source. A language needs one table entry and one test row. Nothing else
-changes: search, impact, flows and the viewer all read the table, and projects that
-cached the old table reindex by themselves. First see what is already there:
+WhoSaidSo source. A language needs one table entry and one test row: search, impact,
+flows and the viewer all read the table, and projects that cached the old table
+reindex by themselves. First see what is already there:
 
 ```sh
 whosaidso code help coverage
@@ -24,7 +24,7 @@ const RUBY: &str = "[(method) (singleton_method) (class) (module)] @def\n(call) 
 
 Registration {
     name: "Ruby",
-    syntax_gap: "dynamic dispatch and metaprogramming remain unresolved",
+    syntax_gap: "calls without parentheses, dynamic dispatch and metaprogramming remain unresolved",
     precise_gap: "indexer coverage was not probed",
     indexer: None,
     extensions: &["rb"],
@@ -57,6 +57,16 @@ cd <a project with that language>
 Answers are labelled `[syntactic]`: they match names, so the gaps above apply.
 
 If two languages call each other by name, such as C and C++, add them to `family`.
+
+Most grammars need nothing more. Two rare exceptions need one line of code, and then
+a bump of `EXTRACTOR_VERSION` in `src/code/store.rs`, because code changes do not reach
+cached projects by themselves:
+
+- `code defs` finds nothing: the node has no `name` field, or its kind does not end in
+  function, method, class, module, struct, enum, trait or interface. Add it to
+  `definition` in `src/code/names.rs`.
+- `code callers` misses `object.target()`: the grammar keeps the called name in a field
+  `call_target` in `src/code/parse.rs` does not read. Add the field there.
 
 ## Precise support
 

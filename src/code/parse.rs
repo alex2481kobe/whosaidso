@@ -96,5 +96,6 @@ fn call_target(node: tree_sitter::Node<'_>) -> Option<tree_sitter::Node<'_>> {
         .or_else(|| node.child_by_field_name("name"))
         .or_else(|| node.child_by_field_name("constructor"))
         .or_else(|| node.child_by_field_name("type"))
+        .or_else(|| node.child_by_field_name("method"))
         .or_else(|| node.named_child(0))
 }

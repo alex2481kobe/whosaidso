@@ -70,8 +70,8 @@ fn bodies_and_outlines_preserve_ranges_and_report_ambiguity() {
         "{ambiguous}"
     );
     assert!(cli(root, &["code", "show", "two.rs::duplicate"]).contains("fn duplicate() {}"));
-    write(&root.join("unsupported.rb"), "def target; end\n");
-    assert!(cli(root, &["code", "outline", "unsupported.rb"]).contains("not indexed"));
+    write(&root.join("unsupported.unindexed"), "def target; end\n");
+    assert!(cli(root, &["code", "outline", "unsupported.unindexed"]).contains("not indexed"));
     import(
         root,
         &[doc(

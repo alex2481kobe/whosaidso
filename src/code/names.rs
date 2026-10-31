@@ -72,9 +72,28 @@ pub(super) fn definition(node: Node<'_>, bytes: &[u8]) -> Option<(String, String
         "trait_item" => "trait",
         "impl_item" => "impl",
         "mod_item" => "mod",
-        _ => return None,
+        other => conventional(other)?,
     };
     definition_name(node, bytes).map(|name| (name, kind.into()))
+}
+// A newly registered grammar needs no entry above when its node kinds say what they are.
+fn conventional(kind: &str) -> Option<&'static str> {
+    let word = ["_declaration", "_definition", "_item", "_specifier"]
+        .iter()
+        .find_map(|suffix| kind.strip_suffix(suffix))
+        .unwrap_or(kind);
+    [
+        "function",
+        "method",
+        "class",
+        "module",
+        "struct",
+        "enum",
+        "trait",
+        "interface",
+    ]
+    .into_iter()
+    .find(|label| word == *label || word.ends_with(&format!("_{label}")))
 }
 fn definition_name(node: Node<'_>, bytes: &[u8]) -> Option<String> {
     if matches!(

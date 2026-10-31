@@ -74,8 +74,8 @@ fn registered_languages_extract_definitions_and_calls() {
             "{ext}: {refs}"
         );
     }
-    let fixture = Fixture::sources(&[("example.rb", "def target; end\n")]);
-    let answer = cli(&fixture.root, &["code", "deps", "example.rb"]);
+    let fixture = Fixture::sources(&[("example.unindexed", "def target; end\n")]);
+    let answer = cli(&fixture.root, &["code", "deps", "example.unindexed"]);
     assert!(
         answer.contains("not indexed") && !answer.contains("none recorded"),
         "{answer}"
