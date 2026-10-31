@@ -174,11 +174,16 @@ fn broken_installed_executable_fails_open() {
     let f = Fixture::empty();
     let copy = f.root.join("hook binary");
     std::fs::copy(BIN, &copy).unwrap();
-    success(
-        command(&f.root, copy.to_str().unwrap(), &["install-agent", "codex"])
-            .output()
-            .unwrap(),
-    );
+    // A process forked by a parallel test can briefly inherit the copy's write handle.
+    let install = loop {
+        match command(&f.root, copy.to_str().unwrap(), &["install-agent", "codex"]).output() {
+            Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy => {
+                std::thread::sleep(std::time::Duration::from_millis(20))
+            }
+            result => break result.unwrap(),
+        }
+    };
+    success(install);
     let settings = value(&f.root.parent().unwrap().join(".codex/hooks.json"));
     let shell = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
         .as_str()
