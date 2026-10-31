@@ -131,6 +131,7 @@ pub fn validate(flow: &Flow) -> Vec<String> {
                 errors.push(format!("step {}: unknown node {target:?}", step.id));
             }
         }
+        if let Some(literal) = &step.literal { nonempty(literal, &format!("step {}.literal", step.id), &mut errors); }
         nonempty(&step.when, &format!("step {}.when", step.id), &mut errors);
     }
     parent_cycles(flow, &mut errors);

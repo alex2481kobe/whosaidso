@@ -59,6 +59,8 @@ pub struct Step {
     pub from: String,
     pub to: String,
     pub when: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub literal: Option<String>,
 }
 
 #[derive(Clone, Default, Deserialize, Serialize)]

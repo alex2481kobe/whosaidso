@@ -49,7 +49,7 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<Value, String> {
     }
     let mut steps = BTreeMap::new();
     for step in &flow.steps {
-        steps.insert(step.id.clone(), super::hops::compare(step, &nodes, &owners, &graph));
+        steps.insert(step.id.clone(), super::hops::compare(step, &nodes, &owners, &graph, snapshot)?);
     }
     let unplanned = unplanned(flow, &graph, &owners);
     for item in &unplanned {
