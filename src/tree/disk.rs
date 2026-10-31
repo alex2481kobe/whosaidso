@@ -59,3 +59,30 @@ pub(super) fn linked(
         .as_ref()
         .is_none_or(|links| path.file_name().is_some_and(|name| links.contains(name))))
 }
+
+pub(super) fn read(
+    root: &Path,
+    file: &super::File,
+    max_bytes: usize,
+) -> Result<(super::File, Option<Vec<u8>>), String> {
+    let mut input = open(root, &file.path)?;
+    let mut bytes =
+        Vec::with_capacity((input.metadata().map_err(err)?.len() as usize).min(max_bytes + 1));
+    Read::by_ref(&mut input)
+        .take(max_bytes as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(err)?;
+    let mut file = file.clone();
+    // Hash this very buffer, after reading: filters and later edits cannot change its stamp.
+    if bytes.len() <= max_bytes {
+        file.blob = crate::record::sha256_hex(&bytes);
+    }
+    Ok((
+        file,
+        if bytes.len() > max_bytes {
+            None
+        } else {
+            Some(bytes)
+        },
+    ))
+}
