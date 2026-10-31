@@ -101,3 +101,15 @@ fn repository_absolute_check_runs_each_revisions_own_executable() {
     commit(&f.root);
     assert!(cli(&f.root, &["prove", "g"]).contains("failed on main"));
 }
+
+#[test]
+fn replacing_an_external_check_invalidates_cached_runs() {
+    let f = Fixture::new();
+    let script = f.root.parent().unwrap().join("external-check");
+    executable(&script, "#!/bin/sh\nexit 0\n");
+    r::check_command(&f.root, &[script.to_str().unwrap()]);
+    commit(&f.root);
+    assert!(cli(&f.root, &["prove", "g", "--reason", "existing behavior"]).contains("pass"));
+    executable(&script, "#!/bin/sh\nexit 1\n");
+    assert!(cli(&f.root, &["prove", "g", "--reason", "existing behavior"]).contains("ran: g fail"));
+}

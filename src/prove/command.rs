@@ -34,3 +34,16 @@ pub fn arguments(root: &Path, check: &[String]) -> Result<Vec<String>, String> {
     }
     Ok(result)
 }
+
+pub fn identity(root: &Path, check: &[String]) -> Result<Option<(PathBuf, String, u32)>, String> {
+    use std::os::unix::fs::PermissionsExt;
+    let Some(path) = check.first().and_then(|p| resolved(root, p)) else {
+        return Ok(None);
+    };
+    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+    let mode = fs::metadata(&path)
+        .map_err(|e| e.to_string())?
+        .permissions()
+        .mode();
+    Ok(Some((path, crate::record::sha256_hex(&bytes), mode)))
+}

@@ -79,6 +79,8 @@ pub fn prove_on(root: &Path, id: &str, reason: Option<&str>, main: &str) -> Resu
         &main,
         id,
         &check,
+        &run_check,
+        command::identity(root, &check)?,
         &limit,
         std::env::vars_os()
             .collect::<Vec<_>>()
