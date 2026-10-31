@@ -37,10 +37,10 @@ fn viewer_version_moves_after_code_edit_within_three_seconds() {
     let before = viewer.json("/api/version", &cookie);
     let start = std::time::Instant::now();
     write(&f.root.join("app.rs"), "fn changed() {}\n");
-    assert_ne!(
-        viewer.json("/api/version", &cookie)["version"],
-        before["version"]
-    );
+    while viewer.json("/api/version", &cookie)["version"] == before["version"] {
+        assert!(start.elapsed().as_secs_f64() < 3.0);
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
     assert!(start.elapsed().as_secs_f64() < 3.0);
     let map = viewer.json("/api/flows?id=%24map", &cookie);
     assert_eq!(map["freshness"], "fresh");

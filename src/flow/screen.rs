@@ -25,22 +25,21 @@ pub fn screen(
                 json!({"id":id,"revision":format!("{}:{}",record.revision,snapshot.id),"state":"unknown","problems":record.problems,"nodes":[],"steps":[]})
             } else {
                 let flow = record.flow.ok_or("unreadable flow")?;
-                let comparison = compare::compare(&flow, &snapshot)?;
+                let (comparison, graph) = compare::compare(&flow, &snapshot)?;
                 let layer = view::layer(&flow, parent)?;
-                let graph = snapshot.graph()?;
                 let mut nodes: Vec<_> = layer
                     .nodes
                     .iter()
                     .map(|(n, children)| {
                         json!({"id":n.id,"name":n.id,"type":n.r#type,
                             "state":comparison["nodes"][&n.id]["state"],"evidence":comparison["nodes"][&n.id]["evidence"],
-                            "children":if *children>0 { *children } else { graph.definitions.iter().filter(|r| compare::selected(n,r)).count() }})
+                            "children":if *children>0 { *children } else { graph.definitions.iter().filter(|r| super::code::selected(n,r)).count() }})
                     })
                     .collect();
                 if nodes.is_empty()
                     && let Some(node) = flow.nodes.iter().find(|n| Some(n.id.as_str()) == parent)
                 {
-                    nodes = graph.definitions.iter().filter(|r| compare::selected(node,r)).map(|r| json!({
+                    nodes = graph.definitions.iter().filter(|r| super::code::selected(node,r)).map(|r| json!({
                         "id":map::symbol_id(&r.path,&r.qualified,r.range.line),"name":r.qualified,"type":"function",
                         "path":r.path,"line":r.range.line,"symbol":r.symbol,"children":0,
                         "state":"built","evidence":map::strength(r.layer)
@@ -81,27 +80,18 @@ pub fn screen(
                         .as_bytes()
                 )
             );
-            let rows: Vec<_> = records.into_iter().map(|r| {
+            let total = records.len();
+            let rows: Vec<_> = records.into_iter().skip(offset).take(map::PAGE).map(|r| {
                 if !r.problems.is_empty() { return Ok(json!({"id":r.id,"state":"unknown","problems":r.problems})); }
-                let comparison = compare::compare(&r.flow.ok_or("unreadable flow")?,&snapshot)?;
+                let comparison = compare::compare(&r.flow.ok_or("unreadable flow")?,&snapshot)?.0;
                 Ok(json!({"id":r.id,"state":comparison["state"],"progress":comparison["progress"]}))
             }).collect::<Result<_,String>>()?;
-            let total = rows.len();
-            json!({"flows":rows.into_iter().skip(offset).take(map::PAGE).collect::<Vec<_>>(),"revision":revision,"next":(offset+map::PAGE<total).then_some(offset+map::PAGE)})
+            json!({"flows":rows,"revision":revision,"next":(offset+map::PAGE<total).then_some(offset+map::PAGE)})
         }
     };
-    let coverage = snapshot.coverage()?;
-    result["freshness"] = json!(if coverage.iter().any(|c| c.precise == "stale") {
-        "stale"
-    } else if coverage.iter().any(|c| {
-        // Files in no supported language are outside the map; a file it could not read is a gap.
-        let unread = !matches!(c.syntax.as_str(), "indexed" | "not indexed");
-        c.precise == "unknown" || (unread && c.precise != "fresh")
-    }) {
-        "unknown"
-    } else {
-        "fresh"
-    });
+    if result.get("freshness").is_none() {
+        result["freshness"] = json!(snapshot.freshness()?);
+    }
     result["committed_only"] = json!(branch.is_some());
     result["branch"] = json!(branch);
     result["branches"] = json!(
@@ -138,7 +128,7 @@ pub fn comparison(root: &Path, id: &str, branch: Option<&str>) -> Result<Value, 
     if !record.problems.is_empty() {
         return Err(record.problems.join("\n"));
     }
-    let mut value = compare::compare(&record.flow.ok_or("unreadable flow")?, &snapshot)?;
+    let mut value = compare::compare(&record.flow.ok_or("unreadable flow")?, &snapshot)?.0;
     value["committed_only"] = json!(branch.is_some());
     value["branch"] = json!(branch);
     Ok(value)

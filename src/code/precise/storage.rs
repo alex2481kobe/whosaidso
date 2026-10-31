@@ -13,11 +13,14 @@ use std::{
     fs,
     path::Path,
 };
+const PATH_INDEX: &str =
+    "CREATE INDEX IF NOT EXISTS precise.scip_occ_path ON scip_occ(path,is_def)";
 pub(in crate::code) fn schema(db: &Connection) -> Result<(), String> {
     let version: i64 = db
         .query_row("PRAGMA precise.user_version", [], |r| r.get(0))
         .map_err(err)?;
-    if version == 2 {
+    let path_index: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM precise.sqlite_master WHERE type='index' AND name='scip_occ_path')",[],|r| r.get(0)).map_err(err)?;
+    if version == 2 && path_index {
         return Ok(());
     }
     let tx =
@@ -40,6 +43,7 @@ pub(in crate::code) fn schema(db: &Connection) -> Result<(), String> {
         CREATE INDEX IF NOT EXISTS precise.scip_syms_name ON scip_syms(name);
         CREATE INDEX IF NOT EXISTS precise.scip_descriptor_name ON scip_syms(descriptor_name); PRAGMA precise.user_version=2;").map_err(err)?;
     }
+    tx.execute_batch(PATH_INDEX).map_err(err)?;
     tx.commit().map_err(err)
 }
 pub(super) fn symbol_key(path: &str, symbol: &str) -> String {
@@ -128,7 +132,7 @@ pub(in crate::code) fn import_run(
         .map_err(err)?;
     // Rebuild secondary indexes once, rather than maintaining them for millions of imported rows.
     tx.execute_batch(
-        "DELETE FROM scip_run; DROP INDEX precise.scip_occ_symbol; DROP INDEX precise.scip_syms_name; DROP INDEX precise.scip_descriptor_name;
+        "DELETE FROM scip_run; DROP INDEX precise.scip_occ_symbol; DROP INDEX precise.scip_occ_path; DROP INDEX precise.scip_syms_name; DROP INDEX precise.scip_descriptor_name;
         DELETE FROM scip_docs; DELETE FROM scip_occ; DELETE FROM scip_syms; DELETE FROM scip_docs_text; DELETE FROM scip_relationships;",
     )
     .map_err(err)?;
@@ -214,6 +218,7 @@ pub(in crate::code) fn import_run(
     }
     drop((insert_doc, insert_sym));
     tx.execute_batch("CREATE INDEX precise.scip_occ_symbol ON scip_occ(symbol); CREATE INDEX precise.scip_syms_name ON scip_syms(name); CREATE INDEX precise.scip_descriptor_name ON scip_syms(descriptor_name);").map_err(err)?;
+    tx.execute_batch(PATH_INDEX).map_err(err)?;
     tx.commit().map_err(err)?;
     Ok(Report {
         documents: docs.len(),

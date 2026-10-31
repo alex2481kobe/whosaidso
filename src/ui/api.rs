@@ -192,10 +192,12 @@ fn media_file(root: &Path, sha: &str, params: &HashMap<String, String>) -> Reply
 }
 pub(super) fn answer(root: &Path, path: &str, params: &HashMap<String, String>) -> Reply {
     match path {
-        "/api/version" => current_version(root).map_or_else(
-            |e| Reply::error(500, &e),
-            |v| Reply::json(&json!({"version":v})),
-        ),
+        "/api/version" => version::refresh(root)
+            .and_then(|_| current_version(root))
+            .map_or_else(
+                |e| Reply::error(500, &e),
+                |v| Reply::json(&json!({"version":v})),
+            ),
         "/api/goals" => goals_answer(root),
         "/api/flows" => {
             let token = current_version(root);

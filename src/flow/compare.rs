@@ -1,6 +1,8 @@
 use super::{
+    code::{inside, selected},
     map::strength,
     model::{Flow, Node},
+    pattern::matches,
 };
 use crate::code::facts::{Snapshot, edges::Graph, reads::Row};
 use serde_json::{Value, json};
@@ -23,28 +25,16 @@ pub fn rollup<'a>(states: impl IntoIterator<Item = &'a str>) -> &'static str {
     .find(|s| states.contains(s))
     .unwrap_or("authored")
 }
-pub fn matches(pattern: &str, path: &str) -> bool {
-    super::pattern::matches(pattern, path)
-}
-pub fn inside(flow: &Flow, path: &str) -> bool {
-    flow.covers.paths.iter().any(|p| matches(p, path))
-}
-pub fn selected(node: &Node, row: &Row) -> bool {
-    (node.paths.is_empty() || node.paths.iter().any(|p| matches(p, &row.path)))
-        && (node.symbols.is_empty()
-            || node
-                .symbols
-                .iter()
-                .any(|s| s == &row.symbol || s == &row.name || s == &row.qualified))
-        && (!node.paths.is_empty() || !node.symbols.is_empty())
-}
-fn node_state(node: &Node, rows: &[&Row], snapshot: &Snapshot) -> Result<&'static str, String> {
+fn node_state(
+    node: &Node,
+    rows: &[&Row],
+    coverage: &[crate::code::facts::coverage::Coverage],
+) -> Result<&'static str, String> {
     if node.paths.is_empty() && node.symbols.is_empty() {
         return Ok("authored");
     }
-    let paths: Vec<_> = snapshot
-        .coverage()?
-        .into_iter()
+    let paths: Vec<_> = coverage
+        .iter()
         .filter(|c| node.paths.iter().any(|p| matches(p, &c.path)))
         .collect();
     if paths
@@ -67,7 +57,7 @@ fn node_state(node: &Node, rows: &[&Row], snapshot: &Snapshot) -> Result<&'stati
     let paths_missing = node
         .paths
         .iter()
-        .any(|p| !snapshot.files.entries.iter().any(|f| matches(p, &f.path)));
+        .any(|p| !coverage.iter().any(|f| matches(p, &f.path)));
     if paths_missing
         || present < node.symbols.len()
         || (node.symbols.is_empty() && paths.is_empty())
@@ -82,8 +72,8 @@ fn node_state(node: &Node, rows: &[&Row], snapshot: &Snapshot) -> Result<&'stati
     }
     Ok("built")
 }
-pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<Value, String> {
-    let graph = snapshot.graph()?;
+pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<(Value, Graph), String> {
+    let (graph, coverage) = super::code::graph(flow, snapshot)?;
     let mut nodes = BTreeMap::new();
     let mut owners: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     for node in &flow.nodes {
@@ -95,7 +85,7 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<Value, String> {
         for row in &rows {
             owners.entry(&row.symbol).or_default().push(&node.id);
         }
-        let state = node_state(node, &rows, snapshot)?;
+        let state = node_state(node, &rows, &coverage)?;
         nodes.insert(node.id.clone(), json!({"state":state,"binding_state":state,"evidence":rows.first().map_or("authored", |r| strength(r.layer)),
             "goal":node.goal,"risks":node.risks,"symbols":rows.iter().map(|r| &r.symbol).collect::<Vec<_>>() }));
     }
@@ -124,8 +114,7 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<Value, String> {
             }
         }
     }
-    let gaps: Vec<_> = snapshot
-        .coverage()?
+    let gaps: Vec<_> = coverage
         .into_iter()
         .filter(|c| inside(flow, &c.path) && c.syntax != "indexed" && c.precise != "fresh")
         .map(|c| c.path)
@@ -210,10 +199,11 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<Value, String> {
         .iter()
         .filter(|n| nodes[&n.id]["binding_state"] == "built")
         .count();
-    Ok(
+    Ok((
         json!({"state":state,"revision":snapshot.id,"nodes":nodes,"steps":steps,"unplanned":unplanned,
         "unknown":gaps,"progress":{"built":built,"total":leaves.len()},"goal":flow.goal,"goal_effect":"progress only"}),
-    )
+        graph,
+    ))
 }
 fn unplanned(flow: &Flow, graph: &Graph, owners: &BTreeMap<&str, Vec<&str>>) -> Vec<Value> {
     let mut seen = BTreeSet::new();

@@ -2,7 +2,7 @@
 use super::{MAX_RECORD_BYTES, model::Goal};
 use crate::git;
 use rusqlite::OptionalExtension;
-use std::{collections::HashMap, fs, path::Path, time::Duration};
+use std::{collections::HashMap, fs, path::Path};
 pub fn checks(
     root: &Path,
     names: &[String],
@@ -15,12 +15,7 @@ pub fn checks(
         .join(git::run(root, &["rev-parse", "--git-common-dir"])?.trim())
         .join("whosaidso");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let mut db =
-        rusqlite::Connection::open(dir.join("record-checks.db")).map_err(|e| e.to_string())?;
-    db.busy_timeout(Duration::from_secs(5))
-        .map_err(|e| e.to_string())?;
-    db.pragma_update(None, "journal_mode", "WAL")
-        .map_err(|e| e.to_string())?;
+    let mut db = crate::database::open(&dir.join("record-checks.db"))?;
     db.execute_batch("CREATE TABLE IF NOT EXISTS record_checks (name TEXT PRIMARY KEY, check_json TEXT NOT NULL)").map_err(|e|e.to_string())?;
     let mut missing = Vec::new();
     {

@@ -21,8 +21,7 @@ struct Snapshot {
     dirty: Vec<String>,
     aliases: std::collections::HashMap<String, String>,
 }
-fn sync(root: &Path) -> Result<Snapshot, String> {
-    let mut db = cache::db(root)?;
+fn sync(root: &Path, mut db: rusqlite::Connection) -> Result<Snapshot, String> {
     db.execute_batch("CREATE TABLE IF NOT EXISTS text_files(path TEXT PRIMARY KEY, blob TEXT);
         CREATE VIRTUAL TABLE IF NOT EXISTS text_fts USING fts5(path UNINDEXED, body, tokenize='trigram', detail=none);").map_err(err)?;
     let files = tree::text_files(root)?;
@@ -74,7 +73,7 @@ pub(super) fn candidates(root: &Path, needle: &str) -> Result<Option<Vec<String>
     if !needle.is_ascii() || needle.len() < 3 || needle.contains(['\n', '\r']) {
         return Ok(None);
     }
-    let Snapshot { db, dirty, aliases } = sync(root)?;
+    let Snapshot { db, dirty, aliases } = sync(root, cache::db(root)?)?;
     let expression = needle
         .as_bytes()
         .windows(3)
