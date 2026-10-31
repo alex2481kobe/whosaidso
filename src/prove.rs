@@ -1,5 +1,6 @@
 // Paired evidence runs; results survive a non-interactive request for a reason.
 mod capture;
+mod command;
 mod scratch;
 use crate::{
     git, publish,
@@ -70,6 +71,7 @@ pub fn prove_on(root: &Path, id: &str, reason: Option<&str>, main: &str) -> Resu
     if goal.check.as_ref() != Some(&check) {
         return Err("prove: uncommitted check".into());
     }
+    let run_check = command::arguments(root, &check)?;
     let limit = crate::config::load(root)?.limits.check_seconds;
     let scratch = scratch::Scratch::lock(root)?;
     let inputs = serde_json::to_vec(&(
@@ -92,8 +94,8 @@ pub fn prove_on(root: &Path, id: &str, reason: Option<&str>, main: &str) -> Resu
         serde_json::from_slice::<Pair>(&fs::read(&kept).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?
     } else {
-        let candidate = scratch.run(&commit, &check, limit.value())?;
-        let baseline = scratch.run(&main, &check, limit.value())?;
+        let candidate = scratch.run(&commit, &run_check, limit.value())?;
+        let baseline = scratch.run(&main, &run_check, limit.value())?;
         let pair = Pair {
             candidate,
             main: baseline,

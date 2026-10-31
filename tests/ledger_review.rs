@@ -68,11 +68,36 @@ fn a_bad_bundle_does_not_hide_other_children_or_live_questions() {
 
 #[test]
 fn landed_work_without_evidence_keeps_its_claim_exclusive() {
-    let f=Fixture::new();
-    cli(&f.root,&["install-hooks"]); commit(&f.root);
-    work(&f.root,"implementation","g");
-    success(command(&f.root,BIN,&["start","g"]).env("WHOSAIDSO_AGENT","first").output().unwrap());
-    for args in [vec!["start","g"],vec!["next"]] {
-        failure(command(&f.root,BIN,&args).env("WHOSAIDSO_AGENT","second").output().unwrap(),"claimed");
+    let f = Fixture::new();
+    cli(&f.root, &["install-hooks"]);
+    commit(&f.root);
+    work(&f.root, "implementation", "g");
+    success(
+        command(&f.root, BIN, &["start", "g"])
+            .env("WHOSAIDSO_AGENT", "first")
+            .output()
+            .unwrap(),
+    );
+    for args in [vec!["start", "g"], vec!["next"]] {
+        failure(
+            command(&f.root, BIN, &args)
+                .env("WHOSAIDSO_AGENT", "second")
+                .output()
+                .unwrap(),
+            "claimed",
+        );
     }
+}
+
+#[test]
+fn repository_absolute_check_runs_each_revisions_own_executable() {
+    let f = Fixture::new();
+    let path = f.root.join("check");
+    executable(&path, "#!/bin/sh\nexit 1\n");
+    r::check_command(&f.root, &[path.to_str().unwrap()]);
+    commit(&f.root);
+    git(&f.root, &["checkout", "-q", "-b", "worker"]);
+    executable(&path, "#!/bin/sh\nexit 0\n");
+    commit(&f.root);
+    assert!(cli(&f.root, &["prove", "g"]).contains("failed on main"));
 }
