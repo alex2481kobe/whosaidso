@@ -39,8 +39,14 @@ fn run() -> Result<(), String> {
     }
     if args.as_slice() == ["help"] || args.as_slice() == ["--help"] || args.as_slice() == ["-h"] {
         println!(
-            "WhoSaidSo: goals and evidence in Git\n\ncheck | goals | show <id> | start <goal> | next | assign <goal> <agent:name|branch:name> | prove <goal> [--reason <why>] | gate [base] | prune\nevidence add <goal> <file> <shows> | reopen <milestone> <destination-revision> | media <goal> <file> <title> | sync [remote] | note | flow | context | find | grep | code | ui\n\nUse short end-to-end checks of real behavior. Tests stay smaller than source; checks default to 60 seconds. Run a full suite only when needed. See USAGE.md for formats and options."
+            "WhoSaidSo: goals and evidence in Git\n\ncheck | goals | show <id> | start <goal> | next | assign <goal> <agent:name|branch:name> | prove <goal> [--reason <why>] | gate [base] | prune\nevidence add <goal> <file> <shows> | reopen <milestone> <destination-revision> | media <goal> <file> <title> | sync [remote] | note | flow | context | find | grep | code | model fetch | ui\n\nUse short end-to-end checks of real behavior. Tests stay smaller than source; checks default to 60 seconds. Run a full suite only when needed. See USAGE.md for formats and options."
         );
+        return Ok(());
+    }
+    if let [cmd, rest @ ..] = args.as_slice()
+        && cmd == "model"
+    {
+        println!("{}", index::embedding::command(rest)?);
         return Ok(());
     }
     let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
