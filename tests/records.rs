@@ -88,3 +88,17 @@ fn temporary_publications_are_ignored_and_symlink_directories_refused() {
     std::os::unix::fs::symlink(root.join(".git"), root.join(".whosaidso/proofs")).unwrap();
     bad(root, &["prove", "g"], "symlink");
 }
+
+#[test]
+fn check_says_when_an_older_ledger_was_not_read() {
+    let f = Fixture::new();
+    let root = &f.root;
+    assert!(!cli(root, &["check"]).contains("older ledger"));
+    fs::create_dir_all(root.join(".whosaidso/events")).unwrap();
+    let out = cli(root, &["check"]);
+    assert!(
+        out.contains("older ledger in .whosaidso/events was not read"),
+        "{out}"
+    );
+    assert!(out.contains("check: ok"), "{out}");
+}
