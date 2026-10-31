@@ -7,7 +7,7 @@ pub struct Config {
     pub main: Option<String>,
     pub focus: usize,
     pub limits: Limits,
-    pub land: Option<serde_json::Value>,
+    pub land: Option<Land>,
     pub test_paths: Vec<String>,
 }
 impl Default for Config {
@@ -33,6 +33,7 @@ pub struct Limits {
     pub proofs: usize,
     pub tests: Limit,
     pub check_seconds: Limit,
+    pub land_lines: Limit,
 }
 impl Default for Limits {
     fn default() -> Self {
@@ -42,6 +43,7 @@ impl Default for Limits {
             proofs: 20,
             tests: Limit::Number(1.0),
             check_seconds: Limit::Number(60.0),
+            land_lines: Limit::Number(400.0),
         }
     }
 }
@@ -53,6 +55,7 @@ pub fn load(root: &Path) -> Result<Config, String> {
             for (name, limit) in [
                 ("tests", &config.limits.tests),
                 ("check_seconds", &config.limits.check_seconds),
+                ("land_lines", &config.limits.land_lines),
             ] {
                 if limit.value().is_some_and(|n| !n.is_finite() || n < 0.0) {
                     return Err(format!("config: limits.{name} must be nonnegative or off"));
@@ -65,12 +68,38 @@ pub fn load(root: &Path) -> Result<Config, String> {
     }
 }
 pub fn main(root: &Path) -> Result<String, String> {
-    if let Ok(reference) = crate::git::run(
+    let listing = crate::git::run(
         root,
-        &["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"],
-    ) && let Some(name) = reference.trim().strip_prefix("refs/remotes/origin/")
+        &[
+            "for-each-ref",
+            "--format=%(refname)%09%(symref)",
+            "refs/remotes/*/HEAD",
+        ],
+    )?;
+    let mut heads = std::collections::HashMap::new();
+    for line in listing.lines() {
+        let Some((reference, target)) = line.split_once('\t') else {
+            continue;
+        };
+        let Some(remote) = reference
+            .strip_prefix("refs/remotes/")
+            .and_then(|r| r.strip_suffix("/HEAD"))
+        else {
+            continue;
+        };
+        if let Some(branch) = target.strip_prefix(&format!("refs/remotes/{remote}/")) {
+            heads.insert(remote, branch);
+        }
+    }
+    if let Some(branch) = heads.get("origin") {
+        return Ok((*branch).into());
+    }
+    // Without a remote HEAD there is no discovery to do; offline reads need no remote queries.
+    if !heads.is_empty()
+        && let Some(remote) = remote(root)?
+        && let Some(branch) = heads.get(remote.as_str())
     {
-        return Ok(name.to_owned());
+        return Ok((*branch).into());
     }
     let name = load(root)?.main.unwrap_or_else(|| "main".into());
     crate::git::run(root, &["check-ref-format", &format!("refs/heads/{name}")])?;
@@ -95,4 +124,46 @@ impl Limit {
             Self::Disabled(_) => None,
         }
     }
+}
+
+#[derive(Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Land {
+    Main,
+    Branch,
+}
+
+// Prefer the branch's upstream, then origin, then a sole configured remote.
+pub fn remote(root: &Path) -> Result<Option<String>, String> {
+    let branch = crate::git::run(root, &["branch", "--show-current"])?;
+    for name in [
+        branch.trim().to_owned(),
+        load(root)?.main.unwrap_or_else(|| "main".into()),
+    ] {
+        if let Ok(remote) =
+            crate::git::run(root, &["config", "--get", &format!("branch.{name}.remote")])
+        {
+            let remote = remote.trim();
+            if remote != "." && !remote.is_empty() {
+                return Ok(Some(remote.into()));
+            }
+        }
+    }
+    let remotes = crate::git::run(root, &["remote"])?;
+    let names: Vec<_> = remotes.lines().collect();
+    if names.contains(&"origin") {
+        return Ok(Some("origin".into()));
+    }
+    match names.as_slice() {
+        [] => Ok(None),
+        [name] => Ok(Some((*name).into())),
+        _ => Err("destination remote is ambiguous; set the main branch's upstream".into()),
+    }
+}
+
+pub fn destination_ref(remote: &str, destination: &str) -> String {
+    format!(
+        "refs/whosaidso/destinations/{}",
+        crate::record::sha256_hex(format!("{remote}\0{destination}").as_bytes())
+    )
 }

@@ -1,0 +1,172 @@
+mod common;
+use common::process::*;
+use common::{records as r, *};
+
+#[test]
+fn unlanded_evidence_never_completes_a_goal() {
+    for attached in [true, false] {
+        let f = Fixture::new();
+        let branch = f.worktree("worker");
+        if attached {
+            attach(&branch, "uncommitted report");
+        } else {
+            r::proof(&branch, &head(&branch), 1, 0);
+        }
+        assert!(!cli(&branch, &["goals"]).contains("done    g"));
+        commit(&branch);
+        assert!(!cli(&branch, &["goals"]).contains("done    g"));
+        git(&f.root, &["merge", "-q", "worker"]);
+        assert!(cli(&f.root, &["goals"]).contains("done    g"));
+        cli(&f.root, &["prune"]);
+        commit(&f.root);
+        assert!(cli(&f.root, &["goals"]).contains("done    g"));
+    }
+}
+
+#[test]
+fn a_bad_bundle_does_not_hide_other_children_or_live_questions() {
+    let f = Fixture::new();
+    for (id, parent) in [
+        ("g", None),
+        ("child", Some("g")),
+        ("bad", None),
+        ("bad-child", Some("bad")),
+    ] {
+        let p = r::goal(&f.root, id);
+        let mut v = value(&p);
+        v["parent"] = serde_json::json!(parent);
+        r::put(&f.root, "goals", id, &v);
+    }
+    commit(&f.root);
+    let p = r::proof(&f.root, &head(&f.root), 1, 0);
+    let mut proof = value(&p);
+    for id in ["child", "bad", "bad-child"] {
+        proof["goal"] = serde_json::json!(id);
+        r::put(&f.root, "proofs", "", &proof);
+    }
+    commit(&f.root);
+    cli(&f.root, &["prune"]);
+    commit(&f.root);
+    r::goal(&f.root, "live");
+    proof["goal"] = serde_json::json!("live");
+    // Record the live goal before evidence refers to its revision.
+    commit(&f.root);
+    proof["commit"] = serde_json::json!(head(&f.root));
+    r::put(&f.root, "proofs", "", &proof);
+    write(
+        &f.root.join(".whosaidso/notes/question.md"),
+        "---\n{\"type\":\"question\",\"status\":\"open\",\"title\":\"Unanswered\",\"goal\":\"live\"}\n---\nNeeds an answer.\n",
+    );
+    commit(&f.root);
+    write(&f.root.join(".whosaidso/done/bad.jsonl"), "malformed\n");
+    let out = command(&f.root, BIN, &["goals"]).output().unwrap();
+    let text = String::from_utf8(out.stdout).unwrap();
+    assert!(text.contains("child"), "{text}");
+    assert!(!text.contains("done    live"), "{text}");
+    assert!(cli(&f.root, &["note", "show", "question"]).contains("Needs an answer"));
+}
+
+#[test]
+fn landed_work_without_evidence_keeps_its_claim_exclusive() {
+    let f = Fixture::new();
+    cli(&f.root, &["install-hooks"]);
+    commit(&f.root);
+    work(&f.root, "implementation", "g");
+    success(
+        command(&f.root, BIN, &["start", "g"])
+            .env("WHOSAIDSO_AGENT", "first")
+            .output()
+            .unwrap(),
+    );
+    for args in [vec!["start", "g"], vec!["next"]] {
+        failure(
+            command(&f.root, BIN, &args)
+                .env("WHOSAIDSO_AGENT", "second")
+                .output()
+                .unwrap(),
+            "claimed",
+        );
+    }
+}
+
+#[test]
+fn repository_absolute_check_runs_each_revisions_own_executable() {
+    let f = Fixture::new();
+    let path = f.root.join("check");
+    executable(&path, "#!/bin/sh\nexit 1\n");
+    r::check_command(&f.root, &[path.to_str().unwrap()]);
+    commit(&f.root);
+    git(&f.root, &["checkout", "-q", "-b", "worker"]);
+    executable(&path, "#!/bin/sh\nexit 0\n");
+    commit(&f.root);
+    assert!(cli(&f.root, &["prove", "g"]).contains("failed on main"));
+}
+
+#[test]
+fn replacing_an_external_check_invalidates_cached_runs() {
+    let f = Fixture::new();
+    let script = f.root.parent().unwrap().join("external-check");
+    executable(&script, "#!/bin/sh\nexit 0\n");
+    r::check_command(&f.root, &[script.to_str().unwrap()]);
+    commit(&f.root);
+    assert!(cli(&f.root, &["prove", "g", "--reason", "existing behavior"]).contains("pass"));
+    executable(&script, "#!/bin/sh\nexit 1\n");
+    assert!(cli(&f.root, &["prove", "g", "--reason", "existing behavior"]).contains("ran: g fail"));
+}
+
+#[test]
+fn collection_keeps_the_only_attachment_until_its_milestone_folds() {
+    let f = Fixture::new();
+    let evidence = r::media(&f.root, b"report", "bin", 1);
+    let mut m = value(&evidence);
+    m["goal"] = serde_json::json!("");
+    for n in 2..102 {
+        m["ran_at"] = serde_json::json!(n);
+        r::put(&f.root, "media", "", &m);
+    }
+    commit(&f.root);
+    cli(&f.root, &["prune"]);
+    assert!(f.root.join(".whosaidso/done/g.jsonl").exists());
+    commit(&f.root);
+    assert!(cli(&f.root, &["goals"]).contains("done    g"));
+}
+
+#[test]
+fn folded_check_survives_removal_of_its_old_script() {
+    let f = Fixture::new();
+    executable(&f.root.join("check-g"), "#!/bin/sh\nexit 0\n");
+    r::check_command(&f.root, &["./check-g"]);
+    commit(&f.root);
+    cli(&f.root, &["prove", "g", "--reason", "existing behavior"]);
+    commit(&f.root);
+    cli(&f.root, &["prune"]);
+    commit(&f.root);
+    std::fs::remove_file(f.root.join("check-g")).unwrap();
+    commit(&f.root);
+    cli(&f.root, &["check"]);
+    assert!(cli(&f.root, &["goals"]).contains("done    g"));
+}
+
+#[test]
+fn gate_remembers_both_sides_after_a_clean_note_merge() {
+    let f = Fixture::new();
+    let note = "---\n{\"type\":\"decision\",\"status\":\"open\",\"title\":\"Choice\",\"goal\":\"g\"}\n---\nfirst\n\nlast\n";
+    let file = ".whosaidso/notes/choice.md";
+    write(&f.root.join(file), note);
+    commit(&f.root);
+    let branch = f.worktree("worker");
+    write(&branch.join(file), note.replace("first", "ours"));
+    commit(&branch);
+    write(&f.root.join(file), note.replace("last", "theirs"));
+    commit(&f.root);
+    let revision = hash(&std::fs::read(f.root.join(file)).unwrap());
+    git(&branch, &["merge", "-q", "main"]);
+    bad(&branch, &["gate"], "note reconcile choice");
+    let current = hash(&std::fs::read(branch.join(file)).unwrap());
+    cli(
+        &branch,
+        &["note", "reconcile", "choice", &current, &revision],
+    );
+    commit(&branch);
+    cli(&branch, &["gate"]);
+}

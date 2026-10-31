@@ -8,6 +8,7 @@ fn questions_and_children_block_done_but_a_childless_milestone_needs_only_eviden
     let f = Fixture::new();
     let root = &f.root;
     r::proof(root, &head(root), 1, 0);
+    commit(root);
     assert!(cli(root, &["goals"]).contains("done    g"));
     let note = root.join(".whosaidso/notes/why.md");
     write(
@@ -34,9 +35,11 @@ fn questions_and_children_block_done_but_a_childless_milestone_needs_only_eviden
     let mut p = value(&proof);
     p["goal"] = json!("child");
     r::put(root, "proofs", "", &p);
+    commit(root);
     assert!(cli(root, &["goals"]).contains("done    g"));
     r::clear(root, "proofs");
     r::put(root, "proofs", "", &p);
+    commit(root);
     let out = cli(root, &["goals"]);
     assert!(out.contains("done    child"));
     assert!(!out.contains("done    g"));

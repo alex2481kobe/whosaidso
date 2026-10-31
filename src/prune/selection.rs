@@ -93,6 +93,13 @@ pub(super) fn select<'a>(
     let removed = [0; 2];
     let mut deletions = Vec::new();
     let proofs = proofs_to_remove(root, store)?;
+    let commits = git::run(root, &["rev-list", &git::main_tip(root)?])?;
+    let commits: HashSet<_> = commits.lines().collect();
+    let bearing: HashSet<_> = store
+        .goals
+        .iter()
+        .filter_map(|g| state::newest_media(store, &commits, &g.id).map(|m| m.sha.as_str()))
+        .collect();
     let ordered = gallery::newest(candidates);
     let archived: Vec<_> = ordered
         .into_iter()
@@ -101,6 +108,7 @@ pub(super) fn select<'a>(
             (root
                 .join(format!(".whosaidso/media/{}.json", m.sha))
                 .exists()
+                && !bearing.contains(m.sha.as_str())
                 && !store.notes.iter().any(|n| {
                     n.header
                         .evidence
