@@ -57,6 +57,7 @@ pub(super) fn build(root: &Path, topic: &[String], budget: usize) -> Result<Stri
         }
         output.push_str(&label);
         output.push('\n');
+        if hit.kind == "symbol" { output.push_str(&format!("file {}\n", hit.source.strip_prefix("file:").unwrap_or(&hit.source))); }
         let detail = results.detail(hit)?;
         let available = capacity.saturating_sub(output.len() + 25).min(1600);
         output.push_str(prefix(&detail, available));

@@ -1,6 +1,7 @@
 use rusqlite::{Connection, params_from_iter, types::Value};
 
 pub(crate) struct Hit {
+    pub source: String,
     pub kind: String,
     pub key: String,
     pub title: String,
@@ -25,7 +26,7 @@ impl Pool {
         let mut values = vec![
             Value::Null,
             Value::Integer(cap as i64),
-            Value::Integer(words.len().div_ceil(2) as i64),
+            Value::Integer(words.len().div_ceil(2).min(2) as i64),
             if kinds.is_empty() {
                 Value::Null
             } else {
@@ -89,7 +90,7 @@ impl Pool {
         let all = terms == self.terms.join(" AND ") && self.edits == "0";
         let matched = if all { self.terms.len().to_string() } else { self.coverage.clone() };
         let sql = format!(
-            "SELECT docs.kind,docs.key,docs.title,({}) AS matched,({}) AS edits,bm25(docs_fts,0,1,1) AS bm {} AND (?5 IS NULL OR docs.title=?5 COLLATE NOCASE) ORDER BY bm,docs.id LIMIT CASE WHEN ?5 IS NULL THEN ?2 ELSE -1 END",
+            "SELECT docs.kind,docs.key,docs.title,({}) AS matched,({}) AS edits,bm25(docs_fts,0,1,1) AS bm,docs.source {} AND (?5 IS NULL OR docs.title=?5 COLLATE NOCASE) ORDER BY matched DESC,edits,bm,docs.id LIMIT CASE WHEN ?5 IS NULL THEN ?2 ELSE -1 END",
             matched,
             self.edits,
             self.source(!all)
@@ -98,6 +99,7 @@ impl Pool {
         let mut rows = stmt
             .query_map(params_from_iter(if all { &self.values[..5] } else { &self.values }), |r| {
                 Ok(Hit {
+                    source: r.get(6)?,
                     kind: r.get(0)?,
                     key: r.get(1)?,
                     title: r.get(2)?,
@@ -115,17 +117,19 @@ impl Pool {
         }
         Ok(rows)
     }
-    pub fn total(&mut self, db: &Connection) -> Result<i64, String> {
-        self.bind(&self.terms.join(" OR "));
+    pub fn total(&mut self, db: &Connection, terms: &str) -> Result<i64, String> {
+        self.bind(terms);
         // Count membership keys without reading the much larger payload rows.
-        let coverage = self.coverage.replace("docs.id", "docs_fts.rowid");
+        let coverage = if terms == self.terms.join(" AND ") { self.terms.len().to_string() } else { self.coverage.replace("docs.id", "docs_fts.rowid") };
         let kind = if matches!(self.values[3], Value::Null) {
             String::new()
         } else {
             " AND payload IN (SELECT id FROM payloads WHERE instr(?4,'|'||kind||'|')>0)".into()
         };
-        let sql = format!("SELECT count(DISTINCT key) FROM members INDEXED BY member_lookup WHERE worktree=(SELECT worktree FROM selection) AND payload IN (SELECT rowid FROM docs_fts WHERE docs_fts MATCH ?1 AND ({coverage})>=?3){kind}");
-        db.query_row(&sql, params_from_iter(&self.values), |r| r.get(0))
+        let sql = format!("SELECT count(DISTINCT CASE WHEN source LIKE 'file:%' THEN source ELSE key END) FROM members INDEXED BY member_lookup WHERE worktree=(SELECT worktree FROM selection) AND payload IN (SELECT rowid FROM docs_fts WHERE docs_fts MATCH ?1 AND ({coverage})>=?3){kind}");
+        { let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
+        let count = stmt.parameter_count();
+        stmt.query_row(params_from_iter(&self.values[..count]), |r| r.get(0)) }
             .map_err(|e| e.to_string())
     }
 }

@@ -1,6 +1,6 @@
 use super::{
     pool::{Hit, Pool},
-    words::{STOP, correct, drop_order},
+    words::{STOP, correct},
 };
 use crate::index::{self, terms::tokens};
 use std::{collections::HashMap, path::Path};
@@ -75,24 +75,13 @@ pub(crate) fn search(
         let all = pool.terms.join(" AND ");
         collect(&mut hits, pool.fetch(&db, &all, None)?);
     }
-    if hits.len() < limit {
-        let order = drop_order(&db, &corrected)?;
-        // Keep every widened set: the stage never decides a result's rank.
-        for gone in 1..words.len() {
-            let rest = pool
-                .terms
-                .iter()
-                .enumerate()
-                .filter(|(i, _)| !order[..gone].contains(i))
-                .map(|(_, w)| w.as_str())
-                .collect::<Vec<_>>()
-                .join(" AND ");
-            collect(&mut hits, pool.fetch(&db, &rest, None)?);
-        }
+    let widened = hits.len() < limit;
+    if widened {
         let any = pool.terms.join(" OR ");
         collect(&mut hits, pool.fetch(&db, &any, None)?);
     }
-    let total = pool.total(&db)?;
+    let terms = pool.terms.join(if widened { " OR " } else { " AND " });
+    let total = pool.total(&db, &terms)?;
     let mut ranked: Vec<_> = hits
         .into_values()
         .map(|hit| (exactness(&hit, words, &corrected), hit))
@@ -106,8 +95,27 @@ pub(crate) fn search(
             .then_with(|| a.key.cmp(&b.key))
     });
     Ok(Results {
-        hits: ranked.into_iter().map(|(_, hit)| hit).collect(),
+        hits: merge(ranked.into_iter().map(|(_, hit)| hit).collect()),
         total,
         db,
     })
+}
+
+// A source file occupies one rank; its best matching definition names that hit.
+fn merge(hits: Vec<Hit>) -> Vec<Hit> {
+    let mut best_symbols = HashMap::new();
+    for hit in &hits {
+        if hit.kind == "symbol" { best_symbols.entry(hit.source.clone()).or_insert(hit.key.clone()); }
+    }
+    let mut representatives = HashMap::new();
+    let mut order = Vec::new();
+    for hit in hits {
+        let source = hit.source.clone();
+        let first = !representatives.contains_key(&source);
+        if first { order.push(source.clone()); }
+        if first || best_symbols.get(&source) == Some(&hit.key) {
+            representatives.insert(source, hit);
+        }
+    }
+    order.into_iter().filter_map(|source| representatives.remove(&source)).collect()
 }
