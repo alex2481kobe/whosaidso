@@ -22,7 +22,10 @@ pub(super) fn closed(
                 .iter()
                 .map(|e| root.join(".whosaidso").join(&e.path)),
         );
-        journal.created.push(plan.target.clone());
+        let encoded = record::fold::encode(&plan.entries)?;
+        journal
+            .created
+            .push((plan.target.clone(), record::sha256_hex(&encoded)));
         journal.save(journal_path)?;
         let mut available = Vec::new();
         for m in store.media.iter().filter(|m| {
@@ -35,7 +38,7 @@ pub(super) fn closed(
             }
         }
         gallery::archive::archive(root, &available)?;
-        publish::write_bytes(&plan.target, &record::fold::encode(&plan.entries)?)?;
+        publish::write_bytes(&plan.target, &encoded)?;
         for e in &plan.entries {
             fs::remove_file(root.join(".whosaidso").join(&e.path)).map_err(|e| e.to_string())?;
         }

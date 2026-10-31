@@ -14,6 +14,7 @@ fn write_claim(
     id: &str,
     settled: bool,
     target: Option<&str>,
+    require_remote: bool,
 ) -> (Vec<String>, Result<(), String>) {
     let mut notices = Vec::new();
     let result = (|| {
@@ -23,6 +24,9 @@ fn write_claim(
             .to_owned();
         let destination = crate::config::remote(root)?;
         let published = destination.is_some();
+        if require_remote && !published {
+            return Err("land: no destination remote for claim".into());
+        }
         if published {
             sync(root, &mut notices);
         }
@@ -36,7 +40,7 @@ fn write_claim(
             && binds(&c, now, settled)
         {
             return Err(format!(
-                "start: {id} is claimed by {}; it is released when that worktree starts another goal or none",
+                "start: {id} is claimed by {}; it is released after publication or when that worktree leaves without unpublished work",
                 describe(&c)
             ));
         }
@@ -100,6 +104,7 @@ fn write_claim(
                     sync(root, &mut notices);
                     return Err(lost(root, id));
                 }
+                Err(e) if require_remote => return Err(e),
                 Err(e) => warn(
                     &mut notices,
                     "claim not published to the destination remote",
@@ -107,6 +112,9 @@ fn write_claim(
                 ),
             }
         }
+        notices.push(format!(
+            "claim: {id} is local only; remote ownership must be acquired before landing"
+        ));
         // Only this clone's refs bind here. They are shared by its worktrees, so the write expects the value that was checked.
         match git::run(
             root,
@@ -142,8 +150,25 @@ pub fn release(root: &Path, cwd: &Path, keep: &str) -> (Vec<String>, Result<(), 
             .lines()
             .filter_map(|r| r.strip_prefix(LOCAL).or_else(|| r.strip_prefix(ORIGIN)))
             .collect();
+        let unpublished = match git::main_tip(cwd) {
+            Ok(tip) => Some(git::run(
+                cwd,
+                &[
+                    "log",
+                    "--no-merges",
+                    "--format=%(trailers:key=Goal,valueonly)",
+                    &format!("{tip}..HEAD"),
+                ],
+            )?),
+            Err(_) => None,
+        };
         for id in ids {
-            if id == keep {
+            // An unknown destination cannot establish that this worker's work was published.
+            if id == keep
+                || unpublished
+                    .as_ref()
+                    .is_none_or(|log| log.lines().any(|g| g == id))
+            {
                 continue;
             }
             let (local_ref, origin_ref) = (format!("{LOCAL}{id}"), format!("{ORIGIN}{id}"));
@@ -201,7 +226,7 @@ pub fn claim(
     id: &str,
     settled: bool,
 ) -> (Vec<String>, Result<(), String>) {
-    write_claim(root, cwd, id, settled, None)
+    write_claim(root, cwd, id, settled, None, false)
 }
 pub fn assign(
     root: &Path,
@@ -225,7 +250,7 @@ pub fn assign(
         Ok(_lock)
     })();
     match result {
-        Ok(_lock) => write_claim(root, cwd, id, false, Some(target)),
+        Ok(_lock) => write_claim(root, cwd, id, false, Some(target), false),
         Err(e) => (Vec::new(), Err(e)),
     }
 }

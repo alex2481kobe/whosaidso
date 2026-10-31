@@ -30,7 +30,9 @@ pub fn command(root: &Path, args: &[String]) -> Result<String, String> {
     }
 }
 fn prove(root: &Path, id: &str, reason: Option<&str>) -> Result<String, String> {
-    Prover::open(root, &git::main_tip(root)?, &[id.to_owned()])?.prove(id, reason)
+    Prover::open(root, &git::main_tip(root)?, &[id.to_owned()])?
+        .prove(id, reason)
+        .map(|(_, message)| message)
 }
 
 // One committed snapshot and scratch lock for all checks in a landing.
@@ -43,7 +45,7 @@ pub struct Prover<'a> {
     scratch: scratch::Scratch,
 }
 impl Prover<'_> {
-    pub fn prove(&self, id: &str, reason: Option<&str>) -> Result<String, String> {
+    pub fn prove(&self, id: &str, reason: Option<&str>) -> Result<(Proof, String), String> {
         let root = self.root;
         let main = self.main;
         let commit = &self.commit;
@@ -52,14 +54,12 @@ impl Prover<'_> {
             .get(id)
             .ok_or_else(|| format!("unknown goal {id}"))?
             .clone();
-        let run_check = command::arguments(root, &check)?;
         let limit = &self.limit;
         let scratch = &self.scratch;
         let inputs = serde_json::to_vec(&(
             &commit,
             &main,
             &check,
-            &run_check,
             command::identity(root, &check)?,
             &limit,
             std::env::vars_os()
@@ -76,8 +76,8 @@ impl Prover<'_> {
             serde_json::from_slice::<Pair>(&fs::read(&kept).map_err(|e| e.to_string())?)
                 .map_err(|e| e.to_string())?
         } else {
-            let candidate = scratch.run(commit, &run_check, limit.value())?;
-            let baseline = scratch.run(main, &run_check, limit.value())?;
+            let candidate = scratch.run(commit, &check, limit.value())?;
+            let baseline = scratch.run(main, &check, limit.value())?;
             let pair = Pair {
                 candidate,
                 main: baseline,
@@ -116,7 +116,7 @@ impl Prover<'_> {
                 proof.elapsed_ms
             ));
         }
-        Ok(format!(
+        let message = format!(
             "ran: {id} {} {} · {}{}",
             record::result(proof.exit_code),
             &sha[..12],
@@ -129,15 +129,15 @@ impl Prover<'_> {
                 .reason
                 .as_ref()
                 .map_or(String::new(), |r| format!(" · {r}"))
-        ))
+        );
+        Ok((proof, message))
     }
 }
 
 pub fn verify_at(root: &Path, tip: &str, check: &[String]) -> Result<Run, String> {
-    let argv = command::arguments(root, check)?;
     scratch::Scratch::lock(root)?.run(
         tip,
-        &argv,
+        check,
         crate::config::load(root)?.limits.check_seconds.value(),
     )
 }

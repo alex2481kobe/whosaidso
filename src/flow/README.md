@@ -93,3 +93,12 @@ except `built` or `planned`. Landing can call
 second; code edits, plan changes and precise freshness move its change token.
 Precise evidence is labelled stale after an edit while syntax updates. Timing
 on large projects depends on index refresh cost.
+
+The top map reads file rows and counts definitions only for its page. A file
+layer reads that file's calls, resolving name candidates across the index so
+narrowing never hides ambiguity. Comparison reads covered paths, anchors and
+incoming calls to declared boundaries. Broad covers still require broad reads.
+The viewer's version poll returns the last verified code token while one index
+refresh runs in the background. Screen and CLI reads still verify current
+sources. A large fallback filesystem scan can therefore dominate a map request
+without loading the repository's symbol graph.

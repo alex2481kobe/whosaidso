@@ -4,7 +4,8 @@ use std::{
     collections::hash_map::DefaultHasher,
     fs,
     hash::{Hash, Hasher},
-    path::Path,
+    path::{Path, PathBuf},
+    sync::{Mutex, OnceLock},
     time::UNIX_EPOCH,
 };
 
@@ -34,7 +35,7 @@ fn listing(dir: &Path) -> Vec<(String, u64, u128)> {
 }
 pub fn token(root: &Path) -> Result<String, String> {
     let mut hash = DefaultHasher::new();
-    crate::flow::check::change_token(root)?.hash(&mut hash);
+    flow_token(root, false)?.hash(&mut hash);
     // Local main, every branch the states read, and the claims; one process lists them all.
     git::run(
         root,
@@ -59,4 +60,40 @@ pub fn token(root: &Path) -> Result<String, String> {
     }
     listing(&gallery::archive::archive_dir(root)?).hash(&mut hash);
     Ok(format!("{:016x}", hash.finish()))
+}
+
+// The fallback source scan is verified off the request path. Polls compare the
+// last completed scan; at most one refresh runs for a project at a time.
+struct FlowVersion {
+    value: Result<String, String>,
+    checking: bool,
+}
+fn flow_token(root: &Path, refresh: bool) -> Result<String, String> {
+    static KEPT: OnceLock<Mutex<std::collections::HashMap<PathBuf, FlowVersion>>> = OnceLock::new();
+    let kept = KEPT.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
+    let mut guard = kept.lock().unwrap_or_else(|e| e.into_inner());
+    let entry = guard.entry(root.to_owned()).or_insert_with(|| FlowVersion {
+        value: crate::flow::check::change_token(root),
+        checking: false,
+    });
+    let value = entry.value.clone();
+    if refresh && !entry.checking {
+        entry.checking = true;
+        let root = root.to_owned();
+        std::thread::spawn(move || {
+            let value = crate::flow::check::change_token(&root);
+            let mut guard = kept.lock().unwrap_or_else(|e| e.into_inner());
+            guard.insert(
+                root,
+                FlowVersion {
+                    value,
+                    checking: false,
+                },
+            );
+        });
+    }
+    value
+}
+pub(super) fn refresh(root: &Path) -> Result<(), String> {
+    flow_token(root, true).map(|_| ())
 }

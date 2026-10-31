@@ -171,24 +171,46 @@ pub fn root(dir: &Path) -> Result<std::path::PathBuf, String> {
 
 pub fn main_tip(root: &Path) -> Result<String, String> {
     let name = crate::config::main(root)?;
-    if let Some(remote) = crate::config::remote(root)?
-        && let Ok(tip) = run(
-            root,
-            &[
-                "rev-parse",
-                "--verify",
-                &crate::config::destination_ref(&remote, &format!("refs/heads/{name}")),
-            ],
-        )
-    {
-        return Ok(tip.trim().to_owned());
-    }
-    run(
+    let local = run(
         root,
         &["rev-parse", "--verify", &format!("refs/heads/{name}")],
     )
-    .map(|s| s.trim().to_owned())
-    .map_err(|_| format!("no local branch {name}"))
+    .ok()
+    .map(|s| s.trim().to_owned());
+    let fallback = || {
+        local
+            .clone()
+            .ok_or_else(|| format!("no local branch {name}"))
+    };
+    let Some(remote) = crate::config::remote(root)? else {
+        return fallback();
+    };
+    let destination = format!("refs/heads/{name}");
+    let tracking = crate::config::destination_ref(&remote, &destination);
+    let Ok(cached) = run(root, &["rev-parse", "--verify", &tracking]) else {
+        return fallback();
+    };
+    let cached = cached.trim();
+    let Some(local) = local.as_deref() else {
+        return Ok(cached.into());
+    };
+    if local == cached || run(root, &["merge-base", "--is-ancestor", cached, local]).is_ok() {
+        return Ok(local.into());
+    }
+    if run(root, &["merge-base", "--is-ancestor", local, cached]).is_ok() {
+        return Ok(cached.into());
+    }
+    // Divergent local history cannot tell us which destination is current.
+    run(
+        root,
+        &[
+            "fetch",
+            "--no-tags",
+            &remote,
+            &format!("+{destination}:{tracking}"),
+        ],
+    )?;
+    run(root, &["rev-parse", "--verify", &tracking]).map(|s| s.trim().to_owned())
 }
 pub fn local_revision(root: &Path, revision: &str) -> Result<String, String> {
     let end = revision.find(['~', '^']).unwrap_or(revision.len());
