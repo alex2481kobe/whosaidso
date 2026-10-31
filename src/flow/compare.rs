@@ -1,5 +1,7 @@
 use super::{
+    code::{inside, selected},
     map::strength,
+    pattern::matches,
     model::{Flow, Node},
 };
 use crate::code::facts::{Snapshot, edges::Graph, reads::Row};
@@ -22,21 +24,6 @@ pub fn rollup<'a>(states: impl IntoIterator<Item = &'a str>) -> &'static str {
     .into_iter()
     .find(|s| states.contains(s))
     .unwrap_or("authored")
-}
-pub fn matches(pattern: &str, path: &str) -> bool {
-    super::pattern::matches(pattern, path)
-}
-pub fn inside(flow: &Flow, path: &str) -> bool {
-    flow.covers.paths.iter().any(|p| matches(p, path))
-}
-pub fn selected(node: &Node, row: &Row) -> bool {
-    (node.paths.is_empty() || node.paths.iter().any(|p| matches(p, &row.path)))
-        && (node.symbols.is_empty()
-            || node
-                .symbols
-                .iter()
-                .any(|s| s == &row.symbol || s == &row.name || s == &row.qualified))
-        && (!node.paths.is_empty() || !node.symbols.is_empty())
 }
 fn node_state(
     node: &Node,

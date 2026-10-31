@@ -61,6 +61,17 @@ impl Snapshot {
             db,
         })
     }
+    pub(super) fn precise_prefix(&self) -> Result<String, String> {
+        let run: String = self
+            .db
+            .query_row(
+                "SELECT coalesce((SELECT artifact FROM scip_run LIMIT 1),'')",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(err)?;
+        Ok(format!("{}:precise:{}:{run}:", self.project, self.worktree))
+    }
     // Body bytes belong to this generation, including edits no longer on disk.
     pub fn body(&self, path: &str) -> Result<Option<Vec<u8>>, String> {
         use rusqlite::OptionalExtension;

@@ -1,5 +1,8 @@
-use super::{compare, model::Flow};
-use crate::code::facts::{Snapshot, coverage::Coverage, edges::Graph};
+use super::{
+    model::{Flow, Node},
+    pattern::matches,
+};
+use crate::code::facts::{Snapshot, coverage::Coverage, edges::Graph, reads::Row};
 use std::collections::BTreeSet;
 
 // The scope includes anchors and both sides of declared boundaries, while target
@@ -10,11 +13,11 @@ pub fn graph(flow: &Flow, snapshot: &Snapshot) -> Result<(Graph, Vec<Coverage>),
         .entries
         .iter()
         .filter(|f| {
-            compare::inside(flow, &f.path)
+            inside(flow, &f.path)
                 || flow
                     .nodes
                     .iter()
-                    .any(|n| n.paths.iter().any(|p| compare::matches(p, &f.path)))
+                    .any(|n| n.paths.iter().any(|p| matches(p, &f.path)))
         })
         .map(|f| f.path.clone())
         .collect();
@@ -32,7 +35,7 @@ pub fn graph(flow: &Flow, snapshot: &Snapshot) -> Result<(Graph, Vec<Coverage>),
             incoming.extend(
                 anchored
                     .iter()
-                    .filter(|r| compare::selected(node, r))
+                    .filter(|r| selected(node, r))
                     .map(|r| r.name.clone()),
             );
         }
@@ -41,4 +44,17 @@ pub fn graph(flow: &Flow, snapshot: &Snapshot) -> Result<(Graph, Vec<Coverage>),
         snapshot.graph_in(&paths, &incoming.into_iter().collect::<Vec<_>>())?,
         snapshot.coverage_in(&paths)?,
     ))
+}
+
+pub fn inside(flow: &Flow, path: &str) -> bool {
+    flow.covers.paths.iter().any(|p| matches(p, path))
+}
+pub fn selected(node: &Node, row: &Row) -> bool {
+    (node.paths.is_empty() || node.paths.iter().any(|p| matches(p, &row.path)))
+        && (node.symbols.is_empty()
+            || node
+                .symbols
+                .iter()
+                .any(|s| s == &row.symbol || s == &row.name || s == &row.qualified))
+        && (!node.paths.is_empty() || !node.symbols.is_empty())
 }

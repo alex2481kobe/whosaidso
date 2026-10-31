@@ -33,13 +33,13 @@ pub fn screen(
                     .map(|(n, children)| {
                         json!({"id":n.id,"name":n.id,"type":n.r#type,
                             "state":comparison["nodes"][&n.id]["state"],"evidence":comparison["nodes"][&n.id]["evidence"],
-                            "children":if *children>0 { *children } else { graph.definitions.iter().filter(|r| compare::selected(n,r)).count() }})
+                            "children":if *children>0 { *children } else { graph.definitions.iter().filter(|r| super::code::selected(n,r)).count() }})
                     })
                     .collect();
                 if nodes.is_empty()
                     && let Some(node) = flow.nodes.iter().find(|n| Some(n.id.as_str()) == parent)
                 {
-                    nodes = graph.definitions.iter().filter(|r| compare::selected(node,r)).map(|r| json!({
+                    nodes = graph.definitions.iter().filter(|r| super::code::selected(node,r)).map(|r| json!({
                         "id":map::symbol_id(&r.path,&r.qualified,r.range.line),"name":r.qualified,"type":"function",
                         "path":r.path,"line":r.range.line,"symbol":r.symbol,"children":0,
                         "state":"built","evidence":map::strength(r.layer)

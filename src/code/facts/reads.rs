@@ -68,16 +68,8 @@ impl Snapshot {
     ) -> Result<Complete, String> {
         let (fresh, precise) = precise::rows(&self.db, &self.files, value, def, paths)?;
         let mut rows = Vec::new();
-        let run: String = self
-            .db
-            .query_row(
-                "SELECT coalesce((SELECT artifact FROM scip_run LIMIT 1),'')",
-                [],
-                |r| r.get(0),
-            )
-            .map_err(err)?;
-        let id =
-            |symbol: &str| format!("{}:precise:{}:{run}:{symbol}", self.project, self.worktree);
+        let prefix = self.precise_prefix()?;
+        let id = |symbol: &str| format!("{prefix}{symbol}");
         for p in precise {
             rows.push(Row {
                 symbol: id(&p.symbol),
@@ -248,6 +240,6 @@ impl Snapshot {
     }
     fn container(&self, path: &str, range: &Range) -> Result<Option<String>, String> {
         use rusqlite::OptionalExtension;
-        self.db.query_row("SELECT f.blob,f.extractor,d.qualified,d.line,d.start FROM manifest_files m JOIN facts f ON f.id=m.fact JOIN syntax_defs d ON d.fact=m.fact WHERE m.manifest=(SELECT manifest FROM selection) AND m.path=?1 AND (d.line<?2 OR (d.line=?2 AND d.start<=?4)) AND (d.end_line>?3 OR (d.end_line=?3 AND d.stop>=?5)) AND (d.line<?2 OR d.start<?4 OR d.end_line>?3 OR d.stop>?5) ORDER BY d.end_line-d.line,d.stop-d.start LIMIT 1", params![path,range.line,range.end_line,range.start,range.stop], |r| Ok(format!("{}:syntax:{}:{}:{path}:{}:{}:{}",self.project,r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,i64>(3)?,r.get::<_,i64>(4)?))).optional().map_err(err)
+        self.db.query_row("SELECT f.blob,f.extractor,d.qualified,d.line,d.start FROM manifest_files m JOIN facts f ON f.id=m.fact JOIN syntax_defs d ON d.fact=m.fact WHERE m.manifest=(SELECT manifest FROM selection) AND m.path=?1 AND (d.line<?2 OR (d.line=?2 AND d.start<=?4)) AND (d.end_line>?3 OR (d.end_line=?3 AND d.stop>=?5)) AND (d.line<?2 OR d.start<?4 OR d.end_line>?3 OR d.stop>?5) ORDER BY d.end_line-d.line,d.stop-d.start LIMIT 1", params![path,range.line,range.end_line,range.start,range.stop], |r| Ok(format!("{}:{SYNTAX}:{}:{}:{path}:{}:{}:{}",self.project,r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,i64>(3)?,r.get::<_,i64>(4)?))).optional().map_err(err)
     }
 }

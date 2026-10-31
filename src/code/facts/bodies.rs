@@ -37,7 +37,7 @@ impl Snapshot {
                 blob,
             )
         } else {
-            let prefix = self.relationship_prefix()?;
+            let prefix = self.precise_prefix()?;
             let Some(symbol) = value.strip_prefix(&prefix) else {
                 return Ok(vec![]);
             };

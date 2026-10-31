@@ -15,25 +15,14 @@ impl Snapshot {
         symbol: &str,
         direction: Direction,
     ) -> Result<Vec<Relationship>, String> {
-        let prefix = self.relationship_prefix()?;
+        let prefix = self.precise_prefix()?;
         let raw = symbol
             .strip_prefix(&prefix)
             .ok_or("symbol is not in this precise run")?;
         self.read_relationships(Some(raw), direction, &prefix)
     }
     pub(super) fn all_relationships(&self) -> Result<Vec<Relationship>, String> {
-        self.read_relationships(None, Direction::Forward, &self.relationship_prefix()?)
-    }
-    pub(super) fn relationship_prefix(&self) -> Result<String, String> {
-        let run: String = self
-            .db
-            .query_row(
-                "SELECT coalesce((SELECT artifact FROM scip_run LIMIT 1),'')",
-                [],
-                |r| r.get(0),
-            )
-            .map_err(err)?;
-        Ok(format!("{}:precise:{}:{run}:", self.project, self.worktree))
+        self.read_relationships(None, Direction::Forward, &self.precise_prefix()?)
     }
     fn read_relationships(
         &self,
