@@ -13,6 +13,11 @@ pub(super) fn run(
     options: &Options,
 ) -> Result<(Vec<String>, usize, Vec<String>), String> {
     let special = super::attributes::special(root, paths)?;
+    let disk_root = if std::env::current_dir().is_ok_and(|cwd| cwd == root) {
+        Path::new(".")
+    } else {
+        root
+    };
     let next = AtomicUsize::new(0);
     let cap = options.offset.saturating_add(options.limit);
     let threads = std::thread::available_parallelism()
@@ -25,6 +30,8 @@ pub(super) fn run(
                 scope.spawn(|| {
                     let regex = regex.clone();
                     let mut results = Vec::new();
+                    let mut remaining = cap;
+                    let mut scanner = super::scan::Scanner::new();
                     loop {
                         let start = next.fetch_add(64, Ordering::Relaxed);
                         if start >= paths.len() {
@@ -38,24 +45,20 @@ pub(super) fn run(
                                 fallback.push(i);
                                 continue;
                             }
-                            let bytes = std::fs::read(root.join(path))
-                                .map_err(|e| format!("{path}: {e}"))?;
-                            if ((options.ignore_case || options.regex) && !bytes.is_ascii())
-                                || (bytes.len() > 8000 && bytes[8000..].contains(&0))
-                            {
-                                fallback.push(i);
-                            } else {
-                                let (found, count) = super::scan::bytes(
-                                    path,
-                                    &bytes,
-                                    &regex,
-                                    options,
-                                    cap.saturating_sub(rows.len()),
-                                );
+                            if let Some((found, count)) = scanner.file(
+                                disk_root,
+                                path,
+                                &regex,
+                                options,
+                                remaining.saturating_sub(rows.len()),
+                            )? {
                                 rows.extend(found);
                                 total += count;
+                            } else {
+                                fallback.push(i);
                             }
                         }
+                        remaining -= rows.len();
                         results.push((start, rows, total, fallback));
                     }
                     Ok::<_, String>(results)

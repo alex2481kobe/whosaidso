@@ -79,3 +79,22 @@ pub(super) fn prefix(pattern: &str) -> &str {
     }
     &pattern[..end]
 }
+
+pub(super) fn byte_folding(options: &Options, bytes: &[u8]) -> bool {
+    if bytes.is_ascii() || (!options.regex && !options.ignore_case) {
+        return true;
+    }
+    if options.regex {
+        return false;
+    }
+    let Ok(text) = std::str::from_utf8(bytes) else {
+        return false;
+    };
+    // Byte folding is sufficient unless a non-ASCII character can case-map into ASCII.
+    // Such characters (including Kelvin and long s), and invalid UTF-8, stay with Git.
+    !text.chars().filter(|c| !c.is_ascii()).any(|c| {
+        c.to_lowercase()
+            .chain(c.to_uppercase())
+            .any(|c| c.is_ascii())
+    })
+}

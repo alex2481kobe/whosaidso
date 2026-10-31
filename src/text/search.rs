@@ -62,11 +62,11 @@ pub(super) fn run(root: &Path, options: &Options) -> Result<(Vec<String>, usize)
             .iter()
             .any(|p| p.bytes().any(|b| b < 32 || b"\"\\:".contains(&b)))
         {
-            return git::batches(root, options, &paths).map(complete);
+            return git::batches(root, options, &paths);
         }
         let (mut rows, total, fallback) = parallel::run(root, &paths, &matcher, options)?;
-        let missing = git::batches(root, options, &fallback)?;
-        let total = total + missing.len();
+        let (missing, count) = git::batches(root, options, &fallback)?;
+        let total = total + count;
         rows.extend(missing);
         // Rows from each path retain numeric line order, including 10 after 9.
         rows.sort_by(|a, b| {
@@ -83,9 +83,14 @@ pub(super) fn run(root: &Path, options: &Options) -> Result<(Vec<String>, usize)
         return Ok((rows, total));
     }
     if let Some(paths) = candidates {
-        git::batches(root, options, &paths).map(complete)
+        git::batches(root, options, &paths)
     } else {
-        git::run(root, options, None).map(complete)
+        git::run(
+            root,
+            options,
+            None,
+            options.offset.saturating_add(options.limit),
+        )
     }
 }
 fn complete(rows: Vec<String>) -> (Vec<String>, usize) {

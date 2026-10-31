@@ -1,6 +1,10 @@
 // Git file enumeration and text-search fallback.
 use super::options::Options;
-use std::{path::Path, process::Command};
+use std::{
+    io::{BufRead, BufReader, Read},
+    path::Path,
+    process::{Command, Stdio},
+};
 
 fn command(root: &Path) -> Command {
     let mut cmd = Command::new("git");
@@ -58,8 +62,10 @@ pub(super) fn batches(
     root: &Path,
     options: &Options,
     paths: &[String],
-) -> Result<Vec<String>, String> {
+) -> Result<(Vec<String>, usize), String> {
     let mut rows = Vec::new();
+    let mut total = 0;
+    let cap = options.offset.saturating_add(options.limit);
     let mut start = 0;
     while start < paths.len() {
         let mut end = start;
@@ -68,20 +74,30 @@ pub(super) fn batches(
             bytes += paths[end].len() + 12;
             end += 1;
         }
-        let batch = run(root, options, Some(&paths[start..end]))?;
-        if options.context > 0 && !rows.is_empty() && !batch.is_empty() {
-            rows.push("--".into());
+        let (batch, count) = run(
+            root,
+            options,
+            Some(&paths[start..end]),
+            cap.saturating_sub(rows.len()),
+        )?;
+        if options.context > 0 && total > 0 && count > 0 {
+            total += 1;
+            if rows.len() < cap {
+                rows.push("--".into());
+            }
         }
-        rows.extend(batch);
+        rows.extend(batch.into_iter().take(cap.saturating_sub(rows.len())));
+        total += count;
         start = end;
     }
-    Ok(rows)
+    Ok((rows, total))
 }
 pub(super) fn run(
     root: &Path,
     options: &Options,
     candidates: Option<&[String]>,
-) -> Result<Vec<String>, String> {
+    cap: usize,
+) -> Result<(Vec<String>, usize), String> {
     let mut cmd = command(root);
     cmd.arg("grep");
     if candidates.is_some() {
@@ -116,12 +132,52 @@ pub(super) fn run(
     } else {
         cmd.args(globs(options));
     }
-    let out = cmd.output().map_err(|e| format!("git grep: {e}"))?;
-    if !matches!(out.status.code(), Some(0 | 1)) {
-        return Err(String::from_utf8_lossy(&out.stderr).trim().to_owned());
-    }
-    Ok(String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .map(str::to_owned)
-        .collect())
+    let mut child = cmd
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("git grep: {e}"))?;
+    let stdout = child.stdout.take().ok_or("missing grep output")?;
+    let mut stderr = child.stderr.take().ok_or("missing grep diagnostics")?;
+    std::thread::scope(|scope| {
+        let errors = scope.spawn(move || {
+            let mut bytes = Vec::new();
+            stderr.read_to_end(&mut bytes).map(|_| bytes)
+        });
+        let mut reader = BufReader::new(stdout);
+        let (mut rows, mut total, mut bytes) = (Vec::new(), 0, Vec::new());
+        let read = (|| {
+            while reader
+                .read_until(b'\n', &mut bytes)
+                .map_err(|e| e.to_string())?
+                > 0
+            {
+                if rows.len() < cap {
+                    rows.push(
+                        String::from_utf8_lossy(&bytes)
+                            .lines()
+                            .next()
+                            .unwrap_or("")
+                            .to_owned(),
+                    );
+                }
+                total += 1;
+                bytes.clear();
+            }
+            Ok::<_, String>(())
+        })();
+        if read.is_err() {
+            child.kill().map_err(|e| e.to_string())?;
+        }
+        let status = child.wait().map_err(|e| e.to_string())?;
+        let errors = errors
+            .join()
+            .map_err(|_| "grep diagnostics thread failed")?
+            .map_err(|e| e.to_string())?;
+        read?;
+        if !matches!(status.code(), Some(0 | 1)) {
+            return Err(String::from_utf8_lossy(&errors).trim().to_owned());
+        }
+        Ok((rows, total))
+    })
 }
