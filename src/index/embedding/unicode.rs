@@ -19,7 +19,10 @@ impl Unicode {
             let parts: Vec<_> = line.split('\t').collect();
             let code = u32::from_str_radix(parts[1], 16).expect("Unicode data");
             if parts[0] == "N" {
-                let text = parts[2]
+                let text = parts
+                    .get(2)
+                    .copied()
+                    .unwrap_or_default()
                     .split(',')
                     .filter(|s| !s.is_empty())
                     .map(|s| {

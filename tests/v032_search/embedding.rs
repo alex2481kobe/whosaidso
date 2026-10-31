@@ -53,7 +53,7 @@ fn static_vectors_match_reference_and_share_across_worktrees() {
         return;
     };
     let f = Fixture::empty();
-    let text = "Café CAFÉ running 中文 résumé";
+    let text = "Café CAFE\u{301} running 中文 résumé";
     write(&f.root.join("words.txt"), text);
     write(
         &f.root.join("billing.rs"),
