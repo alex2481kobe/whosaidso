@@ -75,11 +75,6 @@ pub(in crate::code) fn select(db: &Connection) -> Result<String, String> {
     })
 }
 
-pub(in crate::code) fn language(db: &Connection) -> Result<Option<String>, String> {
-    db.query_row("SELECT r.language FROM scip_run r JOIN worktrees w ON w.token=r.worktree WHERE w.id=(SELECT worktree FROM selection)", [], |r| r.get::<_, Option<String>>(0))
-        .optional().map(Option::flatten).map_err(err)
-}
-
 // The run includes language inputs even when the indexer emits no document for them.
 pub(in crate::code) fn input(files: &crate::tree::Files, language: &str) -> Result<String, String> {
     let registration =
@@ -98,31 +93,4 @@ pub(in crate::code) fn input(files: &crate::tree::Files, language: &str) -> Resu
         skipped: 0,
     };
     Ok(crate::tree::fingerprint(&files))
-}
-
-// A precise target can depend on another document's imports or declarations.
-pub(in crate::code) fn strict(
-    db: &Connection,
-    files: &crate::tree::Files,
-) -> Result<Option<String>, String> {
-    let Some(language) = language(db)? else {
-        return Ok(None);
-    };
-    let saved: String = db
-        .query_row(
-            "SELECT coalesce(input_manifest,'') FROM scip_run",
-            [],
-            |r| r.get(0),
-        )
-        .map_err(err)?;
-    let bound: bool = db
-        .query_row("SELECT status='fresh' FROM precise_freshness", [], |r| {
-            r.get(0)
-        })
-        .map_err(err)?;
-    if bound && saved == input(files, &language)? {
-        return Ok(None);
-    }
-    db.execute_batch("DROP VIEW precise_freshness; CREATE TEMP VIEW precise_freshness AS SELECT 'stale' AS status").map_err(err)?;
-    Ok(Some(language.to_ascii_lowercase()))
 }

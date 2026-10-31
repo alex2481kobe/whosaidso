@@ -77,7 +77,10 @@ pub(super) fn build(
         "Goal: none\nWhoSaidSo-Receipt: {}",
         serde_json::to_string(&receipt).map_err(|e| e.to_string())?
     );
-    git::run(&tree, &["add", "--", ".whosaidso"])?;
+    // A project that has landed nothing yet has no records to stage.
+    if tree.join(".whosaidso").is_dir() {
+        git::run(&tree, &["add", "--", ".whosaidso"])?;
+    }
     git::run(
         &tree,
         &[

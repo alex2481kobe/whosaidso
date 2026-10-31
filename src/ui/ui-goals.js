@@ -41,6 +41,7 @@ function row(g) {
 function milestone(p, rows) {
   // A goal with no subgoals is its own row, with no header repeating its title.
   if (rows.length === 1 && rows[0].id === p.id) return el("section", "milestone", row(rows[0]));
+  rows = rows.filter(g => g.id !== p.id);
   const {done, total} = p.progress, bar = el("progress", "bar");
   bar.setAttribute("max", String(total)); bar.setAttribute("value", String(done));
   bar.setAttribute("aria-label", `${p.title}: ${done} of ${total} done`);

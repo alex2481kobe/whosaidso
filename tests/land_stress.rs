@@ -95,7 +95,6 @@ fn stress(count: usize, mut seed: u64, collect: bool) {
             s.spawn(move || {
                 for id in batch {
                     write(&path.join(format!(".whosaidso/notes/{id}.md")),format!("---\n{{\"type\":\"idea\",\"status\":\"resolved\",\"title\":\"Measured work\",\"goal\":\"{id}\"}}\n---\n{id} result\n"));
-                    write(&path.join(format!(".whosaidso/flows/{id}.json")),json!({"covers":{"paths":[format!("{id}.rs")],"boundaries":[]},"goal":id,"nodes":[{"id":"work","type":"action","paths":[format!("{id}.rs")],"goal":id}],"steps":[]}).to_string());
                     work(path,&format!("{id}.txt"),id);
                 }
                 commit(path);
@@ -164,7 +163,6 @@ fn stress(count: usize, mut seed: u64, collect: bool) {
         let bundle =
             fs::read_to_string(f.root.join(format!(".whosaidso/done/{id}.jsonl"))).unwrap();
         assert!(bundle.contains(&format!("{id} result")));
-        assert!(f.root.join(format!(".whosaidso/flows/{id}.json")).exists());
     }
     assert!(git(&remote, &["for-each-ref", "refs/whosaidso/claims"]).is_empty());
     let published = fs::read_to_string(tips).unwrap();

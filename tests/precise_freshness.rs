@@ -1,6 +1,5 @@
 mod common;
-use common::{flow::FlowFixture, process::*, *};
-use serde_json::{Value, json};
+use common::{process::*, *};
 
 fn fixture() -> Fixture {
     let f = Fixture::sources(&[
@@ -8,13 +7,6 @@ fn fixture() -> Fixture {
         ("caller.rs", "fn caller() { area(); }\n"),
         ("other.rs", "fn area() {}\n"),
     ]);
-    f.write(
-        "app",
-        &json!({"covers":{"paths":["api.rs","caller.rs"]},"nodes":[
-        {"id":"caller","type":"part","paths":["caller.rs"]},
-        {"id":"api","type":"part","paths":["api.rs"]}
-    ],"steps":[{"id":"call","from":"caller","to":"api","when":"ready"}]}),
-    );
     commit(&f.root);
     scip::import(
         &f.root,
@@ -48,36 +40,31 @@ fn fixture() -> Fixture {
     f
 }
 
+fn precise(f: &Fixture, name: &str) -> bool {
+    cli(&f.root, &["code", "defs", name]).contains("[precise]")
+}
+
 #[test]
 fn unrelated_edits_retain_precise_documents_and_only_changed_documents_fall_back() {
     let f = fixture();
-    let compare =
-        || -> Value { serde_json::from_str(&cli(&f.root, &["flow", "compare", "app"])).unwrap() };
-    assert_eq!(compare()["steps"]["call"]["evidence"], "precise");
+    assert!(precise(&f, "caller") && precise(&f, "area"));
     write(&f.root.join("README.md"), "Updated documentation\n");
     write(&f.root.join("new.rs"), "fn unrelated() {}\n");
-    let mut plan = value(&f.root.join(".whosaidso/flows/app.json"));
-    plan["nodes"][0]["note"] = json!("Updated explanation");
-    f.write("app", &plan);
-    assert_eq!(compare()["state"], "built");
-    assert_eq!(compare()["steps"]["call"]["evidence"], "precise");
+    assert!(precise(&f, "caller") && precise(&f, "area"));
     write(
         &f.root.join("caller.rs"),
         "// edited\nfn caller() { area(); }\n",
     );
-    assert_eq!(compare()["nodes"]["api"]["evidence"], "precise");
-    assert_eq!(compare()["nodes"]["caller"]["evidence"], "syntactic");
-    assert_eq!(compare()["steps"]["call"]["state"], "ambiguous");
+    assert!(precise(&f, "area"));
+    assert!(!precise(&f, "caller"));
 }
 
 #[test]
-fn landing_a_document_only_candidate_keeps_precise_flow_evidence() {
+fn landing_a_document_only_candidate_keeps_precise_evidence() {
     let f = fixture();
     f.remote();
     git(&f.root, &["switch", "-qc", "worker"]);
     work(&f.root, "README.md", "none");
     cli(&f.root, &["land", "--reason", "documentation"]);
-    let v: Value = serde_json::from_str(&cli(&f.root, &["flow", "compare", "app"])).unwrap();
-    assert_eq!(v["state"], "built");
-    assert_eq!(v["steps"]["call"]["evidence"], "precise");
+    assert!(precise(&f, "caller"));
 }

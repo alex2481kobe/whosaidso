@@ -30,31 +30,17 @@ fn land_tests_candidate_folds_and_releases_its_claim() {
 }
 
 #[test]
-fn land_refuses_a_flow_that_drifted_from_its_code() {
-    let (_f, lane) = ready();
-    write(&lane.join("app.rs"), "fn screen() {}\nfn action() {}\n");
-    let plan = serde_json::json!({"covers":{"paths":["app.rs"]},"nodes":[
-        {"id":"screen","type":"screen","symbols":["screen"]},
-        {"id":"action","type":"action","symbols":["action"]}
-    ],"steps":[{"id":"tap","from":"screen","to":"action","when":"tap"}]});
-    cli(&lane, &["flow", "put", "app", &plan.to_string()]);
-    commit(&lane);
-    bad(&lane, &["land"], "drifted");
-}
-
-#[test]
 fn broken_main_does_not_block_the_fix() {
-    for path in [".whosaidso/flows/bad.json", ".whosaidso/done/g.jsonl"] {
-        let (f, lane) = ready();
-        write(&f.root.join(path), "{}");
-        commit(&f.root);
-        git(&f.root, &["push", "origin", "main"]);
-        git(&lane, &["fetch", "origin"]);
-        git(&lane, &["merge", "-q", "origin/main"]);
-        fs::remove_file(lane.join(path)).unwrap();
-        commit(&lane);
-        cli(&lane, &["land"]);
-    }
+    let path = ".whosaidso/done/g.jsonl";
+    let (f, lane) = ready();
+    write(&f.root.join(path), "{}");
+    commit(&f.root);
+    git(&f.root, &["push", "origin", "main"]);
+    git(&lane, &["fetch", "origin"]);
+    git(&lane, &["merge", "-q", "origin/main"]);
+    fs::remove_file(lane.join(path)).unwrap();
+    commit(&lane);
+    cli(&lane, &["land"]);
 }
 #[test]
 fn receipt_cannot_change_code_even_with_a_valid_trailer() {

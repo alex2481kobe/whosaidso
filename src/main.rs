@@ -4,13 +4,12 @@ mod blob;
 mod cache;
 mod check;
 mod claims;
-pub mod code;
+mod code;
 mod config;
 mod context;
 mod database;
 mod evidence;
 mod find;
-mod flow;
 mod gallery;
 mod gate;
 mod git;
@@ -42,7 +41,7 @@ fn run() -> Result<(), String> {
     }
     if args.as_slice() == ["help"] || args.as_slice() == ["--help"] || args.as_slice() == ["-h"] {
         println!(
-            "WhoSaidSo: goals and evidence in Git\n\ncheck | goals | show <id> | start <goal> | next | assign <goal> <agent:name|branch:name> | land [--reason <why>] [--override <name>] | prove <goal> [--reason <why>] | gate [base] | gate --ci <base>..<tip> | prune\nevidence add <goal> <file> <shows> | reopen <milestone> <destination-revision> | media <goal> <file> <title> | sync [remote] | note | flow | context | find | grep | code | model fetch | install-agent claude|codex [--uninstall] | ui\n\nUse short end-to-end checks of real behavior. Tests stay smaller than source; checks default to 60 seconds. Run a full suite only when needed. See USAGE.md for formats and options."
+            "WhoSaidSo: goals and evidence in Git\n\ncheck | goals | show <id> | start <goal> | next | assign <goal> <agent:name|branch:name> | land [--reason <why>] [--override <name>] | prove <goal> [--reason <why>] | gate [base] | gate --ci <base>..<tip> | prune\nevidence add <goal> <file> <shows> | reopen <milestone> <destination-revision> | media <goal> <file> <title> | sync [remote] | note | context | find | grep | code | model fetch | install-agent claude|codex [--uninstall] | ui\n\nUse short end-to-end checks of real behavior. Tests stay smaller than source; checks default to 60 seconds. Run a full suite only when needed. See USAGE.md for formats and options."
         );
         return Ok(());
     }
@@ -62,10 +61,7 @@ fn run() -> Result<(), String> {
     }
     let help_topic = match args.as_slice() {
         [help, topic] if help == "help" => Some(topic.as_str()),
-        [topic, help]
-            if help == "--help"
-                || (help == "help" && ["flow", "code"].contains(&topic.as_str())) =>
-        {
+        [topic, help] if help == "--help" || (help == "help" && topic == "code") => {
             Some(topic.as_str())
         }
         _ => None,
@@ -94,7 +90,6 @@ fn run() -> Result<(), String> {
     commands! {
         "review [--base REF] [--diff FILE|-] [--depth N] [--limit N] [--offset N]", [cmd, rest @ ..] if cmd == "review" => review::command(&root, rest);
         "note <command> [<args>...]", [cmd, rest @ ..] if cmd == "note" => note::command(&root, rest);
-        "flow show|view|map|compare|check|drift-check|put|rm [arguments]", [cmd, rest @ ..] if cmd == "flow" => flow::command(&root, rest);
         "check", [cmd] if cmd == "check" => sync::check(&root);
         "sync [<remote>]", [cmd, rest @ ..] if cmd == "sync" && rest.len() <= 1 => sync::sync(&root, rest.first().map_or("origin", String::as_str));
         "install-hooks", [cmd] if cmd == "install-hooks" => { hooks::install(&root)?; projects::register(&root) };

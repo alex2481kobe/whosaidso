@@ -27,15 +27,6 @@ pub fn indexed(root: &Path) -> Result<(Connection, Counts, tree::Files), String>
     let (counts, files) = index_files(root, &mut db, files)?;
     Ok((db, counts, files))
 }
-pub fn indexed_in(
-    root: &Path,
-    include: impl Fn(&str) -> bool,
-) -> Result<(Connection, Counts, tree::Files), String> {
-    let mut db = open(root)?;
-    let files = tree::files_in(root, include)?;
-    let (counts, files) = index_files(root, &mut db, files)?;
-    Ok((db, counts, files))
-}
 fn index_files(
     root: &Path,
     db: &mut Connection,

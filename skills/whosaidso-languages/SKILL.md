@@ -1,11 +1,11 @@
 ---
 name: whosaidso-languages
-description: Add a programming language to WhoSaidSo so search, impact and flows understand it.
+description: Add a programming language to WhoSaidSo so search and impact understand it.
 ---
 
 Use this when a command says a language is not indexed. Work in a checkout of the
-WhoSaidSo source. A language needs one table entry and one test row: search, impact,
-flows and the viewer all read the table, and projects that cached the old table
+WhoSaidSo source. A language needs one table entry and one test row: search and impact
+read the table, and projects that cached the old table
 reindex by themselves. First see what is already there:
 
 ```sh

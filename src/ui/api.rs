@@ -86,53 +86,8 @@ fn goals_answer(root: &Path) -> Reply {
         Err(e) => Reply::error(500, &e),
     }
 }
-// Comparing a flow with code is the slowest read, so an answer is kept until the version moves.
-// The lock is held while deriving, for the same reason as the goals answer above.
-fn flows_answer(root: &Path, params: &HashMap<String, String>) -> Reply {
-    type Kept = HashMap<(PathBuf, String), (String, String)>;
-    static KEPT: Mutex<Option<Kept>> = Mutex::new(None);
-    let field = |name: &str| {
-        params
-            .get(name)
-            .filter(|s| !s.is_empty())
-            .map(String::as_str)
-    };
-    let Ok(offset) = params.get("offset").map_or(Ok(0), |s| s.parse::<usize>()) else {
-        return Reply::error(400, "invalid offset");
-    };
-    let (id, parent, branch) = (field("id"), field("parent"), field("branch"));
-    let version = match current_version(root) {
-        Ok(version) => version,
-        Err(e) => return Reply::error(500, &e),
-    };
-    let key = (
-        root.to_owned(),
-        format!("{id:?} {parent:?} {branch:?} {offset}"),
-    );
-    let mut guard = KEPT.lock().unwrap_or_else(|e| e.into_inner());
-    let kept = guard.get_or_insert_with(HashMap::new);
-    if let Some((_, body)) = kept.get(&key).filter(|k| k.0 == version) {
-        return Reply::bytes("application/json; charset=utf-8", body.as_bytes());
-    }
-    match crate::flow::screen::screen(root, id, parent, offset, branch) {
-        Ok(mut value) => {
-            value["version"] = json!(version);
-            let body = value.to_string();
-            kept.retain(|_, k| k.0 == version);
-            kept.insert(key, (version, body.clone()));
-            Reply::bytes("application/json; charset=utf-8", body.as_bytes())
-        }
-        Err(e) => Reply::error(400, &e),
-    }
-}
 pub(super) fn warm(root: &Path) {
     let _ = goals_answer(root);
-    let plans = crate::flow::screen::screen(root, None, None, 0, None);
-    let first = plans
-        .ok()
-        .and_then(|p| p["flows"][0]["id"].as_str().map(str::to_owned));
-    let id = first.unwrap_or_else(|| "$map".into());
-    let _ = flows_answer(root, &HashMap::from([("id".to_owned(), id)]));
 }
 fn media_file(root: &Path, sha: &str, params: &HashMap<String, String>) -> Reply {
     let result = (|| -> Result<Reply, String> {
@@ -155,22 +110,11 @@ fn media_file(root: &Path, sha: &str, params: &HashMap<String, String>) -> Reply
 }
 pub(super) fn answer(root: &Path, path: &str, params: &HashMap<String, String>) -> Reply {
     match path {
-        "/api/version" => version::refresh(root)
-            .and_then(|_| current_version(root))
-            .map_or_else(
-                |e| Reply::error(500, &e),
-                |v| Reply::json(&json!({"version":v})),
-            ),
+        "/api/version" => current_version(root).map_or_else(
+            |e| Reply::error(500, &e),
+            |v| Reply::json(&json!({"version":v})),
+        ),
         "/api/goals" => goals_answer(root),
-        "/api/branch" => params
-            .get("name")
-            .ok_or_else(|| "missing branch".to_string())
-            .and_then(|name| state::branch_age(root, name))
-            .map_or_else(
-                |e| Reply::error(400, &e),
-                |age| Reply::json(&json!({"age":age})),
-            ),
-        "/api/flows" => flows_answer(root, params),
         "/api/gallery" => match gallery_screen(root) {
             Ok(value) => Reply::json(&value),
             Err(e) => Reply::error(500, &e),

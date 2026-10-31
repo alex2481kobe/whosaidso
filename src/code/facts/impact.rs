@@ -9,7 +9,6 @@ pub struct Reach {
     pub symbol: String,
     pub distance: usize,
     pub ambiguous: bool,
-    pub via: String,
     pub implementation: bool,
     pub layer: Layer,
 }
@@ -151,7 +150,6 @@ fn walk(
                     symbol: to.to_owned(),
                     distance: distance + 1,
                     ambiguous,
-                    via: symbol.to_owned(),
                     implementation,
                     layer,
                 },

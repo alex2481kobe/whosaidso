@@ -11,10 +11,6 @@ const SKILLS: &[(&str, &str)] = &[
         include_str!("../../skills/whosaidso-search/SKILL.md"),
     ),
     (
-        "whosaidso-flows",
-        include_str!("../../skills/whosaidso-flows/SKILL.md"),
-    ),
-    (
         "whosaidso-landing",
         include_str!("../../skills/whosaidso-landing/SKILL.md"),
     ),

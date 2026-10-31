@@ -46,7 +46,7 @@ Create `.whosaidso/goals/<id>.json`:
 | `media <goal> <file> <title>` | Attaches media, addressed by its content hash. |
 | `prune` | Collects superseded evidence and archives older media. Run on the destination branch with committed records. Interrupted collection can resume. |
 | `sync [remote]` | Shares media and archives through Git refs; default remote is `origin`. |
-| `ui [--port N] [--open]` | Opens the read-only Goals, Flows and Gallery viewer on 127.0.0.1. |
+| `ui [--port N] [--open]` | Opens the read-only Goals and Gallery viewer on 127.0.0.1. |
 
 `land` checks the exact merged candidate. A rejected push makes it merge and check again. Checks run in a disposable Git worktree restored to the tested commit. Absolute executable paths and separate absolute arguments under any worktree in this clone, including `--option=/path` arguments, are mapped to that same relative location in the scratch worktree. Paths inside shell command strings are not rewritten. Checks must leave tracked inputs unchanged; write generated output to `WHOSAIDSO_OUTPUT`. Cargo builds use a separate scratch target directory.
 
@@ -83,7 +83,7 @@ Types are `decision`, `idea`, `question`, `claim`, `said` and `doc`; statuses ar
 
 When both branches changed a topic since their merge base, `gate` requires explicit reconciliation, including when Git would merge the text cleanly. Review both versions, update the note, then use `note reconcile <slug> <revision> <destination-note-revision>` with the revision named by the refusal. Decisions and documents stay live until retired.
 
-## Search and flows
+## Search
 
 | Command | Behavior |
 | --- | --- |
@@ -95,13 +95,6 @@ When both branches changed a topic since their merge base, `gate` requires expli
 | `code defs <name>` / `code refs <name>` | Finds definitions or references, with evidence strength shown. |
 | `code deps <path>` / `code includers <path>` | Shows includes and reverse includes. |
 | `code import-scip <file>` | Imports precise code information. |
-| `flow view [<id>] [--branch <revision>]` | Shows a flow or lists flows, with comparison against code. A branch view reads committed data only. |
-| `flow map [<file-id>] [--branch <revision>]` | Shows the code map. |
-| `flow compare <id> [--branch <revision>]` | Compares a flow with code. Flow progress never completes a goal. |
-| `flow check [<id>]` | Checks flow records. |
-| `flow put <id> <json>` | Writes a flow record from JSON. |
-| `flow show [<id>]` | Shows the authored flow. |
-| `flow drift-check` | Refuses drift between flows and code. |
 
 Grep accelerates ASCII literals and basic ASCII extended regexes; context, backreferences, POSIX character classes, non-ASCII case matching and custom Git output or binary settings use `git grep`.
 
@@ -109,7 +102,7 @@ A file's best matching symbol names its search hit. Hybrid results label BM25, e
 
 Model fetching needs system `curl`; `--from` selects an HTTPS or file download source while hashes stay pinned. `WHOSAIDSO_MODEL` overrides the read location. Search keeps lexical results with one diagnostic when the model is missing or invalid. Once fetched, inference is offline and needs no service.
 
-Search caches are disposable. Records remain the source of truth. Symlinks and submodules are not followed. Built-in code extraction is syntactic; precise results require a bound SCIP index and unchanged document bytes. Records and unrelated files do not invalidate other documents. Viewer reads stay per-document and label stale evidence. Landing and `flow drift-check` fall back to syntax for an indexed language when language sources or registered build manifests were added, removed or edited since the indexer run. Sources the indexer received but did not emit are unchanged inputs, not permanent staleness. Commit, index the language, then land; strict refusals name the indexing command once. Unchanged documents that fail occurrence validation stay unknown and use syntax locally, in both gates and viewer. Precise calls into those documents remain unknown when their targets cannot be owned; Rust import aliases cannot resolve through unrelated name matches. Changes to the pinned build environment invalidate the run.
+Search caches are disposable. Records remain the source of truth. Symlinks and submodules are not followed. Built-in code extraction is syntactic; precise results require a bound SCIP index and unchanged document bytes. Records and unrelated files do not invalidate other documents. Unchanged documents that fail occurrence validation stay unknown and use syntax locally. Precise calls into those documents remain unknown when their targets cannot be owned; Rust import aliases cannot resolve through unrelated name matches. Changes to the pinned build environment invalidate the run.
 
 ## Media and viewer
 

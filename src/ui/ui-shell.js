@@ -1,24 +1,9 @@
-// Project menu, theme, routing between the two screens, and the change poll that keeps them current.
+// Project menu, routing between the two screens, and the change poll that keeps them current.
 import { main, state, el, api, icon } from "./ui.js";
 import { message } from "./ui-components.js";
 import { place } from "./ui-parts.js";
 import { goalsScreen } from "./ui-goals.js";
-import { flowsScreen } from "./ui-flows.js";
 import { galleryScreen } from "./ui-gallery.js";
-const toggle = document.getElementById("theme-toggle");
-function setTheme(theme) {
-  document.documentElement.dataset.theme = theme;
-  toggle.replaceChildren(icon(theme === "dark" ? "sun" : "moon"));
-  toggle.setAttribute("aria-pressed", String(theme === "dark"));
-  toggle.setAttribute("aria-label", `Switch to ${theme === "dark" ? "light" : "dark"} mode`);
-  try { localStorage.setItem("whosaidso-theme", theme); } catch {}
-}
-function initTheme() {
-  let saved;
-  try { saved = localStorage.getItem("whosaidso-theme"); } catch {}
-  toggle.addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
-  setTheme(["light","dark"].includes(saved) ? saved : "light");
-}
 function renderMenu() {
   const chosen = state.projects.find(p => p.id === state.project);
   document.getElementById("project-name").textContent = chosen?.name || "No workspace";
@@ -89,7 +74,7 @@ async function route() {
   last = "";
   const mine = ++state.renders;
   const requested = location.hash.replace(/^#\//, "").split("?")[0];
-  const screen = ["gallery", "flows"].includes(requested) ? requested : "goals";
+  const screen = requested === "gallery" ? requested : "goals";
   for (const a of document.querySelectorAll("[data-nav]")) {
     if (a.dataset.nav === screen) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   }
@@ -97,7 +82,7 @@ async function route() {
   current?.dispose?.();
   current = null;
   if (!state.project) { main.replaceChildren(message("No workspace")); return; }
-  const shown = screen === "gallery" ? galleryScreen() : screen === "flows" ? flowsScreen() : goalsScreen(), key = state.project + screen + (screen === "flows" ? location.hash : "");
+  const shown = screen === "gallery" ? galleryScreen() : goalsScreen(), key = state.project + screen;
   // Keep the old screen up, while the next one is laid out at full width but unseen.
   shown.node.classList.add("pending"); main.append(shown.node);
   try { seen = await shown.load(); }
@@ -122,8 +107,7 @@ async function poll() {
   finally { checking = false; }
 }
 export async function startViewer() {
-  main.addEventListener("scroll", () => { if (last) positions.set(last, main.scrollTop); }, {passive:true});
-  initTheme(); initMenu();
+  main.addEventListener("scroll", () => { if (last) positions.set(last, main.scrollTop); }, {passive:true}); initMenu();
   const list = await api("/api/projects"); state.projects = list.projects;
   let remembered;
   try { remembered = sessionStorage.getItem("whosaidso-project"); } catch {}

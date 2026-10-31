@@ -22,7 +22,7 @@ fn clients_install_embedded_skills_idempotently_and_remove_only_owned_files() {
         assert!(
             first
                 .keys()
-                .any(|p| p.ends_with("whosaidso-flows/SKILL.md"))
+                .any(|p| p.ends_with("whosaidso-goals/SKILL.md"))
         );
         cli(&f.root, &["install-agent", client]);
         assert_eq!(first, snapshot(&folder));
@@ -54,7 +54,7 @@ fn clients_install_embedded_skills_idempotently_and_remove_only_owned_files() {
                 )
             ])
         );
-        assert!(!folder.join("whosaidso-flows").exists());
+        assert!(!folder.join("whosaidso-goals").exists());
         cli(&f.root, &["install-agent", client, "--uninstall"]);
     }
 }
@@ -174,10 +174,6 @@ fn every_skill_example_is_accepted_by_the_real_binary() {
             run_examples(&f.root, &doc);
             match skill {
                 "whosaidso-goals" => assert!(cli(&f.root, &["show", "report"]).contains("done")),
-                "whosaidso-flows" => assert!(
-                    cli(&f.root, &["flow", "show", "report", "report"])
-                        .contains("generate -> save")
-                ),
                 "whosaidso-gallery" => assert_eq!(
                     fs::read(f.root.join("restored-report.txt")).unwrap(),
                     b"A readable report\n"

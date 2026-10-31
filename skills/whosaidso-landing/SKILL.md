@@ -40,7 +40,7 @@ whosaidso show report
 ```
 
 The installed commit hook adds the selected goal trailer. Read landing's output;
-a failed check or flow drift blocks publication. Fetch before assessing other
+a failed check blocks publication. Fetch before assessing other
 machines' work. Claims coordinate worktrees and workers; do not take a goal
 already claimed by someone else. Keep changes small enough to land frequently.
 
@@ -69,4 +69,4 @@ Checks should be simple end-to-end tests of real behavior: one short test per
 behavior, no unit-test bloat, and no full suite unless needed. A goal need not
 add a test. Use a short existing check or attach an honest result with the
 gallery skill. Never substitute an always-successful command for evidence.
-Commit, run `whosaidso code index rust` (or the project language), then land; strict flow gates fall back to syntax when indexed documents are stale or missing, while the viewer stays per-document.
+Commit, run `whosaidso code index rust` (or the project language), then land.

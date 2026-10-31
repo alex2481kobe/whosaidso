@@ -53,12 +53,6 @@ impl Snapshot {
     pub fn definitions_in(&self, paths: &[String]) -> Result<Complete, String> {
         self.lookup("", true, Some(paths), true)
     }
-    pub fn references_in(&self, paths: &[String]) -> Result<Complete, String> {
-        self.lookup("", false, Some(paths), true)
-    }
-    pub(super) fn candidates(&self, value: &str, def: bool) -> Result<Complete, String> {
-        self.lookup(value, def, None, false)
-    }
     fn lookup(
         &self,
         value: &str,

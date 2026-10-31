@@ -30,7 +30,7 @@ fn viewer_serves_current_screens_and_assets_without_writing_records() {
     let viewer = Viewer::start(root);
     let cookie = viewer.cookie();
     let html = String::from_utf8(viewer.get("/", &cookie).2).unwrap();
-    assert_eq!(html.matches("data-nav=").count(), 3);
+    assert_eq!(html.matches("data-nav=").count(), 2);
     assert!(html.contains("data-nav=\"goals\"") && html.contains("data-nav=\"gallery\""));
     for asset in [
         "ui.css",
@@ -38,8 +38,6 @@ fn viewer_serves_current_screens_and_assets_without_writing_records() {
         "ui.js",
         "ui-shell.js",
         "ui-goals.js",
-        "ui-flows.js",
-        "ui-flow-diagram.js",
         "ui-gallery.js",
         "ui-gallery-media.js",
         "ui-gallery-actions.js",

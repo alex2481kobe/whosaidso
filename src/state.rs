@@ -83,13 +83,6 @@ fn age_word(time: i64) -> String {
     };
     format!("{n}{unit}")
 }
-pub fn branch_age(root: &Path, branch: &str) -> Result<String, String> {
-    let tip = git::local_revision(root, branch)?;
-    let time = git::run(root, &["show", "-s", "--format=%ct", &tip])?;
-    let time = time.trim().parse::<i64>().map_err(|e| e.to_string())?;
-    renew();
-    Ok(age_word(time))
-}
 fn trailers(log: &str) -> impl Iterator<Item = &str> {
     log.lines()
         .filter_map(|line| line.split_once('\t').map(|(_, value)| value))
