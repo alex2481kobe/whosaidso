@@ -164,6 +164,11 @@ fn media_metadata_must_match_hash_size_type_and_goal() {
     let p = r::media(root, &png("x"), "png", 1);
     let original = value(&p);
     fs::remove_file(p).unwrap();
+    let mut unlinked = original.clone();
+    unlinked.as_object_mut().unwrap().remove("goal");
+    let p = r::put(root, "media", "", &unlinked);
+    cli(root, &["check"]);
+    fs::remove_file(p).unwrap();
     for (key, val, expected) in [
         ("media_sha256", json!("../../outside"), "bad media sha256"),
         ("ext", json!("../bad"), "bad media type"),

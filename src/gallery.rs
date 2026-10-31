@@ -56,12 +56,6 @@ pub fn newest(store: &record::model::Store) -> Vec<&Media> {
     publish::newest(store.media.iter().map(|m| (m, m.ran_at, m.sha.as_str())))
 }
 
-pub fn show(root: &Path, cwd: &Path, goal: &str, source: &str, shows: &str) -> Result<(), String> {
-    let sha = attach(root, cwd, goal, source, shows)?;
-    println!("media: {goal} {}", &sha[..12]);
-    Ok(())
-}
-
 pub fn restore(root: &Path, sha: &str) -> Result<(), String> {
     use std::io::Write;
     let bytes = archive::read::restore(root, sha)?;
