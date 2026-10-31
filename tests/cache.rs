@@ -1,4 +1,5 @@
 mod common;
+use common::process::code_rows as cli;
 use common::process::*;
 use common::*;
 use std::fs;
@@ -22,7 +23,7 @@ fn warm_queries_reuse_bytes_and_still_notice_edits() {
         let blob = blob.trim();
         fs::remove_file(root.join(".git/objects").join(&blob[..2]).join(&blob[2..])).unwrap();
     }
-    assert!(cli(root, &["code", "defs", "changed_needle"]).contains("syntactic"));
+    assert!(cli(root, &["code", "defs", "changed_needle"]).contains("absence is not proven"));
     assert!(cli(root, &["grep", "needle"]).contains("main.rs:1"));
     assert!(cli(root, &["find", "needle", "guide"]).contains("guide.md"));
     assert_eq!(
