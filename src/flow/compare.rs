@@ -45,7 +45,7 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<Value, String> {
         for row in &rows { owners.entry(&row.symbol).or_default().push(&node.id); }
         let state = node_state(node, &rows, snapshot)?;
         nodes.insert(node.id.clone(), json!({"state":state,"evidence":rows.first().map_or("authored", |r| strength(r.layer)),
-            "symbols":rows.iter().map(|r| &r.symbol).collect::<Vec<_>>() }));
+            "goal":node.goal,"risks":node.risks,"symbols":rows.iter().map(|r| &r.symbol).collect::<Vec<_>>() }));
     }
     let mut steps = BTreeMap::new();
     for step in &flow.steps {
