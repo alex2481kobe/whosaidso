@@ -63,6 +63,8 @@ When both branches changed a topic since their merge base, `gate` requires expli
 | `code import-scip <file>` | Imports precise code information. |
 | `flow <command>` | Authors and reads feature flows; see `flow help`. Flow progress never completes a goal. |
 
+Grep accelerates ASCII literals and basic ASCII extended regexes; context, backreferences, POSIX character classes, non-ASCII case matching and custom Git output or binary settings use `git grep`.
+
 Search caches are disposable. Records remain the source of truth. Symlinks and submodules are not followed. Built-in code extraction is syntactic; precise results require a fresh SCIP index.
 
 ## Media and viewer

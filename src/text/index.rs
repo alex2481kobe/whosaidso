@@ -6,7 +6,6 @@ use std::path::Path;
 fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
-use tree::Counts;
 fn clear(tx: &Transaction<'_>, path: &str) -> Result<(), String> {
     tx.execute(
         "DELETE FROM text_fts WHERE rowid=(SELECT rowid FROM text_files WHERE path=?1)",
@@ -17,11 +16,17 @@ fn clear(tx: &Transaction<'_>, path: &str) -> Result<(), String> {
         .map_err(err)?;
     Ok(())
 }
-fn sync(root: &Path) -> Result<Counts, String> {
+struct Snapshot {
+    db: rusqlite::Connection,
+    dirty: Vec<String>,
+    aliases: std::collections::HashMap<String, String>,
+}
+fn sync(root: &Path) -> Result<Snapshot, String> {
     let mut db = cache::db(root)?;
     db.execute_batch("CREATE TABLE IF NOT EXISTS text_files(path TEXT PRIMARY KEY, blob TEXT);
         CREATE VIRTUAL TABLE IF NOT EXISTS text_fts USING fts5(path UNINDEXED, body, tokenize='trigram', detail=none);").map_err(err)?;
-    let files = tree::files(root)?;
+    let files = tree::text_files(root)?;
+    let aliases = super::attributes::aliases(root, files.entries.iter().map(|f| f.path.clone()))?;
     tree::reconcile(
         root,
         &mut db,
@@ -55,15 +60,21 @@ fn sync(root: &Path) -> Result<Counts, String> {
             }
             Ok((indexed, skipped))
         },
-    )
+    )?;
+    let dirty = files
+        .entries
+        .into_iter()
+        .filter(|f| f.on_disk)
+        .map(|f| f.path)
+        .collect();
+    Ok(Snapshot { db, dirty, aliases })
 }
 
 pub(super) fn candidates(root: &Path, needle: &str) -> Result<Option<Vec<String>>, String> {
     if !needle.is_ascii() || needle.len() < 3 || needle.contains(['\n', '\r']) {
         return Ok(None);
     }
-    sync(root)?;
-    let db = cache::db(root)?;
+    let Snapshot { db, dirty, aliases } = sync(root)?;
     let expression = needle
         .as_bytes()
         .windows(3)
@@ -81,24 +92,14 @@ pub(super) fn candidates(root: &Path, needle: &str) -> Result<Option<Vec<String>
         .map_err(err)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(err)?;
-    // Always verify live changes, even if another writer published the text snapshot.
-    let dirty = crate::git::run_bytes(root, &["ls-files", "-m", "-o", "--exclude-standard", "-z"])?;
-    paths.extend(
-        dirty
-            .split(|b| *b == 0)
-            .filter(|b| !b.is_empty())
-            .map(|p| std::str::from_utf8(p).map(str::to_owned).map_err(err))
-            .collect::<Result<Vec<_>, _>>()?,
-    );
-    let omitted = crate::git::run_bytes(root, &["ls-files", "-z", "--", ":(glob)**/.tmp-*"])?;
-    paths.extend(
-        omitted
-            .split(|b| *b == 0)
-            .filter(|b| !b.is_empty())
-            .map(|p| std::str::from_utf8(p).map(str::to_owned).map_err(err))
-            .collect::<Result<Vec<_>, _>>()?,
-    );
+    // Reconciliation's disk inputs remain candidates even if another writer changed the cache.
+    paths.extend(dirty);
+    for path in &mut paths {
+        if let Some(actual) = aliases.get(path) {
+            *path = actual.clone();
+        }
+    }
     paths.sort();
     paths.dedup();
-    Ok((paths.iter().map(|p| p.len() + 12).sum::<usize>() <= 64 * 1024).then_some(paths))
+    Ok(Some(paths))
 }

@@ -91,6 +91,9 @@ pub fn open(root: &Path, path: &str) -> Result<fs::File, String> {
 pub fn files(root: &Path) -> Result<Files, String> {
     files_in(root, |_| true)
 }
+pub fn text_files(root: &Path) -> Result<Files, String> {
+    discover(root, |_| true)
+}
 pub fn files_in(root: &Path, include: impl Fn(&str) -> bool) -> Result<Files, String> {
     discover(root, |path| !temporary(Path::new(path)) && include(path))
 }
