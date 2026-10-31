@@ -4,11 +4,12 @@ use serde_json::{Value, json};
 use std::path::Path;
 
 pub fn screen(root: &Path, id: Option<&str>, parent: Option<&str>, offset: usize, branch: Option<&str>) -> Result<Value,String> {
-    let snapshot = if let Some(branch) = branch { Snapshot::branch(root,branch)? } else { Snapshot::current(root)? };
+    let commit = branch.map(|b| crate::git::local_revision(root,b)).transpose()?;
+    let snapshot = if let Some(commit) = &commit { Snapshot::branch(root,commit)? } else { Snapshot::current(root)? };
     let mut result = if id == Some("$map") {
         map::layer(&snapshot,parent,offset)?
     } else {
-        let records = store::load(root,id)?;
+        let records = if let Some(commit) = &commit { store::committed(root,commit,id)? } else { store::load(root,id)? };
         if let Some(id) = id {
             let record = records.into_iter().next().ok_or("unknown flow")?;
             if !record.problems.is_empty() {
@@ -61,5 +62,6 @@ pub fn screen(root: &Path, id: Option<&str>, parent: Option<&str>, offset: usize
         else { "fresh" });
     result["committed_only"] = json!(branch.is_some());
     result["branch"] = json!(branch);
+    result["branches"] = json!(crate::git::run(root,&["for-each-ref","--format=%(refname:short)","refs/heads"])?.lines().collect::<Vec<_>>());
     Ok(result)
 }

@@ -14,22 +14,32 @@ mod view;
 use std::path::Path;
 
 pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
+    let mut values = args.to_vec();
+    let mut branch = None;
+    if values.first().is_some_and(|s| ["view","map","compare"].contains(&s.as_str())) {
+        if let Some(i) = values.iter().position(|s| s == "--branch") {
+            branch = Some(values.get(i+1).ok_or("--branch needs a revision")?.clone());
+            values.drain(i..=i+1);
+        }
+    }
+    let args = values.as_slice();
     match args {
         [cmd] if cmd == "drift-check" => check::check_drift(root),
         [cmd, rest @ ..] if cmd == "view" && rest.len() <= 3 => {
             let offset = rest.get(2).map_or(Ok(0), |s| s.parse::<usize>().map_err(|_| "invalid offset"))?;
-            println!("{}", screen::screen(root,rest.first().map(String::as_str),rest.get(1).map(String::as_str),offset,None)?);
+            println!("{}", screen::screen(root,rest.first().map(String::as_str),rest.get(1).map(String::as_str),offset,branch.as_deref())?);
             Ok(())
         }
         [cmd, id] if cmd == "compare" => {
-            let record = store::load(root, Some(id))?.pop().ok_or("unknown flow")?;
+            let records = if let Some(branch) = &branch { store::committed(root,&crate::git::local_revision(root,branch)?,Some(id))? } else {store::load(root,Some(id))?};
+            let record = records.into_iter().next().ok_or("unknown flow")?;
             if !record.problems.is_empty() { return Err(record.problems.join("\n")); }
-            let snapshot = crate::code::facts::Snapshot::current(root)?;
+            let snapshot = if let Some(branch) = &branch { crate::code::facts::Snapshot::branch(root, &crate::git::local_revision(root,branch)?)? } else {crate::code::facts::Snapshot::current(root)?};
             println!("{}", compare::compare(&record.flow.ok_or("unreadable flow")?, &snapshot)?);
             Ok(())
         }
         [cmd, rest @ ..] if cmd == "map" && rest.len() <= 1 => {
-            let snapshot = crate::code::facts::Snapshot::current(root)?;
+            let snapshot = if let Some(branch) = &branch { crate::code::facts::Snapshot::branch(root, &crate::git::local_revision(root,branch)?)? } else {crate::code::facts::Snapshot::current(root)?};
             println!("{}", map::layer(&snapshot, rest.first().map(String::as_str), 0)?);
             Ok(())
         }
