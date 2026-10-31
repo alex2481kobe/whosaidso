@@ -26,6 +26,12 @@ fn fixture() -> Fixture {
                 &[(&[0, 3, 7], true)],
             ),
             scip::doc(
+                "other.rs",
+                "scip fixture app 1 other/area().",
+                "area",
+                &[(&[0, 3, 7], true)],
+            ),
+            scip::doc(
                 "caller.rs",
                 "scip fixture app 1 caller().",
                 "caller",

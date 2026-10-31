@@ -22,6 +22,7 @@ fn check(root: &Path, destination: Option<&str>, every_source: bool) -> Result<(
         .chain(&previous)
         .filter_map(|r| r.flow.as_ref())
         .collect();
+    let every_source = every_source || Snapshot::has_precise(root)?;
     let include = |path: &str| {
         every_source
             || flows.iter().any(|f| {
@@ -31,8 +32,9 @@ fn check(root: &Path, destination: Option<&str>, every_source: bool) -> Result<(
                         .any(|n| n.paths.iter().any(|p| super::pattern::matches(p, path)))
             })
     };
-    let outside = Snapshot::sources_outside(root, include)?;
-    let snapshot = Snapshot::current_in(root, include)?;
+    let outside = !every_source && Snapshot::sources_outside(root, include)?;
+    let mut snapshot = Snapshot::current_in(root, include)?;
+    let reindex = snapshot.strict()?;
     let baseline = destination
         .filter(|_| !previous.is_empty())
         .map(|d| Snapshot::branch_in(root, d, include))
@@ -91,6 +93,9 @@ fn check(root: &Path, destination: Option<&str>, every_source: bool) -> Result<(
     if faults.is_empty() {
         Ok(())
     } else {
+        if let Some(language) = reindex {
+            faults.push(format!("run whosaidso code index {language}"));
+        }
         Err(faults.join("\n"))
     }
 }

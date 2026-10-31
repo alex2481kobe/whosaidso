@@ -57,7 +57,7 @@ pub(in crate::code) fn select(db: &Connection) -> Result<String, String> {
     db.execute_batch(&format!(
         "CREATE TEMP VIEW precise_freshness AS SELECT '{status}' AS status;
         CREATE TEMP VIEW precise_documents AS SELECT d.path,d.blob,CASE
-        WHEN '{status}'<>'fresh' THEN '{status}'
+        WHEN (SELECT status FROM precise_freshness)<>'fresh' THEN (SELECT status FROM precise_freshness)
         WHEN d.blob IS NULL THEN 'unknown'
         WHEN f.path IS NULL OR d.blob<>f.blob THEN 'stale'
         ELSE 'fresh' END AS status FROM scip_docs d LEFT JOIN files f ON f.path=d.path;"
@@ -68,4 +68,44 @@ pub(in crate::code) fn select(db: &Connection) -> Result<String, String> {
     } else {
         String::new()
     })
+}
+
+pub(in crate::code) fn language(db: &Connection) -> Result<Option<String>, String> {
+    db.query_row("SELECT r.language FROM scip_run r JOIN worktrees w ON w.token=r.worktree WHERE w.id=(SELECT worktree FROM selection)", [], |r| r.get::<_, Option<String>>(0))
+        .optional().map(Option::flatten).map_err(err)
+}
+
+// A precise target can depend on another document's imports or declarations.
+pub(in crate::code) fn strict(
+    db: &Connection,
+    files: &crate::tree::Files,
+) -> Result<Option<String>, String> {
+    let Some(language) = language(db)? else {
+        return Ok(None);
+    };
+    let registration =
+        super::super::languages::for_name(&language).ok_or("unknown precise language")?;
+    let family = super::super::languages::family(&format!("file.{}", registration.extensions[0]));
+    let mut stmt = db.prepare("SELECT path FROM scip_docs").map_err(err)?;
+    let indexed = stmt
+        .query_map([], |r| r.get::<_, String>(0))
+        .map_err(err)?
+        .collect::<Result<std::collections::HashSet<_>, _>>()
+        .map_err(err)?;
+    let stale: bool = db
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM precise_documents WHERE status<>'fresh')",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(err)?;
+    let missing = files
+        .entries
+        .iter()
+        .any(|f| super::super::languages::family(&f.path) == family && !indexed.contains(&f.path));
+    if !stale && !missing {
+        return Ok(None);
+    }
+    db.execute_batch("DROP VIEW precise_freshness; CREATE TEMP VIEW precise_freshness AS SELECT 'stale' AS status").map_err(err)?;
+    Ok(Some(registration.name.to_ascii_lowercase()))
 }

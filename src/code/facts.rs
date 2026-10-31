@@ -26,6 +26,19 @@ impl Snapshot {
     pub fn extractor_version(&self) -> &str {
         self.change_token.split(':').next().unwrap_or_default()
     }
+    pub fn has_precise(root: &Path) -> Result<bool, String> {
+        let db = store::open(root)?;
+        precise::storage::schema(&db)?;
+        Ok(precise::binding::language(&db)?.is_some())
+    }
+    pub fn strict(&mut self) -> Result<Option<String>, String> {
+        let language = precise::binding::strict(&self.db, &self.files)?;
+        if language.is_some() {
+            self.id.push_str(":strict");
+            self.change_token.push_str(":strict");
+        }
+        Ok(language)
+    }
     pub fn current(root: &Path) -> Result<Self, String> {
         let (db, _, _) = store::indexed(root)?;
         Self::from_db(db, Some(root))

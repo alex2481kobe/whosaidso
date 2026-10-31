@@ -87,3 +87,4 @@ update the plan, then rerun the drift check. Never mark something built just to
 hide a missing call. Literal evidence checks text, not execution or a response.
 Use simple end-to-end tests: one short test per behavior, no unit-test bloat,
 and no full suite unless needed.
+Commit, run `whosaidso code index rust` (or the project language), then land; strict flow gates fall back to syntax when indexed documents are stale or missing, while the viewer stays per-document.
