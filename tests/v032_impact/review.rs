@@ -31,6 +31,37 @@ fn review_sees_renames_deletions_and_both_sides_of_a_diff() {
         "{answer}"
     );
     assert!(answer.contains("caller.rs:1 user [syntactic]"), "{answer}");
+    let header = answer.lines().next().unwrap();
+    let token = |key: &str| {
+        header
+            .split_whitespace()
+            .find_map(|s| s.strip_prefix(key))
+            .unwrap()
+    };
+    let before = token("before=");
+    let current = token("current=");
+    let page = cli(
+        root,
+        &[
+            "review",
+            "--limit",
+            "1",
+            "--offset",
+            "1",
+            "--snapshot",
+            current,
+            "--before-snapshot",
+            before,
+        ],
+    );
+    assert!(page.contains("offset=1"), "{page}");
+    write(&root.join("later.rs"), "fn later() {}\n");
+    failure(
+        command(root, BIN, &["review", "--snapshot", current])
+            .output()
+            .unwrap(),
+        "snapshot expired",
+    );
     let patch = "diff --git a/deleted.rs b/deleted.rs\ndeleted file mode 100644\n--- a/deleted.rs\n+++ /dev/null\n@@ -1 +0,0 @@\n-fn gone() {}\n";
     write(&root.join(".git/change.diff"), patch);
     let diff = cli(root, &["review", "--diff", ".git/change.diff"]);

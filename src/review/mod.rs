@@ -11,6 +11,8 @@ use std::{collections::BTreeSet, io::Read, path::Path};
 pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
     let mut base = "HEAD";
     let mut input = None;
+    let mut expected_before = None;
+    let mut expected_current = None;
     let mut limit = DEFAULT_LIMIT;
     let mut offset = 0;
     let mut depth = 1;
@@ -20,6 +22,8 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
         match args[i].as_str() {
             "--base" => base = value,
             "--diff" => input = Some(value.as_str()),
+            "--snapshot" => expected_current = Some(value.as_str()),
+            "--before-snapshot" => expected_before = Some(value.as_str()),
             "--limit" => {
                 limit = number(value)?;
                 if !(1..=MAX_LIMIT).contains(&limit) {
@@ -39,6 +43,12 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
     }
     let before = Snapshot::branch(root, base)?;
     let after = Snapshot::current(root)?;
+    if let Some(id) = expected_before {
+        before.ensure(id)?;
+    }
+    if let Some(id) = expected_current {
+        after.ensure(id)?;
+    }
     let changes = match input {
         Some(path) => {
             let mut text = String::new();
