@@ -1,6 +1,6 @@
 [package]
 name = "whosaidso"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 license = "Apache-2.0"
 description = "Agent-first engineering record kept in git: goals, proofs and progress derived from landings."
