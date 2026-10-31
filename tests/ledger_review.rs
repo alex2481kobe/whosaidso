@@ -130,3 +130,19 @@ fn collection_keeps_the_only_attachment_until_its_milestone_folds() {
     commit(&f.root);
     assert!(cli(&f.root, &["goals"]).contains("done    g"));
 }
+
+#[test]
+fn folded_check_survives_removal_of_its_old_script() {
+    let f = Fixture::new();
+    executable(&f.root.join("check-g"), "#!/bin/sh\nexit 0\n");
+    r::check_command(&f.root, &["./check-g"]);
+    commit(&f.root);
+    cli(&f.root, &["prove", "g", "--reason", "existing behavior"]);
+    commit(&f.root);
+    cli(&f.root, &["prune"]);
+    commit(&f.root);
+    std::fs::remove_file(f.root.join("check-g")).unwrap();
+    commit(&f.root);
+    cli(&f.root, &["check"]);
+    assert!(cli(&f.root, &["goals"]).contains("done    g"));
+}
