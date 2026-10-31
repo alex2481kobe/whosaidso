@@ -26,6 +26,18 @@ impl Snapshot {
         let (db, _, _) = store::indexed(root)?;
         Self::from_db(db)
     }
+    pub fn sources_outside(root: &Path, include: impl Fn(&str) -> bool) -> Result<bool, String> {
+        let listing =
+            crate::git::run_bytes(root, &["ls-files", "-co", "--exclude-standard", "-z"])?;
+        Ok(listing
+            .split(|b| *b == 0)
+            .filter_map(|p| std::str::from_utf8(p).ok())
+            .any(|p| !include(p) && super::parse::supported(p)))
+    }
+    pub fn current_in(root: &Path, include: impl Fn(&str) -> bool) -> Result<Self, String> {
+        let (db, _, _) = store::indexed_in(root, include)?;
+        Self::from_db(db)
+    }
     pub fn published(root: &Path) -> Result<Self, String> {
         let db = store::open(root)?;
         Self::from_db(db)
