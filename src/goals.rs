@@ -93,9 +93,9 @@ pub fn label(state: State) -> &'static str {
         State::Stale => "stale",
     }
 }
-fn output(root: &Path, store: &Store) -> Result<String, String> {
+fn output(root: &Path, store: &Store, tip: &str) -> Result<String, String> {
     let mut output = String::new();
-    let states = state::states(root, store)?;
+    let states = state::states_at(root, store, tip)?;
     let done = states.iter().filter(|s| s.state == State::Done).count();
     output.push_str(&format!("{done}/{} done\n", store.goals.len()));
     for (kind, id) in &store.broken {
@@ -108,8 +108,15 @@ fn output(root: &Path, store: &Store) -> Result<String, String> {
     Ok(output)
 }
 pub fn goals(root: &Path) -> Result<(), String> {
-    let store = record::load(root)?;
-    print!("{}", output(root, &store)?);
+    let (store, tip) = std::thread::scope(|scope| {
+        let store = scope.spawn(|| record::load(root));
+        let tip = crate::git::main_tip(root);
+        Ok::<_, String>((
+            store.join().map_err(|_| "record read thread failed")??,
+            tip?,
+        ))
+    })?;
+    print!("{}", output(root, &store, &tip)?);
     if store.errors.is_empty() {
         Ok(())
     } else {
