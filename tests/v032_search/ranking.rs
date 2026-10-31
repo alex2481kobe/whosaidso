@@ -50,3 +50,27 @@ fn natural_question_recovers_two_meaningful_terms() {
     assert!(found.contains("calculate_invoice"), "{found}");
     assert!(cli(&f.root, &["find", "invoice qzxv qzzq zxqq"]).contains("no indexed match"));
 }
+
+#[test]
+fn one_large_file_cannot_fill_the_candidate_window() {
+    let f = Fixture::empty();
+    let body = (0..240)
+        .map(|i| format!("/// Computes invoice sales tax.\nfn charge_{i}() {{}}\n"))
+        .collect::<String>();
+    write(&f.root.join("many.rs"), body);
+    write(
+        &f.root.join("other.rs"),
+        format!(
+            "/// Computes invoice sales tax {}\nfn customer_charge() {{}}\n",
+            "filler ".repeat(300)
+        ),
+    );
+    let found = cli(
+        &f.root,
+        &["find", "computes invoice sales tax", "--limit", "5"],
+    );
+    assert!(
+        found.contains("many.rs") && found.contains("customer_charge"),
+        "{found}"
+    );
+}

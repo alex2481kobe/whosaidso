@@ -73,6 +73,18 @@ pub(super) fn build(root: &Path, topic: &[String], budget: usize) -> Result<Stri
         output.push_str("\n\n");
     }
     let outside = (results.total as usize).saturating_sub(results.hits.len().min(64));
-    output.push_str(&footer(&omitted, outside, reserve));
+    if results.lower_bound && omitted.is_empty() && outside == 0 {
+        output.push_str("omitted: more matches may exist\n");
+    } else {
+        let suffix = if results.lower_bound {
+            " [lower bound]"
+        } else {
+            ""
+        };
+        let summary = footer(&omitted, outside, reserve.saturating_sub(suffix.len()));
+        output.push_str(summary.trim_end_matches('\n'));
+        output.push_str(suffix);
+        output.push('\n');
+    }
     Ok(output)
 }

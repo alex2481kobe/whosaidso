@@ -29,12 +29,27 @@ pub fn sync(tx: &Transaction<'_>, model: &Model, token: &str) -> Result<(), Stri
     let id = model_id(tx)?;
     // This command has one pinned model. Expire older inference formats and their
     // stamps together, so another worktree recomputes instead of trusting missing data.
-    tx.execute("DELETE FROM vectors WHERE model<>?1", [id]).map_err(err)?;
-    tx.execute("DELETE FROM vector_coverage WHERE model<>?1", [id]).map_err(err)?;
-    tx.execute("DELETE FROM embedding_models WHERE id<>?1", [id]).map_err(err)?;
-    tx.execute("DELETE FROM stamps WHERE source LIKE 'vectors:%' AND source<>?1", [&stamp]).map_err(err)?;
-    tx.execute("DELETE FROM vectors WHERE payload NOT IN (SELECT payload FROM members)", []).map_err(err)?;
-    tx.execute("DELETE FROM vector_coverage WHERE payload NOT IN (SELECT payload FROM members)", []).map_err(err)?;
+    tx.execute("DELETE FROM vectors WHERE model<>?1", [id])
+        .map_err(err)?;
+    tx.execute("DELETE FROM vector_coverage WHERE model<>?1", [id])
+        .map_err(err)?;
+    tx.execute("DELETE FROM embedding_models WHERE id<>?1", [id])
+        .map_err(err)?;
+    tx.execute(
+        "DELETE FROM stamps WHERE source LIKE 'vectors:%' AND source<>?1",
+        [&stamp],
+    )
+    .map_err(err)?;
+    tx.execute(
+        "DELETE FROM vectors WHERE payload NOT IN (SELECT payload FROM members)",
+        [],
+    )
+    .map_err(err)?;
+    tx.execute(
+        "DELETE FROM vector_coverage WHERE payload NOT IN (SELECT payload FROM members)",
+        [],
+    )
+    .map_err(err)?;
     let mut missing = tx.prepare("SELECT DISTINCT m.payload FROM members m LEFT JOIN vector_coverage c ON c.model=?1 AND c.payload=m.payload WHERE m.worktree=(SELECT worktree FROM selection) AND m.source LIKE 'file:%' AND c.payload IS NULL").map_err(err)?;
     let payloads = missing
         .query_map([id], |r| r.get::<_, i64>(0))

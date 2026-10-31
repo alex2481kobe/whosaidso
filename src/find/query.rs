@@ -35,6 +35,7 @@ pub(crate) struct Results {
     pub hits: Vec<Hit>,
     pub total: i64,
     pub notice: Option<String>,
+    pub lower_bound: bool,
     db: rusqlite::Connection,
 }
 impl Results {
@@ -76,19 +77,33 @@ pub(crate) fn search(
     // Exact titles must reach reranking even when BM25 fills the candidate pool.
     collect(&mut hits, pool.fetch(&db, &all, Some(&words.join(" ")))?);
     collect(&mut hits, pool.fetch(&db, &all, None)?);
-    if hits.len() < limit {
+    if hits.len() < limit
+        && !hits
+            .values()
+            .any(|hit| exactness(hit, words, &corrected) == 2)
+    {
         corrected = correct(&db, words)?;
         pool = Pool::new(words, &corrected, kinds, candidates);
         let all = pool.terms.join(" AND ");
         collect(&mut hits, pool.fetch(&db, &all, None)?);
     }
-    let widened = hits.len() < limit;
+    let widened = hits.len() < limit
+        && !hits
+            .values()
+            .any(|hit| exactness(hit, words, &corrected) == 2);
     if widened {
         let any = pool.terms.join(" OR ");
         collect(&mut hits, pool.fetch(&db, &any, None)?);
     }
     let terms = pool.terms.join(if widened { " OR " } else { " AND " });
-    let mut total = pool.total(&db, &terms)?;
+    // Partial retrieval is bounded. An exhaustive display count must not turn a
+    // short answer into a second corpus-wide ranking pass.
+    let lower_bound = (widened && words.len() > 1) || model.is_ok();
+    let mut total = if widened && words.len() > 1 {
+        0
+    } else {
+        pool.total(&db, &terms)?
+    };
     let mut ranked: Vec<_> = hits
         .into_values()
         .map(|hit| (exactness(&hit, words, &corrected), hit))
@@ -111,6 +126,7 @@ pub(crate) fn search(
         hits,
         total,
         notice,
+        lower_bound,
         db,
     })
 }

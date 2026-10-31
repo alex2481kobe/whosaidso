@@ -127,12 +127,12 @@ impl Pool {
             let floor = if all {
                 String::new()
             } else {
-                format!(" AND ({coverage})>=?3")
+                "WHERE matched>=?3".to_owned()
             };
-            // Rank only postings and compact membership keys. Fetch source-sized
-            // payload rows after LIMIT, not once for every partial match.
+            // Keep a source's best file row and best symbol before applying the
+            // candidate cap, then read only those compact winners' payloads.
             format!(
-                "WITH ranked AS MATERIALIZED (SELECT docs_fts.rowid AS id,m.key,m.source,({coverage}) AS matched,({edits}) AS edits,bm25(docs_fts,0,1,1) AS bm FROM docs_fts CROSS JOIN members m INDEXED BY member_lookup WHERE docs_fts MATCH ?1 AND m.worktree=(SELECT worktree FROM selection) AND m.payload=docs_fts.rowid{floor} ORDER BY matched DESC,edits,bm,id LIMIT ?2) SELECT p.kind,r.key,CASE WHEN p.kind='file' THEN substr(r.key,6) ELSE p.title END,r.matched,r.edits,r.bm,r.source FROM ranked r JOIN payloads p ON p.id=r.id ORDER BY r.matched DESC,r.edits,r.bm,r.id"
+                "WITH postings AS MATERIALIZED (SELECT docs_fts.rowid AS id,m.key,m.source,({coverage}) AS matched,({edits}) AS edits,bm25(docs_fts,0,1,1) AS bm FROM docs_fts CROSS JOIN members m INDEXED BY member_lookup WHERE docs_fts MATCH ?1 AND m.worktree=(SELECT worktree FROM selection) AND m.payload=docs_fts.rowid), ranked AS MATERIALIZED (SELECT *,row_number() OVER (PARTITION BY source,(key LIKE 'symbol:%') ORDER BY matched DESC,edits,bm,id,key) AS position FROM postings {floor}), selected AS MATERIALIZED (SELECT * FROM ranked WHERE position=1 ORDER BY matched DESC,edits,bm,id,key LIMIT ?2) SELECT p.kind,r.key,CASE WHEN p.kind='file' THEN substr(r.key,6) ELSE p.title END,r.matched,r.edits,r.bm,r.source FROM selected r JOIN payloads p ON p.id=r.id ORDER BY r.matched DESC,r.edits,r.bm,r.id,r.key"
             )
         };
         let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
