@@ -118,8 +118,10 @@ fn stale(root: &Path, proof: &Proof, goal: &str, format: &str, main: &str) -> Re
     Ok(trailers(&later).any(|g| g == goal))
 }
 pub fn states(root: &Path, store: &Store) -> Result<Vec<GoalState>, String> {
+    states_at(root, store, &git::main_tip(root)?)
+}
+pub fn states_at(root: &Path, store: &Store, tip: &str) -> Result<Vec<GoalState>, String> {
     let format = "--format=%H%x09%(trailers:key=Goal,valueonly,separator=%x2C)";
-    let tip = git::main_tip(root)?;
     let revisions = git::run(root, &["rev-list", &tip])?;
     if store.goals.is_empty() {
         return Ok(Vec::new());

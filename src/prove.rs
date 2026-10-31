@@ -28,6 +28,9 @@ pub fn command(root: &Path, args: &[String]) -> Result<String, String> {
     }
 }
 pub fn prove(root: &Path, id: &str, reason: Option<&str>) -> Result<String, String> {
+    prove_on(root, id, reason, &git::main_tip(root)?)
+}
+pub fn prove_on(root: &Path, id: &str, reason: Option<&str>, main: &str) -> Result<String, String> {
     publish::record_dir(root, "proofs")?;
     let store = record::load(root)?;
     if !store.errors.is_empty() {
@@ -67,7 +70,6 @@ pub fn prove(root: &Path, id: &str, reason: Option<&str>) -> Result<String, Stri
     if goal.check.as_ref() != Some(&check) {
         return Err("prove: uncommitted check".into());
     }
-    let main = git::main_tip(root)?;
     let limit = crate::config::load(root)?.limits.check_seconds;
     let scratch = scratch::Scratch::lock(root)?;
     let inputs = serde_json::to_vec(&(
