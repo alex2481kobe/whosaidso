@@ -91,7 +91,7 @@ fn documented_quick_start_runs_verbatim() {
         } else {
             assert!(out.contains("goal first-goal  First goal"));
             assert!(out.contains("grep: no match"));
-            assert_eq!(out.matches("code: none recorded").count(), 4);
+            assert_eq!(out.matches("code: not indexed").count(), 4);
             assert!(!root.join(".whosaidso/cache/view").exists());
         }
     }

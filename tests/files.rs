@@ -42,7 +42,7 @@ fn directory_replacement_removes_children_from_every_index() {
     fs::remove_dir_all(root.join("dir")).unwrap();
     write(&root.join("dir"), "replacementneedle");
     assert!(cli(root, &["grep", "directoryneedle"]).contains("no match"));
-    assert!(cli(root, &["code", "defs", "directoryneedle"]).contains("none recorded"));
+    assert!(cli(root, &["code", "defs", "directoryneedle"]).contains("not indexed"));
     assert!(cli(root, &["find", "kind:file", "child"]).contains("no indexed match"));
     assert!(cli(root, &["grep", "replacementneedle"]).contains("dir:1"));
 }
@@ -117,7 +117,7 @@ fn binary_invalid_utf8_and_oversized_code_are_not_searchable() {
         .unwrap()
         .set_len(64 * 1024 * 1024 + 1)
         .unwrap();
-    assert!(cli(root, &["code", "defs", "oversized_code"]).contains("none recorded"));
+    assert!(cli(root, &["code", "defs", "oversized_code"]).contains("not indexed"));
 }
 
 #[test]

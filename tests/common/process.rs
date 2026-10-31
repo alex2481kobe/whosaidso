@@ -73,3 +73,14 @@ pub fn input(root: &Path, args: &[&str], bytes: &[u8]) -> String {
     child.stdin.take().unwrap().write_all(bytes).unwrap();
     success(child.wait_with_output().unwrap()).trim().to_owned()
 }
+
+// Row equality stays independent of the separately tested coverage diagnostics.
+pub fn code_rows(root: &Path, args: &[&str]) -> String {
+    code_rows_text(cli(root, args))
+}
+pub fn code_rows_text(text: String) -> String {
+    text.lines()
+        .filter(|line| !line.starts_with("gap: ") && !line.starts_with("gaps: "))
+        .map(|line| format!("{line}\n"))
+        .collect()
+}
