@@ -1,10 +1,13 @@
 // Optimistic publication: test each merged candidate, then push its scoped receipt by fast-forward.
 mod attempt;
+mod policy;
+mod prepare;
 pub mod receipt;
 pub(crate) mod worktree;
-use crate::{config, git, record, state};
+use crate::{config, git, record};
 use attempt::Attempt;
-use std::{collections::BTreeSet, fs, path::Path};
+use policy::{goals, limits};
+use std::{fs, path::Path};
 
 pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
     let mut reason = None;
@@ -123,81 +126,15 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
         };
         a.save(&dir)?;
         worktree::hook(root, "gate")?;
-        let tree = worktree::restore(root, &dir, &candidate)?;
-        for id in &goals {
-            if store
-                .goals
-                .iter()
-                .find(|g| &g.id == id)
-                .is_some_and(|g| g.check.is_some())
-                && !store.folded.contains_key(id)
-            {
-                println!("{}", crate::prove::prove_on(&tree, id, reason, &baseline)?);
-            }
-        }
-        worktree::hook(root, "check")?;
-        let proven = record::load(&tree)?;
-        let states = state::candidate_states(&tree, &proven, &candidate)?;
-        for id in &goals {
-            if !states
-                .iter()
-                .any(|s| &s.id == id && s.state == state::State::Done)
-            {
-                return Err(format!(
-                    "land: {id} has no qualifying evidence or is blocked"
-                ));
-            }
-        }
-        // Folding is generated in disposable inputs; the receipt verifier independently checks every byte.
-        for plan in crate::prune::fold::candidate_plan(&tree, &candidate)? {
-            crate::publish::write_bytes(&plan.target, &record::fold::encode(&plan.entries)?)?;
-            for e in plan.entries {
-                fs::remove_file(tree.join(".whosaidso").join(e.path)).map_err(|e| e.to_string())?;
-            }
-        }
-        if !proven.media.is_empty() {
-            crate::sync::sync(&tree, remote)?;
-        }
-        for m in &proven.media {
-            if !crate::blob::verify(&tree, &m.media_sha256, &m.ext, m.byte_size)? {
-                return Err(format!("land: missing media {}", m.media_sha256));
-            }
-        }
-        worktree::hook(root, "media")?;
-        let receipt = receipt::Receipt {
+        let mut receipt = receipt::Receipt {
             destination: destination.clone(),
             candidate: candidate.clone(),
             baseline,
-            proofs: proven
-                .proofs
-                .iter()
-                .filter(|p| p.commit == candidate)
-                .map(|p| p.sha.clone())
-                .collect(),
+            proofs: Vec::new(),
             goals,
             line_override: line_override.map(str::to_owned),
         };
-        let metadata = format!(
-            "Goal: none\nWhoSaidSo-Receipt: {}",
-            serde_json::to_string(&receipt).map_err(|e| e.to_string())?
-        );
-        git::run(&tree, &["add", "--", ".whosaidso"])?;
-        git::run(
-            &tree,
-            &[
-                "-c",
-                "core.hooksPath=/dev/null",
-                "commit",
-                "--allow-empty",
-                "-m",
-                "Record landing evidence",
-                "-m",
-                &metadata,
-            ],
-        )?;
-        a.receipt = git::run(&tree, &["rev-parse", "HEAD"])?.trim().into();
-        receipt::verify(&tree, &a.receipt, &receipt)?;
-        crate::gate::gate(&tree, &candidate)?;
+        a.receipt = prepare::build(root, &dir, remote, &mut receipt, reason)?;
         a.save(&dir)?;
         worktree::hook(root, "receipt")?;
         // A concurrent edit in this checkout must never be overwritten by the receipt.
@@ -252,62 +189,6 @@ fn rejected(e: &str) -> bool {
 fn clean(root: &Path) -> Result<(), String> {
     if !git::run(root, &["status", "--porcelain", "--untracked-files=all"])?.is_empty() {
         return Err("land: commit your changes first".into());
-    }
-    Ok(())
-}
-fn goals(root: &Path, baseline: &str) -> Result<Vec<String>, String> {
-    let log = git::run(
-        root,
-        &[
-            "log",
-            "--no-merges",
-            "--format=%(trailers:key=Goal,valueonly)",
-            &format!("{baseline}..HEAD"),
-        ],
-    )?;
-    let mut ids: BTreeSet<String> = log
-        .lines()
-        .filter(|s| !s.is_empty() && *s != "none")
-        .map(str::to_owned)
-        .collect();
-    let selection =
-        root.join(git::run(root, &["rev-parse", "--git-path", "whosaidso-goal"])?.trim());
-    if let Ok(id) = fs::read_to_string(selection)
-        && record::valid_id(id.trim())
-        && id.trim() != "none"
-    {
-        ids.insert(id.trim().into());
-    }
-    Ok(ids.into_iter().collect())
-}
-
-fn limits(root: &Path, baseline: &str, named: Option<&str>) -> Result<(), String> {
-    let Some(limit) = config::load(root)?.limits.land_lines.value() else {
-        return Ok(());
-    };
-    let stat = git::run(
-        root,
-        &[
-            "diff",
-            "--numstat",
-            baseline,
-            "HEAD",
-            "--",
-            ".",
-            ":(exclude).whosaidso",
-        ],
-    )?;
-    let mut count = 0.0;
-    for line in stat.lines() {
-        let fields: Vec<_> = line.splitn(3, '\t').collect();
-        for field in fields.iter().take(2) {
-            count += field.parse::<f64>().unwrap_or(f64::INFINITY);
-        }
-    }
-    if count > limit && named.is_none() {
-        return Err(format!(
-            "limits.land_lines {limit}: {count} changed lines; use --override <name> for an intentional exception"
-        ));
     }
     Ok(())
 }
