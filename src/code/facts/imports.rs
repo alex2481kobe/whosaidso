@@ -30,7 +30,7 @@ impl Snapshot {
     ) -> Result<Vec<super::reads::Row>, String> {
         use super::reads::Layer;
         use std::collections::{BTreeMap, HashMap};
-        use tree_sitter::{Parser, Query, QueryCursor, StreamingIterator};
+        use tree_sitter::{CaptureQuantifier, Parser, Query, QueryCursor, StreamingIterator};
         rows.retain(|r| r.kind != "namespace");
         let mut imports = BTreeMap::new();
         let mut queries = HashMap::new();
@@ -44,10 +44,19 @@ impl Snapshot {
                 let grammar = (language.grammar)();
                 parser.set_language(&grammar).map_err(super::err)?;
                 if !queries.contains_key(language.name) {
-                    queries.insert(
-                        language.name,
-                        Query::new(&grammar, language.query).map_err(super::err)?,
-                    );
+                    let mut query = Query::new(&grammar, language.query).map_err(super::err)?;
+                    let include = query
+                        .capture_names()
+                        .iter()
+                        .position(|&name| name == "include");
+                    for pattern in 0..query.pattern_count() {
+                        if include.is_none_or(|i| {
+                            query.capture_quantifiers(pattern)[i] == CaptureQuantifier::Zero
+                        }) {
+                            query.disable_pattern(pattern);
+                        }
+                    }
+                    queries.insert(language.name, query);
                 }
                 if let Some(bytes) = self.body(&row.path)? {
                     let tree = parser
