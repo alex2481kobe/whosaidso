@@ -31,6 +31,39 @@ fn source_evidence_survives_data_floods_and_generated_code() {
 }
 
 #[test]
+fn grep_diagnoses_regex_forms_instead_of_claiming_absence() {
+    let f = Fixture::empty();
+    write(
+        &f.root.join("words.txt"),
+        "cat\nconcatenate\nleft|right\n\\b\n",
+    );
+    commit(&f.root);
+    bad(&f.root, &["grep", r"\bcat\b"], "literal mode");
+    bad(
+        &f.root,
+        &["grep", "--regex", r"left\|right"],
+        "extended regex",
+    );
+    bad(
+        &f.root,
+        &["grep", "--regex", r"\d", "--in", "absent/"],
+        "unsupported",
+    );
+    bad(&f.root, &["grep", "--regex", r"\bcat\b"], "unsupported");
+    bad(&f.root, &["grep", "--regex", "[", "--in", "absent/"], "[");
+    let pattern = "(^|[^[:alnum:]_])cat([^[:alnum:]_]|$)";
+    let out = command(&f.root, BIN, &["grep", "--regex", pattern])
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&out.stderr).contains("Git extended regex"));
+    assert_eq!(success(out), git(&f.root, &["grep", "-n", "-E", pattern]));
+    assert_eq!(
+        cli(&f.root, &["grep", "--literal", r"\b"]),
+        "words.txt:4:\\b\n"
+    );
+}
+
+#[test]
 fn ambiguous_show_includes_bodies_with_a_shared_small_budget() {
     let f = Fixture::empty();
     for (name, marker) in [

@@ -38,6 +38,9 @@ pub(super) fn run(root: &Path, options: &Options) -> Result<(Vec<String>, usize)
         paths.retain(|p| !ignored.contains(p));
     }
     if candidates.as_ref().is_some_and(Vec::is_empty) {
+        if options.regex {
+            git::validate(root, options)?;
+        }
         return Ok((Vec::new(), 0));
     }
     if let Some(matcher) = matcher {

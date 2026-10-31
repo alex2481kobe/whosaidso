@@ -27,6 +27,9 @@ pub fn grep(root: &Path, args: &[String]) -> Result<(), String> {
     let stdout = std::io::stdout();
     let mut out = BufWriter::new(stdout.lock());
     let options = options::parse(args)?;
+    if options.regex && !options.files {
+        eprintln!("grep: Git extended regex (--regex); | is alternation");
+    }
     let (rows, total) = search::run(root, &options)?;
     if total == 0 {
         writeln!(out, "grep: no matches").map_err(|e| e.to_string())?;
