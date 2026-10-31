@@ -252,3 +252,6 @@ fn graph_combines_fresh_precise_and_syntax_and_reports_implementations() {
         "{stale}"
     );
 }
+
+#[path = "v032_impact/review.rs"]
+mod review;

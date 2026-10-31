@@ -20,6 +20,7 @@ mod prove;
 mod prune;
 mod publish;
 mod record;
+mod review;
 mod show;
 mod state;
 mod sync;
@@ -54,6 +55,7 @@ fn run() -> Result<(), String> {
         };
     }
     commands! {
+        "review [--base REF] [--diff FILE|-] [--depth N] [--limit N] [--offset N]", [cmd, rest @ ..] if cmd == "review" => review::command(&root, rest);
         "note <command> [<args>...]", [cmd, rest @ ..] if cmd == "note" => note::command(&root, rest);
         "flow <command> [<args>...]", [cmd, rest @ ..] if cmd == "flow" => flow::command(&root, rest);
         "check", [cmd] if cmd == "check" => sync::check(&root);
