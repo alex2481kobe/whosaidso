@@ -27,6 +27,7 @@ impl Pool {
             Value::Integer(cap as i64),
             Value::Integer(words.len().div_ceil(2) as i64),
             kind.map_or(Value::Null, |k| Value::Text(k.to_owned())),
+            Value::Null,
         ];
         let mut coverage = Vec::new();
         let mut edits = Vec::new();
@@ -75,10 +76,16 @@ impl Pool {
     fn bind(&mut self, terms: &str) {
         self.values[0] = Value::Text(format!("{{title body}} : ({terms})"));
     }
-    pub fn fetch(&mut self, db: &Connection, terms: &str) -> Result<Vec<Hit>, String> {
+    pub fn fetch(
+        &mut self,
+        db: &Connection,
+        terms: &str,
+        exact_title: Option<&str>,
+    ) -> Result<Vec<Hit>, String> {
         self.bind(terms);
+        self.values[4] = exact_title.map_or(Value::Null, |title| Value::Text(title.to_owned()));
         let sql = format!(
-            "SELECT docs.kind,docs.key,docs.title,({}) AS matched,({}) AS edits,bm25(docs_fts,0,1,1) AS bm {} ORDER BY bm,docs.id LIMIT ?2",
+            "SELECT docs.kind,docs.key,docs.title,({}) AS matched,({}) AS edits,bm25(docs_fts,0,1,1) AS bm {} AND (?5 IS NULL OR docs.title=?5 COLLATE NOCASE) ORDER BY bm,docs.id LIMIT CASE WHEN ?5 IS NULL THEN ?2 ELSE -1 END",
             self.coverage,
             self.edits,
             self.source()

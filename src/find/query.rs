@@ -55,12 +55,14 @@ pub(super) fn search(
     let mut pool = Pool::new(words, &corrected, kind, candidates);
     let mut hits = HashMap::new();
     let all = pool.terms.join(" AND ");
-    collect(&mut hits, pool.fetch(&db, &all)?);
+    // Exact titles must reach reranking even when BM25 fills the candidate pool.
+    collect(&mut hits, pool.fetch(&db, &all, Some(&words.join(" ")))?);
+    collect(&mut hits, pool.fetch(&db, &all, None)?);
     if hits.len() < limit {
         corrected = correct(&db, words)?;
         pool = Pool::new(words, &corrected, kind, candidates);
         let all = pool.terms.join(" AND ");
-        collect(&mut hits, pool.fetch(&db, &all)?);
+        collect(&mut hits, pool.fetch(&db, &all, None)?);
     }
     if hits.len() < limit {
         let order = drop_order(&db, &corrected)?;
@@ -74,10 +76,10 @@ pub(super) fn search(
                 .map(|(_, w)| w.as_str())
                 .collect::<Vec<_>>()
                 .join(" AND ");
-            collect(&mut hits, pool.fetch(&db, &rest)?);
+            collect(&mut hits, pool.fetch(&db, &rest, None)?);
         }
         let any = pool.terms.join(" OR ");
-        collect(&mut hits, pool.fetch(&db, &any)?);
+        collect(&mut hits, pool.fetch(&db, &any, None)?);
     }
     let total = pool.total(&db)?;
     let mut ranked: Vec<_> = hits

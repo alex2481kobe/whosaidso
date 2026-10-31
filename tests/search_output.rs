@@ -37,24 +37,27 @@ fn grep_scopes_union_paths_and_preserves_unicode_literals() {
             root,
             &["grep", "scopeneedle", "--in", "docs", "--in", "outside"]
         ),
-        "docs/a.md:1: scopeneedle\noutside.txt:1: scopeneedle\n"
+        "docs/a.md:1:scopeneedle\noutside.txt:1:scopeneedle\n"
     );
     assert_eq!(
         cli(root, &["grep", "scopeneedle", "--in", "missing"]),
-        "grep: no match\n"
+        "grep: no matches\n"
     );
     assert_eq!(
-        cli(root, &["grep", "scopeneedle"]).lines().last(),
-        Some(".whosaidso/evidence.txt:1: scopeneedle")
+        cli(root, &["grep", "scopeneedle"]).lines().next(),
+        Some(".whosaidso/evidence.txt:1:scopeneedle")
     );
     write(
         &root.join("needle.txt"),
         "abcd exact\nabc elsewhere bcd\n\u{1f600}éxW unicode\nquote \"needle\"\n",
     );
-    assert_eq!(cli(root, &["grep", "abcd"]), "needle.txt:1: abcd exact\n");
+    assert_eq!(cli(root, &["grep", "abcd"]), "needle.txt:1:abcd exact\n");
     assert!(cli(root, &["grep", "\u{1f600}éxw"]).contains("needle.txt:3"));
     assert!(cli(root, &["grep", "\"needle\""]).contains("needle.txt:4"));
-    bad(root, &["grep", "zz"], "needs at least 3 characters");
+    assert_eq!(
+        cli(root, &["grep", "ab"]),
+        "needle.txt:1:abcd exact\nneedle.txt:2:abc elsewhere bcd\n"
+    );
     assert!(
         !command(root, BIN, &["grep", "needle", "--in"])
             .output()
@@ -65,7 +68,7 @@ fn grep_scopes_union_paths_and_preserves_unicode_literals() {
 }
 
 #[test]
-fn text_answers_are_capped_and_unicode_truncation_is_valid() {
+fn grep_rows_are_paged_and_find_and_code_answers_are_truncated() {
     let f = Fixture::empty();
     let root = &f.root;
 
@@ -73,13 +76,13 @@ fn text_answers_are_capped_and_unicode_truncation_is_valid() {
         write(&root.join(format!("repeat{n:02}.txt")), "repeatword\n");
     }
     let text = cli(root, &["grep", "repeatword"]);
-    assert!(text.ends_with("shown 20 of 25 lines in 25 files\n"));
+    assert!(text.ends_with("shown 20 of 25 rows; offset 0\n"));
     write(
         &root.join("long.txt"),
         format!("cutneedle{}", "é".repeat(240)),
     );
     let text = cli(root, &["grep", "cutneedle"]);
-    assert!(text.trim_end().ends_with("...") && text.trim_end().chars().count() == 160);
+    assert_eq!(text, format!("long.txt:1:cutneedle{}\n", "é".repeat(240)));
     let name = format!("{}.md", "longpath".repeat(28));
     write(&root.join(name), "longpath");
     assert_eq!(

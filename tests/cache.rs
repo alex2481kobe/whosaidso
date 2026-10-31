@@ -29,7 +29,7 @@ fn warm_queries_reuse_bytes_and_still_notice_edits() {
         cli(root, &["code", "defs", "needle"]),
         "main.rs:1  fn needle  [syntactic]\n"
     );
-    assert!(cli(root, &["grep", "needle"]).contains("main.rs:1: fn needle() {}"));
+    assert!(cli(root, &["grep", "needle"]).contains("main.rs:1:fn needle() {}"));
     assert!(cli(root, &["find", "needle", "guide"]).contains("guide.md"));
     fs::write(root.join("main.rs"), "fn changed_needle() {}\n").unwrap();
     assert!(cli(root, &["code", "defs", "changed_needle"]).contains("syntactic"));
@@ -69,7 +69,7 @@ fn concurrent_index_writers_wait_for_sqlite_and_publish_current_files() {
     db.execute_batch("COMMIT").unwrap();
     drop(db);
     for c in children {
-        assert!(success(c.wait_with_output().unwrap()).contains("file.txt:1: changed"));
+        assert!(success(c.wait_with_output().unwrap()).contains("file.txt:1:changed"));
     }
 }
 
