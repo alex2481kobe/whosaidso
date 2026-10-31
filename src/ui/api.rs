@@ -51,7 +51,7 @@ fn goals_screen(root: &Path, store: &Store) -> Result<(Value, i64), String> {
     state::renew();
     let states = state::states(root, store)?;
     let now = state::now()?;
-    let held: HashMap<String, claims::Held> = claims::held(root, &states, now)?
+    let held: HashMap<String, claims::view::Held> = claims::view::held(root, &states, now)?
         .into_iter()
         .map(|c| (c.goal.clone(), c))
         .collect();

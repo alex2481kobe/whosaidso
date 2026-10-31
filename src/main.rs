@@ -13,6 +13,7 @@ mod gate;
 mod git;
 mod goal_tree;
 mod goals;
+mod goals_selection;
 mod hooks;
 mod index;
 mod note;
@@ -60,6 +61,8 @@ fn run() -> Result<(), String> {
         "check", [cmd] if cmd == "check" => sync::check(&root);
         "sync [<remote>]", [cmd, rest @ ..] if cmd == "sync" && rest.len() <= 1 => sync::sync(&root, rest.first().map_or("origin", String::as_str));
         "install-hooks", [cmd] if cmd == "install-hooks" => { hooks::install(&root)?; projects::register(&root) };
+        "next", [cmd] if cmd == "next" => goals_selection::next(&root);
+        "assign <goal> <agent:name|branch:name>", [cmd, id, target] if cmd == "assign" => { let (notices, result) = claims::assign(&root, &cwd, id, target); for n in notices { println!("{n}"); } result };
         "start <goal-id>", [cmd, id] if cmd == "start" => hooks::start(&root, &cwd, id);
         "gate [<base>]", [cmd, rest @ ..] if cmd == "gate" && rest.len() <= 1 => gate::gate(&root, rest.first().map(String::as_str).unwrap_or(&config::main(&root)?));
         "show <id>", [cmd, id] if cmd == "show" => show::show(&root, id);
