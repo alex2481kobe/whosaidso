@@ -81,7 +81,7 @@ fn inspect(
         let mut reasons = persistent.clone();
         let mut start = 0;
         while start < words.len() {
-            if assignment(&words[start], &mut reasons) {
+            if assignment(words[start], &mut reasons) {
                 start += 1;
                 continue;
             }
@@ -122,20 +122,15 @@ fn inspect(
         args[0] = basename(args[0]);
         if ["sh", "bash", "zsh"].contains(&args[0])
             && args.get(1).is_some_and(|s| ["-c", "-lc"].contains(s))
+            && let Some(inner) = args.get(2).and_then(|s| shell::commands(s))
+            && let Some(reason) = inspect(&inner, &reasons, used, depth + 1)
         {
-            if let Some(inner) = args.get(2).and_then(|s| shell::commands(s))
-                && let Some(reason) = inspect(&inner, &reasons, used, depth + 1)
-            {
-                return Some(reason);
-            }
+            return Some(reason);
         }
-        if runners::unscoped(&args) {
-            if !use_reason("FULL_SUITE", &reasons, used) {
-                return Some(
-                    "Run a scoped test, or set FULL_SUITE='<why this full suite is needed>'."
-                        .into(),
-                );
-            }
+        if runners::unscoped(&args) && !use_reason("FULL_SUITE", &reasons, used) {
+            return Some(
+                "Run a scoped test, or set FULL_SUITE='<why this full suite is needed>'.".into(),
+            );
         }
         let selected = &words[start..];
         let mut normalized = selected
