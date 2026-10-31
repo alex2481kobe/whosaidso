@@ -8,7 +8,6 @@ use crate::{
 use serde_json::{Value, json};
 use std::{
     collections::HashMap,
-    fs,
     path::{Path, PathBuf},
     sync::Mutex,
 };
@@ -19,11 +18,7 @@ fn media(root: &Path, m: &gallery::Media, store: &Store) -> Result<Value, String
     let mut value = json!(m);
     value["id"] = json!(m.sha);
     value["label"] = json!("attached");
-    value["kind"] = json!(match kind.tag {
-        "img" => "image",
-        "video" => "video",
-        _ => "document",
-    });
+    value["kind"] = json!(kind.kind());
     value["mime"] = json!(kind.mime);
     value["tag"] = json!(kind.tag);
     value["path"] = json!(path);
@@ -102,11 +97,7 @@ fn media_file(root: &Path, sha: &str, params: &HashMap<String, String>) -> Reply
         let Some(m) = store.media.iter().find(|m| m.media_sha256 == sha) else {
             return Err("no recorded media with this sha".to_owned());
         };
-        let bytes =
-            fs::read(blob::path(root, &m.media_sha256, &m.ext)?).map_err(|e| e.to_string())?;
-        if bytes.len() as u64 != m.byte_size || record::sha256_hex(&bytes) != sha {
-            return Err("media changed while reading".into());
-        }
+        let bytes = blob::read_recorded(root, m)?;
         let kind = gallery::types::media_type(&m.ext)?;
         let mut reply = Reply::bytes(kind.mime, &bytes);
         if kind.download_only() || params.get("download").is_some_and(|v| v == "1") {
