@@ -113,3 +113,20 @@ fn replacing_an_external_check_invalidates_cached_runs() {
     executable(&script, "#!/bin/sh\nexit 1\n");
     assert!(cli(&f.root, &["prove", "g", "--reason", "existing behavior"]).contains("ran: g fail"));
 }
+
+#[test]
+fn collection_keeps_the_only_attachment_until_its_milestone_folds() {
+    let f = Fixture::new();
+    let evidence = r::media(&f.root, b"report", "bin", 1);
+    let mut m = value(&evidence);
+    m["goal"] = serde_json::json!("");
+    for n in 2..102 {
+        m["ran_at"] = serde_json::json!(n);
+        r::put(&f.root, "media", "", &m);
+    }
+    commit(&f.root);
+    cli(&f.root, &["prune"]);
+    assert!(f.root.join(".whosaidso/done/g.jsonl").exists());
+    commit(&f.root);
+    assert!(cli(&f.root, &["goals"]).contains("done    g"));
+}

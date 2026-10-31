@@ -121,6 +121,33 @@ fn select_proof<'a>(
         })
         .max_by(|a, b| (a.ran_at, &a.sha).cmp(&(b.ran_at, &b.sha)))
 }
+pub fn newest_media<'a>(
+    store: &'a Store,
+    commits: &HashSet<&str>,
+    goal: &str,
+) -> Option<&'a crate::gallery::Media> {
+    select_media(store, commits, goal, |_| true)
+}
+fn select_media<'a>(
+    store: &'a Store,
+    commits: &HashSet<&str>,
+    goal: &str,
+    eligible: impl Fn(&str) -> bool,
+) -> Option<&'a crate::gallery::Media> {
+    store
+        .media
+        .iter()
+        .filter(|m| {
+            eligible(&m.sha)
+                && m.goal == goal
+                && commits.contains(m.commit.as_str())
+                && !store
+                    .broken
+                    .iter()
+                    .any(|(k, id)| k == "media" && id == &m.sha)
+        })
+        .max_by_key(|m| (m.ran_at, &m.sha))
+}
 fn stale(root: &Path, proof: &Proof, goal: &str, format: &str, main: &str) -> Result<bool, String> {
     let later = work_log(
         root,
@@ -177,18 +204,7 @@ fn derive(root: &Path, store: &Store, tip: &str, pending: bool) -> Result<Vec<Go
                         State::Done
                     }
                 }
-                None if store.media.iter().any(|m| {
-                    eligible(&m.sha)
-                        && m.goal == goal.id
-                        && commits.contains(m.commit.as_str())
-                        && !store
-                            .broken
-                            .iter()
-                            .any(|(k, id)| k == "media" && id == &m.sha)
-                }) =>
-                {
-                    State::Done
-                }
+                None if select_media(store, &commits, &goal.id, eligible).is_some() => State::Done,
                 None if trailers(&main).any(|g| g == goal.id) => State::Landed,
                 None => match bs {
                     Some(bs) if bs.iter().any(|b| active(b.time, now)) => State::Active,
