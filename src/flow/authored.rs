@@ -53,7 +53,7 @@ pub fn layer(
             return Err("authored layer has children".into());
         }
         let mut nodes: Vec<_>=layer.nodes.iter().map(|(n,children)| json!({"id":n.id,"name":map::name(&n.id),"type":n.r#type,"state":comparison["nodes"][&n.id]["state"],"evidence":comparison["nodes"][&n.id]["evidence"],
-            "children":if *children>0{*children}else{graph.definitions.iter().filter(|r| code::selected(n,r)).count()},"paths":n.paths,"symbols":n.symbols,"note":n.note,"refs":n.refs,"goal":n.goal,"risks":n.risks})).collect();
+            "children":if *children>0{*children}else{code::selected(n, &graph.definitions).len()},"paths":n.paths,"symbols":n.symbols,"note":n.note,"refs":n.refs,"goal":n.goal,"risks":n.risks})).collect();
         // Out-of-layer arrows lead to the actual authored box through a context port.
         let steps: Vec<_>=layer.steps.iter().map(|s| {
             for endpoint in [&s.from,&s.to] {

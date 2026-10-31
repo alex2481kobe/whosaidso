@@ -71,11 +71,7 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<(Value, Graph), Strin
     let mut nodes = BTreeMap::new();
     let mut owners: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     for node in &flow.nodes {
-        let rows: Vec<_> = graph
-            .definitions
-            .iter()
-            .filter(|r| selected(node, r))
-            .collect();
+        let rows = selected(node, &graph.definitions);
         for row in &rows {
             owners.entry(&row.symbol).or_default().push(&node.id);
         }

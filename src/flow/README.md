@@ -75,7 +75,8 @@ code at one commit and are labelled `committed_only`.
 
 Node paths use slash-separated globs (`*`, `**`, `?`, and character classes).
 Symbols match names, qualified names or snapshot symbol ids; paths constrain
-symbol selection. Missing planned anchors stay `planned`; other absent anchors
+symbol selection. Local variables are excluded; a named definition takes precedence
+over a namespace matching the same selector. Missing planned anchors stay `planned`; other absent anchors
 are `missing`; partial anchors are `drifted`. Multiple symbol candidates are
 `ambiguous`. HTML and HTM are documents like CSS; inline script is not read.
 Unextracted files and unresolved calls inside `covers` remain

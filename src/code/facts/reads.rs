@@ -83,7 +83,15 @@ impl Snapshot {
                 },
                 name: p.name,
                 qualified: p.qualified,
-                kind: if p.symbol.ends_with('/') {
+                kind: if p.symbol.ends_with(')')
+                    || p.symbol.ends_with(']')
+                    || p.symbol.starts_with("local ")
+                    || p.symbol
+                        .split_once('\0')
+                        .is_some_and(|(_, s)| s.starts_with("local "))
+                {
+                    "local".into()
+                } else if p.symbol.ends_with('/') {
                     "namespace".into()
                 } else {
                     String::new()

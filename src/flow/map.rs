@@ -82,10 +82,8 @@ pub fn linked(
     parent: Option<&str>,
     offset: usize,
 ) -> Result<Value, String> {
-    let selected: BTreeSet<_> = graph
-        .definitions
-        .iter()
-        .filter(|r| super::code::selected(node, r))
+    let selected: BTreeSet<_> = super::code::selected(node, &graph.definitions)
+        .into_iter()
         .map(|r| r.path.clone())
         .collect();
     let paths: Vec<_> = snapshot

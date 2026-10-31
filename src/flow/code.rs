@@ -38,7 +38,7 @@ pub fn graph(flow: &Flow, snapshot: &Snapshot) -> Result<(Graph, Vec<Coverage>),
     for node in flow.nodes.iter().filter(|n| n.paths.is_empty()) {
         for symbol in &node.symbols {
             let rows = snapshot.select(symbol)?;
-            paths.extend(rows.into_iter().map(|r| r.path));
+            paths.extend(selected(node, &rows).into_iter().map(|r| r.path.clone()));
         }
     }
     let paths: Vec<_> = paths.into_iter().collect();
@@ -51,17 +51,16 @@ pub fn graph(flow: &Flow, snapshot: &Snapshot) -> Result<(Graph, Vec<Coverage>),
     for boundary in &flow.covers.boundaries {
         for node in flow.nodes.iter().filter(|n| flow.contains(&n.id, boundary)) {
             incoming.extend(
-                anchored
-                    .iter()
-                    .filter(|r| selected(node, r))
+                selected(node, &anchored)
+                    .into_iter()
                     .map(|r| r.name.clone()),
             );
         }
     }
-    Ok((
-        snapshot.graph_in(&paths, &incoming.into_iter().collect::<Vec<_>>())?,
-        snapshot.coverage_in(&paths)?,
-    ))
+    let mut graph = snapshot.graph_in(&paths, &incoming.into_iter().collect::<Vec<_>>())?;
+    graph.definitions.retain(|r| r.kind != "local");
+    graph.edges.retain(|e| e.occurrence.kind != "local");
+    Ok((graph, snapshot.coverage_in(&paths)?))
 }
 
 pub fn inside(flow: &Flow, path: &str) -> bool {
@@ -82,7 +81,29 @@ pub fn known_coverage(c: &Coverage) -> bool {
                 .contains(&s)
             })
 }
-pub fn selected(node: &Node, row: &Row) -> bool {
+pub fn selected<'a>(node: &Node, definitions: &'a [Row]) -> Vec<&'a Row> {
+    let rows: Vec<_> = definitions
+        .iter()
+        .filter(|row| row.kind != "local")
+        .filter(|row| matches_node(node, row))
+        .collect();
+    let namespace = |row: &Row| matches!(row.kind.as_str(), "namespace" | "mod");
+    rows.iter()
+        .copied()
+        .filter(|row| {
+            !namespace(row)
+                || node.symbols.is_empty()
+                || node.symbols.iter().any(|s| {
+                    symbol_matches(s, row)
+                        && (s == &row.symbol
+                            || !rows
+                                .iter()
+                                .any(|other| !namespace(other) && symbol_matches(s, other)))
+                })
+        })
+        .collect()
+}
+fn matches_node(node: &Node, row: &Row) -> bool {
     (node.paths.is_empty() || node.paths.iter().any(|p| matches(p, &row.path)))
         && (node.symbols.is_empty() || node.symbols.iter().any(|s| symbol_matches(s, row)))
         && (!node.paths.is_empty() || !node.symbols.is_empty())
