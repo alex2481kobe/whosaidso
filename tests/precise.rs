@@ -71,23 +71,23 @@ fn duplicate_document_local_ids_keep_independent_occurrences() {
         &[(&[1, 13, 19], true), (&[1, 25, 31], false)],
     );
     assert!(
-        import(&root, &[apple, banana])
+        import(root, &[apple, banana])
             .contains("1 documents, 4 occurrences, 2 symbols, 0 stale documents")
     );
     assert_eq!(
-        cli(&root, &["code", "defs", "apple"]),
+        cli(root, &["code", "defs", "apple"]),
         "locals.rs:1  [precise]\n"
     );
     assert_eq!(
-        cli(&root, &["code", "defs", "banana"]),
+        cli(root, &["code", "defs", "banana"]),
         "locals.rs:2  [precise]\n"
     );
     assert_eq!(
-        cli(&root, &["code", "refs", "apple"]),
+        cli(root, &["code", "refs", "apple"]),
         "locals.rs:1  [precise]\n"
     );
     assert_eq!(
-        cli(&root, &["code", "refs", "banana"]),
+        cli(root, &["code", "refs", "banana"]),
         "locals.rs:2  [precise]\n"
     );
 }

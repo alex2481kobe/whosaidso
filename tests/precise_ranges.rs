@@ -28,9 +28,9 @@ fn stale_and_out_of_bounds_ranges_fall_back_without_colliding_local_ids() {
         &root.join("calls.cpp"),
         "struct Widget {};\ntemplate<class T> void f() {}\nvoid caller() { f<Widget>(); }\n",
     );
-    git(&root, &["add", "."]);
-    git(&root, &["commit", "-m", "sources"]);
-    git(&root, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    git(root, &["add", "."]);
+    git(root, &["commit", "-m", "sources"]);
+    git(root, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
     let mut index = field(1, &[]);
     index.extend(doc(
         "changed.rs",
@@ -77,21 +77,21 @@ fn stale_and_out_of_bounds_ranges_fall_back_without_colliding_local_ids() {
         .unwrap()
         .set_times(fs::FileTimes::new().set_modified(written + Duration::from_secs(1)))
         .unwrap();
-    let imported = cli(&root, &["code", "import-scip", ".git/index.scip"]);
+    let imported = cli(root, &["code", "import-scip", ".git/index.scip"]);
 
     // 6: Neither newer sources nor out-of-bounds ranges suppress syntax.
-    let changed = cli(&root, &["code", "defs", "current_name"]);
+    let changed = cli(root, &["code", "defs", "current_name"]);
     assert!(
         changed.contains("changed.rs:2  fn current_name  [syntactic]"),
         "{changed}"
     );
-    assert!(!cli(&root, &["code", "defs", "old_name"]).contains("[precise]"));
-    let short = cli(&root, &["code", "defs", "far_name"]);
+    assert!(!cli(root, &["code", "defs", "old_name"]).contains("[precise]"));
+    let short = cli(root, &["code", "defs", "far_name"]);
     assert!(
         short.contains("short.rs:1  fn far_name  [syntactic]"),
         "{short}"
     );
-    let multi = cli(&root, &["code", "defs", "multi_name"]);
+    let multi = cli(root, &["code", "defs", "multi_name"]);
     assert!(
         multi.contains("multi.rs:1  fn multi_name  [syntactic]"),
         "{multi}"
@@ -99,20 +99,14 @@ fn stale_and_out_of_bounds_ranges_fall_back_without_colliding_local_ids() {
     assert!(imported.contains("3 stale documents"), "{imported}");
 
     // 7: Repeated file-local IDs keep independent names and occurrences.
+    assert_eq!(cli(root, &["code", "defs", "apple"]), "a.rs:1  [precise]\n");
     assert_eq!(
-        cli(&root, &["code", "defs", "apple"]),
-        "a.rs:1  [precise]\n"
-    );
-    assert_eq!(
-        cli(&root, &["code", "defs", "banana"]),
+        cli(root, &["code", "defs", "banana"]),
         "b.rs:1  [precise]\n"
     );
+    assert_eq!(cli(root, &["code", "refs", "apple"]), "a.rs:2  [precise]\n");
     assert_eq!(
-        cli(&root, &["code", "refs", "apple"]),
-        "a.rs:2  [precise]\n"
-    );
-    assert_eq!(
-        cli(&root, &["code", "refs", "banana"]),
+        cli(root, &["code", "refs", "banana"]),
         "b.rs:2  [precise]\n"
     );
 }

@@ -22,7 +22,7 @@ jobs:
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Lints
-        run: cargo clippy --locked --bin whosaidso
+        run: cargo clippy --locked --all-targets
       - name: Build without warnings
         run: cargo build --locked
       - name: Test

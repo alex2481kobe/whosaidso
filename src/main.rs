@@ -67,7 +67,7 @@ fn run() -> Result<(), String> {
         "prune", [cmd] if cmd == "prune" => { println!("{}", prune::prune(&root)?); Ok(()) };
         "media <goal-id> <file> <title>", [cmd, goal, path, shows] if cmd == "media" => gallery::show(&root, &cwd, goal, path, shows);
         "ui [--port N] [--open]", [cmd, rest @ ..] if cmd == "ui" => ui::serve(&root, rest);
-        "grep <text...> [--in <path-or-prefix>]...", [cmd, words @ ..] if cmd == "grep" => text::grep(&root, words);
+        "grep [--regex] [-i|-s] [-C N] [-g glob] [--in prefix] [--limit N] [--offset N] [-l|--files] [pattern...]", [cmd, words @ ..] if cmd == "grep" => text::grep(&root, words);
         "find <words...> [--limit N]", [cmd, words @ ..] if cmd == "find" => find::find(&root, words);
         "code import-scip <file>", [cmd, sub, file] if cmd == "code" && sub == "import-scip" => code::import_scip(&root, &cwd.join(file));
         "code defs|refs <name> / code deps|includers <path>", [cmd, sub, value] if cmd == "code" && ["defs", "refs", "deps", "includers"].contains(&sub.as_str()) => code::query(&root, sub, value);

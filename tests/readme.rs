@@ -16,7 +16,7 @@ fn documented_quick_start_runs_verbatim() {
     fs::create_dir_all(&bin).unwrap();
     symlink(env!("CARGO_BIN_EXE_whosaidso"), bin.join("whosaidso")).unwrap();
     let real = success(
-        command(&root, "sh", &["-c", "command -v git"])
+        command(root, "sh", &["-c", "command -v git"])
             .output()
             .unwrap(),
     );
@@ -43,7 +43,7 @@ fn documented_quick_start_runs_verbatim() {
     assert_eq!(blocks.len(), 3);
     for (n, block) in blocks.iter().enumerate() {
         let out = success(
-            command(&root, "sh", &["-e", "-c", block])
+            command(root, "sh", &["-e", "-c", block])
                 .env("CARGO_TARGET_DIR", root.join("target"))
                 .env(
                     "PATH",
@@ -63,7 +63,7 @@ fn documented_quick_start_runs_verbatim() {
             );
             assert!(
                 success(
-                    command(&root, "git", &["log", "-1", "--format=%s"])
+                    command(root, "git", &["log", "-1", "--format=%s"])
                         .output()
                         .unwrap()
                 )
@@ -71,7 +71,7 @@ fn documented_quick_start_runs_verbatim() {
             );
             assert!(
                 success(
-                    command(&root, "git", &["status", "--porcelain"])
+                    command(root, "git", &["status", "--porcelain"])
                         .output()
                         .unwrap()
                 )

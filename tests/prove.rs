@@ -52,7 +52,7 @@ fn spawn_errors_publish_no_proof() {
         ("#!/bin/sh\nexit 0\n", 0o644),
     ] {
         use std::os::unix::fs::PermissionsExt;
-        write(&root.join("run"), script.replace("\n", "\n"));
+        write(&root.join("run"), script);
         fs::set_permissions(root.join("run"), fs::Permissions::from_mode(mode)).unwrap();
         r::check_command(root, &["./run"]);
         commit(root);

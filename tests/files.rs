@@ -94,7 +94,7 @@ fn symlinks_ancestor_symlinks_and_submodules_are_not_followed() {
 }
 
 #[test]
-fn binary_invalid_utf8_and_oversized_text_are_explicitly_skipped() {
+fn binary_invalid_utf8_and_oversized_code_are_not_searchable() {
     let f = Fixture::empty();
     let root = &f.root;
 
@@ -108,10 +108,7 @@ fn binary_invalid_utf8_and_oversized_text_are_explicitly_skipped() {
         .set_len(1024 * 1024 + 1)
         .unwrap();
     let text = cli(root, &["grep", "largeuniqueword"]);
-    assert!(
-        text.contains("no match") && text.contains("not searched: 3 files"),
-        "{text}"
-    );
+    assert_eq!(text, "grep: no matches\n");
     write(&root.join("huge.rs"), "fn oversized_code() {}\n");
     assert!(cli(root, &["code", "defs", "oversized_code"]).contains("huge.rs:1"));
     fs::File::options()

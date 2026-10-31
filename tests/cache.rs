@@ -10,33 +10,33 @@ fn warm_queries_reuse_bytes_and_still_notice_edits() {
     fs::write(root.join("main.rs"), "fn needle() {}\n").unwrap();
     fs::write(root.join("bad.rs"), [0xff, 0xfe]).unwrap();
     fs::write(root.join("guide.md"), "# Needle guide\n").unwrap();
-    git(&root, &["add", "."]);
-    git(&root, &["commit", "-m", "fixture"]);
-    git(&root, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
-    assert!(cli(&root, &["code", "defs", "needle"]).contains("syntactic"));
-    assert!(cli(&root, &["grep", "needle"]).contains("main.rs:1"));
-    assert!(cli(&root, &["find", "needle", "guide"]).contains("guide.md"));
+    git(root, &["add", "."]);
+    git(root, &["commit", "-m", "fixture"]);
+    git(root, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    assert!(cli(root, &["code", "defs", "needle"]).contains("syntactic"));
+    assert!(cli(root, &["grep", "needle"]).contains("main.rs:1"));
+    assert!(cli(root, &["find", "needle", "guide"]).contains("guide.md"));
     // Removing only fixture blobs makes any repeated cat-file read fail, without using time.
     for path in ["main.rs", "bad.rs", "guide.md"] {
-        let blob = git(&root, &["rev-parse", &format!(":{path}")]);
+        let blob = git(root, &["rev-parse", &format!(":{path}")]);
         let blob = blob.trim();
         fs::remove_file(root.join(".git/objects").join(&blob[..2]).join(&blob[2..])).unwrap();
     }
-    assert!(cli(&root, &["code", "defs", "changed_needle"]).contains("syntactic"));
-    assert!(cli(&root, &["grep", "needle"]).contains("main.rs:1"));
-    assert!(cli(&root, &["find", "needle", "guide"]).contains("guide.md"));
+    assert!(cli(root, &["code", "defs", "changed_needle"]).contains("syntactic"));
+    assert!(cli(root, &["grep", "needle"]).contains("main.rs:1"));
+    assert!(cli(root, &["find", "needle", "guide"]).contains("guide.md"));
     assert_eq!(
-        cli(&root, &["code", "defs", "needle"]),
+        cli(root, &["code", "defs", "needle"]),
         "main.rs:1  fn needle  [syntactic]\n"
     );
-    assert!(cli(&root, &["grep", "needle"]).contains("main.rs:1: fn needle() {}"));
-    assert!(cli(&root, &["find", "needle", "guide"]).contains("guide.md"));
+    assert!(cli(root, &["grep", "needle"]).contains("main.rs:1:fn needle() {}"));
+    assert!(cli(root, &["find", "needle", "guide"]).contains("guide.md"));
     fs::write(root.join("main.rs"), "fn changed_needle() {}\n").unwrap();
-    assert!(cli(&root, &["code", "defs", "changed_needle"]).contains("syntactic"));
-    assert!(cli(&root, &["grep", "needle"]).contains("main.rs:1"));
-    assert!(cli(&root, &["find", "needle", "guide"]).contains("guide.md"));
+    assert!(cli(root, &["code", "defs", "changed_needle"]).contains("syntactic"));
+    assert!(cli(root, &["grep", "needle"]).contains("main.rs:1"));
+    assert!(cli(root, &["find", "needle", "guide"]).contains("guide.md"));
     assert_eq!(
-        cli(&root, &["code", "defs", "changed_needle"]),
+        cli(root, &["code", "defs", "changed_needle"]),
         "main.rs:1  fn changed_needle  [syntactic]\n"
     );
 }
@@ -69,7 +69,7 @@ fn concurrent_index_writers_wait_for_sqlite_and_publish_current_files() {
     db.execute_batch("COMMIT").unwrap();
     drop(db);
     for c in children {
-        assert!(success(c.wait_with_output().unwrap()).contains("file.txt:1: changed"));
+        assert!(success(c.wait_with_output().unwrap()).contains("file.txt:1:changed"));
     }
 }
 

@@ -62,7 +62,7 @@ fn state_queries_batch_git_reads_and_oversized_text_fetches_metadata_only() {
             .output()
             .unwrap(),
     );
-    assert!(found.starts_with("needle.txt:1: abcd exact\nnot searched: 1 files"));
+    assert_eq!(found, "needle.txt:1:abcd exact\n");
     let requests = fs::read_to_string(requests).unwrap();
     assert!(requests.contains(&format!("info {}\n", large.trim())));
     assert!(!requests.contains(&format!("contents {}\n", large.trim())));

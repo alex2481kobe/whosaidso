@@ -18,7 +18,7 @@ fn fault_sequence(seed: u64, hooks: &[&str]) {
             .wrapping_add(1442695040888963407);
         r::clear(root, "proofs");
         let at = head(root);
-        let time = if seed % 2 == 0 {
+        let time = if seed.is_multiple_of(2) {
             i64::MAX - 2
         } else {
             i64::MIN
