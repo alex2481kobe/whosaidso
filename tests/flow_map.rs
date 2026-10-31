@@ -4,9 +4,13 @@ use serde_json::Value;
 
 #[test]
 fn derives_a_bounded_map_without_authored_records() {
-    let f = Fixture::sources(&[("app.rs", "fn screen() { action(); }\nfn action() {}\n")]);
+    let f = Fixture::sources(&[
+        ("app.rs", "fn screen() { action(); }\nfn action() {}\n"),
+        ("notes.xyz", "no supported language"),
+    ]);
     let top: Value = serde_json::from_str(&cli(&f.root, &["flow", "map"])).unwrap();
     assert_eq!(top["nodes"][0]["path"], "app.rs");
+    assert_eq!(top["nodes"].as_array().unwrap().len(), 1, "{top}");
     let id = top["nodes"][0]["id"].as_str().unwrap();
     let layer: Value = serde_json::from_str(&cli(&f.root, &["flow", "map", id])).unwrap();
     assert!(
