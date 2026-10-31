@@ -126,6 +126,11 @@ pub fn rows(
             })
         })
         .map_err(err)?;
+    let mut caller = db
+        .prepare("SELECT name FROM scip_syms WHERE symbol=?1")
+        .map_err(err)?;
+    let mut occurrence_docs = db.prepare("SELECT text FROM scip_docs_text WHERE symbol=?1 AND path=?2 AND line=?3 AND start=?4 ORDER BY rowid").map_err(err)?;
+    let mut symbol_docs = db.prepare("SELECT text FROM scip_docs_text WHERE symbol=?1 AND (path=?2 OR path='') AND line IS NULL ORDER BY rowid").map_err(err)?;
     let mut answer = Vec::new();
     for row in rows {
         let mut row = row.map_err(err)?;
@@ -139,18 +144,13 @@ pub fn rows(
                     .ends_with(&super::contracts::parts(value)))
         {
             if let Some(container) = &row.container {
-                row.caller = db
-                    .query_row(
-                        "SELECT name FROM scip_syms WHERE symbol=?1",
-                        [container],
-                        |r| r.get(0),
-                    )
+                row.caller = caller
+                    .query_row([container], |r| r.get(0))
                     .optional()
                     .map_err(err)?
                     .unwrap_or_else(|| name(container));
             }
-            let mut docs = db.prepare("SELECT text FROM scip_docs_text WHERE symbol=?1 AND path=?2 AND line=?3 AND start=?4 ORDER BY rowid").map_err(err)?;
-            row.documentation = docs
+            row.documentation = occurrence_docs
                 .query_map(params![row.symbol, row.path, row.line, row.start], |r| {
                     r.get(0)
                 })
@@ -158,8 +158,7 @@ pub fn rows(
                 .collect::<Result<_, _>>()
                 .map_err(err)?;
             if row.documentation.is_empty() {
-                let mut docs = db.prepare("SELECT text FROM scip_docs_text WHERE symbol=?1 AND (path=?2 OR path='') AND line IS NULL ORDER BY rowid").map_err(err)?;
-                row.documentation = docs
+                row.documentation = symbol_docs
                     .query_map(params![row.symbol, row.path], |r| r.get(0))
                     .map_err(err)?
                     .collect::<Result<_, _>>()
