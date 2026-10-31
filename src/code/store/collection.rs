@@ -4,6 +4,12 @@ use rusqlite::Transaction;
 use std::{collections::HashSet, fs, path::Path};
 
 pub(super) fn retired(root: &Path, tx: &Transaction<'_>) -> Result<(), String> {
+    // Committed snapshots retain the eight most recently published generations.
+    tx.execute_batch(
+        "DELETE FROM generations WHERE branch IS NOT NULL AND id NOT IN
+        (SELECT id FROM generations WHERE branch IS NOT NULL ORDER BY id DESC LIMIT 8);",
+    )
+    .map_err(err)?;
     let common = crate::git::run(
         root,
         &["rev-parse", "--path-format=absolute", "--git-common-dir"],

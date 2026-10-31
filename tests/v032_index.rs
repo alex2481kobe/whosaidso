@@ -420,3 +420,41 @@ fn unbound_old_artifact_cannot_hide_a_new_syntax_definition() {
         );
     }
 }
+
+#[test]
+fn old_branch_snapshots_are_collected_and_their_tokens_expire() {
+    let fixture = Fixture::sources(&[("one.rs", "fn original() {}\n")]);
+    let root = &fixture.root;
+    let commit = common::head(root);
+    let first = cli(root, &["review"]);
+    let token = first
+        .lines()
+        .next()
+        .unwrap()
+        .split_whitespace()
+        .find_map(|s| s.strip_prefix("before="))
+        .unwrap();
+    for i in 0..10 {
+        fs::write(root.join("one.rs"), format!("fn changed_{i}() {{}}\n")).unwrap();
+        common::commit(root);
+        cli(root, &["review"]);
+    }
+    assert!(
+        scalar(
+            &database(root),
+            "SELECT count(*) FROM generations WHERE worktree IS NULL"
+        ) <= 8,
+        "committed snapshots grew beyond retention"
+    );
+    common::process::failure(
+        command(
+            root,
+            BIN,
+            &["review", "--base", &commit, "--before-snapshot", token],
+        )
+        .output()
+        .unwrap(),
+        "snapshot expired",
+    );
+    assert!(cli(root, &["code", "defs", "changed_9"]).contains("one.rs:1"));
+}
