@@ -24,12 +24,12 @@ pub(super) fn open(root: &Path, worktree: &str) -> Result<Connection, String> {
         CREATE VIRTUAL TABLE IF NOT EXISTS search_trigrams USING fts5(term,tokenize='trigram');
         CREATE TEMP TABLE selection(worktree TEXT);
         CREATE TEMP VIEW source_features AS SELECT m.source,f.priority,f.text_bytes FROM members m JOIN file_features f ON f.payload=m.payload WHERE m.worktree=(SELECT worktree FROM selection);
-        CREATE TEMP VIEW docs AS SELECT p.id,p.kind,m.key,m.source,CASE WHEN p.kind='file' THEN substr(m.key,6) ELSE p.title END AS title,p.body,p.detail,coalesce(f.priority,{}) AS priority,coalesce(f.text_bytes,0) AS text_bytes FROM members m INDEXED BY member_lookup JOIN payloads p ON p.id=m.payload LEFT JOIN source_features f ON f.source=m.source WHERE m.worktree=(SELECT worktree FROM selection);
+        CREATE TEMP VIEW docs AS SELECT p.id,p.kind,m.key,m.source,CASE WHEN p.kind='file' THEN substr(m.key,6) ELSE p.title END AS title,p.body,p.detail,{} FROM members m INDEXED BY member_lookup JOIN payloads p ON p.id=m.payload WHERE m.worktree=(SELECT worktree FROM selection);
         CREATE TEMP VIEW manifest AS SELECT source,stamp FROM stamps WHERE worktree=(SELECT worktree FROM selection);
         CREATE TEMP VIEW source_docs AS SELECT DISTINCT source,key FROM members WHERE worktree=(SELECT worktree FROM selection);
         CREATE TEMP VIEW vocab AS SELECT v.term,
             (SELECT count(DISTINCT m.key) FROM docs_fts CROSS JOIN members m INDEXED BY member_lookup WHERE docs_fts MATCH ('\"'||replace(v.term,'\"','\"\"')||'\"') AND m.worktree=(SELECT worktree FROM selection) AND m.payload=docs_fts.rowid) AS doc
-            FROM all_vocab v WHERE EXISTS(SELECT 1 FROM docs_fts CROSS JOIN members m INDEXED BY member_lookup WHERE docs_fts MATCH ('\"'||replace(v.term,'\"','\"\"')||'\"') AND m.worktree=(SELECT worktree FROM selection) AND m.payload=docs_fts.rowid);", super::features::RECORD )).map_err(err)?;
+            FROM all_vocab v WHERE EXISTS(SELECT 1 FROM docs_fts CROSS JOIN members m INDEXED BY member_lookup WHERE docs_fts MATCH ('\"'||replace(v.term,'\"','\"\"')||'\"') AND m.worktree=(SELECT worktree FROM selection) AND m.payload=docs_fts.rowid);", super::features::projection("m") )).map_err(err)?;
     db.execute("INSERT INTO selection VALUES (?1)", [worktree])
         .map_err(err)?;
     Ok(db)

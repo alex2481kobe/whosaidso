@@ -8,6 +8,13 @@ pub(crate) const SOURCE: i64 = 3;
 pub(crate) const SIZE_BUCKET: i64 = 65_536;
 pub(super) const VERSION: &str = "1";
 
+pub(crate) fn projection(member: &str) -> String {
+    // An outer join materializes every source's features, even for a single hit.
+    format!(
+        "coalesce((SELECT f.priority FROM source_features f WHERE f.source={member}.source LIMIT 1),{RECORD}) AS priority,coalesce((SELECT f.text_bytes FROM source_features f WHERE f.source={member}.source LIMIT 1),0) AS text_bytes"
+    )
+}
+
 pub(super) fn remember(
     tx: &Transaction<'_>,
     payload: i64,
