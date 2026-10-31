@@ -65,6 +65,7 @@ fn run() -> Result<(), String> {
         "goals", [cmd] if cmd == "goals" => goals::goals(&root);
         "prove <goal-id>", [cmd, id] if cmd == "prove" => { println!("{}", prove::prove(&root, id)?); Ok(()) };
         "prune", [cmd] if cmd == "prune" => { println!("{}", prune::prune(&root)?); Ok(()) };
+        "media restore <sha256>", [cmd, sub, sha] if cmd == "media" && sub == "restore" => gallery::restore(&root, sha);
         "media <goal-id> <file> <title>", [cmd, goal, path, shows] if cmd == "media" => gallery::show(&root, &cwd, goal, path, shows);
         "ui [--port N] [--open]", [cmd, rest @ ..] if cmd == "ui" => ui::serve(&root, rest);
         "grep [--regex] [-i|-s] [-C N] [-g glob] [--in prefix] [--limit N] [--offset N] [-l|--files] [pattern...]", [cmd, words @ ..] if cmd == "grep" => text::grep(&root, words);

@@ -7,15 +7,14 @@ use crate::{
 };
 use serde_json::{Value, json};
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap},
     fs,
-    io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
     sync::Mutex,
 };
 
 fn media(root: &Path, m: &gallery::Media, store: &Store) -> Result<Value, String> {
-    let kind = gallery::media_type(&m.ext)?;
+    let kind = gallery::types::media_type(&m.ext)?;
     let path = blob::path(root, &m.media_sha256, &m.ext)?;
     let mut value = json!(m);
     value["id"] = json!(m.sha);
@@ -89,7 +88,7 @@ fn goals_screen(root: &Path, store: &Store) -> Result<(Value, i64), String> {
             "parent":g.parent, "milestone":crate::goal_tree::milestone(g, &store.goals),
             "state":s.map(|s| goals::label(s.state)), "branches":s.map(|s| &s.branches), "claim":held.get(&g.id), "check":g.check,
             "proof":proof.map(|(p, current)| json!({"check":p.check,"commit":p.commit,"exit_code":p.exit_code,"ran_at":p.ran_at,"output_tail":p.output_tail,"current":current})),
-            "media":media.get(g.id.as_str()).into_iter().flatten().take(RECENT).map(|m| json!({"id":m.sha,"media_sha256":m.media_sha256,"tag":gallery::media_type(&m.ext).map_or("", |t| t.tag),"shows":m.shows})).collect::<Vec<_>>(),
+            "media":media.get(g.id.as_str()).into_iter().flatten().take(RECENT).map(|m| json!({"id":m.sha,"media_sha256":m.media_sha256,"tag":gallery::types::media_type(&m.ext).map_or("", |t| t.tag),"shows":m.shows})).collect::<Vec<_>>(),
         })
     }).collect::<Vec<_>>();
     let milestones: Vec<_> = store.goals.iter().filter(|g| g.parent.is_none()).map(|g| json!({"id":g.id,"title":g.title,"counts":tally(rows.iter().filter(|r| r["milestone"] == g.id).filter_map(|r| r["state"].as_str()))})).collect();
@@ -107,82 +106,7 @@ fn gallery_screen(root: &Path) -> Result<Value, String> {
         .take(gallery::LIVE_MEDIA)
         .map(|m| media(root, m, &store))
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(json!({"version":token,"entries":entries,"archives":archives(root)?}))
-}
-fn archives(root: &Path) -> Result<Vec<Value>, String> {
-    let sample = gallery::archive_path(root, 0)?;
-    let mut entries = Vec::new();
-    let dir = match fs::read_dir(sample.parent().ok_or("invalid archive path")?) {
-        Ok(d) => d,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(entries),
-        Err(e) => return Err(e.to_string()),
-    };
-    for entry in dir {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        let Some(month) = name
-            .strip_prefix("media-")
-            .and_then(|s| s.strip_suffix(".tar"))
-        else {
-            continue;
-        };
-        if !entry.file_type().map_err(|e| e.to_string())?.is_file() {
-            continue;
-        }
-        let mut input = fs::File::open(entry.path()).map_err(|e| e.to_string())?;
-        let length = input.metadata().map_err(|e| e.to_string())?.len();
-        let mut seen = HashSet::new();
-        loop {
-            let mut header = [0; 512];
-            input.read_exact(&mut header).map_err(|e| e.to_string())?;
-            if header == [0; 512] {
-                break;
-            }
-            let octal = |b: &[u8]| {
-                u64::from_str_radix(
-                    std::str::from_utf8(b)
-                        .map_err(|e| e.to_string())?
-                        .trim_matches(['\0', ' ']),
-                    8,
-                )
-                .map_err(|e| e.to_string())
-            };
-            let sum: u64 = header
-                .iter()
-                .enumerate()
-                .map(|(i, b)| {
-                    if (148..156).contains(&i) {
-                        32
-                    } else {
-                        u64::from(*b)
-                    }
-                })
-                .sum();
-            if &header[257..263] != b"ustar\0" || octal(&header[148..156])? != sum {
-                return Err("invalid media archive header".into());
-            }
-            let name = std::str::from_utf8(&header[..100])
-                .map_err(|e| e.to_string())?
-                .trim_end_matches('\0');
-            if let Some(id) = name.strip_suffix(".json") {
-                seen.insert(id.to_owned());
-            }
-            let size = octal(&header[124..136])?;
-            let offset = input
-                .stream_position()
-                .map_err(|e| e.to_string())?
-                .checked_add(size.checked_add(511).ok_or("invalid archive size")? / 512 * 512)
-                .filter(|n| *n <= length)
-                .ok_or("truncated media archive")?;
-            input
-                .seek(SeekFrom::Start(offset))
-                .map_err(|e| e.to_string())?;
-        }
-        entries.push(json!({"month":month,"count":seen.len(),"path":entry.path()}));
-    }
-    entries.sort_by(|a, b| b["month"].as_str().cmp(&a["month"].as_str()));
-    Ok(entries)
+    Ok(json!({"version":token,"entries":entries}))
 }
 // The goals answer is the slowest to derive, so it is kept per project until the change token moves or a branch lapses to idle.
 // The lock is held while deriving: a second caller (the start-up warm-up and the first page load) waits for the answer rather than deriving it again.
@@ -243,9 +167,10 @@ fn media_file(root: &Path, sha: &str, params: &HashMap<String, String>) -> Reply
         if bytes.len() as u64 != m.byte_size || record::sha256_hex(&bytes) != sha {
             return Err("media changed while reading".into());
         }
-        let mut reply = Reply::bytes(gallery::media_type(&m.ext)?.mime, &bytes);
+        let kind = gallery::types::media_type(&m.ext)?;
+        let mut reply = Reply::bytes(kind.mime, &bytes);
         reply.header("Accept-Ranges", "bytes");
-        if params.get("download").is_some_and(|v| v == "1") {
+        if kind.download_only() || params.get("download").is_some_and(|v| v == "1") {
             reply.header(
                 "Content-Disposition",
                 format!("attachment; filename=\"{}.{}\"", m.media_sha256, m.ext),
