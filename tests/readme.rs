@@ -1,32 +1,17 @@
-#[path = "common/command.rs"]
-mod commands;
-use commands::command;
-// Execute the documented quick start verbatim against a fresh Cargo/Git project.
-use std::{
-    fs,
-    os::unix::fs::{PermissionsExt, symlink},
-    path::Path,
-    process::Output,
-    time::{SystemTime, UNIX_EPOCH},
-};
-fn success(out: Output) -> String {
-    assert!(out.status.success(), "{out:?}");
-    String::from_utf8(out.stdout).unwrap()
-}
+mod common;
+use common::process::*;
+use common::*;
+use std::fs;
+
 #[test]
 fn documented_quick_start_runs_verbatim() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("target/e2e-tmp")
-        .join(format!(
-            "readme-{}-{}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
+    let f = Fixture::empty();
+    let root = &f.root;
+    use std::{
+        os::unix::fs::{PermissionsExt, symlink},
+        path::Path,
+    };
     fs::create_dir_all(root.join("src")).unwrap();
-    success(command(&root, "git", &["init"]).output().unwrap());
     fs::write(
         root.join("Cargo.toml"),
         "[package]\nname = 'example'\nversion = '0.1.0'\nedition = '2024'\n",
@@ -81,6 +66,7 @@ fn documented_quick_start_runs_verbatim() {
     for (n, block) in blocks.iter().enumerate() {
         let out = success(
             command(&root, "sh", &["-e", "-c", block])
+                .env("CARGO_TARGET_DIR", root.join("target"))
                 .env(
                     "PATH",
                     format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
@@ -132,5 +118,4 @@ fn documented_quick_start_runs_verbatim() {
             assert!(!root.join(".whosaidso/cache/view").exists());
         }
     }
-    fs::remove_dir_all(root).unwrap();
 }
