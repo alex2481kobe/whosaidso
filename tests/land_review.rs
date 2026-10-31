@@ -183,3 +183,20 @@ fn offline_claims_must_acquire_remote_ownership_before_landing() {
     );
     assert_eq!(tip, git(&remote, &["rev-parse", "main"]));
 }
+
+#[test]
+fn changing_selection_keeps_claims_for_unpublished_work() {
+    let f = Fixture::new();
+    cli(&f.root, &["install-hooks"]);
+    commit(&f.root);
+    f.remote();
+    let lane = f.worktree("worker");
+    cli(&lane, &["start", "g"]);
+    work(&lane, "feature", "g");
+    cli(&lane, &["start", "none"]);
+    let other = f.clone("other");
+    cli(&other, &["install-hooks"]);
+    bad(&other, &["start", "g"], "claimed");
+    cli(&lane, &["land", "--reason", "shared check"]);
+    assert!(git(&lane, &["ls-remote", "origin", "refs/whosaidso/claims/*"]).is_empty());
+}

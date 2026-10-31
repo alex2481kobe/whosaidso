@@ -40,7 +40,7 @@ fn write_claim(
             && binds(&c, now, settled)
         {
             return Err(format!(
-                "start: {id} is claimed by {}; it is released when that worktree starts another goal or none",
+                "start: {id} is claimed by {}; it is released after publication or when that worktree leaves without unpublished work",
                 describe(&c)
             ));
         }
@@ -150,8 +150,25 @@ pub fn release(root: &Path, cwd: &Path, keep: &str) -> (Vec<String>, Result<(), 
             .lines()
             .filter_map(|r| r.strip_prefix(LOCAL).or_else(|| r.strip_prefix(ORIGIN)))
             .collect();
+        let unpublished = match git::main_tip(cwd) {
+            Ok(tip) => Some(git::run(
+                cwd,
+                &[
+                    "log",
+                    "--no-merges",
+                    "--format=%(trailers:key=Goal,valueonly)",
+                    &format!("{tip}..HEAD"),
+                ],
+            )?),
+            Err(_) => None,
+        };
         for id in ids {
-            if id == keep {
+            // An unknown destination cannot establish that this worker's work was published.
+            if id == keep
+                || unpublished
+                    .as_ref()
+                    .is_none_or(|log| log.lines().any(|g| g == id))
+            {
                 continue;
             }
             let (local_ref, origin_ref) = (format!("{LOCAL}{id}"), format!("{ORIGIN}{id}"));
