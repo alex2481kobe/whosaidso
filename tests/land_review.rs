@@ -61,3 +61,27 @@ fn absolute_check_arguments_use_each_restored_revision() {
     assert!(output.contains("/prove/worktree/feature"), "{output}");
     assert!(output.contains("--input="), "{output}");
 }
+
+#[test]
+fn queued_work_reruns_checks_for_an_already_done_goal() {
+    let f = Fixture::new();
+    r::goal(&f.root, "parent");
+    let mut goal = value(&f.root.join(".whosaidso/goals/g.json"));
+    goal["parent"] = serde_json::json!("parent");
+    goal["check"] = serde_json::json!(["sh", "-c", "test ! -f broken"]);
+    r::put(&f.root, "goals", "g", &goal);
+    commit(&f.root);
+    work(&f.root, "feature", "g");
+    r::proof(&f.root, &head(&f.root), 1, 0);
+    commit(&f.root);
+    let base = head(&f.root);
+    work(&f.root, "update", "g");
+    cli(&f.root, &["prove", "g", "--reason", "existing behavior"]);
+    commit(&f.root);
+    work(&f.root, "broken", "none");
+    bad(
+        &f.root,
+        &["gate", "--ci", &format!("{base}..HEAD")],
+        "queued check failed for g",
+    );
+}
