@@ -87,10 +87,12 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
         }) {
             receipt::check_range(root, &format!("{}..{}", a.candidate, head))?;
             if git::run(root, &["merge-base", "--is-ancestor", &baseline, &head]).is_ok() {
+                let mut a = a.clone();
+                let ids = goals(root, &baseline)?;
+                a.acquire(root, &dir, &ids)?;
                 prepare::media(root, remote, &baseline, &record::load(root)?)?;
                 match push(root, remote, &push_ref, &head) {
                     Ok(()) => {
-                        let mut a = a.clone();
                         worktree::hook(root, "published")?;
                         return finish(root, &dir, &mut a);
                     }
@@ -134,10 +136,10 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
             push_ref: push_ref.clone(),
             remote: remote.into(),
             receipt: String::new(),
-            claims: crate::claims::publication::snapshot(root, &goals)?,
+            claims: Vec::new(),
             released: false,
         };
-        a.save(&dir)?;
+        a.acquire(root, &dir, &goals)?;
         worktree::hook(root, "gate")?;
         let mut receipt = receipt::Receipt {
             destination: destination.clone(),

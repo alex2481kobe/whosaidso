@@ -14,6 +14,7 @@ fn write_claim(
     id: &str,
     settled: bool,
     target: Option<&str>,
+    require_remote: bool,
 ) -> (Vec<String>, Result<(), String>) {
     let mut notices = Vec::new();
     let result = (|| {
@@ -23,6 +24,9 @@ fn write_claim(
             .to_owned();
         let destination = crate::config::remote(root)?;
         let published = destination.is_some();
+        if require_remote && !published {
+            return Err("land: no destination remote for claim".into());
+        }
         if published {
             sync(root, &mut notices);
         }
@@ -100,6 +104,7 @@ fn write_claim(
                     sync(root, &mut notices);
                     return Err(lost(root, id));
                 }
+                Err(e) if require_remote => return Err(e),
                 Err(e) => warn(
                     &mut notices,
                     "claim not published to the destination remote",
@@ -107,6 +112,9 @@ fn write_claim(
                 ),
             }
         }
+        notices.push(format!(
+            "claim: {id} is local only; remote ownership must be acquired before landing"
+        ));
         // Only this clone's refs bind here. They are shared by its worktrees, so the write expects the value that was checked.
         match git::run(
             root,
@@ -201,7 +209,7 @@ pub fn claim(
     id: &str,
     settled: bool,
 ) -> (Vec<String>, Result<(), String>) {
-    write_claim(root, cwd, id, settled, None)
+    write_claim(root, cwd, id, settled, None, false)
 }
 pub fn assign(
     root: &Path,
@@ -225,7 +233,7 @@ pub fn assign(
         Ok(_lock)
     })();
     match result {
-        Ok(_lock) => write_claim(root, cwd, id, false, Some(target)),
+        Ok(_lock) => write_claim(root, cwd, id, false, Some(target), false),
         Err(e) => (Vec::new(), Err(e)),
     }
 }

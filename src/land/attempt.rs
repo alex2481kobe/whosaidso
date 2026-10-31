@@ -13,6 +13,11 @@ pub struct Attempt {
     pub released: bool,
 }
 impl Attempt {
+    pub fn acquire(&mut self, root: &Path, dir: &Path, goals: &[String]) -> Result<(), String> {
+        crate::claims::publication::acquire(root, goals)?;
+        self.claims = crate::claims::publication::snapshot(root, goals)?;
+        self.save(dir)
+    }
     pub fn save(&self, dir: &Path) -> Result<(), String> {
         publish::write_bytes(
             &dir.join(format!("{}.json", self.candidate)),

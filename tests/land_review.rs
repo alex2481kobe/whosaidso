@@ -117,9 +117,69 @@ fn resuming_a_receipt_publishes_media_to_the_current_remote() {
     cli(&lane, &["land", "--reason", "shared check"]);
     assert!(!git(&lane, &["ls-remote", "origin", "refs/whosaidso/blobs"]).is_empty());
     let other = f.root.parent().unwrap().join("reader");
-    git(&f.root, &["clone", "-q", replacement.to_str().unwrap(), other.to_str().unwrap()]);
+    git(
+        &f.root,
+        &[
+            "clone",
+            "-q",
+            replacement.to_str().unwrap(),
+            other.to_str().unwrap(),
+        ],
+    );
     cli(&other, &["sync"]);
     let check = cli(&other, &["check"]);
     assert!(!check.contains("missing"), "{check}");
-    assert!(other.join(format!(".git/whosaidso/blobs/{}.png", hash(&png("landing measurement")))).is_file());
+    assert!(
+        other
+            .join(format!(
+                ".git/whosaidso/blobs/{}.png",
+                hash(&png("landing measurement"))
+            ))
+            .is_file()
+    );
+}
+
+#[test]
+fn offline_claims_must_acquire_remote_ownership_before_landing() {
+    let f = Fixture::new();
+    cli(&f.root, &["install-hooks"]);
+    commit(&f.root);
+    let remote = f.remote();
+    let first = f.clone("first");
+    let second = f.clone("second");
+    let mut notices = Vec::new();
+    for (root, agent) in [(&first, "first"), (&second, "holder")] {
+        cli(root, &["install-hooks"]);
+        git(root, &["remote", "set-url", "origin", "unreachable"]);
+        notices.push(success(
+            command(root, BIN, &["start", "g"])
+                .env("WHOSAIDSO_AGENT", agent)
+                .output()
+                .unwrap(),
+        ));
+        work(root, "feature", "g");
+        git(
+            root,
+            &["remote", "set-url", "origin", remote.to_str().unwrap()],
+        );
+    }
+    success(
+        command(&second, BIN, &["start", "g"])
+            .env("WHOSAIDSO_AGENT", "holder")
+            .output()
+            .unwrap(),
+    );
+    let tip = git(&remote, &["rev-parse", "main"]);
+    failure(
+        command(&first, BIN, &["land", "--reason", "shared check"])
+            .env("WHOSAIDSO_AGENT", "first")
+            .output()
+            .unwrap(),
+        "holder",
+    );
+    assert!(
+        notices.iter().all(|text| text.contains("local only")),
+        "{notices:?}"
+    );
+    assert_eq!(tip, git(&remote, &["rev-parse", "main"]));
 }

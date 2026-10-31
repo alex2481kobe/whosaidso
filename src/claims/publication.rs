@@ -54,3 +54,13 @@ pub fn release(root: &Path, remote: &str, claims: &[(String, String)]) -> Result
     }
     Ok(())
 }
+
+// Landing must publish its ownership, even when start could only claim locally.
+pub fn acquire(root: &Path, goals: &[String]) -> Result<(), String> {
+    let _lock = super::selection_lock(root)?;
+    for goal in goals {
+        let (_, result) = super::write_claim(root, root, goal, false, None, true);
+        result?;
+    }
+    Ok(())
+}

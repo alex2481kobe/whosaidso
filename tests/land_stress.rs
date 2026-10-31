@@ -109,6 +109,14 @@ fn stress(count: usize, mut seed: u64, collect: bool) {
     if collect {
         for first in [0, 3] {
             for other in first + 1..first + 3 {
+                cli(
+                    &workers[other].1,
+                    &[
+                        "assign",
+                        &batches[other][0],
+                        &format!("branch:{}", workers[first].0),
+                    ],
+                );
                 git(
                     &workers[first].1,
                     &["merge", "--no-edit", &workers[other].0],
