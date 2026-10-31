@@ -1,4 +1,4 @@
-use super::{index, options::Options};
+use super::{index, options::Options, parallel};
 use std::{path::Path, process::Command};
 
 fn command(root: &Path) -> Command {
@@ -53,12 +53,21 @@ fn listing(root: &Path, options: &Options) -> Result<Vec<String>, String> {
     paths.dedup();
     Ok(paths)
 }
-pub(super) fn run(root: &Path, options: &Options) -> Result<Vec<String>, String> {
+pub(super) fn run(root: &Path, options: &Options) -> Result<(Vec<String>, usize), String> {
     if options.files {
-        return listing(root, options);
+        return listing(root, options).map(complete);
     }
-    let mut candidates = if options.regex {
+    let matcher = if super::attributes::custom_output(root)? {
         None
+    } else {
+        parallel::matcher(options)
+    };
+    let mut candidates = if options.regex {
+        if matcher.is_some() {
+            index::candidates(root, parallel::prefix(&options.pattern))?
+        } else {
+            None
+        }
     } else {
         index::candidates(root, &options.pattern)?
     };
@@ -75,9 +84,90 @@ pub(super) fn run(root: &Path, options: &Options) -> Result<Vec<String>, String>
     if let Some(paths) = &mut candidates {
         paths.retain(|p| std::fs::symlink_metadata(root.join(p)).is_ok_and(|m| m.is_file()));
     }
-    if candidates.as_ref().is_some_and(Vec::is_empty) {
-        return Ok(Vec::new());
+    // --exclude-standard also applies to tracked paths in Git's untracked grep walk.
+    if let Some(paths) = &mut candidates {
+        let ignored = super::attributes::ignored(root, paths)?;
+        paths.retain(|p| !ignored.contains(p));
     }
+    if candidates.as_ref().is_some_and(Vec::is_empty) {
+        return Ok((Vec::new(), 0));
+    }
+    if let Some(matcher) = matcher {
+        let paths = match candidates {
+            Some(paths) => paths,
+            None => {
+                let mut paths = listing(root, options)?;
+                let aliases = super::attributes::aliases(root, paths.iter().cloned())?;
+                for path in &mut paths {
+                    if let Some(actual) = aliases.get(path) {
+                        *path = actual.clone();
+                    }
+                }
+                paths.sort();
+                paths.dedup();
+                let ignored = super::attributes::ignored(root, &paths)?;
+                paths.retain(|p| !ignored.contains(p));
+                paths
+            }
+        };
+        if paths
+            .iter()
+            .any(|p| p.bytes().any(|b| b < 32 || b"\"\\:".contains(&b)))
+        {
+            return git_batches(root, options, &paths).map(complete);
+        }
+        let (mut rows, total, fallback) = parallel::run(root, &paths, &matcher, options)?;
+        let missing = git_batches(root, options, &fallback)?;
+        let total = total + missing.len();
+        rows.extend(missing);
+        // Rows from each path retain numeric line order, including 10 after 9.
+        rows.sort_by(|a, b| {
+            if options.matching_files {
+                a.cmp(b)
+            } else {
+                a.split_once(':')
+                    .unwrap()
+                    .0
+                    .cmp(b.split_once(':').unwrap().0)
+            }
+        });
+        rows.truncate(options.offset.saturating_add(options.limit));
+        return Ok((rows, total));
+    }
+    if let Some(paths) = candidates {
+        git_batches(root, options, &paths).map(complete)
+    } else {
+        git(root, options, None).map(complete)
+    }
+}
+fn complete(rows: Vec<String>) -> (Vec<String>, usize) {
+    let total = rows.len();
+    (rows, total)
+}
+fn git_batches(root: &Path, options: &Options, paths: &[String]) -> Result<Vec<String>, String> {
+    let mut rows = Vec::new();
+    let mut start = 0;
+    while start < paths.len() {
+        let mut end = start;
+        let mut bytes = 0;
+        while end < paths.len() && (end == start || bytes + paths[end].len() + 12 <= 64 * 1024) {
+            bytes += paths[end].len() + 12;
+            end += 1;
+        }
+        let batch = git(root, options, Some(&paths[start..end]))?;
+        if options.context > 0 && !rows.is_empty() && !batch.is_empty() {
+            rows.push("--".into());
+        }
+        rows.extend(batch);
+        start = end;
+    }
+    Ok(rows)
+}
+fn git(
+    root: &Path,
+    options: &Options,
+    candidates: Option<&[String]>,
+) -> Result<Vec<String>, String> {
     let mut cmd = command(root);
     cmd.arg("grep");
     if candidates.is_some() {

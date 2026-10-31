@@ -1,6 +1,8 @@
 // Text-search command boundary.
+mod attributes;
 mod index;
 mod options;
+mod parallel;
 mod search;
 use std::path::Path;
 
@@ -17,8 +19,7 @@ pub fn cut(line: &str, limit: usize) -> String {
 }
 pub fn grep(root: &Path, args: &[String]) -> Result<(), String> {
     let options = options::parse(args)?;
-    let rows = search::run(root, &options)?;
-    let total = rows.len();
+    let (rows, total) = search::run(root, &options)?;
     if total == 0 {
         println!("grep: no matches");
         return Ok(());

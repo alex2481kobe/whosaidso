@@ -131,6 +131,15 @@ fn changed_build_environment_invalidates_the_precise_run() {
         )],
     );
     assert!(cli(root, &["code", "defs", "target"]).contains("[precise]"));
+    let unchanged = common::process::success(
+        command(root, BIN, &["code", "defs", "target"])
+            .env("UNRELATED_AGENT_SESSION", "another-session")
+            .env("PWD", "/different-shell")
+            .env("GOFLAGS", "-tags=unrelated-language")
+            .output()
+            .unwrap(),
+    );
+    assert!(unchanged.contains("[precise]"), "{unchanged}");
     let answer = common::process::success(
         command(root, BIN, &["code", "defs", "target"])
             .env("RUSTFLAGS", "--cfg changed")

@@ -581,6 +581,7 @@ dependencies = [
 name = "whosaidso"
 version = "0.3.1"
 dependencies = [
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",
