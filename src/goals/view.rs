@@ -48,7 +48,7 @@ pub fn screen(root: &Path, store: &Store) -> Result<(Value, i64), String> {
         }
     }
     let mut media: HashMap<&str, Vec<&gallery::Media>> = HashMap::new();
-    for m in gallery::newest(store).into_iter().take(gallery::LIVE_MEDIA) {
+    for m in gallery::visible(store) {
         media.entry(&m.goal).or_default().push(m);
     }
     let mut entries: Vec<_> = store.goals.iter().collect();
