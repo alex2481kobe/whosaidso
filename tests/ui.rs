@@ -30,7 +30,7 @@ fn viewer_serves_current_screens_and_assets_without_writing_records() {
     let viewer = Viewer::start(root);
     let cookie = viewer.cookie();
     let html = String::from_utf8(viewer.get("/", &cookie).2).unwrap();
-    assert_eq!(html.matches("data-nav=").count(), 2);
+    assert_eq!(html.matches("data-nav=").count(), 3);
     assert!(html.contains("data-nav=\"goals\"") && html.contains("data-nav=\"gallery\""));
     for asset in [
         "ui.css",
@@ -38,6 +38,7 @@ fn viewer_serves_current_screens_and_assets_without_writing_records() {
         "ui.js",
         "ui-shell.js",
         "ui-goals.js",
+        "ui-flows.js",
         "ui-gallery.js",
         "ui-gallery-media.js",
         "ui-gallery-actions.js",
@@ -73,12 +74,15 @@ fn viewer_labels_current_and_ineligible_proofs() {
     let goals = viewer.json("/api/goals", &cookie);
     assert_eq!(goals["goals"][0]["state"], "done");
     assert_eq!(goals["goals"][0]["proof"]["current"], true);
+    assert_eq!(goals["goals"][0]["proof"]["verdict"], "pass");
+    assert_eq!(goals["goals"][0]["proof"]["main"]["verdict"], "pass");
     commit(root);
     r::check_command(root, &["false"]);
     commit(root);
     let goal = viewer.json("/api/goals", &cookie)["goals"][0].clone();
     assert_eq!(goal["proof"]["current"], false);
     assert_eq!(goal["proof"]["exit_code"], 0);
+    assert_eq!(goal["proof"]["verdict"], "pass");
 }
 
 #[test]
@@ -113,4 +117,22 @@ fn viewer_updates_worktrees_and_missing_media_without_restart() {
         viewer.json("/api/gallery", &cookie)["entries"][0]["status"],
         "present"
     );
+}
+
+#[test]
+fn viewer_serves_milestone_progress_from_goal_tree() {
+    let f = Fixture::new();
+    r::goal(&f.root, "release");
+    let mut child = value(&f.root.join(".whosaidso/goals/g.json"));
+    child["parent"] = serde_json::json!("release");
+    r::put(&f.root, "goals", "g", &child);
+    commit(&f.root);
+    let viewer = common::viewer::Viewer::start(&f.root);
+    let cookie = viewer.cookie();
+    let goals = viewer.json("/api/goals", &cookie);
+    assert_eq!(
+        goals["milestones"][0]["progress"],
+        serde_json::json!({"done":0,"total":1})
+    );
+    assert_eq!(goals["goals"][0]["state"], "open");
 }

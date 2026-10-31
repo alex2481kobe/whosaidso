@@ -162,11 +162,29 @@ impl Snapshot {
         if missing > 0 {
             gaps.push(format!("{missing} files have no syntax extraction"));
         }
-        let stale: i64 = self.db.query_row("SELECT count(*) FROM scip_docs d WHERE NOT EXISTS (SELECT 1 FROM files f WHERE f.path=d.path AND f.blob=d.blob)",[],|r|r.get(0)).map_err(err)?;
+        let stale: i64 = self
+            .db
+            .query_row(
+                "SELECT count(*) FROM precise_documents WHERE status='stale'",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(err)?;
         if stale > 0 {
             gaps.push(format!(
                 "{stale} precise documents are stale; syntax fills the remaining files"
             ));
+        }
+        let unknown: i64 = self
+            .db
+            .query_row(
+                "SELECT count(*) FROM precise_documents WHERE status='unknown'",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(err)?;
+        if unknown > 0 {
+            gaps.push(format!("{unknown} precise documents have unknown freshness; syntax fills the remaining files"));
         }
         Ok(Complete { rows, gaps })
     }

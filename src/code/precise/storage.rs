@@ -17,7 +17,7 @@ pub(in crate::code) fn schema(db: &Connection) -> Result<(), String> {
     let version: i64 = db
         .query_row("PRAGMA precise.user_version", [], |r| r.get(0))
         .map_err(err)?;
-    if version == 1 {
+    if version == 2 {
         return Ok(());
     }
     let tx =
@@ -25,9 +25,9 @@ pub(in crate::code) fn schema(db: &Connection) -> Result<(), String> {
     let version: i64 = tx
         .query_row("PRAGMA precise.user_version", [], |r| r.get(0))
         .map_err(err)?;
-    if version != 1 {
+    if version != 2 {
         tx.execute_batch("DROP TABLE IF EXISTS precise.scip_run; DROP TABLE IF EXISTS precise.scip_docs; DROP TABLE IF EXISTS precise.scip_occ; DROP TABLE IF EXISTS precise.scip_syms; DROP TABLE IF EXISTS precise.scip_docs_text; DROP TABLE IF EXISTS precise.scip_relationships;").map_err(err)?;
-        tx.execute_batch("CREATE TABLE IF NOT EXISTS precise.scip_run(worktree TEXT, input_manifest TEXT, build_context TEXT, artifact TEXT);
+        tx.execute_batch("CREATE TABLE IF NOT EXISTS precise.scip_run(worktree TEXT, input_manifest TEXT, build_context TEXT, artifact TEXT, language TEXT);
         CREATE TABLE IF NOT EXISTS precise.scip_docs(path TEXT PRIMARY KEY, blob TEXT);
         CREATE TABLE IF NOT EXISTS precise.scip_occ(path TEXT, symbol TEXT, line INTEGER, is_def INTEGER,start INTEGER,end_line INTEGER,stop INTEGER,enclosing_line INTEGER,enclosing_start INTEGER,enclosing_end_line INTEGER,enclosing_stop INTEGER,container TEXT,encoding INTEGER);
         CREATE TABLE IF NOT EXISTS precise.scip_syms(symbol TEXT PRIMARY KEY, name TEXT, descriptor_name TEXT);
@@ -38,7 +38,7 @@ pub(in crate::code) fn schema(db: &Connection) -> Result<(), String> {
         CREATE INDEX IF NOT EXISTS precise.scip_rel_target ON scip_relationships(target);
         CREATE INDEX IF NOT EXISTS precise.scip_occ_symbol ON scip_occ(symbol);
         CREATE INDEX IF NOT EXISTS precise.scip_syms_name ON scip_syms(name);
-        CREATE INDEX IF NOT EXISTS precise.scip_descriptor_name ON scip_syms(descriptor_name); PRAGMA precise.user_version=1;").map_err(err)?;
+        CREATE INDEX IF NOT EXISTS precise.scip_descriptor_name ON scip_syms(descriptor_name); PRAGMA precise.user_version=2;").map_err(err)?;
     }
     tx.commit().map_err(err)
 }
@@ -55,7 +55,7 @@ pub fn import(root: &Path, file: &Path) -> Result<Report, String> {
 pub(in crate::code) fn import_run(
     root: &Path,
     file: &Path,
-    expected: Option<&str>,
+    expected: Option<(&str, &str, &str)>,
 ) -> Result<Report, String> {
     let data = fs::read(file).map_err(|e| format!("{}: {e}", file.display()))?;
     let mut docs = Vec::new();
@@ -85,7 +85,9 @@ pub(in crate::code) fn import_run(
     }
     let docs = merge_paths(docs)?;
     let (_, mut files) = super::super::store::index(root)?;
-    if expected.is_some_and(|stamp| tree::fingerprint(&files) != stamp) {
+    if expected.is_some_and(|(stamp, context, language)| {
+        tree::fingerprint(&files) != stamp || super::binding::context(language) != context
+    }) {
         return Err("sources changed during indexing; old index retained".into());
     }
     let paths: HashSet<_> = docs.iter().map(|d| d.path.as_str()).collect();
@@ -114,7 +116,9 @@ pub(in crate::code) fn import_run(
             f.blob = blob;
         }
     }
-    if expected.is_some_and(|stamp| tree::fingerprint(&files) != stamp) {
+    if expected.is_some_and(|(stamp, context, language)| {
+        tree::fingerprint(&files) != stamp || super::binding::context(language) != context
+    }) {
         return Err("sources changed during indexing; old index retained".into());
     }
     let mut db = super::super::store::open(root)?;
@@ -136,28 +140,33 @@ pub(in crate::code) fn import_run(
             |r| r.get(0),
         )
         .map_err(err)?;
-    let metadata = fields(&data)?
-        .into_iter()
-        .find(|(n, _)| *n == 1)
-        .ok_or_else(malformed)?
-        .1;
-    let context = crate::record::sha256_hex(bytes(metadata)?);
     tx.execute(
-        "INSERT INTO scip_run VALUES (?1,?2,?3,?4)",
-        params![worktree, tree::fingerprint(&files), context, artifact],
+        "INSERT INTO scip_run VALUES (?1,?2,?3,?4,?5)",
+        params![
+            worktree,
+            expected.map(|(input, _, _)| input),
+            expected.map(|(_, context, _)| context),
+            artifact,
+            expected.map(|(_, _, language)| language)
+        ],
     )
     .map_err(err)?;
     let mut symbols = HashMap::new();
     let mut count = 0;
     let mut stale = 0;
+    let mut unknown = 0;
     let mut insert_doc = tx
         .prepare("INSERT INTO scip_docs VALUES (?1,?2)")
         .map_err(err)?;
     for d in &docs {
-        let blob = blobs.get(&d.path);
-        if blob.is_none() {
+        let checked = blobs.get(&d.path);
+        if checked.is_none() {
             stale += 1;
         }
+        if expected.is_none() && checked.is_some() {
+            unknown += 1;
+        }
+        let blob = checked.filter(|_| expected.is_some());
         insert_doc.execute(params![d.path, blob]).map_err(err)?;
         for o in &d.occ {
             super::details::occurrence(&tx, d, o)?;
@@ -211,6 +220,7 @@ pub(in crate::code) fn import_run(
         occurrences: count,
         symbols: symbols.len(),
         stale,
+        unknown,
     })
 }
 
@@ -219,13 +229,14 @@ pub struct Report {
     pub occurrences: usize,
     pub symbols: usize,
     pub stale: usize,
+    pub unknown: usize,
 }
 impl std::fmt::Display for Report {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "scip: {} documents, {} occurrences, {} symbols, {} stale documents",
-            self.documents, self.occurrences, self.symbols, self.stale
+            "scip: {} documents, {} occurrences, {} symbols, {} stale documents, {} unknown documents",
+            self.documents, self.occurrences, self.symbols, self.stale, self.unknown
         )
     }
 }

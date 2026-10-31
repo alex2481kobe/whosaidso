@@ -3,6 +3,7 @@ use crate::tree;
 use rusqlite::{Connection, OptionalExtension, params};
 use std::collections::{HashMap, HashSet};
 
+pub(in crate::code) mod binding;
 mod decode;
 mod details;
 mod freshness;
@@ -35,7 +36,11 @@ pub fn rows(
     value: &str,
     def: bool,
 ) -> Result<(HashSet<String>, Vec<Row>), String> {
-    let bound: bool = db.query_row("SELECT EXISTS (SELECT 1 FROM scip_run r JOIN worktrees w ON w.token=r.worktree WHERE w.id=(SELECT worktree FROM selection))",[],|r|r.get(0)).map_err(err)?;
+    let bound: bool = db
+        .query_row("SELECT status='fresh' FROM precise_freshness", [], |r| {
+            r.get(0)
+        })
+        .map_err(err)?;
     if !bound {
         return Ok((HashSet::new(), Vec::new()));
     }
@@ -53,10 +58,10 @@ pub fn rows(
         "SELECT path FROM calls WHERE callee=?1"
     };
     let sql = if value.is_empty() {
-        "SELECT path,blob FROM scip_docs".to_string()
+        "SELECT path,blob FROM precise_documents WHERE status='fresh'".to_string()
     } else {
         format!(
-            "SELECT path,blob FROM scip_docs WHERE path IN ({syntax} UNION SELECT o.path FROM scip_occ o JOIN scip_syms s ON s.symbol=o.symbol WHERE (?1='' OR {column}=?1) AND o.is_def=?2)"
+            "SELECT path,blob FROM precise_documents WHERE status='fresh' AND path IN ({syntax} UNION SELECT o.path FROM scip_occ o JOIN scip_syms s ON s.symbol=o.symbol WHERE (?1='' OR {column}=?1) AND o.is_def=?2)"
         )
     };
     let mut stmt = db.prepare(&sql).map_err(err)?;

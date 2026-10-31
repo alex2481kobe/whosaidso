@@ -44,12 +44,13 @@ impl Snapshot {
                 |r| r.get(0),
             )
             .map_err(err)?;
-        let change_token = format!("{stamp}:{run}");
+        let files = store::reads::files(&db)?;
+        let freshness = precise::binding::select(&db, &files)?;
+        let change_token = format!("{stamp}:{run}:{freshness}");
         let project = db
             .query_row("SELECT token FROM project", [], |r| r.get(0))
             .map_err(err)?;
         let id = format!("{project}:{worktree}:{generation}:{change_token}");
-        let files = store::reads::files(&db)?;
         Ok(Self {
             id,
             change_token,

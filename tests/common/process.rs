@@ -55,6 +55,14 @@ pub fn command(root: &Path, program: &str, args: &[&str]) -> Command {
     if program == "git" {
         c.args(["-c", "init.defaultBranch=main"]);
     }
+    let bin = root.join(".git/bound-bin");
+    if bin.is_dir() {
+        c.env(
+            "PATH",
+            std::env::join_paths(std::iter::once(bin).chain(std::env::split_paths(tool_path())))
+                .unwrap(),
+        );
+    }
     c.args(args);
     c
 }

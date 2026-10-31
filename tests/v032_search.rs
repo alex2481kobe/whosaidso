@@ -290,6 +290,7 @@ fn live_literal_matches_ignore_deleted_binary_and_ignored_files() {
     fs::write(root.join("staged.txt"), "live_needle\n").unwrap();
     git(root, &["add", "staged.txt"]);
     fs::write(root.join("new.txt"), "live_needle\n").unwrap();
+    fs::write(root.join(".tmp-new"), "live_needle\n").unwrap();
     fs::write(root.join("ignored.txt"), "live_needle\n").unwrap();
     fs::write(root.join("binary.dat"), b"live_needle\0\n").unwrap();
     fs::write(
@@ -299,7 +300,7 @@ fn live_literal_matches_ignore_deleted_binary_and_ignored_files() {
     .unwrap();
     assert_eq!(
         cli(root, &["grep", "live_needle"]),
-        ".tmp-keep:1:live_needle\nlarge.txt:2:live_needle\nnew.txt:1:live_needle\nsrc/old.txt:1:live_needle\nstaged.txt:1:live_needle\n"
+        ".tmp-keep:1:live_needle\n.tmp-new:1:live_needle\nlarge.txt:2:live_needle\nnew.txt:1:live_needle\nsrc/old.txt:1:live_needle\nstaged.txt:1:live_needle\n"
     );
     assert_eq!(cli(root, &["grep", "stale_needle"]), "grep: no matches\n");
     assert_eq!(
