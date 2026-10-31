@@ -18,10 +18,22 @@ pub(super) fn fuse(
         return Ok(lexical);
     };
     let semantic = scan(db, &query, cap)?;
+    // Full, uncorrected source/record evidence can corroborate a semantic rank.
+    // Partial words are a fallback, not a second vote against the semantic head.
+    let strong = lexical.iter().any(|hit| {
+        hit.matched == words.len()
+            && hit.edits == 0
+            && hit.priority >= crate::index::features::SOURCE
+    });
     let mut ranked = HashMap::new();
     for (rank, mut hit) in lexical.into_iter().enumerate() {
         hit.method = Some("bm25");
-        ranked.insert(hit.key.clone(), (contribution(rank + 1), hit));
+        let score = if strong {
+            contribution(rank + 1)
+        } else {
+            -(rank as f64 + 1.0)
+        };
+        ranked.insert(hit.key.clone(), (score, hit));
     }
     let mut stmt = db
         .prepare(
@@ -60,8 +72,13 @@ pub(super) fn fuse(
             rank += 1;
             let score = contribution(rank);
             if let Some((old, hit)) = ranked.get_mut(&hit.key) {
-                *old += score;
-                hit.method = Some("bm25+embedding");
+                if strong {
+                    *old += score;
+                    hit.method = Some("bm25+embedding");
+                } else {
+                    *old = score;
+                    hit.method = Some("embedding");
+                }
             } else {
                 ranked.insert(hit.key.clone(), (score, hit));
             }
