@@ -1,6 +1,9 @@
 mod author;
 mod model;
 mod map;
+mod compare;
+mod hops;
+mod pattern;
 mod schema;
 mod store;
 mod validate;
@@ -10,6 +13,13 @@ use std::path::Path;
 
 pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
     match args {
+        [cmd, id] if cmd == "compare" => {
+            let record = store::load(root, Some(id))?.pop().ok_or("unknown flow")?;
+            if !record.problems.is_empty() { return Err(record.problems.join("\n")); }
+            let snapshot = crate::code::facts::Snapshot::current(root)?;
+            println!("{}", compare::compare(&record.flow.ok_or("unreadable flow")?, &snapshot)?);
+            Ok(())
+        }
         [cmd, rest @ ..] if cmd == "map" && rest.len() <= 1 => {
             let snapshot = crate::code::facts::Snapshot::current(root)?;
             println!("{}", map::layer(&snapshot, rest.first().map(String::as_str), 0)?);
