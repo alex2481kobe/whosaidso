@@ -48,13 +48,13 @@ exec "$SYNC_GIT" -c user.name=Test -c user.email=test@example.com -c init.defaul
                 format!(
                     "{}:{}",
                     wrapper.parent().unwrap().display(),
-                    std::env::var("PATH").unwrap()
+                    tool_path().to_string_lossy()
                 ),
             )
             .env("SYNC_GIT", real_git.trim())
             .env("SYNC_B", &b)
             .env("SYNC_EXE", env!("CARGO_BIN_EXE_whosaidso"))
-            .env("SYNC_PATH", std::env::var("PATH").unwrap())
+            .env("SYNC_PATH", tool_path())
             .env("SYNC_ONCE", root.join("once"))
             .env("SYNC_B_RESULT", root.join("b-result"))
             .env("SYNC_ATTEMPTS", root.join("attempts"))
@@ -86,7 +86,7 @@ exec "$SYNC_GIT" -c user.name=Test -c user.email=test@example.com -c init.defaul
             format!(
                 "{}:{}",
                 wrapper.parent().unwrap().display(),
-                std::env::var("PATH").unwrap()
+                tool_path().to_string_lossy()
             ),
         )
         .env("SYNC_GIT", real_git.trim())

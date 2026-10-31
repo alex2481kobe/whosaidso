@@ -67,7 +67,7 @@ fn viewer_labels_current_and_ineligible_proofs() {
     let root = &f.root;
     use common::viewer::Viewer;
 
-    cli(root, &["prove", "g"]);
+    cli(root, &["prove", "g", "--reason", "behavior unchanged"]);
     let viewer = Viewer::start(root);
     let cookie = viewer.cookie();
     let goals = viewer.json("/api/goals", &cookie);

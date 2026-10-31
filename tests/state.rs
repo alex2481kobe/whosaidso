@@ -11,7 +11,7 @@ fn states_follow_work_and_only_landed_proofs() {
     git(root, &["checkout", "-q", "-b", "worker"]);
     work(root, "work", "g");
     assert!(cli(root, &["goals"]).contains("active  g"));
-    cli(root, &["prove", "g"]);
+    cli(root, &["prove", "g", "--reason", "behavior unchanged"]);
     commit(root);
     assert!(!cli(root, &["goals"]).contains("done    g"));
     git(root, &["checkout", "-q", "main"]);
@@ -19,7 +19,7 @@ fn states_follow_work_and_only_landed_proofs() {
     assert!(cli(root, &["goals"]).contains("done    g"));
     work(root, "later", "g");
     assert!(cli(root, &["goals"]).contains("stale   g"));
-    cli(root, &["prove", "g"]);
+    cli(root, &["prove", "g", "--reason", "behavior unchanged"]);
     assert!(cli(root, &["goals"]).contains("done    g"));
 }
 
@@ -56,9 +56,9 @@ fn newest_proof_uses_nanoseconds_then_hash() {
     let pass = r::proof(root, &at, 3, 0);
     let fail = r::proof(root, &at, 3, 1);
     assert!(cli(root, &["show", "g"]).contains(if pass > fail {
-        "proof: pass"
+        "proof: ran pass"
     } else {
-        "proof: fail"
+        "proof: ran fail"
     }));
 }
 

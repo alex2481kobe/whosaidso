@@ -69,6 +69,7 @@ fn live_claim_names_the_holder_and_switching_releases_it() {
     let root = &f.root;
 
     r::goal(root, "h");
+    write(&root.join(".whosaidso/config.json"), r#"{"focus":2}"#);
     cli(root, &["install-hooks"]);
     commit(root);
     f.remote();

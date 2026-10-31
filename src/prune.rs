@@ -1,10 +1,13 @@
+mod cleanup;
+use cleanup::{hook, verify};
+mod fold;
 mod journal;
 pub mod selection;
 use journal::Journal;
 use selection::Selection;
 // Only the landing owner deletes records; branches publish without pruning.
 use crate::{
-    blob, gallery, git, publish,
+    blob, gallery, git,
     record::{self},
     tree,
 };
@@ -52,11 +55,18 @@ pub fn prune(root: &Path) -> Result<String, String> {
         records: Vec::new(),
         moves: Vec::new(),
         archive: Vec::new(),
+        created: Vec::new(),
     };
     journal.save(&path)?;
-    let result = collect(root, &path, &mut journal);
+    let result = collect(root, &path, &mut journal).and_then(|report| {
+        fold::closed(root, &path, &mut journal)?;
+        Ok(report)
+    });
     if result.is_ok()
-        || (journal.records.is_empty() && journal.moves.is_empty() && journal.archive.is_empty())
+        || (journal.records.is_empty()
+            && journal.moves.is_empty()
+            && journal.archive.is_empty()
+            && journal.created.is_empty())
     {
         journal.finish(&path)?;
     }
@@ -104,6 +114,9 @@ fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<St
     let head = git::run(root, &["rev-parse", "HEAD"])?;
     let candidates = record::read(root)?;
     let store = record::load(root)?;
+    if store.broken.iter().any(|(kind, _)| kind == "done") {
+        return Err(store.errors.join("\n"));
+    }
     let Selection {
         deletions,
         removed,
@@ -235,68 +248,10 @@ fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<St
             fs::remove_file(path).map_err(|e| e.to_string())?;
         }
     }
-    for tree in blob::retention::worktrees(root)? {
-        for folder in record::FOLDERS {
-            publish::record_dir(&tree, folder)?;
-            if let Ok(entries) = fs::read_dir(tree.join(".whosaidso").join(folder)) {
-                for entry in entries {
-                    let entry = entry.map_err(|e| e.to_string())?;
-                    if tree::temporary(&entry.path())
-                        && entry.file_type().map_err(|e| e.to_string())?.is_file()
-                    {
-                        fs::remove_file(entry.path()).map_err(|e| e.to_string())?;
-                    }
-                }
-            }
-        }
-    }
-    if !shared {
-        blob::clean_temporaries(root)?;
-    }
+    cleanup::temporaries(root, shared)?;
     let media_archived = archived.len();
     Ok(format!(
         "{notice}prune: {} proofs, {media_archived} media archived",
         proofs.len() + removed[0]
     ))
-}
-fn verify(
-    root: &Path,
-    before: &Result<crate::goal_tree::Snapshot, String>,
-    moved: &[(PathBuf, PathBuf, SystemTime)],
-    shared: bool,
-) -> Result<HashSet<String>, String> {
-    if &crate::goal_tree::snapshot(root) != before {
-        return Err("goal output changed".into());
-    }
-    let kept = if shared {
-        HashSet::new()
-    } else {
-        blob::retention::referenced(root)?
-    };
-    if moved.iter().any(|(_, path, _)| {
-        path.file_name()
-            .and_then(|n| n.to_str())
-            .is_some_and(|n| kept.contains(n))
-    }) {
-        return Err("trashed evidence referenced".into());
-    }
-    if !shared {
-        blob::retention::restore(root, &kept)?;
-    }
-    Ok(kept)
-}
-fn hook(root: &Path, name: &str) -> Result<(), String> {
-    if cfg!(debug_assertions)
-        && let Some(command) = std::env::var_os(name)
-        && !std::process::Command::new("sh")
-            .arg("-c")
-            .arg(command)
-            .current_dir(root)
-            .status()
-            .map_err(|e| e.to_string())?
-            .success()
-    {
-        return Err("prune hook failed".into());
-    }
-    Ok(())
 }

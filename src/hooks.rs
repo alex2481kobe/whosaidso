@@ -23,6 +23,7 @@ pub fn start(root: &Path, cwd: &Path, id: &str) -> Result<(), String> {
     {
         return Err("start: run whosaidso install-hooks in this clone".into());
     }
+    let _lock = claims::selection_lock(root)?;
     let store = record::load(root)?;
     if id != "none" && !store.goals.iter().any(|g| g.id == id) {
         return Err(format!("unknown goal {id}"));
@@ -37,6 +38,9 @@ pub fn start(root: &Path, cwd: &Path, id: &str) -> Result<(), String> {
         }
     };
     if id != "none" {
+        if let Some(states) = &states {
+            crate::goals_selection::eligible(root, id, &store, states)?;
+        }
         let settled = states
             .as_ref()
             .and_then(|s| s.iter().find(|g| g.id == id))
