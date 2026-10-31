@@ -11,9 +11,15 @@ fn monthly_bundles_merge_without_losing_either_clone() {
     let a = root.clone();
     f.remote();
     let b = f.clone("b");
+    let mut expected = std::collections::BTreeMap::new();
 
     for (repo, payload) in [(&a, "first"), (&b, "second")] {
         attach(repo, payload);
+        for (path, bytes) in snapshot(&repo.join(".whosaidso/media")) {
+            let id = path.file_stem().unwrap().to_str().unwrap();
+            expected.insert(format!("{id}.json"), bytes);
+            expected.insert(format!("{id}.png"), png(payload));
+        }
         commit(repo);
         fs::remove_file(repo.join(".whosaidso/goals/g.json")).unwrap();
         commit(repo);
@@ -25,36 +31,11 @@ fn monthly_bundles_merge_without_losing_either_clone() {
     let bundle = fs::read_dir(a.join(".git/whosaidso/archive"))
         .unwrap()
         .map(|e| e.unwrap().path())
-        .find(|p| p.extension().is_some_and(|e| e == "tar"))
+        .find(|p| p.to_string_lossy().ends_with(".tar.gz"))
         .unwrap();
     let other = b
         .join(".git/whosaidso/archive")
         .join(bundle.file_name().unwrap());
     assert_eq!(fs::read(&bundle).unwrap(), fs::read(other).unwrap());
-    let listing = success(
-        command(&a, "tar", &["-tf", bundle.to_str().unwrap()])
-            .output()
-            .unwrap(),
-    );
-    assert_eq!(listing.lines().count(), 4);
-    for name in listing.lines().filter(|n| n.ends_with(".json")) {
-        let v: serde_json::Value = serde_json::from_str(&success(
-            command(&a, "tar", &["-xOf", bundle.to_str().unwrap(), name])
-                .output()
-                .unwrap(),
-        ))
-        .unwrap();
-        let bytes = command(
-            &a,
-            "tar",
-            &[
-                "-xOf",
-                bundle.to_str().unwrap(),
-                &format!("{}.png", name.trim_end_matches(".json")),
-            ],
-        )
-        .output()
-        .unwrap();
-        assert_eq!(hash(&bytes.stdout), v["media_sha256"]);
-    }
+    assert_eq!(common::archive::entries(&bundle), expected);
 }

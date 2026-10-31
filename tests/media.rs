@@ -73,7 +73,7 @@ fn types_come_from_bytes_and_gallery_uses_their_mime() {
 }
 
 #[test]
-fn malformed_headers_and_unsupported_bytes_are_rejected() {
+fn unrecognized_headers_are_opaque_but_corrupt_known_type_records_are_rejected() {
     let f = Fixture::new();
     let root = &f.root;
 
@@ -83,19 +83,34 @@ fn malformed_headers_and_unsupported_bytes_are_rejected() {
         b"\xff\xd8\xff\xe0\x00\x02".to_vec(),
         png("x")[..24].to_vec(),
     ] {
-        write(&root.join(".git/input"), bytes);
-        bad(
-            root,
-            &["media", "g", ".git/input", "bad"],
-            "signature and header",
+        write(&root.join(".git/input"), &bytes);
+        cli(root, &["media", "g", ".git/input", "opaque"]);
+        let record = paths(&root.join(".whosaidso/media"))
+            .into_iter()
+            .map(|p| value(&p))
+            .find(|v| v["media_sha256"] == hash(&bytes))
+            .unwrap();
+        assert_eq!(record["ext"], "bin");
+        assert_eq!(record["byte_size"], bytes.len());
+        assert_eq!(
+            fs::read(root.join(format!(".git/whosaidso/blobs/{}.bin", hash(&bytes)))).unwrap(),
+            bytes
         );
     }
-    assert!(paths(&root.join(".whosaidso/media")).is_empty());
+    cli(root, &["check"]);
+    let corrupt = r::media(root, b"\x89PNG\r\n\x1a\n", "png", 1);
+    bad(root, &["check"], "signature and header");
+    fs::remove_file(corrupt).unwrap();
     write(
         &root.join(".git/input"),
         b"\0\0\0\x01ftyp\0\0\0\0\0\0\0\x18isom\0\0\0\0",
     );
     cli(root, &["media", "g", ".git/input", "extended ftyp"]);
+    assert!(
+        paths(&root.join(".whosaidso/media"))
+            .iter()
+            .any(|p| value(p)["ext"] == "mp4")
+    );
 }
 
 #[test]
