@@ -17,7 +17,7 @@ pub(in crate::code) fn schema(db: &Connection) -> Result<(), String> {
     let version: i64 = db
         .query_row("PRAGMA precise.user_version", [], |r| r.get(0))
         .map_err(err)?;
-    if version == 1 {
+    if version == 2 {
         return Ok(());
     }
     let tx =
@@ -25,9 +25,9 @@ pub(in crate::code) fn schema(db: &Connection) -> Result<(), String> {
     let version: i64 = tx
         .query_row("PRAGMA precise.user_version", [], |r| r.get(0))
         .map_err(err)?;
-    if version != 1 {
+    if version != 2 {
         tx.execute_batch("DROP TABLE IF EXISTS precise.scip_run; DROP TABLE IF EXISTS precise.scip_docs; DROP TABLE IF EXISTS precise.scip_occ; DROP TABLE IF EXISTS precise.scip_syms; DROP TABLE IF EXISTS precise.scip_docs_text; DROP TABLE IF EXISTS precise.scip_relationships;").map_err(err)?;
-        tx.execute_batch("CREATE TABLE IF NOT EXISTS precise.scip_run(worktree TEXT, input_manifest TEXT, build_context TEXT, artifact TEXT);
+        tx.execute_batch("CREATE TABLE IF NOT EXISTS precise.scip_run(worktree TEXT, input_manifest TEXT, build_context TEXT, artifact TEXT, language TEXT);
         CREATE TABLE IF NOT EXISTS precise.scip_docs(path TEXT PRIMARY KEY, blob TEXT);
         CREATE TABLE IF NOT EXISTS precise.scip_occ(path TEXT, symbol TEXT, line INTEGER, is_def INTEGER,start INTEGER,end_line INTEGER,stop INTEGER,enclosing_line INTEGER,enclosing_start INTEGER,enclosing_end_line INTEGER,enclosing_stop INTEGER,container TEXT,encoding INTEGER);
         CREATE TABLE IF NOT EXISTS precise.scip_syms(symbol TEXT PRIMARY KEY, name TEXT, descriptor_name TEXT);
@@ -38,7 +38,7 @@ pub(in crate::code) fn schema(db: &Connection) -> Result<(), String> {
         CREATE INDEX IF NOT EXISTS precise.scip_rel_target ON scip_relationships(target);
         CREATE INDEX IF NOT EXISTS precise.scip_occ_symbol ON scip_occ(symbol);
         CREATE INDEX IF NOT EXISTS precise.scip_syms_name ON scip_syms(name);
-        CREATE INDEX IF NOT EXISTS precise.scip_descriptor_name ON scip_syms(descriptor_name); PRAGMA precise.user_version=1;").map_err(err)?;
+        CREATE INDEX IF NOT EXISTS precise.scip_descriptor_name ON scip_syms(descriptor_name); PRAGMA precise.user_version=2;").map_err(err)?;
     }
     tx.commit().map_err(err)
 }
@@ -55,7 +55,7 @@ pub fn import(root: &Path, file: &Path) -> Result<Report, String> {
 pub(in crate::code) fn import_run(
     root: &Path,
     file: &Path,
-    expected: Option<(&str, &str)>,
+    expected: Option<(&str, &str, &str)>,
 ) -> Result<Report, String> {
     let data = fs::read(file).map_err(|e| format!("{}: {e}", file.display()))?;
     let mut docs = Vec::new();
@@ -85,8 +85,8 @@ pub(in crate::code) fn import_run(
     }
     let docs = merge_paths(docs)?;
     let (_, mut files) = super::super::store::index(root)?;
-    if expected.is_some_and(|(stamp, context)| {
-        tree::fingerprint(&files) != stamp || super::binding::context() != context
+    if expected.is_some_and(|(stamp, context, language)| {
+        tree::fingerprint(&files) != stamp || super::binding::context(language) != context
     }) {
         return Err("sources changed during indexing; old index retained".into());
     }
@@ -116,8 +116,8 @@ pub(in crate::code) fn import_run(
             f.blob = blob;
         }
     }
-    if expected.is_some_and(|(stamp, context)| {
-        tree::fingerprint(&files) != stamp || super::binding::context() != context
+    if expected.is_some_and(|(stamp, context, language)| {
+        tree::fingerprint(&files) != stamp || super::binding::context(language) != context
     }) {
         return Err("sources changed during indexing; old index retained".into());
     }
@@ -140,14 +140,14 @@ pub(in crate::code) fn import_run(
             |r| r.get(0),
         )
         .map_err(err)?;
-    let context = super::binding::context();
     tx.execute(
-        "INSERT INTO scip_run VALUES (?1,?2,?3,?4)",
+        "INSERT INTO scip_run VALUES (?1,?2,?3,?4,?5)",
         params![
             worktree,
-            expected.map(|(input, _)| input),
-            expected.map(|_| context),
-            artifact
+            expected.map(|(input, _, _)| input),
+            expected.map(|(_, context, _)| context),
+            artifact,
+            expected.map(|(_, _, language)| language)
         ],
     )
     .map_err(err)?;
