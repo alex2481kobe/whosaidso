@@ -2,7 +2,7 @@
 use super::{
     Snapshot,
     edges::{Direction, Graph},
-    reads::Row,
+    reads::{Layer, Row},
 };
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 pub struct Reach {
@@ -11,6 +11,7 @@ pub struct Reach {
     pub ambiguous: bool,
     pub via: String,
     pub implementation: bool,
+    pub layer: Layer,
 }
 pub struct Impact {
     pub seeds: Vec<Row>,
@@ -72,7 +73,7 @@ fn walk(
     implementations: bool,
 ) -> Impact {
     let seeds: HashSet<_> = selected.iter().map(|r| r.symbol.clone()).collect();
-    let mut adjacency: HashMap<&str, Vec<(&str, bool, bool)>> = HashMap::new();
+    let mut adjacency: HashMap<&str, Vec<(&str, bool, bool, Layer)>> = HashMap::new();
     let mut unresolved = 0;
     for e in &graph.edges {
         let Some(source) = e.source.as_deref() else {
@@ -91,6 +92,7 @@ fn walk(
                 to,
                 e.occurrence.ambiguous || e.targets.len() > 1,
                 false,
+                e.occurrence.layer,
             ));
         }
     }
@@ -107,15 +109,20 @@ fn walk(
                 Direction::Forward => (r.source.as_str(), r.target.as_str()),
                 Direction::Reverse => (r.target.as_str(), r.source.as_str()),
             };
-            adjacency.entry(from).or_default().push((to, false, true));
+            adjacency
+                .entry(from)
+                .or_default()
+                .push((to, false, true, Layer::Precise));
         }
     }
     let mut found: BTreeMap<String, Reach> = BTreeMap::new();
     let mut visited = seeds.clone();
+    let mut ordered: Vec<_> = seeds.iter().map(String::as_str).collect();
+    ordered.sort_unstable();
     let mut queue: VecDeque<_> = if ambiguous {
         VecDeque::new()
     } else {
-        seeds.iter().map(|s| (s.as_str(), 0, false)).collect()
+        ordered.into_iter().map(|s| (s, 0, false)).collect()
     };
     let mut depth_limited = false;
     while let Some((symbol, distance, uncertain)) = queue.pop_front() {
@@ -126,13 +133,14 @@ fn walk(
             depth_limited |= !next.is_empty();
             continue;
         }
-        for &(to, candidate, implementation) in next {
+        for &(to, candidate, implementation, layer) in next {
             let ambiguous = uncertain || candidate;
             if seeds.contains(to) {
                 continue;
             }
             if let Some(row) = found.get_mut(to) {
                 row.ambiguous |= ambiguous;
+                row.implementation |= implementation;
             }
             if !visited.insert(to.to_owned()) {
                 continue;
@@ -145,6 +153,7 @@ fn walk(
                     ambiguous,
                     via: symbol.to_owned(),
                     implementation,
+                    layer,
                 },
             );
             queue.push_back((to, distance + 1, ambiguous));

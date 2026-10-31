@@ -179,6 +179,11 @@ fn graph_combines_fresh_precise_and_syntax_and_reports_implementations() {
     relation.extend([24, 1]);
     external.extend(field(4, &relation));
     import(root, &[field(2, &document), field(3, &external)]);
+    let callees = cli(root, &["code", "callees", "user"]);
+    assert!(
+        callees.contains("api [syntactic] definition=precise"),
+        "{callees}"
+    );
     let answer = cli(root, &["code", "callers", "api", "--implementations"]);
     assert!(
         answer.contains("implementation [precise]") && answer.contains("user [syntactic]"),

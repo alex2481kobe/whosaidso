@@ -1,7 +1,7 @@
 // Bounded command presentation for graph traversal and its coverage limits.
 use super::{
     contracts::{DEFAULT_LIMIT, GAP_LIMIT, MAX_LIMIT, ROW_BYTES},
-    facts::{Snapshot, edges::Direction},
+    facts::{Snapshot, edges::Direction, reads::Layer},
     inspect,
 };
 use std::path::Path;
@@ -111,11 +111,20 @@ pub(super) fn describe(
                 .find(|r| r.symbol == reach.symbol)
             {
                 out.push(format!(
-                    "{}:{} {} [{}] distance={}{}{}",
+                    "{}:{} {} [{}]{} distance={}{}{}",
                     r.path,
                     r.range.line,
                     r.qualified,
-                    inspect::label(r),
+                    if reach.layer == Layer::Precise {
+                        "precise"
+                    } else {
+                        "syntactic"
+                    },
+                    if reach.layer != r.layer {
+                        format!(" definition={}", inspect::label(r))
+                    } else {
+                        String::new()
+                    },
                     reach.distance,
                     if reach.ambiguous {
                         " candidate=by-name"
