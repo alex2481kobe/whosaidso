@@ -79,7 +79,7 @@ fn documented_quick_start_runs_verbatim() {
             );
         } else if n == 1 {
             assert!(out.contains("landed  first-goal"));
-            assert!(out.contains("prove: first-goal pass"));
+            assert!(out.contains("ran: first-goal pass"));
             let proofs: Vec<_> = fs::read_dir(root.join(".whosaidso/proofs"))
                 .unwrap()
                 .collect();

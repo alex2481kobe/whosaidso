@@ -82,7 +82,7 @@ fn help_and_default_branch_work_in_a_master_repository() {
     cli(root, &["start", "g"]);
     work(root, "work", "g");
     cli(root, &["gate"]);
-    cli(root, &["prove", "g"]);
+    cli(root, &["prove", "g", "--reason", "behavior unchanged"]);
     commit(root);
     cli(root, &["prune"]);
     git(root, &["update-ref", "refs/remotes/origin/master", "HEAD"]);

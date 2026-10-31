@@ -39,7 +39,7 @@ pub fn proof(root: &Path, commit: &str, at: i64, code: i32) -> PathBuf {
         root,
         "proofs",
         "",
-        &json!({"goal":"g","check": super::value(&root.join(".whosaidso/goals/g.json"))["check"],"commit":commit,"exit_code":code,"output_sha256":hash(b""),"output_tail":"","ran_at":at}),
+        &json!({"goal":"g","check": super::value(&root.join(".whosaidso/goals/g.json"))["check"],"commit":commit,"exit_code":code,"output_sha256":hash(b""),"output_tail":"","ran_at":at,"main":{"commit":commit,"exit_code":1,"output_sha256":hash(b""),"output_tail":"","elapsed_ms":0},"reason":null}),
     )
 }
 

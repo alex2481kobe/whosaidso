@@ -249,6 +249,17 @@ pub fn states(root: &Path, store: &Store) -> Result<Vec<GoalState>, String> {
                         State::Done
                     }
                 }
+                None if store.media.iter().any(|m| {
+                    m.goal == goal.id
+                        && commits.contains(m.commit.as_str())
+                        && !store
+                            .broken
+                            .iter()
+                            .any(|(k, id)| k == "media" && id == &m.sha)
+                }) =>
+                {
+                    State::Done
+                }
                 None if trailers(&main).any(|g| g == goal.id) => State::Landed,
                 None => match bs {
                     Some(bs) if bs.iter().any(|b| active(b.time, now)) => State::Active,

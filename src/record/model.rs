@@ -28,6 +28,17 @@ pub struct Proof {
     pub output_sha256: String,
     pub output_tail: String,
     pub ran_at: i64,
+    pub main: Run,
+    pub reason: Option<String>,
+}
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Run {
+    pub commit: String,
+    pub exit_code: i64,
+    pub output_sha256: String,
+    pub output_tail: String,
+    pub elapsed_ms: u64,
 }
 #[derive(Default)]
 pub struct Store {

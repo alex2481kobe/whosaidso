@@ -18,7 +18,7 @@ pub fn time(seconds: i64) -> String {
 }
 pub fn proof(p: &Proof) -> String {
     format!(
-        "{} · {} · {}",
+        "ran {} · {} · {}",
         record::result(p.exit_code),
         time(p.ran_at / 1_000_000_000),
         p.commit.chars().take(7).collect::<String>()
@@ -47,7 +47,7 @@ pub fn show(root: &Path, id: &str) -> Result<(), String> {
             lines.push(format!("proof: {}", proof(&store.proofs[index])));
         }
         if let Some(i) = record::newest_media(&store, id) {
-            lines.push(format!("media: {}", i.shows));
+            lines.push(format!("attached: {} · {}", i.shows, i.media_sha256));
         }
         for child in crate::goal_tree::children(&store.goals, id) {
             if let Some(s) = states.iter().find(|s| s.id == child.id) {

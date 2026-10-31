@@ -5,6 +5,7 @@ mod check;
 mod claims;
 mod code;
 mod config;
+mod evidence;
 mod find;
 mod flow;
 mod gallery;
@@ -63,7 +64,8 @@ fn run() -> Result<(), String> {
         "gate [<base>]", [cmd, rest @ ..] if cmd == "gate" && rest.len() <= 1 => gate::gate(&root, rest.first().map(String::as_str).unwrap_or(&config::main(&root)?));
         "show <id>", [cmd, id] if cmd == "show" => show::show(&root, id);
         "goals", [cmd] if cmd == "goals" => goals::goals(&root);
-        "prove <goal-id>", [cmd, id] if cmd == "prove" => { println!("{}", prove::prove(&root, id)?); Ok(()) };
+        "prove <goal-id> [--reason <why>]", [cmd, rest @ ..] if cmd == "prove" => { println!("{}", prove::command(&root, rest)?); Ok(()) };
+        "evidence add <goal> <file> <shows>", [cmd, sub, goal, file, shows] if cmd == "evidence" && sub == "add" => evidence::add(&root, &cwd, goal, file, shows);
         "prune", [cmd] if cmd == "prune" => { println!("{}", prune::prune(&root)?); Ok(()) };
         "media <goal-id> <file> <title>", [cmd, goal, path, shows] if cmd == "media" => gallery::show(&root, &cwd, goal, path, shows);
         "ui [--port N] [--open]", [cmd, rest @ ..] if cmd == "ui" => ui::serve(&root, rest);

@@ -13,7 +13,12 @@ fn large_check_output_uses_bounded_memory_and_hashes_every_byte() {
         command(
             root,
             "sh",
-            &["-c", "ulimit -v 45000; exec \"$1\" prove g", "sh", BIN],
+            &[
+                "-c",
+                "ulimit -v 45000; exec \"$1\" prove g --reason unchanged",
+                "sh",
+                BIN,
+            ],
         )
         .output()
         .unwrap(),
