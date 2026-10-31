@@ -46,5 +46,22 @@ pub fn import(root: &Path, docs: &[Vec<u8>]) -> String {
         index.extend(d);
     }
     write(&root.join(".git/index.scip"), index);
-    cli(root, &["code", "import-scip", ".git/index.scip"])
+    bound(root, ".git/index.scip")
+}
+
+// The external indexer fixture binds synthetic SCIP to the command's input snapshot.
+pub fn bound(root: &Path, file: &str) -> String {
+    let bin = root.join(".git/bound-bin");
+    let input = root.join(file).canonicalize().unwrap();
+    super::write(&root.join(".git/bound-input"), input.to_str().unwrap());
+    super::executable(&bin.join("rust-analyzer"), r##"#!/usr/bin/python3
+import pathlib, sys
+root = pathlib.Path.cwd()
+if '--version' in sys.argv:
+    print('rust-analyzer 1.96.0 (ac68faa2 2026-05-25)')
+else:
+    out = pathlib.Path(sys.argv[sys.argv.index('--output') + 1])
+    out.write_bytes(pathlib.Path((root/'.git/bound-input').read_text()).read_bytes())
+"##);
+    cli(root, &["code", "index", "rust"])
 }

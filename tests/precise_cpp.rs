@@ -173,10 +173,7 @@ fn reference_mismatches_expire_but_implicit_references_do_not() {
         let mut index = field(1, &[]);
         index.extend(field(2, &doc));
         write(&root.join(".whosaidso/cache/index.scip"), index);
-        let imported = cli(
-            root,
-            &["code", "import-scip", ".whosaidso/cache/index.scip"],
-        );
+        let imported = bound(root, ".whosaidso/cache/index.scip");
         assert!(
             imported.contains(&format!("{role} stale documents")),
             "reference exemptions: {imported}"
