@@ -127,6 +127,8 @@ Name-only calls resolve within a language family; a cross-language hop needs dec
 evidence such as a literal bridge or precise identity.
 
 Landing and `flow drift-check` discard precise evidence for an indexed language if
-any of its documents is stale or unvalidated, or a new document in that language is
-not indexed. The viewer remains per-document and labels stale evidence. Commit,
-index the language, then land; a strict refusal names the indexing command once.
+any of its documents changed or was deleted, or a new document in that language is
+not indexed. Unchanged documents that fail occurrence validation stay unknown and
+use syntax locally in gates and viewer. The viewer remains per-document and labels
+stale evidence. Commit, index the language, then land; a strict refusal names the
+indexing command once.

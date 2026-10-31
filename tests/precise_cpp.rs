@@ -79,7 +79,7 @@ fn descriptor_names_and_unicode_encodings_match_source_bytes() {
             encoding,
         ));
     }
-    assert!(import(root, &real).contains("1 stale documents"));
+    assert!(import(root, &real).contains("0 stale documents, 1 unknown documents"));
     for name in ["ns::Widget", "ns::Widget::method", "generated"] {
         let answer = cli(root, &["code", "defs", name]);
         assert!(
@@ -103,7 +103,7 @@ fn descriptor_names_and_unicode_encodings_match_source_bytes() {
             .replace("method", "edited"),
     );
     fs::copy(root.join(".git/index.scip"), root.join(".git/copied.scip")).unwrap();
-    assert!(cli(root, &["code", "import-scip", ".git/copied.scip"]).contains("2 stale documents"));
+    assert!(cli(root, &["code", "import-scip", ".git/copied.scip"]).contains("0 stale documents"));
     assert_eq!(
         cli(root, &["code", "defs", "ns::Widget::edited"]),
         "real.cpp:6  method edited  [syntactic]\n"
@@ -136,7 +136,7 @@ fn reference_mismatches_expire_but_implicit_references_do_not() {
             root,
             &["code", "import-scip", ".whosaidso/cache/index.scip"]
         )
-        .contains("1 stale documents"),
+        .contains("0 stale documents, 1 unknown documents"),
         "2: reference mismatch expires document"
     );
     assert!(
@@ -175,7 +175,7 @@ fn reference_mismatches_expire_but_implicit_references_do_not() {
         write(&root.join(".whosaidso/cache/index.scip"), index);
         let imported = bound(root, ".whosaidso/cache/index.scip");
         assert!(
-            imported.contains(&format!("{role} stale documents")),
+            imported.contains(&format!("0 stale documents, {role} unknown documents")),
             "reference exemptions: {imported}"
         );
         let answer = cli(root, &["code", "defs", "anchor"]);

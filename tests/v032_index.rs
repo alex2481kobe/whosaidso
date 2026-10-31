@@ -243,7 +243,9 @@ fn precise_import_retains_containers_relationships_and_docs() {
     let at = index.windows(typed.len()).position(|w| w == typed).unwrap();
     index[at + 5] = 40;
     fs::write(root.join("index.scip"), &index).unwrap();
-    assert!(common::scip::bound(&root, "index.scip").contains("1 stale documents"));
+    assert!(
+        common::scip::bound(&root, "index.scip").contains("0 stale documents, 1 unknown documents")
+    );
     assert!(!cli(&root, &["code", "refs", "target"]).contains("[precise]"));
 }
 

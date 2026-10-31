@@ -58,8 +58,8 @@ pub(in crate::code) fn select(db: &Connection) -> Result<String, String> {
         "CREATE TEMP VIEW precise_freshness AS SELECT '{status}' AS status;
         CREATE TEMP VIEW precise_documents AS SELECT d.path,d.blob,CASE
         WHEN (SELECT status FROM precise_freshness)<>'fresh' THEN (SELECT status FROM precise_freshness)
-        WHEN d.blob IS NULL THEN 'unknown'
-        WHEN f.path IS NULL OR d.blob<>f.blob THEN 'stale'
+        WHEN d.blob IS NULL OR f.path IS NULL OR d.blob<>f.blob THEN 'stale'
+        WHEN NOT d.validated THEN 'unknown'
         ELSE 'fresh' END AS status FROM scip_docs d LEFT JOIN files f ON f.path=d.path;"
     ))
     .map_err(err)?;
@@ -94,7 +94,7 @@ pub(in crate::code) fn strict(
         .map_err(err)?;
     let stale: bool = db
         .query_row(
-            "SELECT EXISTS(SELECT 1 FROM precise_documents WHERE status<>'fresh')",
+            "SELECT (SELECT status<>'fresh' FROM precise_freshness) OR EXISTS(SELECT 1 FROM precise_documents WHERE status='stale')",
             [],
             |r| r.get(0),
         )

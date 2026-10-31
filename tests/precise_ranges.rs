@@ -97,7 +97,10 @@ fn stale_and_out_of_bounds_ranges_fall_back_without_colliding_local_ids() {
         multi.contains("multi.rs:1  fn multi_name  [syntactic]"),
         "{multi}"
     );
-    assert!(imported.contains("3 stale documents"), "{imported}");
+    assert!(
+        imported.contains("0 stale documents, 3 unknown documents"),
+        "{imported}"
+    );
 
     // 7: Repeated file-local IDs keep independent names and occurrences.
     assert_eq!(cli(root, &["code", "defs", "apple"]), "a.rs:1  [precise]\n");

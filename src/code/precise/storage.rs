@@ -20,7 +20,7 @@ pub(in crate::code) fn schema(db: &Connection) -> Result<(), String> {
         .query_row("PRAGMA precise.user_version", [], |r| r.get(0))
         .map_err(err)?;
     let path_index: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM precise.sqlite_master WHERE type='index' AND name='scip_occ_path')",[],|r| r.get(0)).map_err(err)?;
-    if version == 2 && path_index {
+    if version == 3 && path_index {
         return Ok(());
     }
     let tx =
@@ -28,10 +28,10 @@ pub(in crate::code) fn schema(db: &Connection) -> Result<(), String> {
     let version: i64 = tx
         .query_row("PRAGMA precise.user_version", [], |r| r.get(0))
         .map_err(err)?;
-    if version != 2 {
+    if version != 3 {
         tx.execute_batch("DROP TABLE IF EXISTS precise.scip_run; DROP TABLE IF EXISTS precise.scip_docs; DROP TABLE IF EXISTS precise.scip_occ; DROP TABLE IF EXISTS precise.scip_syms; DROP TABLE IF EXISTS precise.scip_docs_text; DROP TABLE IF EXISTS precise.scip_relationships;").map_err(err)?;
         tx.execute_batch("CREATE TABLE IF NOT EXISTS precise.scip_run(worktree TEXT, input_manifest TEXT, build_context TEXT, artifact TEXT, language TEXT);
-        CREATE TABLE IF NOT EXISTS precise.scip_docs(path TEXT PRIMARY KEY, blob TEXT);
+        CREATE TABLE IF NOT EXISTS precise.scip_docs(path TEXT PRIMARY KEY, blob TEXT, validated INTEGER NOT NULL CHECK(validated IN (0,1)));
         CREATE TABLE IF NOT EXISTS precise.scip_occ(path TEXT, symbol TEXT, line INTEGER, is_def INTEGER,start INTEGER,end_line INTEGER,stop INTEGER,enclosing_line INTEGER,enclosing_start INTEGER,enclosing_end_line INTEGER,enclosing_stop INTEGER,container TEXT,encoding INTEGER);
         CREATE TABLE IF NOT EXISTS precise.scip_syms(symbol TEXT PRIMARY KEY, name TEXT, descriptor_name TEXT);
         CREATE TABLE IF NOT EXISTS precise.scip_docs_text(path TEXT,symbol TEXT,line INTEGER,start INTEGER,text TEXT);
@@ -41,7 +41,7 @@ pub(in crate::code) fn schema(db: &Connection) -> Result<(), String> {
         CREATE INDEX IF NOT EXISTS precise.scip_rel_target ON scip_relationships(target);
         CREATE INDEX IF NOT EXISTS precise.scip_occ_symbol ON scip_occ(symbol);
         CREATE INDEX IF NOT EXISTS precise.scip_syms_name ON scip_syms(name);
-        CREATE INDEX IF NOT EXISTS precise.scip_descriptor_name ON scip_syms(descriptor_name); PRAGMA precise.user_version=2;").map_err(err)?;
+        CREATE INDEX IF NOT EXISTS precise.scip_descriptor_name ON scip_syms(descriptor_name); PRAGMA precise.user_version=3;").map_err(err)?;
     }
     tx.execute_batch(PATH_INDEX).map_err(err)?;
     tx.commit().map_err(err)
@@ -103,21 +103,20 @@ pub(in crate::code) fn import_run(
         .cloned()
         .collect();
     let by_path: HashMap<_, _> = docs.iter().map(|d| (d.path.as_str(), d)).collect();
-    let mut effective = HashMap::new();
+    let mut validated = HashSet::new();
     tree::read(root, &sources, usize::MAX - 1, |file, bytes| {
-        effective.insert(file.path.clone(), file.blob.clone());
-        blobs.remove(&file.path);
+        blobs.insert(file.path.clone(), file.blob.clone());
         if let Some(bytes) = bytes {
             let d = by_path[file.path.as_str()];
             if check(d, &bytes) {
-                blobs.insert(file.path.clone(), file.blob.clone());
+                validated.insert(file.path.clone());
             }
         }
         Ok(())
     })?;
     for f in &mut files.entries {
-        if let Some(blob) = effective.remove(&f.path) {
-            f.blob = blob;
+        if let Some(blob) = blobs.get(&f.path) {
+            f.blob = blob.clone();
         }
     }
     if expected.is_some_and(|(stamp, context, language)| {
@@ -160,18 +159,19 @@ pub(in crate::code) fn import_run(
     let mut stale = 0;
     let mut unknown = 0;
     let mut insert_doc = tx
-        .prepare("INSERT INTO scip_docs VALUES (?1,?2)")
+        .prepare("INSERT INTO scip_docs VALUES (?1,?2,?3)")
         .map_err(err)?;
     for d in &docs {
-        let checked = blobs.get(&d.path);
-        if checked.is_none() {
+        let blob = blobs.get(&d.path);
+        let valid = validated.contains(&d.path);
+        if blob.is_none() {
             stale += 1;
-        }
-        if expected.is_none() && checked.is_some() {
+        } else if !valid || expected.is_none() {
             unknown += 1;
         }
-        let blob = checked.filter(|_| expected.is_some());
-        insert_doc.execute(params![d.path, blob]).map_err(err)?;
+        insert_doc
+            .execute(params![d.path, blob, valid])
+            .map_err(err)?;
         for o in &d.occ {
             super::details::occurrence(&tx, d, o)?;
             let symbol = &o.symbol;
