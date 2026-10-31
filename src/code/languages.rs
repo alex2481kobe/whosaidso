@@ -208,3 +208,13 @@ pub fn for_name(value: &str) -> Option<&'static Registration> {
         .iter()
         .find(|l| l.name.eq_ignore_ascii_case(value) || l.extensions.contains(&value))
 }
+
+// Syntax names can cross extensions within one interoperable language family.
+pub fn family(path: &str) -> Option<&'static str> {
+    let name = for_path(path)?.name;
+    Some(match name {
+        "C" | "C++" => "C",
+        "JavaScript" | "JSX" | "TypeScript" | "TSX" => "JavaScript",
+        _ => name,
+    })
+}

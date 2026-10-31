@@ -119,7 +119,14 @@ fn assemble(
             vec![row.symbol.clone()]
         } else {
             let candidates = names.get(row.name.as_str()).cloned().unwrap_or_default();
-            let mut ids: Vec<_> = candidates.iter().map(|r| r.symbol.clone()).collect();
+            let mut ids: Vec<_> = candidates
+                .iter()
+                .filter(|r| {
+                    let family = super::super::languages::family(&row.path);
+                    family.is_some() && family == super::super::languages::family(&r.path)
+                })
+                .map(|r| r.symbol.clone())
+                .collect();
             ids.sort();
             ids.dedup();
             ids

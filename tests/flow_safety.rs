@@ -55,3 +55,27 @@ fn landing_refuses_regression_of_unchanged_destination_anchors() {
     commit(&lane);
     cli(&lane, &["land", "--reason", "updated plan"]);
 }
+
+#[test]
+fn name_only_calls_stay_in_their_language_family() {
+    let f = Fixture::sources(&[
+        ("app.rs", "fn screen() { verify(); }\n"),
+        ("api.py", "def verify(): pass\n"),
+    ]);
+    f.write(
+        "app",
+        &json!({"covers":{"paths":["app.rs","api.py"]},"nodes":[
+        {"id":"screen","type":"function","paths":["app.rs"],"symbols":["screen"]},
+        {"id":"api","type":"function","paths":["api.py"],"symbols":["verify"]}
+    ],"steps":[{"id":"call","from":"screen","to":"api","when":"ready"}]}),
+    );
+    let report: Value = serde_json::from_str(&cli(&f.root, &["flow", "compare", "app"])).unwrap();
+    assert_ne!(report["steps"]["call"]["state"], "built");
+    write(&f.root.join("web.js"), "function web() { save(); }\n");
+    write(&f.root.join("save.ts"), "export function save() {}\n");
+    f.write("web", &json!({"covers":{"paths":["web.js","save.ts"]},"nodes":[
+        {"id":"web","type":"function","paths":["web.js"]}, {"id":"save","type":"function","paths":["save.ts"]}
+    ],"steps":[{"id":"call","from":"web","to":"save","when":"ready"}]}));
+    let report: Value = serde_json::from_str(&cli(&f.root, &["flow", "compare", "web"])).unwrap();
+    assert_eq!(report["steps"]["call"]["state"], "built");
+}
