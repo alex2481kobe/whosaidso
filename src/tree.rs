@@ -92,6 +92,9 @@ pub fn files(root: &Path) -> Result<Files, String> {
     files_in(root, |_| true)
 }
 pub fn files_in(root: &Path, include: impl Fn(&str) -> bool) -> Result<Files, String> {
+    discover(root, |path| !temporary(Path::new(path)) && include(path))
+}
+fn discover(root: &Path, include: impl Fn(&str) -> bool) -> Result<Files, String> {
     std::thread::scope(|scope| {
         let changed = scope.spawn(|| git::run_bytes(root, &["diff-files", "--name-only", "-z"]));
         let untracked =
@@ -122,7 +125,7 @@ pub fn files_in(root: &Path, include: impl Fn(&str) -> bool) -> Result<Files, St
                 skipped += 1;
                 continue;
             };
-            if temporary(Path::new(path)) || !include(path) {
+            if !include(path) {
                 continue;
             }
             if !matches!(mode, Some("100644" | "100755"))
@@ -155,7 +158,7 @@ pub fn files_in(root: &Path, include: impl Fn(&str) -> bool) -> Result<Files, St
                 skipped += 1;
                 continue;
             };
-            if temporary(Path::new(path)) || !include(path) {
+            if !include(path) {
                 continue;
             }
             if linked(root, Path::new(path), &mut links)? {
