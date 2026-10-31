@@ -109,10 +109,12 @@ async function route() {
       return version;
     };
   }
-  main.replaceChildren(shown.node);
+  // Keep the old screen up, while the next one is laid out at full width but unseen.
+  shown.node.classList.add("pending"); main.append(shown.node);
   try { seen = await shown.load(); }
   catch (error) { if (mine === state.renders) main.replaceChildren(message(error.message, "error")); return; }
   if (mine !== state.renders) return;
+  shown.node.classList.remove("pending"); main.replaceChildren(shown.node);
   current = shown; last = key; main.scrollTop = positions.get(key) || 0;
 }
 // Poll the server for its cheap change token; load a screen again only when it moved.

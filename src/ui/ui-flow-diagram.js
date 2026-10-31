@@ -28,14 +28,14 @@ function layout(nodes,edges,width) {
   const byId=new Map(nodes.map(n=>[n.id,n])), mark=new Map(),order=[],forward=[],back=new Set();
   const visit=id=>{mark.set(id,1);for(const e of edges.filter(e=>e.from===id&&byId.has(e.to))){if(mark.get(e.to)===1){back.add(e.key);continue;}forward.push(e);if(!mark.has(e.to))visit(e.to);}mark.set(id,2);order.unshift(id);};
   nodes.forEach(n=>{if(!mark.has(n.id))visit(n.id);});
-  if(back.size && edges.some(e=>back.has(e.key)&&e.from!==e.to) || Math.max(edges.length,nodes.reduce((sum,n)=>sum+(n.type==="function"?n.children||0:0),0))>1.3*nodes.length)return grid(nodes,edges,width);
+  if(Math.max(forward.length,nodes.reduce((sum,n)=>sum+(n.type==="function"?n.children||0:0),0))>1.3*nodes.length)return grid(nodes,edges,width);
   const rank=new Map(nodes.map(n=>[n.id,0]));
   for(const id of order)for(const e of forward.filter(e=>e.from===id))rank.set(e.to,Math.max(rank.get(e.to),rank.get(id)+1));
   const units=nodes.map(n=>{
     const returns=edges.filter(e=>e.from===n.id&&back.has(e.key)).map(e=>({...e,rows:wrap(`↩ ${e.when ? e.when+" · " : ""}${byId.get(e.to).name}`,132,11)}));
     returns.forEach(e=>{e.h=Math.max(24,e.rows.length*14+8);});
     const rw=Math.max(0,...returns.map(e=>Math.max(...e.rows.map(s=>measure(s,11)))+16)),rh=returns.reduce((h,e)=>h+e.h,0);
-    const w=Math.min(width-48,Math.max(112,Math.min(168,measure(n.name)+36))),rows=wrap(n.name,w-36),h=56+(rows.length-1)*20+(attention[n.state]?18:0);
+    const w=Math.min(width-48,Math.max(112,Math.min(208,measure(n.name)+36))),rows=wrap(n.name,w-36),h=56+(rows.length-1)*20+(attention[n.state]?18:0);
     const below=w+12+rw>width-48||rh>h;
     return {n,w,h,rows,returns,rw,rh,below,uw:below?Math.max(w,rw):w+(rw?12+rw:0),uh:below?h+(rh?12+rh:0):Math.max(h,rh)};
   });
@@ -43,13 +43,13 @@ function layout(nodes,edges,width) {
   const labels=new Map(forward.map(e=>[e.key,e.when?wrap(e.when,112,11):e.extra?[""]:[]])),out=new Map(),incoming=new Map();
   for(const e of forward){const h=labels.get(e.key).length?labels.get(e.key).length*14+8:0;out.set(e.from,(out.get(e.from)||0)+h);incoming.set(e.to,(incoming.get(e.to)||0)+h);}
   const widths=levels.map(group=>Math.max(...group.map(u=>u.uw))),need=widths.reduce((a,b)=>a+b,0)+32*(levels.length-1)+48;
-  const horizontal=levels.length>1&&need<=width,points=new Map(),gap=Math.max(56,Math.max(0,...incoming.values())+28);
+  const horizontal=levels.length>1&&need<=width,spacing=Math.min(200,(width-48-widths.reduce((a,b)=>a+b,0))/(levels.length-1)),points=new Map(),gap=Math.max(56,Math.max(0,...incoming.values())+28);
   let height=0;
   const place=(u,x,y,row,floor)=>{const bx=x+(u.below?(u.uw-u.w)/2:0),by=y+(!u.below?(u.uh-u.h)/2:0);points.set(u.n.id,{...u,x:bx,y:by,left:x,bottom:y+u.uh,row,floor,rx:u.below?x+(u.uw-u.rw)/2:bx+u.w+12,ry:u.below?by+u.h+12:y+(u.uh-u.rh)/2});};
   const band=horizontal?Math.max(0,...out.values())+16:0;
   if(horizontal){
     height=Math.max(...levels.map(g=>g.reduce((h,u)=>h+u.uh,0)+(g.length-1)*28))+band+48;
-    let x=24;const spacing=(width-48-widths.reduce((a,b)=>a+b,0))/(levels.length-1);
+    let x=(width-widths.reduce((a,b)=>a+b,0)-spacing*(levels.length-1))/2;
     levels.forEach((group,i)=>{let y=band+24+(height-band-48-group.reduce((h,u)=>h+u.uh,0)-(group.length-1)*28)/2;group.forEach(u=>{place(u,x,y,i,y+u.uh);y+=u.uh+28;});x+=widths[i]+spacing;});
   }else{
     let y=24,row=0;
@@ -59,7 +59,7 @@ function layout(nodes,edges,width) {
   const labelOffsets=new Map(),routes=[],stems=new Map();
   for(const e of forward){
     const a=points.get(e.from),b=points.get(e.to);let stem,path;
-    if(horizontal){const j=a.left+a.uw+(width-48-widths.reduce((a,b)=>a+b,0))/(levels.length-1)/2,sy=a.y+a.h/2,ty=b.y+b.h/2;
+    if(horizontal){const j=a.left+a.uw+spacing/2,sy=a.y+a.h/2,ty=b.y+b.h/2;
       stem=a.below&&a.returns.length?[[a.x,sy],[a.left-12,sy],[a.left-12,a.bottom+12],[j,a.bottom+12],[j,sy]]:a.returns.length?[[a.x+a.w/2,a.y+a.h],[a.x+a.w/2,a.bottom+12],[j,a.bottom+12],[j,sy]]:[[a.x+a.w,sy],[j,sy]];
       path=b.row===a.row+1?[[j,sy],[j,ty],[b.x,ty]]:[[j,sy],[j,band+8],[b.x-16,band+8],[b.x-16,ty],[b.x,ty]];
     }else{const j=a.floor+gap/2,c=a.x+a.w/2,t=b.x+b.w/2;
@@ -71,7 +71,7 @@ function layout(nodes,edges,width) {
     const lw=Math.max(0,...lines.map(s=>measure(s,11)))+12+(e.extra?22:0);
     let label=lines.length?{x:Math.max(8,Math.min(width-lw-8,cx-lw/2)),y:cy-lh/2,w:lw,h:lh,rows:lines,extra:e.extra}:null;
     if(horizontal&&label){
-      const mid=(a.left+a.uw+b.x)/2,ty=b.y+b.h/2,j=a.left+a.uw+(width-48-widths.reduce((a,b)=>a+b,0))/(levels.length-1)/2;
+      const mid=(a.left+a.uw+b.x)/2,ty=b.y+b.h/2,j=a.left+a.uw+spacing/2;
       const obstacles=[...points.values()].flatMap(p=>[{x:p.x,y:p.y,w:p.w,h:p.h},...(p.returns.length?[{x:p.rx,y:p.ry,w:p.rw,h:p.rh}]:[])]).concat(routes.flatMap(e=>e.label?[e.label]:[]));
       const safeY=ty<a.y+a.h/2?Math.min(ty,a.y-lh/2-8):Math.max(ty,a.y+a.h+lh/2+8);
       for(const [x,y]of [[mid,ty],[mid,a.y-lh/2-8],[mid,a.y+a.h+lh/2+8],[j-7-lw/2,ty],[j-7-lw/2,safeY],[cx,cy]]){

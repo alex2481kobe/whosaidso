@@ -77,6 +77,7 @@ h1, h2, h3, p { margin: 0; }
 .content-state.error { color: var(--red); }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
 
+.pending { height: 0; overflow: hidden; visibility: hidden; }
 /* state chips */
 .chip { display: inline-block; justify-self: start; padding: 1px 8px; border-radius: 6px; font-size: 12px; line-height: 1.6; white-space: nowrap; background: color-mix(in srgb, var(--tone) var(--tint), var(--surface)); color: var(--tone); }
 .s-done { --tone: var(--green); } .s-active { --tone: var(--blue); } .s-landed { --tone: var(--amber); } .s-failing { --tone: var(--red); }
