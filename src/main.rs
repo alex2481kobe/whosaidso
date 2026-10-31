@@ -6,6 +6,7 @@ mod check;
 mod claims;
 mod code;
 mod find;
+mod flow;
 mod gallery;
 mod gate;
 mod git;
@@ -45,6 +46,7 @@ fn run() -> Result<(), String> {
         };
     }
     commands! {
+        "flow <command> [<args>...]", [cmd, rest @ ..] if cmd == "flow" => flow::command(&root, rest);
         "check", [cmd] if cmd == "check" => sync::check(&root);
         "sync [<remote>]", [cmd, rest @ ..] if cmd == "sync" && rest.len() <= 1 => sync::sync(&root, rest.first().map_or("origin", String::as_str));
         "install-hooks", [cmd] if cmd == "install-hooks" => { hooks::install(&root)?; projects::register(&root) };
