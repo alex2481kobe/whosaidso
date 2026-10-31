@@ -118,3 +118,18 @@ fn viewer_updates_worktrees_and_missing_media_without_restart() {
         "present"
     );
 }
+
+#[test]
+fn viewer_serves_milestone_progress_from_goal_tree() {
+    let f = Fixture::new();
+    r::goal(&f.root, "release");
+    let mut child = value(&f.root.join(".whosaidso/goals/g.json"));
+    child["parent"] = serde_json::json!("release");
+    r::put(&f.root,"goals","g",&child);
+    commit(&f.root);
+    let viewer = common::viewer::Viewer::start(&f.root);
+    let cookie = viewer.cookie();
+    let goals = viewer.json("/api/goals",&cookie);
+    assert_eq!(goals["milestones"][0]["progress"], serde_json::json!({"done":0,"total":1}));
+    assert_eq!(goals["goals"][0]["state"], "open");
+}

@@ -96,7 +96,10 @@ fn goals_screen(root: &Path, store: &Store) -> Result<(Value, i64), String> {
             "media":media.get(g.id.as_str()).into_iter().flatten().take(RECENT).map(|m| json!({"id":m.sha,"media_sha256":m.media_sha256,"tag":gallery::types::media_type(&m.ext).map_or("", |t| t.tag),"shows":m.shows,"label":"attached"})).collect::<Vec<_>>(),
         })
     }).collect::<Vec<_>>();
-    let milestones: Vec<_> = store.goals.iter().filter(|g| g.parent.is_none()).map(|g| json!({"id":g.id,"title":g.title,"counts":tally(rows.iter().filter(|r| r["milestone"] == g.id).filter_map(|r| r["state"].as_str()))})).collect();
+    let milestones: Vec<_> = crate::goal_tree::children(&store.goals, "").into_iter().map(|g| {
+        let (done,total,_) = crate::goal_tree::counts(&store.goals,&states,&g.id);
+        json!({"id":g.id,"title":g.title,"progress":{"done":done,"total":total}})
+    }).collect();
     Ok((
         json!({"totals":tally(rows.iter().filter_map(|g| g["state"].as_str())),"milestones":milestones,"goals":rows}),
         lapses,

@@ -3,11 +3,10 @@ import { el, api, apiURL, state, chip, mono, titleCase, ago, stamp, searchBox, i
 import { dropdown } from "./ui-parts.js";
 import { message } from "./ui-components.js";
 
-const ORDER = ["done", "active", "failing", "landed", "stale", "idle", "open"];
+const ORDER = ["done", "active", "failing", "landed", "stale", "idle", "open", "broken"];
 // Filters and open rows outlive a re-render and a visit to the other screen, but not a project switch.
 const kept = { project: "", search: "", state: "", open: new Set() };
 const parts = counts => ORDER.filter(s => counts[s]).map(s => `${counts[s]} ${s}`);
-const sum = counts => Object.values(counts).reduce((a, b) => a + b, 0);
 
 // A long worktree path keeps its last segments; the whole path is the tooltip.
 const tail = path => { const parts = path.split("/"); return parts.length > 4 ? "…/" + parts.slice(-3).join("/") : path; };
@@ -46,11 +45,9 @@ function row(g) {
   return d;
 }
 function milestone(p, rows) {
-  const total = sum(p.counts), done = p.counts.done || 0, fill = el("i");
-  fill.style.width = total ? `${100 * done / total}%` : "0";
-  const bar = el("div", "bar", fill);
-  bar.setAttribute("role", "progressbar"); bar.setAttribute("aria-label", `${p.title}: ${done} of ${total} done`);
-  bar.setAttribute("aria-valuemin", "0"); bar.setAttribute("aria-valuemax", String(total)); bar.setAttribute("aria-valuenow", String(done));
+  const {done, total} = p.progress, bar = el("progress", "bar");
+  bar.setAttribute("max", String(total)); bar.setAttribute("value", String(done));
+  bar.setAttribute("aria-label", `${p.title}: ${done} of ${total} done`);
   return el("section", "milestone", el("header", "milestone-head", el("h2", "", p.title), bar, el("span", "muted", `${done}/${total}`)), rows.map(row));
 }
 export function goalsScreen() {
