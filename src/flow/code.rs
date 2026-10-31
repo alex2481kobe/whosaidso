@@ -188,11 +188,36 @@ fn pair<'a>(flow: &'a Flow, mut a: &'a str, mut b: &'a str) -> Option<(&'a str, 
     Some((a, b))
 }
 
-pub fn unplanned(flow: &Flow, graph: &Graph, owners: &BTreeMap<&str, Vec<&str>>) -> Vec<Value> {
+pub struct Binding<'a> {
+    pub edge: &'a Edge,
+    pub from: Vec<&'a str>,
+    pub to: BTreeSet<&'a str>,
+}
+pub fn bindings<'a>(
+    flow: &'a Flow,
+    graph: &'a Graph,
+    owners: &BTreeMap<&str, Vec<&'a str>>,
+) -> Vec<Binding<'a>> {
+    graph
+        .edges
+        .iter()
+        .map(|edge| Binding {
+            edge,
+            from: source_owners(flow, owners, edge),
+            to: target_owners(owners, edge),
+        })
+        .collect()
+}
+pub fn unplanned(
+    flow: &Flow,
+    bindings: &[Binding<'_>],
+    owners: &BTreeMap<&str, Vec<&str>>,
+) -> Vec<Value> {
     let mut pairs: BTreeMap<(&str, &str), Value> = BTreeMap::new();
-    for edge in &graph.edges {
-        let from = source_owners(flow, owners, edge);
-        let to = target_owners(owners, edge);
+    for binding in bindings {
+        let edge = binding.edge;
+        let from = &binding.from;
+        let to = &binding.to;
         let boundary = |id: &str| flow.covers.boundaries.iter().any(|b| flow.contains(id, b));
         if !inside(flow, &edge.occurrence.path)
             && !from.iter().chain(to.iter()).any(|id| boundary(id))
@@ -200,7 +225,7 @@ pub fn unplanned(flow: &Flow, graph: &Graph, owners: &BTreeMap<&str, Vec<&str>>)
             continue;
         }
         let mut edge_pairs = BTreeMap::new();
-        for source in &from {
+        for source in from {
             let alternatives: BTreeSet<_> = edge
                 .targets
                 .iter()

@@ -83,14 +83,15 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<(Value, Graph), Strin
     for ids in owners.values_mut() {
         super::code::deepest(flow, ids);
     }
+    let bindings = super::code::bindings(flow, &graph, &owners);
     let mut steps = BTreeMap::new();
     for step in &flow.steps {
         steps.insert(
             step.id.clone(),
-            super::hops::compare(flow, step, &nodes, &owners, &graph, snapshot)?,
+            super::hops::compare(flow, step, &nodes, &owners, &graph, &bindings, snapshot)?,
         );
     }
-    let unplanned = super::code::unplanned(flow, &graph, &owners);
+    let unplanned = super::code::unplanned(flow, &bindings, &owners);
     for item in &unplanned {
         let state = item["state"].as_str().unwrap_or("unplanned");
         if let Some(id) = item["from"].as_str() {

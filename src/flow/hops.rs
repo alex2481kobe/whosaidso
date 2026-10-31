@@ -12,6 +12,7 @@ pub fn compare(
     nodes: &BTreeMap<String, Value>,
     owners: &BTreeMap<&str, Vec<&str>>,
     graph: &Graph,
+    bindings: &[super::code::Binding<'_>],
     snapshot: &Snapshot,
 ) -> Result<Value, String> {
     let from = &nodes[&step.from];
@@ -46,21 +47,16 @@ pub fn compare(
         };
         return Ok(json!({"state":state,"evidence":"literal"}));
     }
-    let edges: Vec<_> = graph
-        .edges
+    let edges: Vec<_> = bindings
         .iter()
         .filter(|e| {
-            super::code::source_owners(flow, owners, e)
-                .iter()
-                .any(|id| flow.contains(id, &step.from))
-                && super::code::target_owners(owners, e)
-                    .iter()
-                    .any(|id| flow.contains(id, &step.to))
+            e.from.iter().any(|id| flow.contains(id, &step.from))
+                && e.to.iter().any(|id| flow.contains(id, &step.to))
         })
         .collect();
     if let Some(edge) = edges.first() {
         let certain = edges.iter().find(|e| {
-            e.targets.iter().all(|target| {
+            e.edge.targets.iter().all(|target| {
                 owners
                     .get(target.as_str())
                     .is_some_and(|ids| ids.iter().any(|id| flow.contains(id, &step.to)))
@@ -68,7 +64,7 @@ pub fn compare(
         });
         return Ok(
             json!({"state":if certain.is_some() {"built"} else {"ambiguous"},
-            "evidence":strength(certain.copied().unwrap_or(edge).occurrence.layer)}),
+            "evidence":strength(certain.copied().unwrap_or(edge).edge.occurrence.layer)}),
         );
     }
     let states = [
