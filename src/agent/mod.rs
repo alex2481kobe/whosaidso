@@ -6,6 +6,7 @@ mod redirect;
 mod run;
 mod runners;
 mod shell;
+mod skills;
 
 use serde_json::{Value, json};
 use std::io::{Read, Write};
