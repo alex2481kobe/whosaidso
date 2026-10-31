@@ -341,12 +341,12 @@ fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<()
     let kept = if shared {
         HashSet::new()
     } else {
-        blob::referenced(root)?
+        blob::retention::referenced(root)?
     };
     let blobs = if shared {
         Vec::new()
     } else {
-        blob::to_remove(root, &kept, false)?
+        blob::retention::to_remove(root, &kept, false)?
     };
     let trash = blob::trash(root)?;
     let names = deletions
@@ -396,7 +396,7 @@ fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<()
         .map(|m| {
             Ok((
                 blob::path(root, &m.media_sha256, &m.ext)?,
-                gallery::archive_path(root, m.ran_at)?,
+                gallery::archive::archive_path(root, m.ran_at)?,
             ))
         })
         .collect::<Result<_, String>>()?;
@@ -404,9 +404,9 @@ fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<()
     let mut moved = Vec::new();
     let applied = (|| {
         if !shared {
-            blob::restore(root, &kept)?;
+            blob::retention::restore(root, &kept)?;
         }
-        gallery::archive(root, &archived)?;
+        gallery::archive::archive(root, &archived)?;
         for (path, _) in &records {
             fs::remove_file(path).map_err(|e| e.to_string())?;
         }
@@ -444,7 +444,7 @@ fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<()
                     .map_err(|e| e.to_string())?;
             }
             if !shared {
-                blob::restore(root, &blob::referenced(root)?)?;
+                blob::retention::restore(root, &blob::retention::referenced(root)?)?;
             }
             journal.records.clear();
             journal.moves.clear();
@@ -453,11 +453,11 @@ fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<()
         }
     };
     if !shared {
-        for path in blob::to_remove(root, &kept, true)? {
+        for path in blob::retention::to_remove(root, &kept, true)? {
             fs::remove_file(path).map_err(|e| e.to_string())?;
         }
     }
-    for tree in blob::worktrees(root)? {
+    for tree in blob::retention::worktrees(root)? {
         for folder in record::FOLDERS {
             publish::record_dir(&tree, folder)?;
             if let Ok(entries) = fs::read_dir(tree.join(".whosaidso").join(folder)) {
@@ -495,7 +495,7 @@ fn verify(
     let kept = if shared {
         HashSet::new()
     } else {
-        blob::referenced(root)?
+        blob::retention::referenced(root)?
     };
     if moved.iter().any(|(_, path, _)| {
         path.file_name()
@@ -505,7 +505,7 @@ fn verify(
         return Err("trashed evidence referenced".into());
     }
     if !shared {
-        blob::restore(root, &kept)?;
+        blob::retention::restore(root, &kept)?;
     }
     Ok(kept)
 }

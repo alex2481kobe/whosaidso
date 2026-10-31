@@ -15,7 +15,7 @@ use std::{
 };
 
 fn media(root: &Path, m: &gallery::Media, store: &Store) -> Result<Value, String> {
-    let kind = gallery::media_type(&m.ext)?;
+    let kind = gallery::types::media_type(&m.ext)?;
     let path = blob::path(root, &m.media_sha256, &m.ext)?;
     let mut value = json!(m);
     value["id"] = json!(m.sha);
@@ -91,7 +91,7 @@ fn goals_screen(root: &Path, store: &Store) -> Result<(Value, i64), String> {
             "state":s.map(|s| goals::label(s.state)), "branches":s.map(|s| &s.branches), "claim":held.get(&g.id), "instrument":instrument,
             "proof":proof.map(|(p, current)| json!({"instrument":p.instrument,"commit":p.commit,"exit_code":p.exit_code,"ran_at":p.ran_at,"output_tail":p.output_tail,"current":current})),
             "asks":record::asks(store, &g.id).into_iter().take(RECENT).map(|a| json!({"said":a.said,"ran_at":a.ran_at})).collect::<Vec<_>>(),
-            "media":media.get(g.id.as_str()).into_iter().flatten().take(RECENT).map(|m| json!({"id":m.sha,"media_sha256":m.media_sha256,"tag":gallery::media_type(&m.ext).map_or("", |t| t.tag),"shows":m.shows})).collect::<Vec<_>>(),
+            "media":media.get(g.id.as_str()).into_iter().flatten().take(RECENT).map(|m| json!({"id":m.sha,"media_sha256":m.media_sha256,"tag":gallery::types::media_type(&m.ext).map_or("", |t| t.tag),"shows":m.shows})).collect::<Vec<_>>(),
         })
     }).collect::<Vec<_>>();
     let mut phases: Vec<_> = store.phases.iter().collect();
@@ -124,7 +124,7 @@ fn gallery_screen(root: &Path) -> Result<Value, String> {
     Ok(json!({"version":token,"entries":entries,"archives":archives(root)?}))
 }
 fn archives(root: &Path) -> Result<Vec<Value>, String> {
-    let sample = gallery::archive_path(root, 0)?;
+    let sample = gallery::archive::archive_path(root, 0)?;
     let mut entries = Vec::new();
     let dir = match fs::read_dir(sample.parent().ok_or("invalid archive path")?) {
         Ok(d) => d,
@@ -257,7 +257,7 @@ fn media_file(root: &Path, sha: &str, params: &HashMap<String, String>) -> Reply
         if bytes.len() as u64 != m.byte_size || record::sha256_hex(&bytes) != sha {
             return Err("media changed while reading".into());
         }
-        let mut reply = Reply::bytes(gallery::media_type(&m.ext)?.mime, &bytes);
+        let mut reply = Reply::bytes(gallery::types::media_type(&m.ext)?.mime, &bytes);
         reply.header("Accept-Ranges", "bytes");
         if params.get("download").is_some_and(|v| v == "1") {
             reply.header(

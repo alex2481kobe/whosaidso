@@ -53,6 +53,6 @@ pub fn token(root: &Path) -> Result<String, String> {
     for folder in record::FOLDERS {
         listing(&root.join(".whosaidso").join(folder)).hash(&mut hash);
     }
-    listing(&gallery::archive_dir(root)?).hash(&mut hash);
+    listing(&gallery::archive::archive_dir(root)?).hash(&mut hash);
     Ok(format!("{:016x}", hash.finish()))
 }
