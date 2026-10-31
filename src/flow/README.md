@@ -74,7 +74,8 @@ symbol selection. Missing planned anchors stay `planned`; other absent anchors
 are `missing`; partial anchors are `drifted`. Multiple symbol candidates are
 `ambiguous`. Unextracted files and unresolved calls inside `covers` remain
 `unknown`. Calls crossing parts without a planned step are `unplanned`.
-Calls within a part and paths outside `covers` are not judged. Parent mappings
+Calls within a part and calls outside `covers` are not judged; declared
+boundaries include their incoming and outgoing crossings without path globs. Parent mappings
 do not create extra parts inside children; a step can cover descendant calls.
 
 Steps use indexed call evidence labelled `precise` or `syntactic`. An optional

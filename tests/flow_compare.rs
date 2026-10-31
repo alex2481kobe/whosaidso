@@ -104,3 +104,22 @@ fn planned_absence_does_not_hide_unknown_coverage_in_parent_rollup() {
     assert_eq!(v["state"], "unknown");
     assert_eq!(v["nodes"]["feature"]["state"], "unknown");
 }
+
+#[test]
+fn declared_boundaries_define_the_comparison_universe_without_path_globs() {
+    let f = Fixture::sources(&[(
+        "app.rs",
+        "fn screen() { server(); }\nfn server() {}\nfn other() { private(); }\nfn private() {}\n",
+    )]);
+    let mut flow = json!({"covers":{"boundaries":["server"]},"nodes":[
+        {"id":"screen","type":"screen","symbols":["screen"]},
+        {"id":"server","type":"service","symbols":["server"],"note":"Local test"}
+    ],"steps":[]});
+    f.write("feature", &flow);
+    let v = compare(&f);
+    assert_eq!(v["state"], "unplanned");
+    assert_eq!(v["unplanned"].as_array().unwrap().len(), 1);
+    flow["steps"] = json!([{"id":"call","from":"screen","to":"server","when":"ready"}]);
+    f.write("feature", &flow);
+    assert_eq!(compare(&f)["state"], "built");
+}

@@ -219,10 +219,19 @@ fn unplanned(flow: &Flow, graph: &Graph, owners: &BTreeMap<&str, Vec<&str>>) -> 
     let mut seen = BTreeSet::new();
     let mut rows = vec![];
     for edge in &graph.edges {
-        if !inside(flow, &edge.occurrence.path) {
+        let from = edge.source.as_deref().and_then(|s| owners.get(s));
+        let boundary = |ids: &Vec<&str>| {
+            ids.iter()
+                .any(|id| flow.covers.boundaries.iter().any(|b| flow.contains(id, b)))
+        };
+        let touches_boundary = from.is_some_and(boundary)
+            || edge
+                .targets
+                .iter()
+                .any(|target| owners.get(target.as_str()).is_some_and(boundary));
+        if !inside(flow, &edge.occurrence.path) && !touches_boundary {
             continue;
         }
-        let from = edge.source.as_deref().and_then(|s| owners.get(s));
         for target in &edge.targets {
             let to = owners.get(target.as_str());
             let crossing = match (from, to) {
