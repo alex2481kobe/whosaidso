@@ -127,8 +127,11 @@ Name-only calls resolve within a language family; a cross-language hop needs dec
 evidence such as a literal bridge or precise identity.
 
 Landing and `flow drift-check` discard precise evidence for an indexed language if
-any of its documents changed or was deleted, or a new document in that language is
-not indexed. Unchanged documents that fail occurrence validation stay unknown and
-use syntax locally in gates and viewer. The viewer remains per-document and labels
-stale evidence. Commit, index the language, then land; a strict refusal names the
-indexing command once.
+its sources or registered build manifests were added, removed or edited since the
+indexer run. The run's input manifest includes sources the indexer chose not to
+emit; those files do not permanently invalidate it. Unchanged documents that fail
+occurrence validation stay unknown and use syntax locally in gates and viewer.
+Precise references to their definitions remain unknown when ownership cannot be
+established. Rust import aliases cannot bind through unrelated bare-name matches.
+The viewer remains per-document and labels stale evidence. Commit, index the
+language, then land; a strict refusal names the indexing command once.

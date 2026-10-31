@@ -183,18 +183,28 @@ fn assemble(
     let containers: HashMap<_, _> = definitions.iter().map(|d| (d.symbol.as_str(), d)).collect();
     let mut edges = Vec::new();
     for row in references {
-        let unresolved = unvalidated.contains(&row.symbol);
+        let qualifier = rust_target(&row, &containers);
+        let renamed = aliases.get(&row.path).is_some_and(|names| {
+            names.contains(
+                qualifier
+                    .as_ref()
+                    .map_or(row.name.as_str(), |parts| parts[0].as_str()),
+            )
+        });
+        let unresolved =
+            unvalidated.contains(&row.symbol) || (row.layer == Layer::Syntactic && renamed);
         let targets = if row.layer == Layer::Precise {
             vec![row.symbol.clone()]
         } else {
-            let candidates = rust_target(&row, &containers)
-                .filter(|parts| {
-                    !aliases
-                        .get(&row.path)
-                        .is_some_and(|names| names.contains(&parts[0]))
-                })
+            let candidates = qualifier
+                .clone()
+                .filter(|_| rust_module(&row.path).is_some() && !renamed)
                 .and_then(|path| rust.get(&path))
-                .or_else(|| names.get(row.name.as_str()))
+                .or_else(|| {
+                    (!renamed || qualifier.is_some())
+                        .then(|| names.get(row.name.as_str()))
+                        .flatten()
+                })
                 .cloned()
                 .unwrap_or_default();
             let mut ids: Vec<_> = candidates
@@ -240,7 +250,9 @@ fn rust_module(path: &str) -> Option<Vec<String>> {
     Some(parts)
 }
 fn rust_target(row: &Row, definitions: &HashMap<&str, &Row>) -> Option<Vec<String>> {
-    rust_module(&row.path)?;
+    if !row.path.ends_with(".rs") {
+        return None;
+    }
     let scope = row
         .container
         .as_deref()

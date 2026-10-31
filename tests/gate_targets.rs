@@ -53,3 +53,29 @@ fn an_unvalidated_target_cannot_erase_a_precise_crossing() {
     );
     assert!(compare["unknown"].to_string().contains("send"), "{compare}");
 }
+
+#[test]
+fn bare_import_aliases_cannot_bind_to_an_unrelated_same_named_function() {
+    let f = Fixture::sources(&[
+        (
+            "src/client.rs",
+            "use crate::secret::real as save;\nfn entry() { save(); }\n",
+        ),
+        ("src/safe.rs", "pub fn save() {}\n"),
+        ("src/secret.rs", "pub fn real() {}\n"),
+    ]);
+    f.write(
+        "app",
+        &json!({"covers":{"paths":["src/**"]},"nodes":[
+        {"id":"client","type":"part","paths":["src/client.rs","src/safe.rs"]},
+        {"id":"secret","type":"part","paths":["src/secret.rs"]}
+    ],"steps":[]}),
+    );
+    bad(&f.root, &["flow", "drift-check"], "unknown");
+    write(&f.root.join("src/secret.rs"), "pub fn save() {}\n");
+    write(
+        &f.root.join("src/client.rs"),
+        "use crate::secret::save;\nfn entry() { save(); }\n",
+    );
+    bad(&f.root, &["flow", "drift-check"], "unknown");
+}
