@@ -19,27 +19,19 @@ pub fn put(root: &Path, kind: &str, id: &str, value: &Value) -> PathBuf {
 
 pub fn goal(root: &Path, id: &str) -> PathBuf {
     write(&root.join(".whosaidso/.gitignore"), "cache/\n");
-    if !root.join(".whosaidso/phases/p.json").exists() {
-        put(root, "phases", "p", &json!({"title":"Phase","order":1}));
-    }
-    if !root.join(".whosaidso/instruments/test.json").exists() {
-        instrument(root, &["true"]);
-    }
     put(
         root,
         "goals",
         id,
-        &json!({"title":id,"done_when":"works","check":"test","broader":"p"}),
+        &json!({"title":id,"done_when":"works","check":["true"],"parent":null,"order":1,"after":[]}),
     )
 }
 
-pub fn instrument(root: &Path, run: &[&str]) {
-    put(
-        root,
-        "instruments",
-        "test",
-        &json!({"run":run,"answers":"works"}),
-    );
+pub fn check_command(root: &Path, run: &[&str]) {
+    let path = root.join(".whosaidso/goals/g.json");
+    let mut goal = super::value(&path);
+    goal["check"] = json!(run);
+    put(root, "goals", "g", &goal);
 }
 
 pub fn proof(root: &Path, commit: &str, at: i64, code: i32) -> PathBuf {
@@ -47,7 +39,7 @@ pub fn proof(root: &Path, commit: &str, at: i64, code: i32) -> PathBuf {
         root,
         "proofs",
         "",
-        &json!({"goal":"g","instrument":"test","commit":commit,"exit_code":code,"output_sha256":hash(b""),"output_tail":"","ran_at":at}),
+        &json!({"goal":"g","check": super::value(&root.join(".whosaidso/goals/g.json"))["check"],"commit":commit,"exit_code":code,"output_sha256":hash(b""),"output_tail":"","ran_at":at}),
     )
 }
 

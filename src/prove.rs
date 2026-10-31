@@ -1,9 +1,9 @@
-// Run a goal's instrument and store its content-addressed proof.
+// Run a goal's check and store its content-addressed proof.
 use crate::{
     git, publish,
     record::{
         self,
-        model::{Instrument, Proof},
+        model::{Goal, Proof},
     },
 };
 use sha2::{Digest, Sha256};
@@ -59,14 +59,9 @@ pub fn prove(root: &Path, id: &str) -> Result<String, String> {
             store.errors.join("\n")
         }
     })?;
-    let instrument = store
-        .instruments
-        .iter()
-        .find(|i| i.id == goal.check)
-        .ok_or_else(|| format!("unknown instrument {}", goal.check))?;
-    run(root, &goal.id, instrument)
+    run(root, &goal.id, goal)
 }
-fn run(root: &Path, id: &str, instrument: &Instrument) -> Result<String, String> {
+fn run(root: &Path, id: &str, check: &Goal) -> Result<String, String> {
     publish::record_dir(root, "proofs")?;
     if !clean(root)? {
         return Err("prove: commit or stash your changes first".into());
@@ -77,19 +72,26 @@ fn run(root: &Path, id: &str, instrument: &Instrument) -> Result<String, String>
         root,
         &[
             "show",
-            &format!("{commit}:.whosaidso/instruments/{}.json", instrument.id),
+            &format!("{commit}:.whosaidso/goals/{}.json", check.id),
         ],
     )?;
-    let recorded: Instrument =
-        serde_json::from_slice(&bytes).map_err(|e| format!("prove: instrument: {e}"))?;
+    let recorded: Goal =
+        serde_json::from_slice(&bytes).map_err(|e| format!("prove: check: {e}"))?;
     let (mut output, pipe) = UnixStream::pair().map_err(|e| e.to_string())?;
     let stderr = pipe.try_clone().map_err(|e| e.to_string())?;
-    let child = Command::new(recorded.run.first().ok_or("prove: empty run")?)
-        .args(&recorded.run[1..])
-        .current_dir(root)
-        .stdout(Stdio::from(OwnedFd::from(pipe)))
-        .stderr(Stdio::from(OwnedFd::from(stderr)))
-        .spawn();
+    let child = Command::new(
+        recorded
+            .check
+            .as_ref()
+            .ok_or("prove: goal has no check")?
+            .first()
+            .ok_or("prove: empty run")?,
+    )
+    .args(&recorded.check.as_ref().ok_or("prove: goal has no check")?[1..])
+    .current_dir(root)
+    .stdout(Stdio::from(OwnedFd::from(pipe)))
+    .stderr(Stdio::from(OwnedFd::from(stderr)))
+    .spawn();
     let mut hash = Sha256::new();
     let mut tail = VecDeque::with_capacity(MAX_OUTPUT_TAIL_BYTES);
     let exit_code = match child {
@@ -110,16 +112,16 @@ fn run(root: &Path, id: &str, instrument: &Instrument) -> Result<String, String>
             let status = child.wait().map_err(|e| format!("prove: wait: {e}"))?;
             i64::from(status.code().unwrap_or(-1))
         }
-        Err(e) => return Err(format!("prove: start instrument: {e}")),
+        Err(e) => return Err(format!("prove: start check: {e}")),
     };
     if git::run(root, &["rev-parse", "HEAD"])?.trim() != commit {
-        return Err("prove: HEAD changed during instrument".into());
+        return Err("prove: HEAD changed during check".into());
     }
     if !clean(root)? {
-        return Err("prove: working tree changed during instrument".into());
+        return Err("prove: working tree changed during check".into());
     }
     if head_reflog(root)? != reflog {
-        return Err("prove: HEAD reflog changed during instrument; no proof recorded".into());
+        return Err("prove: HEAD reflog changed during check; no proof recorded".into());
     }
     let mut output_tail =
         String::from_utf8_lossy(&tail.into_iter().collect::<Vec<_>>()).into_owned();
@@ -132,7 +134,7 @@ fn run(root: &Path, id: &str, instrument: &Instrument) -> Result<String, String>
     let mut proof = Proof {
         sha: String::new(),
         goal: id.into(),
-        instrument: instrument.id.clone(),
+        check: check.check.clone().ok_or("prove: goal has no check")?,
         commit,
         exit_code,
         output_sha256: hash.finalize().iter().map(|b| format!("{b:02x}")).collect(),

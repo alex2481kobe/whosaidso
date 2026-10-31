@@ -1,5 +1,4 @@
 // CLI dispatch; record and command rules live in their respective modules.
-mod ask;
 mod blob;
 mod cache;
 mod check;
@@ -60,7 +59,6 @@ fn run() -> Result<(), String> {
         "install-hooks", [cmd] if cmd == "install-hooks" => { hooks::install(&root)?; projects::register(&root) };
         "start <goal-id>", [cmd, id] if cmd == "start" => hooks::start(&root, &cwd, id);
         "gate [<base>]", [cmd, rest @ ..] if cmd == "gate" && rest.len() <= 1 => gate::gate(&root, rest.first().map(String::as_str).unwrap_or(&config::main(&root)?));
-        "ask <goal-id> <words...>", [cmd, id, words @ ..] if cmd == "ask" => ask::ask(&root, id, words);
         "show <id>", [cmd, id] if cmd == "show" => show::show(&root, id);
         "goals", [cmd] if cmd == "goals" => goals::goals(&root);
         "prove <goal-id>", [cmd, id] if cmd == "prove" => { println!("{}", prove::prove(&root, id)?); Ok(()) };

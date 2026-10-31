@@ -47,10 +47,7 @@ fn sync(root: &Path) -> Result<Counts, String> {
     let files = tree::files_in(root, |path| {
         let mut parts = path.split('/');
         if parts.next() == Some(".whosaidso")
-            && matches!(
-                parts.next(),
-                Some("phases" | "goals" | "instruments" | "proofs" | "asks" | "media")
-            )
+            && matches!(parts.next(), Some("goals" | "proofs" | "media"))
         {
             valid.contains(&root.join(path))
         } else {

@@ -1,7 +1,6 @@
 mod common;
 use common::process::*;
 use common::{records as r, *};
-use serde_json::json;
 use std::fs;
 
 #[test]
@@ -18,13 +17,6 @@ fn records_files_and_main_history_are_searchable() {
     assert!(cli(root, &["find", "wall"]).contains("docs/walls.md"));
     assert!(cli(root, &["find", "kind:goal", "walls"]).starts_with("goal g"));
     assert!(cli(root, &["find", "north-wall", "kind:commit"]).contains("north-wall"));
-    r::put(
-        root,
-        "asks",
-        "",
-        &json!({"goal":"g","said":"velvet unicorn request","commit":head(root),"ran_at":1}),
-    );
-    assert!(cli(root, &["find", "velvet", "unicorn"]).contains("ask g"));
     let p = r::proof(root, &head(root), 1, 0);
     let mut v = value(&p);
     fs::remove_file(p).unwrap();
@@ -116,7 +108,7 @@ fn invalid_records_are_evicted_from_a_warm_search() {
     assert!(cli(root, &["find", "validatorneedle"]).contains("no indexed match"));
     let p = r::goal(root, "validatorneedle");
     cli(root, &["find", "validatorneedle"]);
-    fs::remove_file(root.join(".whosaidso/instruments/test.json")).unwrap();
+    write(&p, "{");
     assert!(cli(root, &["find", "kind:goal", "validatorneedle"]).contains("no indexed match"));
     assert!(p.exists());
 }

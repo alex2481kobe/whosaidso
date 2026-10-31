@@ -5,8 +5,11 @@ use crate::{
 use std::collections::HashSet;
 
 pub fn children<'a>(goals: &'a [Goal], parent: &str) -> Vec<&'a Goal> {
-    let mut found: Vec<_> = goals.iter().filter(|g| g.broader == parent).collect();
-    found.sort_by(|a, b| a.id.cmp(&b.id));
+    let mut found: Vec<_> = goals
+        .iter()
+        .filter(|g| g.parent.as_deref().unwrap_or("") == parent)
+        .collect();
+    found.sort_by(|a, b| (a.order, &a.id).cmp(&(b.order, &b.id)));
     found
 }
 fn leaf_states(
@@ -48,39 +51,18 @@ pub fn counts(goals: &[Goal], states: &[GoalState], parent: &str) -> (usize, usi
         ),
     )
 }
-pub fn in_phase(goal: &Goal, phase: &str, goals: &[Goal]) -> bool {
-    let mut parent = goal.broader.as_str();
-    let mut seen = HashSet::new();
-    while seen.insert(parent) {
-        if parent == phase {
-            return true;
-        }
-        match goals.iter().find(|g| g.id == parent) {
-            Some(g) => parent = &g.broader,
-            None => break,
-        }
-    }
-    false
-}
-
 #[derive(PartialEq, Eq)]
 pub struct Snapshot {
-    phases: Vec<(i64, String)>,
-    goals: Vec<(String, String, String)>,
+    goals: Vec<(String, String, Option<String>)>,
     states: Vec<GoalState>,
 }
 pub fn snapshot(root: &std::path::Path) -> Result<Snapshot, String> {
     let store = crate::record::load(root)?;
     Ok(Snapshot {
-        phases: store
-            .phases
-            .iter()
-            .map(|p| (p.order, p.title.clone()))
-            .collect(),
         goals: store
             .goals
             .iter()
-            .map(|g| (g.id.clone(), g.title.clone(), g.broader.clone()))
+            .map(|g| (g.id.clone(), g.title.clone(), g.parent.clone()))
             .collect(),
         states: crate::state::states(root, &store)?
             .into_iter()
@@ -90,4 +72,19 @@ pub fn snapshot(root: &std::path::Path) -> Result<Snapshot, String> {
             })
             .collect(),
     })
+}
+
+pub fn milestone<'a>(goal: &'a Goal, goals: &'a [Goal]) -> &'a str {
+    let mut current = goal;
+    let mut seen = HashSet::new();
+    while let Some(parent) = &current.parent {
+        if !seen.insert(&current.id) {
+            break;
+        }
+        match goals.iter().find(|g| &g.id == parent) {
+            Some(g) => current = g,
+            None => break,
+        }
+    }
+    &current.id
 }

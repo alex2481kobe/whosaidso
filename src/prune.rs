@@ -88,17 +88,11 @@ fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<St
                 || std::str::from_utf8(&f[3..]).map_or(true, |p| {
                     let path = Path::new(p);
                     !tree::temporary(path)
-                        || !matches!(
-                            path.parent().and_then(Path::to_str),
-                            Some(
-                                ".whosaidso/phases"
-                                    | ".whosaidso/goals"
-                                    | ".whosaidso/instruments"
-                                    | ".whosaidso/proofs"
-                                    | ".whosaidso/asks"
-                                    | ".whosaidso/media"
-                            )
-                        )
+                        || !path
+                            .parent()
+                            .and_then(Path::file_name)
+                            .and_then(|s| s.to_str())
+                            .is_some_and(|f| record::FOLDERS.contains(&f))
                         || !fs::symlink_metadata(root.join(p)).is_ok_and(|m| m.is_file())
                 })
         })
@@ -261,9 +255,8 @@ fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<St
     }
     let media_archived = archived.len();
     Ok(format!(
-        "{notice}prune: {} proofs, {} asks, {media_archived} media archived",
-        proofs.len() + removed[0],
-        removed[1]
+        "{notice}prune: {} proofs, {media_archived} media archived",
+        proofs.len() + removed[0]
     ))
 }
 fn verify(

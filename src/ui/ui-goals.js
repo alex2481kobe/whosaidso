@@ -1,4 +1,4 @@
-// The Goals screen: totals, one block per phase, one expandable row per goal.
+// The Goals screen: totals, one block per milestone, one expandable row per goal.
 import { el, api, apiURL, state, chip, mono, titleCase, ago, stamp, searchBox, icon } from "./ui.js";
 import { dropdown } from "./ui-parts.js";
 import { message } from "./ui-components.js";
@@ -30,10 +30,9 @@ function thumbs(media) {
 function detail(g) {
   const p = g.proof, fail = p && p.exit_code !== 0, verdict = fail ? "fail" : "pass";
   return el("div", "goal-detail",
-    el("div", "", g.instrument && [el("b", "", g.instrument.id), " · "],
+    el("div", "", g.check && [mono(g.check.join(" ")), " · "],
       p ? [el("b", "verdict " + verdict + (p.current ? "" : " old"), (p.current ? "" : "old ") + verdict), " · ", mono(p.commit.slice(0, 7)), " · " + stamp(p.ran_at)] : "no proof"),
     fail && p.current && p.output_tail && el("pre", "output", p.output_tail),
-    g.asks.map(a => el("div", "", a.said.split("\n")[0])),
     g.media.length > 0 && thumbs(g.media));
 }
 function row(g) {
@@ -45,7 +44,7 @@ function row(g) {
   d.addEventListener("toggle", () => { if (d.open) { kept.open.add(g.id); fill(); } else kept.open.delete(g.id); });
   return d;
 }
-function phase(p, rows) {
+function milestone(p, rows) {
   const total = sum(p.counts), done = p.counts.done || 0, fill = el("i");
   fill.style.width = total ? `${100 * done / total}%` : "0";
   const bar = el("div", "bar", fill);
@@ -61,7 +60,7 @@ export function goalsScreen() {
     totals.textContent = [`${data.goals.length} goals`, ...parts(data.totals)].join(" · ");
     const rows = data.goals.filter(g => (!kept.state || g.state === kept.state) && (!kept.search || JSON.stringify(g).toLowerCase().includes(kept.search)));
     const focused = document.activeElement?.closest?.("details.goal")?.dataset.id;
-    list.replaceChildren(...data.phases.map(p => { const mine = rows.filter(g => g.phase === p.id); return mine.length ? phase(p, mine) : null; }).filter(Boolean));
+    list.replaceChildren(...data.milestones.map(p => { const mine = rows.filter(g => g.milestone === p.id); return mine.length ? milestone(p, mine) : null; }).filter(Boolean));
     if (!rows.length) list.append(message("None"));
     if (focused) list.querySelector(`details.goal[data-id="${CSS.escape(focused)}"] summary`)?.focus({preventScroll: true});
   };

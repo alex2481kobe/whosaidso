@@ -145,18 +145,18 @@ pub fn newest_proof<'a>(
     store: &'a Store,
     commits: &HashSet<&str>,
     goal: &str,
-    instrument: &str,
+    check: Option<&[String]>,
 ) -> Option<&'a Proof> {
     store
         .proofs
         .iter()
         .filter(|p| {
             p.goal == goal
-                && p.instrument == instrument
-                && store
-                    .instrument_hashes
-                    .get(instrument)
-                    .is_some_and(|hash| store.proof_hashes.get(&p.sha) == Some(hash))
+                && Some(p.check.as_slice()) == check
+                && !store
+                    .broken
+                    .iter()
+                    .any(|(kind, id)| kind == "proof" && id == &p.sha)
                 && commits.contains(p.commit.as_str())
         })
         .max_by(|a, b| (a.ran_at, &a.sha).cmp(&(b.ran_at, &b.sha)))
@@ -229,7 +229,7 @@ pub fn states(root: &Path, store: &Store) -> Result<Vec<GoalState>, String> {
     }
     let mut result = Vec::new();
     for goal in &store.goals {
-        let proof = newest_proof(store, &commits, &goal.id, &goal.check);
+        let proof = newest_proof(store, &commits, &goal.id, goal.check.as_deref());
         let proof_index =
             proof.and_then(|p| store.proofs.iter().position(|item| std::ptr::eq(item, p)));
         let bs = branches.get(&goal.id);

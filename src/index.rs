@@ -88,11 +88,10 @@ pub fn sync(root: &Path) -> Result<(), String> {
         };
         let goal = field("goal");
         let title = match kind.as_str() {
-            "ask" => field("said"),
             "proof" => format!(
                 "{} {} {}",
                 goal,
-                field("instrument"),
+                "ran",
                 record::result(
                     value["exit_code"]
                         .as_i64()
@@ -105,7 +104,7 @@ pub fn sync(root: &Path) -> Result<(), String> {
                 .unwrap_or(&id)
                 .to_string(),
         };
-        let key = if kind == "ask" || kind == "proof" {
+        let key = if kind == "proof" {
             format!("{kind}:{goal}:{id}")
         } else {
             format!("{kind}:{id}")

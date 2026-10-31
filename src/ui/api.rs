@@ -37,7 +37,7 @@ fn media(root: &Path, m: &gallery::Media, store: &Store) -> Result<Value, String
     );
     Ok(value)
 }
-// The newest few proofs, asks and media a goal row opens onto; the rest is one `whosaidso` call away.
+// The newest few proofs and media a goal row opens onto; the rest is one `whosaidso` call away.
 const RECENT: usize = 3;
 fn tally<'a>(labels: impl Iterator<Item = &'a str>) -> BTreeMap<&'a str, usize> {
     let mut counts = BTreeMap::new();
@@ -84,31 +84,17 @@ fn goals_screen(root: &Path, store: &Store) -> Result<(Value, i64), String> {
         let s = by_id.get(g.id.as_str());
         // The eligible proof that decided the state; with none, the newest one for the goal, marked as not current.
         let proof = s.and_then(|s| s.proof).map(|i| (&store.proofs[i], true)).or_else(|| proofs.get(g.id.as_str()).map(|p| (*p, false)));
-        let instrument = store.instruments.iter().find(|i| i.id == g.check).map(|i| json!({"id":i.id,"answers":i.answers,"run":i.run}));
         json!({
             "id":g.id, "title":g.title, "done_when":g.done_when,
-            "phase":store.phases.iter().find(|p| crate::goal_tree::in_phase(g, &p.id, &store.goals)).map(|p| &p.id),
-            "state":s.map(|s| goals::label(s.state)), "branches":s.map(|s| &s.branches), "claim":held.get(&g.id), "instrument":instrument,
-            "proof":proof.map(|(p, current)| json!({"instrument":p.instrument,"commit":p.commit,"exit_code":p.exit_code,"ran_at":p.ran_at,"output_tail":p.output_tail,"current":current})),
-            "asks":record::asks(store, &g.id).into_iter().take(RECENT).map(|a| json!({"said":a.said,"ran_at":a.ran_at})).collect::<Vec<_>>(),
+            "parent":g.parent, "milestone":crate::goal_tree::milestone(g, &store.goals),
+            "state":s.map(|s| goals::label(s.state)), "branches":s.map(|s| &s.branches), "claim":held.get(&g.id), "check":g.check,
+            "proof":proof.map(|(p, current)| json!({"check":p.check,"commit":p.commit,"exit_code":p.exit_code,"ran_at":p.ran_at,"output_tail":p.output_tail,"current":current})),
             "media":media.get(g.id.as_str()).into_iter().flatten().take(RECENT).map(|m| json!({"id":m.sha,"media_sha256":m.media_sha256,"tag":gallery::media_type(&m.ext).map_or("", |t| t.tag),"shows":m.shows})).collect::<Vec<_>>(),
         })
     }).collect::<Vec<_>>();
-    let mut phases: Vec<_> = store.phases.iter().collect();
-    phases.sort_by_key(|p| (p.order, &p.id));
-    let phases = phases
-        .into_iter()
-        .map(|p| {
-            let counts = tally(
-                rows.iter()
-                    .filter(|g| g["phase"] == p.id.as_str())
-                    .filter_map(|g| g["state"].as_str()),
-            );
-            json!({"id":p.id,"title":p.title,"counts":counts})
-        })
-        .collect::<Vec<_>>();
+    let milestones: Vec<_> = store.goals.iter().filter(|g| g.parent.is_none()).map(|g| json!({"id":g.id,"title":g.title,"counts":tally(rows.iter().filter(|r| r["milestone"] == g.id).filter_map(|r| r["state"].as_str()))})).collect();
     Ok((
-        json!({"totals":tally(rows.iter().filter_map(|g| g["state"].as_str())),"phases":phases,"goals":rows}),
+        json!({"totals":tally(rows.iter().filter_map(|g| g["state"].as_str())),"milestones":milestones,"goals":rows}),
         lapses,
     ))
 }

@@ -248,7 +248,7 @@ pub fn find(root: &Path, args: &[String]) -> Result<(), String> {
             .key
             .strip_prefix(&format!("{}:", hit.kind))
             .unwrap_or(&hit.key);
-        let key = if hit.kind == "ask" || hit.kind == "proof" {
+        let key = if hit.kind == "proof" {
             key.split_once(':').map_or(key, |(goal, _)| goal)
         } else {
             key

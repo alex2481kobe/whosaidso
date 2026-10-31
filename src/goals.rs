@@ -1,5 +1,5 @@
 // Display the phase and goal tree with states derived from Git.
-use crate::goal_tree::{children, counts};
+use crate::goal_tree::children;
 use crate::{
     record::{self, model::Goal},
     state::{self, GoalState, State},
@@ -44,6 +44,12 @@ fn walk(
         } else {
             format!("{branches}  {details}")
         };
+        if goal.parent.is_none() {
+            let (_, _, counts) = crate::goal_tree::counts(goals, states, &goal.id);
+            if !children(goals, &goal.id).is_empty() {
+                output.push_str(&format!("{}  {counts}\n", goal.title));
+            }
+        }
         output.push_str(&format!(
             "{}{:7} {}  {}{}\n",
             "  ".repeat(depth),
@@ -76,20 +82,14 @@ pub fn output(root: &Path) -> Result<String, String> {
     for (kind, id) in &store.broken {
         output.push_str(&format!("broken  {id} ({kind})\n"));
     }
-    let mut phases: Vec<_> = store.phases.iter().collect();
-    phases.sort_by_key(|p| p.order);
-    for phase in phases {
-        let (_, _, counts) = counts(&store.goals, &states, &phase.id);
-        output.push_str(&format!("P{} {}  {}\n", phase.order, phase.title, counts));
-        walk(
-            &store.goals,
-            &states,
-            &phase.id,
-            1,
-            &mut HashSet::new(),
-            &mut output,
-        );
-    }
+    walk(
+        &store.goals,
+        &states,
+        "",
+        0,
+        &mut HashSet::new(),
+        &mut output,
+    );
     for error in &store.errors {
         output.push_str(&format!("{error}\n"));
     }

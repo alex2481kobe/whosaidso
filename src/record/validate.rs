@@ -1,98 +1,47 @@
-use super::model::Store;
-use super::{MAX_RECORD_BYTES, kind, sha256_hex};
+// Structural and historical integrity. Diagnostics never remove a record.
+use super::{MAX_OUTPUT_TAIL_BYTES, MAX_RECORD_BYTES, hex, model::Store};
 use crate::git;
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
 };
 
-pub(super) fn validate(root: &Path, s: &mut Store) {
-    // Report the root cause once while removing dependent records to a fixed point.
-    let mut rejected = HashSet::new();
-    loop {
-        let mut bad = HashSet::new();
-        let phases: HashSet<_> = s.phases.iter().map(|p| &p.id).collect();
-        let goals: HashMap<_, _> = s.goals.iter().map(|g| (&g.id, g)).collect();
-        let instruments: HashMap<_, _> = s.instruments.iter().map(|i| (i.id.as_str(), i)).collect();
-        let mut ids = HashMap::new();
-        for (kind, id) in s
-            .phases
-            .iter()
-            .map(|p| ("phase", &p.id))
-            .chain(s.goals.iter().map(|g| ("goal", &g.id)))
-            .chain(s.instruments.iter().map(|i| ("instrument", &i.id)))
-        {
-            if let Some(previous) = ids.insert(id, kind) {
-                if previous == kind {
-                    s.errors.push(format!("duplicate {kind} {id}"));
-                }
-                s.errors.push(format!(
-                    "duplicate id {id}: {previous} {id} and {kind} {id}"
-                ));
-                bad.insert(id.clone());
+pub(super) fn validate(root: &Path, store: &mut Store) -> Result<(), String> {
+    let goals: HashMap<_, _> = store.goals.iter().map(|g| (g.id.as_str(), g)).collect();
+    for goal in &store.goals {
+        let mut errors = Vec::new();
+        if goal.id == "none" {
+            errors.push("reserved goal id none".into());
+        }
+        if goal.title.trim().is_empty() {
+            errors.push("empty title".into());
+        }
+        if goal.done_when.trim().is_empty() {
+            errors.push("empty done_when".into());
+        }
+        for reference in goal.parent.iter().chain(&goal.after) {
+            if !goals.contains_key(reference.as_str()) {
+                errors.push(format!("unknown goal {reference}"));
             }
         }
-        let mut orders = HashSet::new();
-        for p in &s.phases {
-            let before = s.errors.len();
-            if !orders.insert(p.order) {
-                s.errors.push(format!("phase {}: duplicate order", p.id));
+        let mut pending = vec![goal.id.as_str()];
+        let mut seen = HashSet::new();
+        while let Some(id) = pending.pop() {
+            if !seen.insert(id) {
+                continue;
             }
-            if s.errors.len() != before {
-                bad.insert(p.id.clone());
+            if let Some(g) = goals.get(id) {
+                for next in g.parent.iter().chain(&g.after) {
+                    if next == &goal.id {
+                        errors.push("dependency chain loops".into());
+                    } else {
+                        pending.push(next);
+                    }
+                }
             }
         }
-        for g in &s.goals {
-            let before = s.errors.len();
-            if g.id == "none" {
-                s.errors.push("reserved goal id none".into());
-            }
-            if !phases.contains(&g.broader) && !goals.contains_key(&g.broader) {
-                if !rejected.contains(&g.broader) {
-                    s.errors
-                        .push(format!("goal {}: unknown broader {}", g.id, g.broader));
-                }
-                bad.insert(g.id.clone());
-            }
-            if g.done_when.trim().is_empty() {
-                s.errors.push(format!("goal {}: empty done_when", g.id));
-            }
-            if !instruments.contains_key(g.check.as_str()) {
-                if rejected.insert(g.check.clone()) {
-                    s.errors.push(format!(
-                        "missing instrument file .whosaidso/instruments/{}.json",
-                        g.check
-                    ));
-                }
-                bad.insert(g.id.clone());
-            }
-            let mut seen = HashSet::new();
-            let mut current = g;
-            while seen.insert(&current.id) {
-                if phases.contains(&current.broader) {
-                    break;
-                }
-                match goals.get(&current.broader) {
-                    Some(next) => current = next,
-                    None => break,
-                }
-            }
-            if seen.contains(&current.broader) && !phases.contains(&current.broader) {
-                s.errors.push(format!("goal {}: broader chain loops", g.id));
-            }
-            if s.errors.len() != before {
-                bad.insert(g.id.clone());
-            }
-        }
-        for (index, i) in s.instruments.iter().enumerate() {
-            let before = s.errors.len();
-            for other in &s.instruments[..index] {
-                if i.run == other.run {
-                    s.errors
-                        .push(format!("duplicate tool {} {}", i.id, other.id));
-                }
-            }
-            let word = i.run.first().map(String::as_str).unwrap_or("");
+        if let Some(check) = &goal.check {
+            let word = check.first().map(String::as_str).unwrap_or("");
             let resolved = !word.is_empty()
                 && if word.contains('/') {
                     root.join(word).is_file()
@@ -102,113 +51,72 @@ pub(super) fn validate(root: &Path, s: &mut Store) {
                     })
                 };
             if !resolved {
-                s.errors.push(format!("unresolved tool {}: {}", i.id, word));
-            }
-            if s.errors.len() != before {
-                bad.insert(i.id.clone());
+                errors.push(format!("unresolved check: {word}"));
             }
         }
-        if bad.is_empty() {
-            break;
+        if !errors.is_empty() {
+            store.broken.push(("goal".into(), goal.id.clone()));
+            store
+                .errors
+                .extend(errors.into_iter().map(|e| format!("goal {}: {e}", goal.id)));
         }
-        rejected.extend(bad.iter().cloned());
-        s.phases.retain(|p| !bad.contains(&p.id));
-        s.goals.retain(|g| !bad.contains(&g.id));
-        s.instruments.retain(|i| !bad.contains(&i.id));
     }
-    let phases: HashSet<_> = s.phases.iter().map(|p| p.id.as_str()).collect();
-    let goals: HashSet<_> = s.goals.iter().map(|g| g.id.as_str()).collect();
-    let instruments: HashSet<_> = s.instruments.iter().map(|i| i.id.as_str()).collect();
-    s.asks.retain(|a| {
-        if goals.contains(a.goal.as_str()) {
-            true
-        } else {
-            if !rejected.contains(&a.goal) {
-                s.errors.push(format!("ask: unknown goal {}", a.goal));
-            }
-            false
-        }
-    });
-    let mut names: Vec<_> = s
+    let mut names: Vec<_> = store
         .proofs
         .iter()
-        .filter(|p| {
-            instruments.contains(p.instrument.as_str())
-                && !rejected.contains(&p.goal)
-                && !rejected.contains(&p.instrument)
-        })
-        .flat_map(|p| {
-            [
-                format!("HEAD:.whosaidso/instruments/{}.json", p.instrument),
-                format!("{}:.whosaidso/instruments/{}.json", p.commit, p.instrument),
-            ]
-        })
+        .map(|p| format!("{}:.whosaidso/goals/{}.json", p.commit, p.goal))
         .collect();
-    names.sort_unstable();
+    names.sort();
     names.dedup();
-    let mut hashes = HashMap::new();
-    if let Err(e) = git::read_objects(root, &names, MAX_RECORD_BYTES as usize, |i, bytes, _| {
-        hashes.insert(names[i].as_str(), bytes.map(|b| sha256_hex(&b)));
+    let mut historical = HashMap::new();
+    git::read_objects(root, &names, MAX_RECORD_BYTES as usize, |i, bytes, _| {
+        historical.insert(
+            names[i].clone(),
+            bytes
+                .and_then(|b| serde_json::from_slice::<super::model::Goal>(&b).ok())
+                .and_then(|g| g.check),
+        );
         Ok(())
-    }) {
-        s.errors.push(e);
-        hashes.clear();
-    }
-    for id in s.proofs.iter().map(|p| p.instrument.as_str()) {
-        let name = format!("HEAD:.whosaidso/instruments/{id}.json");
-        if s.instrument_hashes.get(id) != hashes.get(name.as_str()).and_then(Option::as_ref) {
-            s.instrument_hashes.remove(id);
+    })?;
+    for proof in &store.proofs {
+        let mut errors = Vec::new();
+        if !goals.contains_key(proof.goal.as_str()) {
+            errors.push(format!("unknown goal {}", proof.goal));
         }
-    }
-    s.proofs.retain(|p| {
-        if rejected.contains(&p.goal) || rejected.contains(&p.instrument) {
-            return false;
+        if !hex(&proof.commit, 40) {
+            errors.push("invalid commit".into());
         }
-        let before = s.errors.len();
-        if !goals.contains(p.goal.as_str()) {
-            s.errors.push(format!("proof: unknown goal {}", p.goal));
+        if !hex(&proof.output_sha256, 64) {
+            errors.push("invalid output sha256".into());
         }
-        if !instruments.contains(p.instrument.as_str()) {
-            if rejected.insert(p.instrument.clone()) {
-                s.errors.push(format!(
-                    "missing instrument file .whosaidso/instruments/{}.json",
-                    p.instrument
-                ));
-            }
-            return false;
-        }
-        let name = format!("{}:.whosaidso/instruments/{}.json", p.commit, p.instrument);
-        let hash = hashes.get(name.as_str()).and_then(Option::as_ref);
-        if let Some(hash) = hash {
-            s.proof_hashes.insert(p.sha.clone(), hash.clone());
-        } else {
-            s.errors.push(format!(
-                "proof {}: missing instrument at {}",
-                p.sha, p.commit
+        if proof.output_tail.len() > MAX_OUTPUT_TAIL_BYTES {
+            errors.push(format!(
+                "output tail cap {MAX_OUTPUT_TAIL_BYTES} bytes: count {}",
+                proof.output_tail.len()
             ));
         }
-        s.errors.len() == before
-    });
-    s.media.retain(|i| {
-        if goals.contains(i.goal.as_str()) {
-            true
-        } else {
-            if !rejected.contains(&i.goal) {
-                s.errors.push(format!("media: unknown goal {}", i.goal));
-            }
-            false
+        let key = format!("{}:.whosaidso/goals/{}.json", proof.commit, proof.goal);
+        if historical.get(&key).and_then(Option::as_ref) != Some(&proof.check) {
+            errors.push(format!("missing or different check at {}", proof.commit));
         }
-    });
-    let proofs: HashSet<_> = s.proofs.iter().map(|p| p.sha.as_str()).collect();
-    s.records.retain(|(path, v)| {
-        let text = |k: &str| v[k].as_str().unwrap_or("");
-        let id = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-        match kind(path) {
-            "phase" => phases.contains(id),
-            "goal" => goals.contains(id),
-            "instrument" => instruments.contains(id),
-            "proof" => proofs.contains(id),
-            _ => goals.contains(text("goal")),
+        if !errors.is_empty() {
+            store.broken.push(("proof".into(), proof.sha.clone()));
+            store.errors.extend(
+                errors
+                    .into_iter()
+                    .map(|e| format!("proof {}: {e}", proof.sha)),
+            );
         }
-    });
+    }
+    for media in &store.media {
+        if !goals.contains_key(media.goal.as_str()) {
+            store.broken.push(("media".into(), media.sha.clone()));
+            store
+                .errors
+                .push(format!("media: unknown goal {}", media.goal));
+        }
+    }
+    store.broken.sort();
+    store.broken.dedup();
+    Ok(())
 }
