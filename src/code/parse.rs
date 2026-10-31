@@ -206,10 +206,9 @@ fn caller(mut node: Node<'_>, bytes: &[u8]) -> String {
                 | "trait_item"
                 | "impl_item"
                 | "mod_item"
-        ) {
-            if let Some(name) = definition_name(parent, bytes) {
-                return name;
-            }
+        ) && let Some(name) = definition_name(parent, bytes)
+        {
+            return name;
         }
         node = parent;
     }

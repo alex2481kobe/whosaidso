@@ -39,10 +39,9 @@ fn remember(tx: &Transaction<'_>, source: &str, value: &str, key: &str) -> Resul
         )
         .optional()
         .map_err(err)?
+        && old != key
     {
-        if old != key {
-            remove(tx, &old)?;
-        }
+        remove(tx, &old)?;
     }
     tx.prepare_cached("INSERT OR REPLACE INTO manifest VALUES (?1,?2)")
         .map_err(err)?
@@ -216,39 +215,39 @@ pub fn sync(root: &Path) -> Result<(), String> {
             .execute([])
             .map_err(err)?;
     }
-    if let Some(head) = head {
-        if old.as_deref() != Some(&head) {
-            let range = if ancestor {
-                format!("{}..{head}", old.as_deref().unwrap())
+    if let Some(head) = head
+        && old.as_deref() != Some(&head)
+    {
+        let range = if ancestor {
+            format!("{}..{head}", old.as_deref().unwrap())
+        } else {
+            head.clone()
+        };
+        let log = git::run(
+            root,
+            &[
+                "log",
+                "--no-merges",
+                "--format=%H%x09%s%x09%(trailers:key=Goal,valueonly,separator=%x2C)",
+                &range,
+            ],
+        )?;
+        for line in log.lines() {
+            let mut parts = line.splitn(3, '\t');
+            let sha = parts.next().ok_or("invalid log")?;
+            let title = parts.next().ok_or("invalid log")?;
+            let goal = parts.next().unwrap_or("");
+            let body = if goal.is_empty() {
+                title.to_string()
             } else {
-                head.clone()
+                format!("{title} goal {goal}")
             };
-            let log = git::run(
-                root,
-                &[
-                    "log",
-                    "--no-merges",
-                    "--format=%H%x09%s%x09%(trailers:key=Goal,valueonly,separator=%x2C)",
-                    &range,
-                ],
-            )?;
-            for line in log.lines() {
-                let mut parts = line.splitn(3, '\t');
-                let sha = parts.next().ok_or("invalid log")?;
-                let title = parts.next().ok_or("invalid log")?;
-                let goal = parts.next().unwrap_or("");
-                let body = if goal.is_empty() {
-                    title.to_string()
-                } else {
-                    format!("{title} goal {goal}")
-                };
-                put(&tx, "commit", &format!("commit:{sha}"), title, &body)?;
-            }
-            tx.prepare_cached("INSERT OR REPLACE INTO manifest VALUES ('git:main',?1)")
-                .map_err(err)?
-                .execute([head])
-                .map_err(err)?;
+            put(&tx, "commit", &format!("commit:{sha}"), title, &body)?;
         }
+        tx.prepare_cached("INSERT OR REPLACE INTO manifest VALUES ('git:main',?1)")
+            .map_err(err)?
+            .execute([head])
+            .map_err(err)?;
     }
     let sources: Vec<(String, String)> = tx
         .prepare("SELECT source,key FROM source_docs WHERE ?1=0 OR source NOT LIKE 'file:%'")

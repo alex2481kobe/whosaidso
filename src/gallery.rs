@@ -324,7 +324,7 @@ fn tar_entry(output: &mut std::fs::File, name: &str, bytes: &[u8]) -> Result<(),
     let mut header = [0u8; 512];
     header[..name.len()].copy_from_slice(name.as_bytes());
     header[100..108].copy_from_slice(b"0000644\0");
-    header[108..124].copy_from_slice(b"0000000\00000000\0");
+    header[108..124].copy_from_slice(b"0000000\x000000000\0");
     header[124..136].copy_from_slice(format!("{:011o}\0", bytes.len()).as_bytes());
     header[136..148].copy_from_slice(b"00000000000\0");
     header[148..156].fill(b' ');
@@ -379,10 +379,10 @@ pub fn merge_archives(left: &[u8], right: &[u8]) -> Result<Vec<u8>, String> {
                 .and_then(|n| n.checked_add(512))
                 .ok_or("invalid archive size")?;
             let entry = bytes.get(..end).ok_or("truncated media archive")?;
-            if let Some((old_size, old)) = entries.insert(name.to_owned(), (size, entry)) {
-                if old_size != size || old[512..512 + size] != entry[512..512 + size] {
-                    return Err(format!("conflicting archive entry {name}"));
-                }
+            if let Some((old_size, old)) = entries.insert(name.to_owned(), (size, entry))
+                && (old_size != size || old[512..512 + size] != entry[512..512 + size])
+            {
+                return Err(format!("conflicting archive entry {name}"));
             }
             bytes = &bytes[end..];
             if bytes.is_empty() {

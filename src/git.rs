@@ -11,7 +11,8 @@ pub fn run(dir: &Path, args: &[&str]) -> Result<String, String> {
 }
 pub fn run_bytes(dir: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
     // Cache only directory lookup and pinned history within this process; refs are always read again.
-    static READS: OnceLock<Mutex<HashMap<(PathBuf, Vec<String>), Vec<u8>>>> = OnceLock::new();
+    type Reads = HashMap<(PathBuf, Vec<String>), Vec<u8>>;
+    static READS: OnceLock<Mutex<Reads>> = OnceLock::new();
     let reads = READS.get_or_init(Mutex::default);
     let pinned = matches!(args.first(), Some(&"log" | &"rev-list"))
         && args
@@ -25,10 +26,8 @@ pub fn run_bytes(dir: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
         dir.to_path_buf(),
         args.iter().map(|s| s.to_string()).collect(),
     );
-    if immutable {
-        if let Some(bytes) = reads.lock().map_err(|e| e.to_string())?.get(&key) {
-            return Ok(bytes.clone());
-        }
+    if immutable && let Some(bytes) = reads.lock().map_err(|e| e.to_string())?.get(&key) {
+        return Ok(bytes.clone());
     }
     let out = Command::new("git")
         .args(args)

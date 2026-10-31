@@ -127,10 +127,7 @@ fn linked(
                 if matches!(
                     e.kind(),
                     std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
-                ) =>
-            {
-                ()
-            }
+                ) => {}
             Err(e) => return Err(format!("{}: {e}", parent.display())),
         }
         Some(links)
@@ -232,7 +229,8 @@ pub fn read(
     mut each: impl FnMut(&File, Option<Vec<u8>>) -> Result<(), String>,
 ) -> Result<(), String> {
     let staged: Vec<_> = files.iter().filter(|f| !f.on_disk).collect();
-    let read_disk = |each: &mut dyn FnMut(&File, Option<Vec<u8>>) -> Result<(), String>| {
+    type Each<'a> = dyn FnMut(&File, Option<Vec<u8>>) -> Result<(), String> + 'a;
+    let read_disk = |each: &mut Each| {
         for file in files.iter().filter(|f| f.on_disk) {
             let mut input = open(root, &file.path)?;
             let mut bytes = Vec::with_capacity(
@@ -272,6 +270,7 @@ pub fn read(
 }
 
 // Both indexes reconcile the same way; callers only interpret and store a bounded batch.
+#[allow(clippy::too_many_arguments)]
 pub fn reconcile(
     root: &Path,
     db: &mut Connection,
@@ -426,7 +425,6 @@ pub fn reconcile(
         Ok(())
     })?;
     flush(batch)?;
-    drop(flush);
     // Publish only a complete snapshot, with no intervening writer or changed read buffer.
     let tx = db
         .transaction_with_behavior(TransactionBehavior::Immediate)

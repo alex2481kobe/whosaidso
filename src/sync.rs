@@ -58,15 +58,14 @@ fn destination(stores: &Stores, path: &str) -> Result<PathBuf, String> {
         blob::validate(sha, ext)?;
         return blob::path_in(&stores.blobs, sha, ext);
     }
-    if let Some(name) = path.strip_prefix("archive/") {
-        if name.ends_with(".tar")
-            && name.len() > 4
-            && name
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
-        {
-            return Ok(stores.archive.join(name));
-        }
+    if let Some(name) = path.strip_prefix("archive/")
+        && name.ends_with(".tar")
+        && name.len() > 4
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+    {
+        return Ok(stores.archive.join(name));
     }
     Err(format!("invalid sync path {path}"))
 }

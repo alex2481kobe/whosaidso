@@ -68,10 +68,10 @@ pub fn show(root: &Path, id: &str) -> Result<(), String> {
         let (_, _, counts) = goals::counts(&store.goals, &states, id);
         lines.push(format!("P{} {}  {}", phase.order, phase.title, counts));
         for g in &store.goals {
-            if goals::in_phase(g, id, &store.goals) {
-                if let Some(s) = states.iter().find(|s| s.id == g.id) {
-                    lines.push(format!("{} {}  {}", goals::label(s.state), g.id, g.title));
-                }
+            if goals::in_phase(g, id, &store.goals)
+                && let Some(s) = states.iter().find(|s| s.id == g.id)
+            {
+                lines.push(format!("{} {}  {}", goals::label(s.state), g.id, g.title));
             }
         }
     } else if let Some(i) = store.instruments.iter().find(|i| i.id == id) {

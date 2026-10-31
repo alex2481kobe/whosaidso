@@ -214,10 +214,9 @@ fn connection(mut stream: TcpStream, server: &Server) -> std::io::Result<()> {
     if reply.code == 200
         && reply.mime != "application/json; charset=utf-8"
         && parts[1].starts_with("/api/media/")
+        && let Some(range) = headers.get("range")
     {
-        if let Some(range) = headers.get("range") {
-            apply_range(&mut reply, range);
-        }
+        apply_range(&mut reply, range);
     }
     write_reply(&mut stream, reply)
 }

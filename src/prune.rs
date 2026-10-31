@@ -273,9 +273,9 @@ fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<()
     }
     let mut commits = HashMap::new();
     for (path, value) in &candidates.records {
-        if matches!(record::kind(&path), "proof" | "ask")
+        if matches!(record::kind(path), "proof" | "ask")
             && (!goals.contains(value["goal"].as_str().unwrap_or(""))
-                || (record::kind(&path) == "proof"
+                || (record::kind(path) == "proof"
                     && (!required.contains(value["instrument"].as_str().unwrap_or(""))
                         || !*commits
                             .entry(value["commit"].as_str().unwrap_or(""))
@@ -294,7 +294,7 @@ fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<()
                                 .is_ok()
                             }))))
         {
-            removed[if record::kind(&path) == "proof" { 0 } else { 1 }] += 1;
+            removed[if record::kind(path) == "proof" { 0 } else { 1 }] += 1;
             deletions.push(path.clone());
         }
     }
@@ -510,19 +510,17 @@ fn verify(
     Ok(kept)
 }
 fn hook(root: &Path, name: &str) -> Result<(), String> {
-    if cfg!(debug_assertions) {
-        if let Some(command) = std::env::var_os(name) {
-            if !std::process::Command::new("sh")
-                .arg("-c")
-                .arg(command)
-                .current_dir(root)
-                .status()
-                .map_err(|e| e.to_string())?
-                .success()
-            {
-                return Err("prune hook failed".into());
-            }
-        }
+    if cfg!(debug_assertions)
+        && let Some(command) = std::env::var_os(name)
+        && !std::process::Command::new("sh")
+            .arg("-c")
+            .arg(command)
+            .current_dir(root)
+            .status()
+            .map_err(|e| e.to_string())?
+            .success()
+    {
+        return Err("prune hook failed".into());
     }
     Ok(())
 }

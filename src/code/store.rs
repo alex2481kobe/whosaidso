@@ -36,7 +36,8 @@ pub fn open(root: &Path) -> Result<Connection, String> {
     tx.commit().map_err(|e| e.to_string())?;
     Ok(db)
 }
-pub fn index(root: &Path) -> Result<((usize, usize, usize, usize), tree::Files), String> {
+type Counts = (usize, usize, usize, usize);
+pub fn index(root: &Path) -> Result<(Counts, tree::Files), String> {
     let mut db = open(root)?;
     let mut files = tree::files(root)?;
     let mut parsed_stamps = HashMap::new();

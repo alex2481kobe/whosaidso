@@ -16,10 +16,10 @@ struct Claim {
 fn worker(cwd: &Path) -> Result<String, String> {
     let file = Path::new(git::run(cwd, &["rev-parse", "--absolute-git-dir"])?.trim())
         .join("whosaidso-worker");
-    if let Ok(id) = fs::read_to_string(&file) {
-        if id.trim().len() == 32 {
-            return Ok(id.trim().to_owned());
-        }
+    if let Ok(id) = fs::read_to_string(&file)
+        && id.trim().len() == 32
+    {
+        return Ok(id.trim().to_owned());
     }
     let mut bytes = [0u8; 16];
     fs::File::open("/dev/urandom")
@@ -120,13 +120,14 @@ pub fn claim(root: &Path, cwd: &Path, id: &str, settled: bool) -> Result<(), Str
     // Both values are read once: the decision below and the compare-and-set that follows rest on the same refs,
     // even though this clone's other worktrees share them.
     let (origin_oid, local_oid) = (ref_oid(root, &origin_ref), ref_oid(root, &local_ref));
-    if let Some(c) = at(root, origin_oid.as_deref()).or_else(|| at(root, local_oid.as_deref())) {
-        if c.worker != me && binds(&c, now, settled) {
-            return Err(format!(
-                "start: {id} is claimed by {}; it is released when that worktree starts another goal or none",
-                describe(&c)
-            ));
-        }
+    if let Some(c) = at(root, origin_oid.as_deref()).or_else(|| at(root, local_oid.as_deref()))
+        && c.worker != me
+        && binds(&c, now, settled)
+    {
+        return Err(format!(
+            "start: {id} is claimed by {}; it is released when that worktree starts another goal or none",
+            describe(&c)
+        ));
     }
     let branch = git::run(cwd, &["branch", "--show-current"])?
         .trim()

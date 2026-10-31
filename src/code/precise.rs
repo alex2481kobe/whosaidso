@@ -204,7 +204,7 @@ fn occurrence(data: &[u8]) -> Result<Occ, String> {
             _ => (),
         }
     }
-    if !range.is_empty() && !(range.len() == 3 || range.len() == 4) {
+    if !range.is_empty() && !matches!(range.len(), 3 | 4) {
         return Err(malformed());
     }
     let r = typed
