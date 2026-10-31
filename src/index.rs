@@ -1,5 +1,6 @@
 // Retrieval synchronization publishes payloads and membership in one transaction.
 pub mod embedding;
+pub(crate) mod features;
 mod files;
 mod history;
 mod records;

@@ -1,4 +1,5 @@
 // Direct pinned-indexer execution; only a validated successful artifact reaches the live transaction.
+mod process;
 use super::{facts::Snapshot, languages, precise};
 use std::{
     fs,
@@ -13,20 +14,54 @@ impl Drop for Run {
         let _ = fs::remove_dir_all(&self.0);
     }
 }
-pub(super) fn run(root: &Path, language: &str) -> Result<String, String> {
+pub(super) fn run(root: &Path, language: &str, args: &[String]) -> Result<String, String> {
+    let deadline = process::Deadline::new(args)?;
+    let dir = crate::git::run(root, &["rev-parse", "--absolute-git-dir"])?;
+    let cache = Path::new(dir.trim_end_matches('\n')).join("whosaidso");
+    fs::create_dir_all(&cache).map_err(|e| e.to_string())?;
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(cache.join("index.lock"))
+        .map_err(|e| e.to_string())?;
+    lock.try_lock()
+        .map_err(|e| format!("indexer busy or lock unavailable: {e}"))?;
     let entry = languages::for_name(language).ok_or("language not indexed")?;
     let adapter = entry
         .indexer
         .ok_or("no pinned indexer for this language; syntax remains available")?;
-    let version = Command::new(adapter.tool)
-        .arg("--version")
-        .current_dir(root)
-        .output()
-        .map_err(|e| format!("{} requires {} on PATH: {e}", adapter.tool, adapter.version))?;
-    let actual = String::from_utf8_lossy(&version.stdout);
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_nanos();
+    let run = Run(cache.join(format!("cache/index-{}-{nonce}", std::process::id())));
+    fs::create_dir_all(&run.0).map_err(|e| e.to_string())?;
+    let artifact = run.0.join("index.scip");
+    let log_path = run.0.join("index.log");
+    let log = fs::File::create(&log_path).map_err(|e| e.to_string())?;
+    let version_path = run.0.join("version.log");
+    let version = deadline.run(
+        Command::new(adapter.tool)
+            .arg("--version")
+            .current_dir(root)
+            .stdin(Stdio::null())
+            .stdout(fs::File::create(&version_path).map_err(|e| e.to_string())?)
+            .stderr(log.try_clone().map_err(|e| e.to_string())?),
+    )?;
+    let mut actual = String::new();
+    fs::File::open(&version_path)
+        .map_err(|e| e.to_string())?
+        .take(16385)
+        .read_to_string(&mut actual)
+        .map_err(|e| e.to_string())?;
+    if actual.len() > 16384 {
+        return Err("indexer version output exceeds 16 KiB".into());
+    }
     let expected = format!("{} {}", adapter.tool, adapter.version);
     let normalized = actual.trim().replace(" v", " ");
-    if !version.status.success() || (normalized != expected && normalized != adapter.version) {
+    if !version.success() || (normalized != expected && normalized != adapter.version) {
         return Err(format!(
             "{} requires {}; found {}",
             adapter.tool,
@@ -38,19 +73,6 @@ pub(super) fn run(root: &Path, language: &str) -> Result<String, String> {
     let input = crate::tree::fingerprint(&before.files);
     let context = precise::binding::context(entry.name);
     drop(before);
-    let dir = crate::git::run(root, &["rev-parse", "--absolute-git-dir"])?;
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|e| e.to_string())?
-        .as_nanos();
-    let run = Run(Path::new(dir.trim()).join(format!(
-        "whosaidso/cache/index-{}-{nonce}",
-        std::process::id()
-    )));
-    fs::create_dir_all(&run.0).map_err(|e| e.to_string())?;
-    let artifact = run.0.join("index.scip");
-    let log_path = run.0.join("index.log");
-    let log = fs::File::create(&log_path).map_err(|e| e.to_string())?;
     let mut command = Command::new(adapter.tool);
     command
         .current_dir(root)
@@ -71,9 +93,7 @@ pub(super) fn run(root: &Path, language: &str) -> Result<String, String> {
         .stdin(Stdio::null())
         .stdout(log.try_clone().map_err(|e| e.to_string())?)
         .stderr(log);
-    let status = command
-        .status()
-        .map_err(|e| format!("indexer failed: {e}"))?;
+    let status = deadline.run(&mut command)?;
     if !status.success() {
         return Err(format!("indexer failed ({status}): {}", tail(&log_path)?));
     }
@@ -85,8 +105,10 @@ pub(super) fn run(root: &Path, language: &str) -> Result<String, String> {
     let report =
         precise::storage::import_run(root, &artifact, Some((&input, &context, entry.name)))?;
     Ok(format!(
-        "{report}\nindexer: {} {}",
-        adapter.tool, adapter.version
+        "{report}\nindexer: {} {} timeout={}s",
+        adapter.tool,
+        adapter.version,
+        deadline.seconds()
     ))
 }
 fn tail(path: &Path) -> Result<String, String> {

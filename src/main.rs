@@ -1,4 +1,5 @@
 // CLI dispatch; record and command rules live in their respective modules.
+mod agent;
 mod blob;
 mod cache;
 mod check;
@@ -41,7 +42,7 @@ fn run() -> Result<(), String> {
     }
     if args.as_slice() == ["help"] || args.as_slice() == ["--help"] || args.as_slice() == ["-h"] {
         println!(
-            "WhoSaidSo: goals and evidence in Git\n\ncheck | goals | show <id> | start <goal> | next | assign <goal> <agent:name|branch:name> | land [--reason <why>] [--override <name>] | prove <goal> [--reason <why>] | gate [base] | gate --ci <base>..<tip> | prune\nevidence add <goal> <file> <shows> | reopen <milestone> <destination-revision> | media <goal> <file> <title> | sync [remote] | note | flow | context | find | grep | code | model fetch | ui\n\nUse short end-to-end checks of real behavior. Tests stay smaller than source; checks default to 60 seconds. Run a full suite only when needed. See USAGE.md for formats and options."
+            "WhoSaidSo: goals and evidence in Git\n\ncheck | goals | show <id> | start <goal> | next | assign <goal> <agent:name|branch:name> | land [--reason <why>] [--override <name>] | prove <goal> [--reason <why>] | gate [base] | gate --ci <base>..<tip> | prune\nevidence add <goal> <file> <shows> | reopen <milestone> <destination-revision> | media <goal> <file> <title> | sync [remote] | note | flow | context | find | grep | code | model fetch | install-agent claude|codex [--uninstall] | ui\n\nUse short end-to-end checks of real behavior. Tests stay smaller than source; checks default to 60 seconds. Run a full suite only when needed. See USAGE.md for formats and options."
         );
         return Ok(());
     }
@@ -51,14 +52,39 @@ fn run() -> Result<(), String> {
         println!("{}", index::embedding::command(rest)?);
         return Ok(());
     }
+    if let [cmd, rest @ ..] = args.as_slice() {
+        match cmd.as_str() {
+            "install-agent" => return agent::install(rest),
+            "agent-hook" => return agent::hook(rest),
+            "agent-run" => return agent::run(rest),
+            _ => {}
+        }
+    }
+    let help_topic = match args.as_slice() {
+        [help, topic] if help == "help" => Some(topic.as_str()),
+        [topic, help]
+            if help == "--help"
+                || (help == "help" && ["flow", "code"].contains(&topic.as_str())) =>
+        {
+            Some(topic.as_str())
+        }
+        _ => None,
+    };
     let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
-    let root = if args.first().is_some_and(|cmd| cmd == "ui") {
+    let root = if help_topic.is_some() || args.first().is_some_and(|cmd| cmd == "ui") {
         cwd.clone()
     } else {
         git::root(&cwd)?
     };
     macro_rules! commands {
         ($($usage:literal, $pattern:pat $(if $guard:expr)? => $action:expr);+ $(;)?) => {
+            if let Some(topic) = help_topic {
+                let usages = [$($usage),+, "install-agent claude|codex [--uninstall]", "model fetch"];
+                let matches: Vec<_> = usages.into_iter().filter(|s|s.split_whitespace().next()==Some(topic)).collect();
+                if matches.is_empty() {return Err(format!("unknown help topic: {topic}"));}
+                for usage in matches {println!("usage: whosaidso {usage}");}
+                return Ok(());
+            }
             match args.as_slice() {
                 $($pattern $(if $guard)? => $action,)+
                 _ => Err(format!("usage: whosaidso {} | --version", [$($usage),+].join(" | "))),
@@ -68,7 +94,7 @@ fn run() -> Result<(), String> {
     commands! {
         "review [--base REF] [--diff FILE|-] [--depth N] [--limit N] [--offset N]", [cmd, rest @ ..] if cmd == "review" => review::command(&root, rest);
         "note <command> [<args>...]", [cmd, rest @ ..] if cmd == "note" => note::command(&root, rest);
-        "flow <command> [<args>...]", [cmd, rest @ ..] if cmd == "flow" => flow::command(&root, rest);
+        "flow show|view|map|compare|check|drift-check|put|rm [arguments]", [cmd, rest @ ..] if cmd == "flow" => flow::command(&root, rest);
         "check", [cmd] if cmd == "check" => sync::check(&root);
         "sync [<remote>]", [cmd, rest @ ..] if cmd == "sync" && rest.len() <= 1 => sync::sync(&root, rest.first().map_or("origin", String::as_str));
         "install-hooks", [cmd] if cmd == "install-hooks" => { hooks::install(&root)?; projects::register(&root) };
@@ -91,7 +117,7 @@ fn run() -> Result<(), String> {
         "context <topic...> [--budget N]", [cmd, words @ ..] if cmd == "context" => context::command(&root, words);
         "find <words...> [--limit N]", [cmd, words @ ..] if cmd == "find" => find::find(&root, words);
         "code import-scip <file>", [cmd, sub, file] if cmd == "code" && sub == "import-scip" => code::import_scip(&root, &cwd.join(file));
-        "code <command> [<args>...]", [cmd, rest @ ..] if cmd == "code" => code::command(&root, rest);
+        "code defs|refs|deps|includers|show|outline|index|callers|callees|affected <value>; index <language> [--timeout <seconds>]; help coverage", [cmd, rest @ ..] if cmd == "code" => code::command(&root, rest);
     }
 }
 fn main() {

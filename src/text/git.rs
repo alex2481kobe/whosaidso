@@ -11,6 +11,26 @@ fn command(root: &Path) -> Command {
     cmd.current_dir(root).args(["-c", "core.quotePath=false"]);
     cmd
 }
+pub(super) fn validate(root: &Path, options: &Options) -> Result<(), String> {
+    let out = command(root)
+        .current_dir("/")
+        .args([
+            "grep",
+            "--no-index",
+            "-E",
+            "-e",
+            &options.pattern,
+            "--",
+            "dev/null",
+        ])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if matches!(out.status.code(), Some(0 | 1)) {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_owned())
+    }
+}
 fn globs(options: &Options) -> Vec<String> {
     options
         .globs

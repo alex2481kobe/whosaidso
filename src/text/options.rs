@@ -23,12 +23,16 @@ pub(super) fn parse(args: &[String]) -> Result<Options, String> {
         limit: 20,
         offset: 0,
     };
+    let mut explicit_literal = false;
     let mut words = Vec::new();
     let mut args = args.iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--regex" | "-E" => out.regex = true,
-            "--literal" | "-F" => out.regex = false,
+            "--literal" | "-F" => {
+                out.regex = false;
+                explicit_literal = true;
+            }
             "--ignore-case" | "-i" => out.ignore_case = true,
             "--case-sensitive" | "-s" => out.ignore_case = false,
             "--files" => out.files = true,
@@ -73,5 +77,37 @@ pub(super) fn parse(args: &[String]) -> Result<Options, String> {
     if out.files && (!out.pattern.is_empty() || out.matching_files) {
         return Err("grep: --files takes no pattern or -l".into());
     }
+    let escapes = escapes(&out.pattern);
+    if !out.regex && !explicit_literal && escapes.iter().any(|c| "bB|()dwWsS".contains(*c)) {
+        return Err("grep: literal mode; --regex uses Git extended regex: | for alternation, [[:digit:]] for digits, (^|[^[:alnum:]_])word([^[:alnum:]_]|$) for boundaries; --literal searches backslashes".into());
+    }
+    if out.regex {
+        if escapes.contains(&'|') {
+            return Err("grep: unsupported basic-regex \\| form in Git extended regex; use | for alternation or [|] for a literal pipe".into());
+        }
+        if out.pattern.contains("(?") || escapes.iter().any(|c| "bBdDwWsSpPQKE".contains(*c)) {
+            return Err("grep: unsupported Perl regex form in portable Git extended regex; use [[:digit:]] for digits and (^|[^[:alnum:]_]) / ([^[:alnum:]_]|$) for word boundaries".into());
+        }
+    }
     Ok(out)
+}
+
+fn escapes(pattern: &str) -> Vec<char> {
+    let (mut escaped, mut class) = (false, false);
+    let mut out = Vec::new();
+    for c in pattern.chars() {
+        if escaped {
+            if !class {
+                out.push(c);
+            }
+            escaped = false;
+        } else if c == '\\' {
+            escaped = true;
+        } else if c == '[' {
+            class = true;
+        } else if c == ']' {
+            class = false;
+        }
+    }
+    out
 }
