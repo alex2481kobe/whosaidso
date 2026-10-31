@@ -7,6 +7,7 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 use tree::Counts;
+const ROW_LIMIT: usize = 20;
 fn clear(tx: &Transaction<'_>, path: &str) -> Result<(), String> {
     tx.execute("DELETE FROM text_fts WHERE path=?1", [path])
         .map_err(err)?;
@@ -122,6 +123,37 @@ pub fn grep(root: &Path, args: &[String]) -> Result<(), String> {
         println!("grep: needs at least 3 characters");
         return Err(String::new());
     }
+    let report = search(root, &needle, &paths)?;
+    for line in report.rows {
+        println!("{line}");
+    }
+    let Report {
+        lines,
+        files,
+        skipped,
+        ..
+    } = report;
+    if lines == 0 {
+        println!("grep: no match");
+    } else if lines > ROW_LIMIT {
+        println!("shown {ROW_LIMIT} of {lines} lines in {files} files");
+    }
+    if skipped > 0 {
+        println!(
+            "not searched: {} files (over 1 MiB, binary, not UTF-8, symlink or submodule)",
+            skipped
+        );
+    }
+    Ok(())
+}
+
+struct Report {
+    rows: Vec<String>,
+    lines: usize,
+    files: usize,
+    skipped: usize,
+}
+fn search(root: &Path, needle: &str, paths: &[String]) -> Result<Report, String> {
     let counts = sync(root)?;
     let db = cache::db(root)?;
     // Positions dwarf the text index. Intersect trigrams, then check complete lines below.
@@ -152,6 +184,7 @@ pub fn grep(root: &Path, args: &[String]) -> Result<(), String> {
             |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
         )
         .map_err(err)?;
+    let mut output_rows = Vec::new();
     let mut lines = 0;
     let mut files = 0;
     let lower = needle.to_lowercase();
@@ -165,25 +198,16 @@ pub fn grep(root: &Path, args: &[String]) -> Result<(), String> {
                     found = true;
                 }
                 lines += 1;
-                if lines <= 20 {
-                    println!(
-                        "{}",
-                        cut(&format!("{}:{}: {}", path, i + 1, line.trim()), 160)
-                    );
+                if lines <= ROW_LIMIT {
+                    output_rows.push(cut(&format!("{}:{}: {}", path, i + 1, line.trim()), 160));
                 }
             }
         }
     }
-    if lines == 0 {
-        println!("grep: no match");
-    } else if lines > 20 {
-        println!("shown 20 of {lines} lines in {files} files");
-    }
-    if counts.skipped > 0 {
-        println!(
-            "not searched: {} files (over 1 MiB, binary, not UTF-8, symlink or submodule)",
-            counts.skipped
-        );
-    }
-    Ok(())
+    Ok(Report {
+        rows: output_rows,
+        lines,
+        files,
+        skipped: counts.skipped,
+    })
 }
