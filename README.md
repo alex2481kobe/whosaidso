@@ -4,7 +4,6 @@ A ledger in your git repo for goals worked on by many agents. Goals have evidenc
 
 <img src="assets/ui-goals.png" alt="Goals and branches" width="912" />
 <img src="assets/ui-gallery.png" alt="Evidence gallery" width="912" />
-<img src="assets/ui-dark.png" alt="Dark mode" width="912" />
 
 ## Install
 
@@ -68,6 +67,6 @@ whosaidso code includers src/types.h
 
 ## Viewer
 
-`whosaidso ui` serves a read-only viewer on your machine, with Goals, Flows and Gallery. `--open` opens your browser.
+`whosaidso ui` serves a read-only viewer on your machine, with Goals and Gallery. `--open` opens your browser.
 
 See [USAGE.md](USAGE.md) for commands and record formats. Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). Apache-2.0.
