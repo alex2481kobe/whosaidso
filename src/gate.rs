@@ -1,9 +1,21 @@
+pub mod ci;
 // Commit trailer gate.
 use crate::{git, record};
 use std::path::Path;
 pub fn gate(root: &Path, base: &str) -> Result<(), String> {
     let base = git::local_revision(root, base)?;
     let store = record::load(root)?;
+    let reopen = record::fold::reopen::required(root, &base)?;
+    if !reopen.is_empty() {
+        return Err(reopen.join("\n"));
+    }
+    let merge_base = git::run(root, &["merge-base", &base, "HEAD"])?;
+    let mut note_problems =
+        crate::note::reconcile::required(root, merge_base.trim(), "HEAD", &base)?;
+    note_problems.extend(crate::note::reconcile::history(root, &base, "HEAD")?);
+    if !note_problems.is_empty() {
+        return Err(note_problems.join("\n"));
+    }
     let range = format!("{base}..HEAD");
     let log = git::run(
         root,
@@ -14,14 +26,25 @@ pub fn gate(root: &Path, base: &str) -> Result<(), String> {
             &range,
         ],
     )?;
+    crate::land::receipt::check_range(root, &range)?;
     let mut count = 0;
     // Records left out of the commit would be lost at the merge, so landing waits for them.
-    let folders: Vec<String> = record::FOLDERS.iter().map(|f| format!(".whosaidso/{f}")).collect();
-    let mut args = vec!["status", "--porcelain", "--untracked-files=all", "--"]; args.extend(folders.iter().map(String::as_str));
+    let folders: Vec<String> = record::FOLDERS
+        .iter()
+        .copied()
+        .chain(["notes", "done", "reopens"])
+        .map(|f| format!(".whosaidso/{f}"))
+        .collect();
+    let mut args = vec!["status", "--porcelain", "--untracked-files=all", "--"];
+    args.extend(folders.iter().map(String::as_str));
     let pending = git::run(root, &args)?;
     let mut bad = !pending.is_empty();
     if let Some(first) = pending.lines().next() {
-        println!("gate: {} uncommitted records, first {}; commit them with the work they prove", pending.lines().count(), first.get(3..).unwrap_or(first));
+        println!(
+            "gate: {} uncommitted records, first {}; commit them with the work they prove",
+            pending.lines().count(),
+            first.get(3..).unwrap_or(first)
+        );
     }
     for line in log.lines() {
         count += 1;

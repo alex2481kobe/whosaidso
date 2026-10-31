@@ -8,7 +8,7 @@ export function inspect(entry, trigger) {
   const close = iconButton("close", "Close", () => dialog.close());
   const content = preview(entry, true);
   const dialog = el("dialog", "artifact-dialog", el("div", "artifact-dialog-head", titleButton(entry), downloadButton(entry), close),
-    el("div", "artifact-dialog-body", el("div", "artifact-stage", content)));
+    el("div", "artifact-stage", content));
   dialog.setAttribute("aria-label", entry.shows);
   dialog.addEventListener("click", e => { if (e.target === dialog) dialog.close(); });
   const closeOnRoute = () => dialog.close(); window.addEventListener("hashchange", closeOnRoute);

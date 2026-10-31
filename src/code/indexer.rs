@@ -1,0 +1,170 @@
+// Direct pinned-indexer execution; only a validated successful artifact reaches the live transaction.
+mod process;
+use super::{facts::Snapshot, languages, precise};
+use std::{
+    fs,
+    io::{Read, Seek, SeekFrom},
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+    time::{SystemTime, UNIX_EPOCH},
+};
+struct Run(PathBuf);
+impl Drop for Run {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+pub(super) fn run(root: &Path, language: &str, args: &[String]) -> Result<String, String> {
+    let deadline = process::Deadline::new(args)?;
+    let dir = crate::git::run(root, &["rev-parse", "--absolute-git-dir"])?;
+    let cache = Path::new(dir.trim_end_matches('\n')).join("whosaidso");
+    fs::create_dir_all(&cache).map_err(|e| format!("{}: {e}", cache.display()))?;
+    let lock_path = cache.join("index.lock");
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&lock_path)
+        .map_err(|e| format!("{}: {e}", lock_path.display()))?;
+    lock.try_lock().map_err(|e| {
+        format!(
+            "{}: indexer busy or lock unavailable: {e}",
+            lock_path.display()
+        )
+    })?;
+    let entry = languages::for_name(language)
+        .ok_or("language not indexed; to add it, see the whosaidso-languages skill")?;
+    let adapter = entry.indexer.ok_or(
+        "no pinned indexer for this language; syntax remains available; to add one, see the whosaidso-languages skill",
+    )?;
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_nanos();
+    let run = Run(cache.join(format!("cache/index-{}-{nonce}", std::process::id())));
+    fs::create_dir_all(&run.0).map_err(|e| format!("{}: {e}", run.0.display()))?;
+    let artifact = run.0.join("index.scip");
+    let log_path = run.0.join("index.log");
+    let log = fs::File::create(&log_path).map_err(|e| format!("{}: {e}", log_path.display()))?;
+    let version_path = run.0.join("version.log");
+    let version = deadline.run(
+        Command::new(adapter.tool)
+            .arg("--version")
+            .current_dir(root)
+            .stdin(Stdio::null())
+            .stdout(
+                fs::File::create(&version_path)
+                    .map_err(|e| format!("{}: {e}", version_path.display()))?,
+            )
+            .stderr(
+                log.try_clone()
+                    .map_err(|e| format!("{}: {e}", log_path.display()))?,
+            ),
+    )?;
+    let mut actual = String::new();
+    fs::File::open(&version_path)
+        .map_err(|e| format!("{}: {e}", version_path.display()))?
+        .take(16385)
+        .read_to_string(&mut actual)
+        .map_err(|e| format!("{}: {e}", version_path.display()))?;
+    if actual.len() > 16384 {
+        return Err("indexer version output exceeds 16 KiB".into());
+    }
+    // Some indexers add lines after the version, such as their compiler build.
+    let normalized = actual
+        .lines()
+        .next()
+        .unwrap_or("")
+        .trim()
+        .replace(" v", " ");
+    let accepted = adapter.version.is_none_or(|pinned| {
+        normalized == pinned || normalized == format!("{} {pinned}", adapter.tool)
+    });
+    if !version.success() || !accepted {
+        return Err(format!(
+            "{} requires {}; found {}",
+            adapter.tool,
+            adapter.version.unwrap_or("a working install"),
+            crate::text::cut(actual.trim(), 200)
+        ));
+    }
+    let build_file = adapter
+        .build_file
+        .as_ref()
+        .map(|file| {
+            file.paths
+                .iter()
+                .find(|path| root.join(path).is_file())
+                .map(|path| format!("{}={path}", file.flag))
+                .ok_or(file.missing)
+        })
+        .transpose()?;
+    let before = Snapshot::current(root)?;
+    let input = precise::binding::input(&before.files, entry.name)?;
+    let context = precise::binding::context(entry.name);
+    drop(before);
+    let mut command = Command::new(adapter.tool);
+    command
+        .current_dir(root)
+        .args(adapter.subcommand)
+        .args(adapter.defaults)
+        .args(build_file);
+    if let Some((file, flag)) = adapter.without
+        && !root.join(file).is_file()
+    {
+        command.arg(flag);
+    }
+    match adapter.root {
+        languages::Root::Flag(flag) => {
+            command.arg(flag).arg(root);
+        }
+        languages::Root::Argument => {
+            command.arg(root);
+        }
+        languages::Root::Cwd => {}
+    }
+    command
+        .arg(adapter.output)
+        .arg(&artifact)
+        .stdin(Stdio::null())
+        .stdout(
+            log.try_clone()
+                .map_err(|e| format!("{}: {e}", log_path.display()))?,
+        )
+        .stderr(log);
+    let status = deadline.run(&mut command)?;
+    if !status.success() {
+        return Err(format!("indexer failed ({status}): {}", tail(&log_path)?));
+    }
+    let after = Snapshot::current(root)?;
+    if precise::binding::input(&after.files, entry.name)? != input {
+        return Err("sources changed during indexing; old index retained".into());
+    }
+    drop(after);
+    let report =
+        precise::storage::import_run(root, &artifact, Some((&input, &context, entry.name)))?;
+    Ok(format!(
+        "{report}\nindexer: {} timeout={}s",
+        adapter
+            .version
+            .map_or(actual.trim().to_owned(), |v| format!(
+                "{} {v}",
+                adapter.tool
+            )),
+        deadline.seconds()
+    ))
+}
+fn tail(path: &Path) -> Result<String, String> {
+    let mut file = fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let len = file
+        .metadata()
+        .map_err(|e| format!("{}: {e}", path.display()))?
+        .len();
+    file.seek(SeekFrom::Start(len.saturating_sub(4096)))
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(crate::text::cut(&String::from_utf8_lossy(&bytes), 1000))
+}

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.2
+
+- Land small changes with checks on the merged candidate, recorded evidence and safe retries after concurrent pushes.
+- Keep decisions and questions as revision-checked notes in Git.
+- Search code and records with lexical and optional local semantic search; inspect callers and change impact across supported languages.
+- Install agent skills with runnable examples for goals, landing, search and gallery evidence. Examples include goal creation and explain check limits and model setup.
+- Keep the viewer to Goals and Gallery, in a light theme. Flows are set aside; the last version is the `flows-preview` tag.
+- Find C++ concepts, macros, unions, aliases and operators, and read `.hxx`, `.ipp`, `.tpp` and `.inl` files.
+- Index C and C++ precisely with `scip-clang` and a compile database.
+- Show who holds a goal in `goals` and `show`, across machines.
+- Keep the same agent name on two machines from sharing a claim.
+- Order a goal's results by what each machine had seen, so a slow clock cannot hide a newer failure.
+- Say which files conflict when `land` cannot merge main.
+- Add a language with one table entry and one test row: the new whosaidso-languages skill walks through it, and cached projects reindex by themselves. `rust-analyzer` follows your toolchain instead of one pinned release. Swift no longer has a precise indexer.
+- Attach reports and other files as evidence, share their bytes and restore them by hash. Missing goals now point to the record format.
+
 ## 0.3.1
 
 - README and USAGE rewritten to be short and plain; code search is documented.

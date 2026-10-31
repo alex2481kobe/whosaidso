@@ -1,10 +1,10 @@
-// Media presentation ported from v0.2.1 internal/ui/ui-gallery-media.js.
+// Media previews use the presentation type supplied by the server.
 import { message } from "./ui-components.js";
 import { el, apiURL, icon } from "./ui.js";
 export const fileURL = (entry, download = false) => apiURL("/api/media/" + entry.media_sha256, download ? {download:1} : {});
 export function preview(entry, full = false) {
   if (entry.status !== "present") return message("Missing");
-  if (entry.kind === "document") return el("div", "gallery-none", icon("file"), "PDF");
+  if (entry.tag === "a") return el("div", "gallery-none", icon("file"));
   const media = el(entry.kind === "image" ? "img" : "video");
   const retry = el("button", "button", "Retry"); retry.type = "button"; retry.hidden = true;
   const node = el("div", "gallery-media", media, retry);

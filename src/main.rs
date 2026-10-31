@@ -1,27 +1,36 @@
 // CLI dispatch; record and command rules live in their respective modules.
-mod ask;
+mod agent;
 mod blob;
 mod cache;
 mod check;
 mod claims;
 mod code;
+mod config;
+mod context;
+mod database;
+mod evidence;
 mod find;
 mod gallery;
 mod gate;
 mod git;
+mod goal_tree;
 mod goals;
+mod goals_selection;
 mod hooks;
 mod index;
+mod land;
+mod note;
 mod projects;
 mod prove;
 mod prune;
 mod publish;
 mod record;
+mod review;
 mod show;
 mod state;
 mod sync;
-mod title;
 mod text;
+mod title;
 mod tree;
 mod ui;
 fn run() -> Result<(), String> {
@@ -30,10 +39,48 @@ fn run() -> Result<(), String> {
         println!("whosaidso {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
+    if args.as_slice() == ["help"] || args.as_slice() == ["--help"] || args.as_slice() == ["-h"] {
+        println!(
+            "WhoSaidSo: goals and evidence in Git\n\ncheck | goals | show <id> | start <goal> | next | assign <goal> <agent:name|branch:name> | land [--reason <why>] [--override <name>] | prove <goal> [--reason <why>] | gate [base] | gate --ci <base>..<tip> | prune\nevidence add <goal> <file> <shows> | reopen <milestone> <destination-revision> | media <goal> <file> <title> | sync [remote] | note | context | find | grep | code | model fetch | install-agent claude|codex [--uninstall] | ui\n\nUse short end-to-end checks of real behavior. Tests stay smaller than source; checks default to 60 seconds. Run a full suite only when needed. See USAGE.md for formats and options."
+        );
+        return Ok(());
+    }
+    if let [cmd, rest @ ..] = args.as_slice()
+        && cmd == "model"
+    {
+        println!("{}", index::embedding::command(rest)?);
+        return Ok(());
+    }
+    if let [cmd, rest @ ..] = args.as_slice() {
+        match cmd.as_str() {
+            "install-agent" => return agent::install(rest),
+            "agent-hook" => return agent::hook(rest),
+            "agent-run" => return agent::run(rest),
+            _ => {}
+        }
+    }
+    let help_topic = match args.as_slice() {
+        [help, topic] if help == "help" => Some(topic.as_str()),
+        [topic, help] if help == "--help" || (help == "help" && topic == "code") => {
+            Some(topic.as_str())
+        }
+        _ => None,
+    };
     let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
-    let root = if args.first().is_some_and(|cmd| cmd == "ui") { cwd.clone() } else { git::root(&cwd)? };
+    let root = if help_topic.is_some() || args.first().is_some_and(|cmd| cmd == "ui") {
+        cwd.clone()
+    } else {
+        git::root(&cwd)?
+    };
     macro_rules! commands {
         ($($usage:literal, $pattern:pat $(if $guard:expr)? => $action:expr);+ $(;)?) => {
+            if let Some(topic) = help_topic {
+                let usages = [$($usage),+, "install-agent claude|codex [--uninstall]", "model fetch"];
+                let matches: Vec<_> = usages.into_iter().filter(|s|s.split_whitespace().next()==Some(topic)).collect();
+                if matches.is_empty() {return Err(format!("unknown help topic: {topic}"));}
+                for usage in matches {println!("usage: whosaidso {usage}");}
+                return Ok(());
+            }
             match args.as_slice() {
                 $($pattern $(if $guard)? => $action,)+
                 _ => Err(format!("usage: whosaidso {} | --version", [$($usage),+].join(" | "))),
@@ -41,22 +88,31 @@ fn run() -> Result<(), String> {
         };
     }
     commands! {
+        "review [--base REF] [--diff FILE|-] [--depth N] [--limit N] [--offset N]", [cmd, rest @ ..] if cmd == "review" => review::command(&root, rest);
+        "note <command> [<args>...]", [cmd, rest @ ..] if cmd == "note" => note::command(&root, rest);
         "check", [cmd] if cmd == "check" => sync::check(&root);
         "sync [<remote>]", [cmd, rest @ ..] if cmd == "sync" && rest.len() <= 1 => sync::sync(&root, rest.first().map_or("origin", String::as_str));
         "install-hooks", [cmd] if cmd == "install-hooks" => { hooks::install(&root)?; projects::register(&root) };
+        "next", [cmd] if cmd == "next" => goals_selection::next(&root);
+        "assign <goal> <agent:name|branch:name>", [cmd, id, target] if cmd == "assign" => { let (notices, result) = claims::assign(&root, &cwd, id, target); for n in notices { println!("{n}"); } result };
         "start <goal-id>", [cmd, id] if cmd == "start" => hooks::start(&root, &cwd, id);
-        "gate [<base>]", [cmd, rest @ ..] if cmd == "gate" && rest.len() <= 1 => gate::gate(&root, rest.first().map_or("main", String::as_str));
-        "ask <goal-id> <words...>", [cmd, id, words @ ..] if cmd == "ask" => ask::ask(&root, id, words);
+        "land [--reason <why>]", [cmd, rest @ ..] if cmd == "land" => land::command(&root, rest);
+        "gate --ci <range>", [cmd, flag, range] if cmd == "gate" && flag == "--ci" => gate::ci::check(&root, range);
+        "gate [<base>]", [cmd, rest @ ..] if cmd == "gate" && rest.len() <= 1 => gate::gate(&root, rest.first().map(String::as_str).unwrap_or(&config::main(&root)?));
         "show <id>", [cmd, id] if cmd == "show" => show::show(&root, id);
         "goals", [cmd] if cmd == "goals" => goals::goals(&root);
-        "prove <goal-id>", [cmd, id] if cmd == "prove" => prove::prove(&root, id);
-        "prune", [cmd] if cmd == "prune" => prune::prune(&root);
-        "media <goal-id> <file> <title>", [cmd, goal, path, shows] if cmd == "media" => gallery::show(&root, &cwd, goal, path, shows);
+        "prove <goal-id> [--reason <why>]", [cmd, rest @ ..] if cmd == "prove" => { println!("{}", prove::command(&root, rest)?); Ok(()) };
+        "evidence add <goal> <file> <shows>", [cmd, sub, goal, file, shows] if cmd == "evidence" && sub == "add" => evidence::add(&root, &cwd, goal, file, shows);
+        "reopen <milestone> <destination-revision>", [cmd, id, revision] if cmd == "reopen" => record::fold::reopen::reopen(&root, id, revision);
+        "prune", [cmd] if cmd == "prune" => { println!("{}", prune::prune(&root)?); Ok(()) };
+        "media restore <sha256>", [cmd, sub, sha] if cmd == "media" && sub == "restore" => gallery::restore(&root, sha);
+        "media <goal-id> <file> <title>", [cmd, goal, path, shows] if cmd == "media" => evidence::add(&root, &cwd, goal, path, shows);
         "ui [--port N] [--open]", [cmd, rest @ ..] if cmd == "ui" => ui::serve(&root, rest);
-        "grep <text...> [--in <path-or-prefix>]...", [cmd, words @ ..] if cmd == "grep" => text::grep(&root, words);
+        "grep [--regex] [-i|-s] [-C N] [-g glob] [--in prefix] [--limit N] [--offset N] [-l|--files] [pattern...]", [cmd, words @ ..] if cmd == "grep" => text::grep(&root, words);
+        "context <topic...> [--budget N]", [cmd, words @ ..] if cmd == "context" => context::command(&root, words);
         "find <words...> [--limit N]", [cmd, words @ ..] if cmd == "find" => find::find(&root, words);
         "code import-scip <file>", [cmd, sub, file] if cmd == "code" && sub == "import-scip" => code::import_scip(&root, &cwd.join(file));
-        "code defs|refs <name> / code deps|includers <path>", [cmd, sub, value] if cmd == "code" && ["defs", "refs", "deps", "includers"].contains(&sub.as_str()) => code::query(&root, sub, value);
+        "code defs|refs|deps|includers|show|outline|index|callers|callees|affected <value>; index <language> [--timeout <seconds>]; help coverage", [cmd, rest @ ..] if cmd == "code" => code::command(&root, rest);
     }
 }
 fn main() {

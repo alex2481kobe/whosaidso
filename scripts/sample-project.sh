@@ -29,24 +29,22 @@ commit() {
         g commit -q "$@"
 }
 cd "$repo"
-mkdir -p .whosaidso/phases .whosaidso/goals .whosaidso/instruments
-printf '{"title":"Renderer","order":1}\n' > .whosaidso/phases/renderer.json
-printf '{"title":"Physics","order":2}\n' > .whosaidso/phases/physics.json
-printf '{"title":"Netcode","order":3}\n' > .whosaidso/phases/netcode.json
-printf '%s\n' '{"run":["sh","-c","test -f build.ok"],"answers":"The game engine build is ready"}' > .whosaidso/instruments/build.json
-printf '%s\n' '{"run":["sh","-c","test -f physics.ok"],"answers":"Collision regression fixtures pass"}' > .whosaidso/instruments/physics-check.json
+mkdir -p .whosaidso/goals
 goal() {
-    printf '{"title":"%s","done_when":"%s","check":"%s","broader":"%s"}\n' "$2" "$3" "$4" "$5" > ".whosaidso/goals/$1.json"
+    printf '{"title":"%s","done_when":"%s","parent":%s,"order":%s,"after":[],"check":["sh","-c","test -f %s"]}\n' "$2" "$3" "$5" "$6" "$4" > ".whosaidso/goals/$1.json"
 }
-goal terrain 'Terrain LOD stitching' 'Terrain transitions have no cracks' build renderer
-goal lighting 'Clustered lighting' 'Seven point lights render within budget' build renderer
-goal shadows 'Cascaded shadows' 'Cascade seams disappear at dusk' build renderer
-goal collision 'Continuous collision detection' 'Fast moving bodies cannot tunnel' physics-check physics
-goal broadphase 'Broadphase acceleration' 'BVH beats the uniform grid at 10000 bodies' build physics
-goal navmesh 'Foundry navigation mesh' 'Every spawn can reach the central foundry' build physics
-goal prediction 'Client prediction' 'Movement stays smooth at 120 ms latency' build netcode
-goal rollback 'Deterministic rollback' 'Resimulation produces identical world hashes' build netcode
-goal transport 'Reliable packet transport' 'Critical packets survive simulated loss' build netcode
+goal renderer 'Renderer' 'Every renderer goal is done' build.ok null 1
+goal physics 'Physics' 'Every physics goal is done' build.ok null 2
+goal netcode 'Netcode' 'Every netcode goal is done' build.ok null 3
+goal terrain 'Terrain LOD stitching' 'Terrain transitions have no cracks' build.ok '"renderer"' 1
+goal lighting 'Clustered lighting' 'Seven point lights render within budget' build.ok '"renderer"' 2
+goal shadows 'Cascaded shadows' 'Cascade seams disappear at dusk' build.ok '"renderer"' 3
+goal collision 'Continuous collision detection' 'Fast moving bodies cannot tunnel' physics.ok '"physics"' 1
+goal broadphase 'Broadphase acceleration' 'BVH beats the uniform grid at 10000 bodies' build.ok '"physics"' 2
+goal navmesh 'Foundry navigation mesh' 'Every spawn can reach the central foundry' build.ok '"physics"' 3
+goal prediction 'Client prediction' 'Movement stays smooth at 120 ms latency' build.ok '"netcode"' 1
+goal rollback 'Deterministic rollback' 'Resimulation produces identical world hashes' build.ok '"netcode"' 2
+goal transport 'Reliable packet transport' 'Critical packets survive simulated loss' build.ok '"netcode"' 3
 printf 'Game engine build ready\n' > build.ok
 printf 'Game engine rendering and simulation\n' > engine.txt
 g add .
@@ -60,11 +58,8 @@ commit Jordan 259200 -m 'Add swept collision fixtures' -m 'Goal: collision'
 printf 'Clustered light assignment\n' > lighting.txt
 g add lighting.txt
 commit Sam 172800 -m 'Land clustered lighting' -m 'Goal: lighting'
-"$WHOSAIDSO" prove terrain >/dev/null
-"$WHOSAIDSO" prove collision >/dev/null
-"$WHOSAIDSO" ask collision 'Please stop fast projectiles from passing through thin walls.' >/dev/null
-"$WHOSAIDSO" ask shadows 'Keep the dusk scene free of visible shadow seams.' >/dev/null
-"$WHOSAIDSO" ask prediction 'Make movement feel smooth even on a slow connection.' >/dev/null
+"$WHOSAIDSO" prove terrain --reason "Sample evidence" >/dev/null
+"$WHOSAIDSO" prove collision --reason "Sample evidence" >/dev/null
 
 # Fixed valid PNGs and a one-page PDF are emitted below with shell printf.
 printf '%b' \
@@ -152,11 +147,11 @@ printf '%b' \
     '\0012\0163\0164\0141\0162\0164\0170\0162\0145\0146\0012\0065\0064\0062\0012\0045\0045\0105\0117\0106\0012' > "$base/media/netcode.pdf"
 
 "$WHOSAIDSO" media terrain "$base/media/terrain.png" 'Terrain LOD stitching, noon preset' >/dev/null
-"$WHOSAIDSO" media shadows "$base/media/shadows.png" 'Cascade seams check, dusk preset' >/dev/null
-"$WHOSAIDSO" media broadphase "$base/media/broadphase.png" 'Broadphase step time, grid vs BVH' >/dev/null
-"$WHOSAIDSO" media navmesh "$base/media/navmesh.png" 'Foundry navigation mesh coverage' >/dev/null
+"$WHOSAIDSO" media terrain "$base/media/shadows.png" 'Cascade seams check, dusk preset' >/dev/null
+"$WHOSAIDSO" media collision "$base/media/broadphase.png" 'Broadphase step time, grid vs BVH' >/dev/null
+"$WHOSAIDSO" media collision "$base/media/navmesh.png" 'Foundry navigation mesh coverage' >/dev/null
 "$WHOSAIDSO" media lighting "$base/media/lighting.png" 'Clustered lighting, seven point lights' >/dev/null
-"$WHOSAIDSO" media prediction "$base/media/netcode.pdf" 'Network simulation report' >/dev/null
+"$WHOSAIDSO" media transport "$base/media/netcode.pdf" 'Network simulation report' >/dev/null
 g add .whosaidso
 commit Sam 3600 -m 'Record checks, requests and visual evidence'
 
@@ -179,6 +174,7 @@ g checkout -q -b net/prediction
 printf 'Client prediction reconciliation\n' > prediction.txt
 g add prediction.txt
 commit Sam 21600 -m 'Reconcile predicted player movement' -m 'Goal: prediction'
+g checkout -q main
 cd "$repo"
 g remote add origin "$base/remote-engine"
 g fetch -q origin

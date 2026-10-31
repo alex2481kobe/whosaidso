@@ -1,4 +1,4 @@
-/* Glass look, light and dark. Tokens first, then the shell, shared controls and the Goals screen; the gallery has its own file. */
+/* Glass look. Tokens first, then the shell, shared controls and the Goals screen; the gallery has its own file. */
 :root {
   --bg: #edf0f8; --surface: rgba(255,255,255,.91); --surface-2: #f1f3fa; --line: rgba(161,171,198,.28); --line-2: rgba(161,171,198,.16);
   --text: #252d44; --muted: #535e76; --scroll: rgba(15,23,42,.18); --hover: rgba(15,23,42,.05); --tint: 11%;
@@ -7,14 +7,6 @@
   --ground: radial-gradient(ellipse at 80% 5%,#dddcf9 0,transparent 50%),radial-gradient(ellipse at 5% 65%,#dfedf1 0,transparent 50%),#f1f2f8;
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   color-scheme: light;
-}
-:root[data-theme="dark"] {
-  --bg: #151824; --surface: rgba(31,35,51,.95); --surface-2: #252b3e; --line: #ffffff16; --line-2: #ffffff0c;
-  --text: #e7eaf7; --muted: #bac2d8; --scroll: rgba(255,255,255,.16); --hover: rgba(255,255,255,.06); --tint: 17%;
-  --blue: #c0b4ff; --green: #83d9ba; --red: #ffa4b4; --amber: #efcc83; --purple: #ccb6f5; --slate: #aab5ce;
-  --shadow: 0 8px 32px #00000018, inset 0 1px 0 #ffffff08;
-  --ground: radial-gradient(ellipse at 80% 0,#30304c 0,transparent 55%),radial-gradient(ellipse at 0% 80%,#1d3340 0,transparent 55%),#171b28;
-  color-scheme: dark;
 }
 * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--scroll) transparent; }
 [hidden] { display: none !important; }
@@ -28,7 +20,7 @@ h1, h2, h3, p { margin: 0; }
 .muted { color: var(--muted); }
 .icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
 
-/* sidebar: workspace picker, the two screens, theme */
+/* sidebar: workspace picker, the two screens */
 .side { position: fixed; z-index: 30; inset: 12px auto 12px 12px; width: 188px; display: flex; flex-direction: column; gap: 14px; padding: 14px 10px 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); backdrop-filter: blur(24px); box-shadow: var(--shadow); }
 .project { position: relative; }
 .project-button { display: flex; align-items: center; gap: 8px; width: 100%; height: 36px; padding: 0 9px; border: 1px solid var(--line); border-radius: 9px; background: transparent; font-weight: 550; cursor: pointer; }
@@ -68,7 +60,6 @@ h1, h2, h3, p { margin: 0; }
 .page { position: absolute; inset: 0 0 0 212px; overflow: auto; padding: 14px 20px 24px 8px; }
 .screen { display: flex; flex-direction: column; gap: 12px; max-width: 1600px; margin: 0 auto; }
 .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
-.totals { margin-right: auto; color: var(--muted); font-size: 13px; }
 .search { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; flex: 0 1 260px; min-width: 150px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); }
 .search:focus-within { border-color: var(--blue); }
 .search-input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: none; color: var(--text); }
@@ -77,24 +68,26 @@ h1, h2, h3, p { margin: 0; }
 .content-state.error { color: var(--red); }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
 
+.pending { height: 0; overflow: hidden; visibility: hidden; }
 /* state chips */
 .chip { display: inline-block; justify-self: start; padding: 1px 8px; border-radius: 6px; font-size: 12px; line-height: 1.6; white-space: nowrap; background: color-mix(in srgb, var(--tone) var(--tint), var(--surface)); color: var(--tone); }
 .s-done { --tone: var(--green); } .s-active { --tone: var(--blue); } .s-landed { --tone: var(--amber); } .s-failing { --tone: var(--red); }
 .s-stale { --tone: var(--purple); } .s-idle, .s-open { --tone: var(--slate); }
 
-/* goals: a phase is a header line and its rows */
+/* goals: a milestone is a header line and its rows */
 .goals { display: flex; flex-direction: column; gap: 10px; }
-.phase { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
-.phase-head { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--line-2); font-size: 12.5px; }
-.phase-head h2 { font-size: 14px; font-weight: 650; }
-.bar { flex: 0 1 140px; min-width: 60px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
-.bar i { display: block; height: 100%; background: var(--green); }
+.milestone { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+.milestone-head { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--line-2); font-size: 12.5px; }
+.milestone-head h2 { font-size: 14px; font-weight: 650; }
+.bar { appearance: none; border: 0; flex: 0 1 140px; min-width: 60px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.bar::-webkit-progress-bar { background: var(--line); }
+.bar::-webkit-progress-value { background: var(--green); }
+.bar::-moz-progress-bar { background: var(--green); }
 .goal + .goal { border-top: 1px solid var(--line-2); }
 .goal-head { display: grid; grid-template-columns: 64px minmax(120px,1.2fr) minmax(60px,.5fr) minmax(0,2.2fr); align-items: start; gap: 4px 10px; padding: 6px 12px; list-style: none; cursor: pointer; }
 .goal-head::-webkit-details-marker { display: none; }
 .goal-head:hover { background: var(--hover); }
 .goal-title { font-weight: 550; overflow-wrap: anywhere; }
-.goal-id { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .works { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-size: 12.5px; }
 .work { display: flex; gap: 8px; min-width: 0; white-space: nowrap; }
 .work > * { flex: 0 0 auto; }
@@ -109,7 +102,7 @@ h1, h2, h3, p { margin: 0; }
 
 @media (max-width: 900px) {
   .goal-head { grid-template-columns: 64px minmax(0,1fr); }
-  .goal-id, .works { grid-column: 2; }
+  .works { grid-column: 2; }
   .goal-detail { padding-left: 12px; }
 }
 @media (max-width: 700px) {
