@@ -59,6 +59,7 @@ fn static_vectors_match_reference_and_share_across_worktrees() {
         &f.root.join("billing.rs"),
         "/// Bills the customer for a recurring service.\nfn charge_subscription() {}\n",
     );
+    write(&f.root.join("special.txt"), "[CLS] Café [SEP]");
     commit(&f.root);
     let run = |root: &std::path::Path, q: &str| {
         success(
@@ -84,6 +85,8 @@ fn static_vectors_match_reference_and_share_across_worktrees() {
             .collect::<String>(),
         "ec90aba3e7b9d9ab192e08aeb701863432ba638b60c0c76f29e856a82eca6799"
     );
+    let special:Vec<u8>=db.query_row("SELECT v.vector FROM vectors v JOIN payloads p ON p.id=v.payload WHERE p.kind='file' AND p.detail='[CLS] Café [SEP]'",[],|r|r.get(0)).unwrap();
+    assert_eq!(Sha256::digest(&special).iter().map(|b|format!("{b:02x}")).collect::<String>(),"956f63dff2b7c12eb9d723e1625bc168ab86f7b037dd26e9a291ffd52b8623bc");
     let count = || {
         db.query_row("SELECT count(*) FROM vectors", [], |r| r.get::<_, i64>(0))
             .unwrap()
@@ -104,6 +107,13 @@ fn static_vectors_match_reference_and_share_across_worktrees() {
     );
     assert!(run(&f.root, "persists session token").contains("save_session"));
     assert!(!run(&other, "persists session token").contains("save_session"));
+    write(&f.root.join("discard.rs"),"fn old_disposable() {}\n");
+    run(&f.root,"old disposable");
+    write(&f.root.join("discard.rs"),"fn new_disposable() {}\n");
+    db.execute("INSERT INTO embedding_models(identity) VALUES ('obsolete-inference')",[]).unwrap();
+    run(&f.root,"new disposable");
+    assert_eq!(db.query_row("SELECT count(*) FROM vectors v WHERE NOT EXISTS(SELECT 1 FROM members m WHERE m.payload=v.payload)",[],|r|r.get::<_,i64>(0)).unwrap(),0);
+    assert_eq!(db.query_row("SELECT count(*) FROM embedding_models",[],|r|r.get::<_,i64>(0)).unwrap(),1);
 }
 
 #[test]

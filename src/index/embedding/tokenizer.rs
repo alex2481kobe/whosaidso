@@ -5,6 +5,7 @@ pub(super) struct Tokenizer {
     unicode: Unicode,
     unknown: usize,
     max_chars: usize,
+    specials: Vec<(String,usize)>,
 }
 impl Tokenizer {
     pub fn load(bytes: &[u8]) -> Result<Self, String> {
@@ -28,14 +29,27 @@ impl Tokenizer {
         let max_chars = model["max_input_chars_per_word"]
             .as_u64()
             .ok_or("model: missing word limit")? as usize;
+        let specials = value["added_tokens"].as_array().ok_or("model: missing special tokens")?.iter().map(|token| {
+            Ok((token["content"].as_str().ok_or("model: invalid special token")?.to_owned(),token["id"].as_u64().ok_or("model: invalid special token ID")? as usize))
+        }).collect::<Result<Vec<_>,String>>()?;
         Ok(Self {
             vocab,
             unicode: Unicode::new(),
             unknown,
             max_chars,
+            specials,
         })
     }
-    pub fn ids(&self, text: &str) -> Vec<usize> {
+    pub fn ids(&self, mut text: &str) -> Vec<usize> {
+        let mut ids = Vec::new();
+        while !text.is_empty() {
+            let next = self.specials.iter().filter_map(|(token,id)|text.find(token).map(|at|(at,token.len(),*id))).min_by_key(|(at,len,_)|(*at,std::cmp::Reverse(*len)));
+            if let Some((at,len,id))=next { ids.extend(self.plain_ids(&text[..at]));ids.push(id);text=&text[at+len..]; }
+            else { ids.extend(self.plain_ids(text));break; }
+        }
+        ids
+    }
+    fn plain_ids(&self, text: &str) -> Vec<usize> {
         let mut normalized = String::new();
         for c in text.chars() {
             if self.unicode.control(c) {

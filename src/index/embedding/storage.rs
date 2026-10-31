@@ -1,4 +1,4 @@
-use super::{DIM, ID, Model, err};
+use super::{DIM, Model, err, identity};
 use crate::index::store;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
@@ -8,13 +8,13 @@ pub use scan::scan;
 fn model_id(db: &Connection) -> Result<i64, String> {
     db.query_row(
         "SELECT id FROM embedding_models WHERE identity=?1",
-        [ID],
+        [identity()],
         |r| r.get(0),
     )
     .map_err(err)
 }
 pub fn sync(tx: &Transaction<'_>, model: &Model, token: &str) -> Result<(), String> {
-    let stamp = format!("vectors:{ID}");
+    let stamp = format!("vectors:{}", identity());
     if store::stamp(tx, &stamp)?.as_deref() == Some(token) {
         return Ok(());
     }
@@ -23,10 +23,18 @@ pub fn sync(tx: &Transaction<'_>, model: &Model, token: &str) -> Result<(), Stri
         CREATE TABLE IF NOT EXISTS vector_coverage(model INTEGER,payload INTEGER,PRIMARY KEY(model,payload)) WITHOUT ROWID;").map_err(err)?;
     tx.execute(
         "INSERT OR IGNORE INTO embedding_models(identity) VALUES (?1)",
-        [ID],
+        [identity()],
     )
     .map_err(err)?;
     let id = model_id(tx)?;
+    // This command has one pinned model. Expire older inference formats and their
+    // stamps together, so another worktree recomputes instead of trusting missing data.
+    tx.execute("DELETE FROM vectors WHERE model<>?1", [id]).map_err(err)?;
+    tx.execute("DELETE FROM vector_coverage WHERE model<>?1", [id]).map_err(err)?;
+    tx.execute("DELETE FROM embedding_models WHERE id<>?1", [id]).map_err(err)?;
+    tx.execute("DELETE FROM stamps WHERE source LIKE 'vectors:%' AND source<>?1", [&stamp]).map_err(err)?;
+    tx.execute("DELETE FROM vectors WHERE payload NOT IN (SELECT payload FROM members)", []).map_err(err)?;
+    tx.execute("DELETE FROM vector_coverage WHERE payload NOT IN (SELECT payload FROM members)", []).map_err(err)?;
     let mut missing = tx.prepare("SELECT DISTINCT m.payload FROM members m LEFT JOIN vector_coverage c ON c.model=?1 AND c.payload=m.payload WHERE m.worktree=(SELECT worktree FROM selection) AND m.source LIKE 'file:%' AND c.payload IS NULL").map_err(err)?;
     let payloads = missing
         .query_map([id], |r| r.get::<_, i64>(0))
