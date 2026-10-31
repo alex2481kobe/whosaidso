@@ -31,34 +31,7 @@ impl Snapshot {
     pub fn graph(&self) -> Result<Graph, String> {
         let definitions = self.definitions("")?.rows;
         let refs = self.all_references()?;
-        let mut names: HashMap<&str, Vec<&Row>> = HashMap::new();
-        for d in &definitions {
-            names.entry(&d.name).or_default().push(d);
-        }
-        let mut edges = Vec::new();
-        for row in refs.rows {
-            let targets = if row.layer == Layer::Precise {
-                vec![row.symbol.clone()]
-            } else {
-                let candidates = names.get(row.name.as_str()).cloned().unwrap_or_default();
-                let mut ids: Vec<_> = candidates.iter().map(|r| r.symbol.clone()).collect();
-                ids.sort();
-                ids.dedup();
-                ids
-            };
-            edges.push(Edge {
-                source: row.container.clone(),
-                targets,
-                occurrence: row,
-            });
-        }
-        let relationships = self.all_relationships()?;
-        Ok(Graph {
-            definitions,
-            edges,
-            relationships,
-            gaps: refs.gaps,
-        })
+        Ok(assemble(definitions,refs.rows,self.all_relationships()?,refs.gaps))
     }
     pub fn edges(&self, symbol: &str, direction: Direction) -> Result<Edges, String> {
         let graph = self.graph()?;
@@ -78,4 +51,35 @@ impl Snapshot {
             gaps: graph.gaps,
         })
     }
+}
+
+fn assemble(definitions: Vec<Row>, references: Vec<Row>, relationships: Vec<Relationship>, gaps: Vec<String>) -> Graph {
+        let mut names: HashMap<&str, Vec<&Row>> = HashMap::new();
+        for d in &definitions {
+            names.entry(&d.name).or_default().push(d);
+        }
+        let mut edges = Vec::new();
+        for row in references {
+            let targets = if row.layer == Layer::Precise {
+                vec![row.symbol.clone()]
+            } else {
+                let candidates = names.get(row.name.as_str()).cloned().unwrap_or_default();
+                let mut ids: Vec<_> = candidates.iter().map(|r| r.symbol.clone()).collect();
+                ids.sort();
+                ids.dedup();
+                ids
+            };
+            edges.push(Edge {
+                source: row.container.clone(),
+                targets,
+                occurrence: row,
+            });
+        }
+        Graph {
+            definitions,
+            edges,
+            relationships,
+            gaps,
+        }
+
 }
