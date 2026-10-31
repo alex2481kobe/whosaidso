@@ -93,3 +93,55 @@ fn changing_an_unvalidated_reexport_still_invalidates_the_language() {
     let view: Value = serde_json::from_str(&cli(&f.root, &["flow", "compare", "app"])).unwrap();
     assert_eq!(view["nodes"]["secret"]["evidence"], "precise");
 }
+
+#[test]
+fn rust_import_alias_spelling_is_validated_against_its_symbol() {
+    let f = Fixture::sources(&[
+        ("api.rs", "pub fn real() {}\n"),
+        (
+            "client.rs",
+            "use crate::api::{real as cli};\nfn entry() { cli(); }\n",
+        ),
+    ]);
+    commit(&f.root);
+    let docs = [
+        scip::doc(
+            "api.rs",
+            "rust-analyzer cargo app 1 api/real().",
+            "real",
+            &[(&[0, 7, 11], true)],
+        ),
+        scip::doc(
+            "client.rs",
+            "rust-analyzer cargo app 1 client/entry().",
+            "entry",
+            &[(&[1, 3, 8], true)],
+        ),
+        scip::doc(
+            "client.rs",
+            "rust-analyzer cargo app 1 api/real().",
+            "real",
+            &[
+                (&[0, 17, 21], false),
+                (&[0, 25, 28], false),
+                (&[1, 13, 16], false),
+            ],
+        ),
+    ];
+    scip::import(&f.root, &docs);
+    let refs = cli(&f.root, &["code", "refs", "real"]);
+    assert!(
+        refs.contains("client.rs:2") && refs.contains("[precise]"),
+        "{refs}"
+    );
+    // A misspelled unrelated reference cannot borrow the alias's permission.
+    let mut wrong = docs.to_vec();
+    wrong.push(scip::doc(
+        "client.rs",
+        "rust-analyzer cargo app 1 api/other().",
+        "other",
+        &[(&[1, 13, 16], false)],
+    ));
+    scip::import(&f.root, &wrong);
+    assert!(!cli(&f.root, &["code", "refs", "real"]).contains("[precise]"));
+}

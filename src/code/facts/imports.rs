@@ -128,7 +128,7 @@ impl Snapshot {
                 aliases
                     .entry(path.to_owned())
                     .or_insert_with(std::collections::HashSet::new)
-                    .insert(alias);
+                    .insert(alias.name);
             }
         }
         Ok(aliases)

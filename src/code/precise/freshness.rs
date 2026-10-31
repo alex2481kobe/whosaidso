@@ -40,6 +40,40 @@ fn offset(line: &[u8], column: usize, encoding: u64) -> Option<usize> {
     }
     (units == column).then_some(line.len())
 }
+fn aliases<'a>(d: &'a Doc, bytes: &[u8], lines: &[&[u8]]) -> HashMap<&'a str, HashSet<String>> {
+    let mut spellings = HashMap::new();
+    if !d.path.ends_with(".rs") || !d.occ.iter().any(|o| o.symbol.starts_with("rust-analyzer ")) {
+        return spellings;
+    }
+    let Ok(aliases) = super::super::parse::names::rust_aliases(bytes) else {
+        return spellings;
+    };
+    let at = |o: &Occ, r: tree_sitter::Range| {
+        o.line == r.start_point.row as i64 + 1
+            && o.end == r.end_point.row as i64 + 1
+            && lines.get(o.line as usize - 1).is_some_and(|line| {
+                offset(line, o.start, d.encoding) == Some(r.start_point.column)
+                    && offset(line, o.stop, d.encoding) == Some(r.end_point.column)
+            })
+    };
+    for alias in aliases {
+        let Some(source) = alias.source else { continue };
+        // The original spelling and both import ranges must identify the same SCIP symbol.
+        for o in d.occ.iter().filter(|o| !o.def && at(o, source)) {
+            if bytes.get(source.start_byte..source.end_byte) == Some(name(&o.symbol).as_bytes())
+                && d.occ
+                    .iter()
+                    .any(|a| !a.def && a.symbol == o.symbol && at(a, alias.range))
+            {
+                spellings
+                    .entry(o.symbol.as_str())
+                    .or_insert_with(HashSet::new)
+                    .insert(alias.name.clone());
+            }
+        }
+    }
+    spellings
+}
 pub(super) fn check(d: &Doc, bytes: &[u8]) -> bool {
     let source_lines: Vec<_> = bytes.split(|&b| b == b'\n').collect();
     let enclosing_valid = d.occ.iter().all(|o| {
@@ -70,6 +104,7 @@ pub(super) fn check(d: &Doc, bytes: &[u8]) -> bool {
         .filter(|o| o.symbol.ends_with('!'))
         .map(range)
         .collect();
+    let aliases = aliases(d, bytes, &source_lines);
     let (mut valid, mut checked) = (enclosing_valid, 0);
     for o in &d.occ {
         let in_source = |line: i64, column: usize| {
@@ -104,7 +139,12 @@ pub(super) fn check(d: &Doc, bytes: &[u8]) -> bool {
             && o.symbol.starts_with("rust-analyzer ")
             && (rust_operator(&expected)
                 || (o.symbol.contains("/impl#") && selected == Some(b"Self")));
-        let matches = (o.line == o.end && selected == Some(expected.as_bytes())) || implicit;
+        let alias = !o.def
+            && aliases
+                .get(o.symbol.as_str())
+                .is_some_and(|names| names.iter().any(|name| selected == Some(name.as_bytes())));
+        let matches =
+            (o.line == o.end && (selected == Some(expected.as_bytes()) || alias)) || implicit;
         valid &= matches;
     }
     valid && checked > 0

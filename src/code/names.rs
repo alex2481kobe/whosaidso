@@ -203,7 +203,13 @@ pub(super) fn caller(mut node: Node<'_>, bytes: &[u8]) -> String {
     String::new()
 }
 
-pub(in crate::code) fn rust_aliases(bytes: &[u8]) -> Result<Vec<String>, String> {
+// Alias spellings and their source ranges share the grammar used for syntax facts.
+pub(in crate::code) struct RustAlias {
+    pub name: String,
+    pub range: tree_sitter::Range,
+    pub source: Option<tree_sitter::Range>,
+}
+pub(in crate::code) fn rust_aliases(bytes: &[u8]) -> Result<Vec<RustAlias>, String> {
     use tree_sitter::{Parser, Query, QueryCursor, StreamingIterator};
     let language = (super::super::languages::for_name("Rust")
         .ok_or("Rust grammar missing")?
@@ -220,7 +226,17 @@ pub(in crate::code) fn rust_aliases(bytes: &[u8]) -> Result<Vec<String>, String>
     let mut aliases = Vec::new();
     while let Some(m) = matches.next() {
         for c in m.captures() {
-            aliases.push(c.node.utf8_text(bytes).map_err(|e| e.to_string())?.to_owned());
+            let source = c.node.parent().and_then(|p| p.child_by_field_name("path"));
+            let source = source.map(|n| n.child_by_field_name("name").unwrap_or(n).range());
+            aliases.push(RustAlias {
+                name: c
+                    .node
+                    .utf8_text(bytes)
+                    .map_err(|e| e.to_string())?
+                    .to_owned(),
+                range: c.node.range(),
+                source,
+            });
         }
     }
     Ok(aliases)
