@@ -1,6 +1,6 @@
 use super::{
     model::{Flow, Node},
-    pattern::matches,
+    pattern::{literal, matches},
 };
 use crate::code::facts::{Snapshot, coverage::Coverage, edges::Graph, reads::Row};
 use std::collections::BTreeSet;
@@ -8,19 +8,26 @@ use std::collections::BTreeSet;
 // The scope includes anchors and both sides of declared boundaries, while target
 // candidates stay global so a narrow plan cannot conceal name ambiguity.
 pub fn graph(flow: &Flow, snapshot: &Snapshot) -> Result<(Graph, Vec<Coverage>), String> {
-    let mut paths: BTreeSet<String> = snapshot
-        .files
-        .entries
+    let mut paths = BTreeSet::new();
+    for pattern in flow
+        .covers
+        .paths
         .iter()
-        .filter(|f| {
-            inside(flow, &f.path)
-                || flow
-                    .nodes
+        .chain(flow.nodes.iter().flat_map(|n| &n.paths))
+    {
+        if literal(pattern) {
+            paths.insert(pattern.clone());
+        } else {
+            paths.extend(
+                snapshot
+                    .files
+                    .entries
                     .iter()
-                    .any(|n| n.paths.iter().any(|p| matches(p, &f.path)))
-        })
-        .map(|f| f.path.clone())
-        .collect();
+                    .filter(|f| matches(pattern, &f.path))
+                    .map(|f| f.path.clone()),
+            );
+        }
+    }
     for node in flow.nodes.iter().filter(|n| n.paths.is_empty()) {
         for symbol in &node.symbols {
             let rows = snapshot.select(symbol)?;
