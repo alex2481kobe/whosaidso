@@ -1,5 +1,8 @@
 // Read and format code answers.
-use super::{contracts::Answers, facts::reads::Layer};
+use super::{
+    contracts::{Answers, DEFAULT_LIMIT, GAP_LIMIT},
+    facts::reads::Layer,
+};
 use std::path::Path;
 
 pub fn run(root: &Path, command: &str, value: &str) -> Result<(), String> {
@@ -9,6 +12,7 @@ pub fn run(root: &Path, command: &str, value: &str) -> Result<(), String> {
         return Ok(());
     }
     let mut answers = Answers::default();
+    let mut gaps = Vec::new();
     match command {
         "defs" | "refs" => {
             let result = if command == "defs" {
@@ -16,6 +20,8 @@ pub fn run(root: &Path, command: &str, value: &str) -> Result<(), String> {
             } else {
                 snapshot.references(value)?
             };
+            gaps = snapshot.blind_spots(&result.rows)?;
+            gaps.extend(result.gaps);
             for row in result.rows {
                 let path = row.path;
                 let line = row.range.line;
@@ -55,7 +61,19 @@ pub fn run(root: &Path, command: &str, value: &str) -> Result<(), String> {
         }
         _ => return Err("unknown code query".into()),
     }
-    let coverage = snapshot.coverage()?;
+    if gaps.is_empty() {
+        gaps = snapshot.blind_spots(&[])?;
+    }
+    let (precise, syntactic, missing) = if answers.total == 0 {
+        snapshot.coverage_summary()?
+    } else {
+        (0, 0, 0)
+    };
+    let coverage = if answers.total == 0 && missing > 0 {
+        snapshot.coverage()?
+    } else {
+        Vec::new()
+    };
     if answers.total == 0 {
         for c in coverage
             .iter()
@@ -65,12 +83,7 @@ pub fn run(root: &Path, command: &str, value: &str) -> Result<(), String> {
             println!("coverage: {}: not indexed", c.path);
         }
     }
-    if answers.total == 0
-        && !coverage.is_empty()
-        && !coverage
-            .iter()
-            .any(|c| c.syntax == "indexed" || c.precise == "fresh")
-    {
+    if answers.total == 0 && precise + syntactic + missing > 0 && precise + syntactic == 0 {
         println!("code: not indexed; no searchable code coverage");
     } else if answers.total == 0 {
         println!("code: none recorded in indexed files; absence is not proven [hybrid]");
@@ -78,9 +91,15 @@ pub fn run(root: &Path, command: &str, value: &str) -> Result<(), String> {
         for line in &answers.lines {
             println!("{line}");
         }
-        if answers.total > 20 {
-            println!("shown 20 of {}", answers.total);
+        if answers.total > DEFAULT_LIMIT {
+            println!("shown {DEFAULT_LIMIT} of {}", answers.total);
         }
+    }
+    for gap in gaps.iter().take(GAP_LIMIT) {
+        println!("gap: {gap}");
+    }
+    if gaps.len() > GAP_LIMIT {
+        println!("gaps: {} omitted", gaps.len() - GAP_LIMIT);
     }
     Ok(())
 }

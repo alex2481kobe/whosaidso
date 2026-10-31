@@ -114,6 +114,9 @@ pub(in crate::code) fn import_run(
             f.blob = blob;
         }
     }
+    if expected.is_some_and(|stamp| tree::fingerprint(&files) != stamp) {
+        return Err("sources changed during indexing; old index retained".into());
+    }
     let mut db = super::super::store::open(root)?;
     schema(&db)?;
     let tx = db

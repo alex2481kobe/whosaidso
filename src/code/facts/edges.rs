@@ -4,8 +4,7 @@ use super::{
     reads::{Layer, Row},
     relationships::Relationship,
 };
-use crate::code::contracts::matches;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 #[derive(Clone, Copy)]
 pub enum Direction {
@@ -42,17 +41,7 @@ impl Snapshot {
                 vec![row.symbol.clone()]
             } else {
                 let candidates = names.get(row.name.as_str()).cloned().unwrap_or_default();
-                let scoped: Vec<_> = candidates
-                    .iter()
-                    .filter(|d| matches(&d.qualified, &row.qualified))
-                    .copied()
-                    .collect();
-                let selected = if scoped.is_empty() {
-                    candidates
-                } else {
-                    scoped
-                };
-                let mut ids: Vec<_> = selected.iter().map(|r| r.symbol.clone()).collect();
+                let mut ids: Vec<_> = candidates.iter().map(|r| r.symbol.clone()).collect();
                 ids.sort();
                 ids.dedup();
                 ids
@@ -63,13 +52,7 @@ impl Snapshot {
                 occurrence: row,
             });
         }
-        let mut relationships = Vec::new();
-        let mut seen = HashSet::new();
-        for row in &definitions {
-            if row.layer == Layer::Precise && seen.insert(&row.symbol) {
-                relationships.extend(self.relationships(&row.symbol, Direction::Forward)?);
-            }
-        }
+        let relationships = self.all_relationships()?;
         Ok(Graph {
             definitions,
             edges,

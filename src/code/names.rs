@@ -35,6 +35,13 @@ pub(super) fn last_identifier(node: Node<'_>, bytes: &[u8]) -> String {
 }
 pub(super) fn definition(node: Node<'_>, bytes: &[u8]) -> Option<(String, String)> {
     let kind = match node.kind() {
+        "variable_declarator"
+            if !node
+                .child_by_field_name("value")
+                .is_some_and(|n| matches!(n.kind(), "arrow_function" | "function_expression")) =>
+        {
+            return None;
+        }
         "function_definition" if node.child_by_field_name("declarator").is_some() => {
             let mut parent = node.parent();
             let mut method = false;

@@ -1,5 +1,6 @@
 // Bounded command presentation for graph traversal and its coverage limits.
 use super::{
+    contracts::{DEFAULT_LIMIT, GAP_LIMIT, MAX_LIMIT, ROW_BYTES},
     facts::{Snapshot, edges::Direction},
     inspect,
 };
@@ -16,7 +17,7 @@ impl Options {
     pub fn parse(args: &[String]) -> Result<Self, String> {
         let mut result = Self {
             depth: 1,
-            limit: 20,
+            limit: DEFAULT_LIMIT,
             ..Self::default()
         };
         let mut i = 0;
@@ -35,7 +36,7 @@ impl Options {
                         .map_err(|_| "query budget must be a non-negative integer")?;
                     match args[i].as_str() {
                         "--depth" if n <= 100 => result.depth = n,
-                        "--limit" if (1..=100).contains(&n) => result.limit = n,
+                        "--limit" if (1..=MAX_LIMIT).contains(&n) => result.limit = n,
                         "--offset" => result.offset = n,
                         _ => return Err("depth must be 0..100; limit must be 1..100".into()),
                     }
@@ -87,10 +88,11 @@ pub(super) fn describe(
         ));
         for r in result.seeds.iter().take(options.limit) {
             out.push(format!(
-                "{} {} [{}]",
+                "{} {} [{}] id={}",
                 inspect::location(r),
                 r.qualified,
-                inspect::label(r)
+                inspect::label(r),
+                r.symbol
             ));
         }
         if result.seeds.len() > options.limit {
@@ -141,7 +143,18 @@ pub(super) fn describe(
             .min(options.limit);
         out.push(format!("shown {shown} of {}", result.rows.len()));
         if result.rows.is_empty() {
-            out.push("none recorded; absence is not proven".into());
+            let (precise, syntax, missing) = snapshot.coverage_summary()?;
+            if precise + syntax == 0 && missing > 0 {
+                out.push("not indexed; no searchable code coverage".into());
+            } else if snapshot
+                .coverage()?
+                .iter()
+                .any(|c| c.path == value && c.syntax == "not indexed" && c.precise != "fresh")
+            {
+                out.push(format!("{value}: not indexed"));
+            } else {
+                out.push("none recorded; absence is not proven".into());
+            }
         }
     }
     if result.depth_limited {
@@ -169,18 +182,28 @@ pub(super) fn describe(
             .take(6)
             .map(|g| format!("gap: {g}")),
     );
+    let gaps = snapshot.blind_spots(&result.graph.definitions)?;
+    out.extend(gaps.iter().take(GAP_LIMIT).map(|g| format!("gap: {g}")));
+    if gaps.len() > GAP_LIMIT {
+        out.push(format!("gaps: {} omitted", gaps.len() - GAP_LIMIT));
+    }
     out.push(coverage(snapshot)?);
-    Ok(out.join("\n"))
+    Ok(out
+        .into_iter()
+        .enumerate()
+        .map(|(i, s)| {
+            if i == 0 {
+                s
+            } else {
+                crate::text::cut(&s, ROW_BYTES)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n"))
 }
 pub(super) fn coverage(snapshot: &Snapshot) -> Result<String, String> {
-    let coverage = snapshot.coverage()?;
-    let precise = coverage.iter().filter(|c| c.precise == "fresh").count();
-    let syntax = coverage
-        .iter()
-        .filter(|c| c.precise != "fresh" && c.syntax == "indexed")
-        .count();
+    let (precise, syntax, missing) = snapshot.coverage_summary()?;
     Ok(format!(
-        "coverage: precise={precise} syntactic={syntax} not indexed={}; empty is not proof of absence",
-        coverage.len() - precise - syntax
+        "coverage: precise={precise} syntactic={syntax} not indexed={missing}; empty is not proof of absence"
     ))
 }

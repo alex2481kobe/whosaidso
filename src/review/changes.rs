@@ -30,7 +30,7 @@ impl Change {
         let range = row.enclosing.as_ref().unwrap_or(&row.range);
         ranges.is_empty()
             || ranges.iter().any(|(start, count)| {
-                range.line <= start + count.max(&1) - 1 && range.end_line >= *start
+                range.line < start + count.max(&1) && range.end_line >= *start
             })
     }
 }

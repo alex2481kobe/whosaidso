@@ -227,14 +227,18 @@ fn graph_combines_fresh_precise_and_syntax_and_reports_implementations() {
     relationship.extend([24, 1]);
     info.extend(field(4, &relationship));
     document.extend(field(3, &info));
-    import(root, &[field(2, &document)]);
+    let mut external = field(1, b"scip-test pkg project 1 external().");
+    let mut relation = field(1, api.as_bytes());
+    relation.extend([24, 1]);
+    external.extend(field(4, &relation));
+    import(root, &[field(2, &document), field(3, &external)]);
     let answer = cli(root, &["code", "callers", "api", "--implementations"]);
     assert!(
         answer.contains("implementation [precise]") && answer.contains("user [syntactic]"),
         "{answer}"
     );
     assert!(
-        answer.contains("implementations: 1 recorded") && answer.contains("precise=1 syntactic=1"),
+        answer.contains("implementations: 2 recorded") && answer.contains("precise=1 syntactic=1"),
         "{answer}"
     );
     assert_eq!(
@@ -255,3 +259,9 @@ fn graph_combines_fresh_precise_and_syntax_and_reports_implementations() {
 
 #[path = "v032_impact/review.rs"]
 mod review;
+
+#[path = "v032_impact/coverage.rs"]
+mod coverage;
+
+#[path = "v032_impact/bodies.rs"]
+mod bodies;

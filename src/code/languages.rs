@@ -6,6 +6,8 @@ pub struct Registration {
     pub name: &'static str,
     pub extensions: &'static [&'static str],
     pub grammar: fn() -> Language,
+    pub syntax_gap: &'static str,
+    pub precise_gap: &'static str,
     pub indexer: Option<&'static Indexer>,
     pub query: &'static str,
 }
@@ -65,6 +67,8 @@ const JAVA: &str = "[(class_declaration) (interface_declaration) (enum_declarati
 pub static LANGUAGES: &[Registration] = &[
     Registration {
         name: "C",
+        syntax_gap: "preprocessor expansions and function-pointer targets remain unknown",
+        precise_gap: "build exclusions, macro expansions and indirect calls may be unrecorded",
         indexer: None,
         extensions: &["c"],
         grammar: || tree_sitter_c::LANGUAGE.into(),
@@ -72,6 +76,8 @@ pub static LANGUAGES: &[Registration] = &[
     },
     Registration {
         name: "C++",
+        syntax_gap: "overloads, templates, preprocessor expansions and virtual dispatch remain unresolved",
+        precise_gap: "build exclusions and dynamic dispatch may be unrecorded",
         indexer: None,
         extensions: &["h", "hh", "hpp", "cc", "cpp", "cxx"],
         grammar: || tree_sitter_cpp::LANGUAGE.into(),
@@ -79,6 +85,8 @@ pub static LANGUAGES: &[Registration] = &[
     },
     Registration {
         name: "Rust",
+        syntax_gap: "macro expansion, trait dispatch and cfg evaluation remain unknown",
+        precise_gap: "inactive cfg, generated code and macro bodies may be unrecorded; implementation relationships are unknown",
         indexer: Some(&RUST_INDEX),
         extensions: &["rs"],
         grammar: || tree_sitter_rust::LANGUAGE.into(),
@@ -86,6 +94,8 @@ pub static LANGUAGES: &[Registration] = &[
     },
     Registration {
         name: "Python",
+        syntax_gap: "dynamic attributes, aliases and runtime imports remain unresolved",
+        precise_gap: "untyped values, import-star names and runtime imports may be unrecorded",
         indexer: Some(&PY_INDEX),
         extensions: &["py"],
         grammar: || tree_sitter_python::LANGUAGE.into(),
@@ -93,6 +103,8 @@ pub static LANGUAGES: &[Registration] = &[
     },
     Registration {
         name: "Go",
+        syntax_gap: "interface dispatch, receiver types and import aliases remain unresolved",
+        precise_gap: "build-tag exclusions and uses through interface methods may hide concrete implementations",
         indexer: Some(&GO_INDEX),
         extensions: &["go"],
         grammar: || tree_sitter_go::LANGUAGE.into(),
@@ -100,6 +112,8 @@ pub static LANGUAGES: &[Registration] = &[
     },
     Registration {
         name: "TypeScript",
+        syntax_gap: "computed properties, aliases and structural typing remain unresolved",
+        precise_gap: "CommonJS assignments, large-file exclusions and structural implementations may be unrecorded",
         indexer: Some(&TS_INDEX),
         extensions: &["ts", "mts", "cts"],
         grammar: || tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
@@ -107,6 +121,8 @@ pub static LANGUAGES: &[Registration] = &[
     },
     Registration {
         name: "TSX",
+        syntax_gap: "JSX component uses and computed properties remain unresolved",
+        precise_gap: "JSX coverage, CommonJS assignments and structural implementations may be incomplete",
         indexer: Some(&TS_INDEX),
         extensions: &["tsx"],
         grammar: || tree_sitter_typescript::LANGUAGE_TSX.into(),
@@ -114,6 +130,8 @@ pub static LANGUAGES: &[Registration] = &[
     },
     Registration {
         name: "JavaScript",
+        syntax_gap: "dynamic properties, runtime imports and aliases remain unresolved",
+        precise_gap: "CommonJS assignments and large-file exclusions may be unrecorded",
         indexer: Some(&TS_INDEX),
         extensions: &["js", "mjs", "cjs"],
         grammar: || tree_sitter_javascript::LANGUAGE.into(),
@@ -121,6 +139,8 @@ pub static LANGUAGES: &[Registration] = &[
     },
     Registration {
         name: "JSX",
+        syntax_gap: "JSX component uses and dynamic properties remain unresolved",
+        precise_gap: "JSX coverage and CommonJS assignments may be incomplete",
         indexer: Some(&TS_INDEX),
         extensions: &["jsx"],
         grammar: || tree_sitter_javascript::LANGUAGE.into(),
@@ -128,6 +148,8 @@ pub static LANGUAGES: &[Registration] = &[
     },
     Registration {
         name: "Swift",
+        syntax_gap: "overloads, protocol dispatch and generated declarations remain unresolved",
+        precise_gap: "build configuration, generated code and protocol relationships may be incomplete",
         indexer: Some(&SWIFT_INDEX),
         extensions: &["swift"],
         grammar: || tree_sitter_swift::LANGUAGE.into(),
@@ -135,6 +157,8 @@ pub static LANGUAGES: &[Registration] = &[
     },
     Registration {
         name: "Java",
+        syntax_gap: "reflection, overloads and virtual dispatch remain unresolved",
+        precise_gap: "indexer coverage was not probed; reflection and runtime dispatch remain unknown",
         indexer: None,
         extensions: &["java"],
         grammar: || tree_sitter_java::LANGUAGE.into(),

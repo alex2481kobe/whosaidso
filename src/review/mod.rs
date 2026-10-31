@@ -1,6 +1,7 @@
 // Review compares immutable source snapshots, optionally narrowed by a unified diff.
 mod changes;
 mod diff;
+use crate::code::contracts::{DEFAULT_LIMIT, GAP_LIMIT, MAX_LIMIT, ROW_BYTES};
 use crate::code::facts::{
     Snapshot,
     edges::Direction,
@@ -10,7 +11,7 @@ use std::{collections::BTreeSet, io::Read, path::Path};
 pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
     let mut base = "HEAD";
     let mut input = None;
-    let mut limit = 20;
+    let mut limit = DEFAULT_LIMIT;
     let mut offset = 0;
     let mut depth = 1;
     let mut i = 0;
@@ -21,7 +22,7 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
             "--diff" => input = Some(value.as_str()),
             "--limit" => {
                 limit = number(value)?;
-                if !(1..=100).contains(&limit) {
+                if !(1..=MAX_LIMIT).contains(&limit) {
                     return Err("review limit must be 1..100".into());
                 }
             }
@@ -130,6 +131,7 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
                 "depth limit {depth}; additional reachability is unknown"
             ));
         }
+        gaps.extend(snapshot.blind_spots(&impact.graph.definitions)?);
         gaps.extend(impact.graph.gaps);
     }
     println!(
@@ -140,7 +142,7 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
         rows.len()
     );
     for row in rows.iter().skip(offset).take(limit) {
-        println!("{}", crate::text::cut(row, 500));
+        println!("{}", crate::text::cut(row, ROW_BYTES));
     }
     println!(
         "shown {} of {}",
@@ -150,7 +152,7 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
     if rows.is_empty() {
         println!("none recorded; absence is not proven");
     }
-    for gap in gaps.iter().take(6) {
+    for gap in gaps.iter().take(GAP_LIMIT) {
         println!("gap: {gap}");
     }
     println!(

@@ -1,5 +1,5 @@
 // Code search commands; parsing, storage and presentation live in their own modules.
-mod contracts;
+pub(crate) mod contracts;
 pub mod facts;
 mod impact;
 mod indexer;
@@ -24,6 +24,19 @@ pub fn import_scip(root: &Path, file: &Path) -> Result<(), String> {
 
 pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
     match args {
+        [sub, topic] if sub == "help" && topic == "coverage" => {
+            println!(
+                "Syntax limits are from extractor rules. SCIP guidance is from indexer coverage notes, not locally reproduced; a missing row is unknown, never proof of absence."
+            );
+            for language in languages::LANGUAGES {
+                println!(
+                    "{}: syntax: {}; SCIP guidance: {}",
+                    language.name, language.syntax_gap, language.precise_gap
+                );
+            }
+            Ok(())
+        }
+
         [sub, value, rest @ ..] if ["callers", "callees", "affected"].contains(&sub.as_str()) => {
             println!("{}", impact::answer(root, sub, value, rest)?);
             Ok(())
@@ -38,6 +51,6 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
             Ok(())
         }
         [sub, value] => query(root, sub, value),
-        _ => Err("usage: code defs|refs|deps|includers|show|outline <value>".into()),
+        _ => Err("usage: code defs|refs|deps|includers|show|outline|index <value>; callers|callees|affected <symbol|path> [--depth N] [--limit N] [--offset N] [--snapshot ID] [--implementations]; help coverage".into()),
     }
 }
