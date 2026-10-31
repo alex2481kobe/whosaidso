@@ -1,162 +1,26 @@
+mod journal;
+pub mod selection;
+use journal::Journal;
+use selection::Selection;
 // Only the landing owner deletes records; branches publish without pruning.
 use crate::{
-    blob, gallery, git, goals, publish,
-    record::{self, Proof, Store},
-    state, tree,
+    blob, gallery, git, publish,
+    record::{self},
+    tree,
 };
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::HashSet,
     fs,
-    io::Write,
-    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     time::SystemTime,
 };
-
-fn required(store: &Store) -> HashSet<&str> {
-    store.goals.iter().map(|g| g.check.as_str()).collect()
-}
-pub fn proofs_to_remove<'a>(root: &Path, store: &'a Store) -> Result<Vec<&'a Proof>, String> {
-    let required = required(store);
-    let mut pairs = BTreeMap::new();
-    for proof in &store.proofs {
-        pairs
-            .entry((proof.goal.as_str(), proof.instrument.as_str()))
-            .or_insert_with(Vec::new)
-            .push(proof);
-    }
-    if pairs.is_empty() {
-        return Ok(Vec::new());
-    }
-    let main = git::run(root, &["rev-list", &git::main_tip(root)?])?;
-    let main: HashSet<_> = main.lines().collect();
-    let reachable = git::run(root, &["rev-list", "--branches", "--tags", "HEAD"])?;
-    let reachable: HashSet<_> = reachable.lines().collect();
-    let mut removed = Vec::new();
-    for ((goal, instrument), mut proofs) in pairs {
-        let selected = state::newest_proof(store, &main, goal, instrument).map(|p| &p.sha);
-        proofs.sort_unstable_by(|a, b| (b.ran_at, &b.sha).cmp(&(a.ran_at, &a.sha)));
-        let mut seen = HashSet::new();
-        for proof in proofs {
-            if !required.contains(instrument)
-                || !reachable.contains(proof.commit.as_str())
-                || if main.contains(proof.commit.as_str()) {
-                    selected != Some(&proof.sha)
-                } else {
-                    !seen.insert(&proof.commit)
-                }
-            {
-                removed.push(proof);
-            }
-        }
-    }
-    Ok(removed)
-}
 
 pub fn journal_path(root: &Path) -> Result<PathBuf, String> {
     Ok(root
         .join(git::run(root, &["rev-parse", "--git-common-dir"])?.trim_end_matches('\n'))
         .join("whosaidso/prune.journal"))
 }
-#[derive(serde::Serialize, serde::Deserialize)]
-struct Journal {
-    pid: u32,
-    root: PathBuf,
-    index: PathBuf,
-    token: PathBuf,
-    records: Vec<PathBuf>,
-    moves: Vec<(PathBuf, PathBuf)>,
-    archive: Vec<(PathBuf, PathBuf)>,
-}
-impl Journal {
-    fn save(&self, path: &Path) -> Result<(), String> {
-        let temp = path.with_extension("journal.tmp");
-        let mut file = fs::File::create(&temp).map_err(|e| e.to_string())?;
-        file.write_all(&serde_json::to_vec(self).map_err(|e| e.to_string())?)
-            .and_then(|_| file.sync_all())
-            .map_err(|e| e.to_string())?;
-        fs::rename(temp, path)
-            .and_then(|_| fs::File::open(path.parent().unwrap())?.sync_all())
-            .map_err(|e| e.to_string())
-    }
-    fn unlock(&self) -> Result<(), String> {
-        if let Ok(index) = fs::symlink_metadata(&self.index) {
-            let ours = fs::metadata(&self.token)
-                .is_ok_and(|m| m.dev() == index.dev() && m.ino() == index.ino());
-            if !ours {
-                return Err(
-                    "prune: index.lock belongs to another git process; run prune after it finishes"
-                        .into(),
-                );
-            }
-            fs::remove_file(&self.index).map_err(|e| e.to_string())?;
-        }
-        Ok(())
-    }
-    fn finish(&self, path: &Path) -> Result<(), String> {
-        self.unlock()?;
-        for p in [&self.token, &path.with_extension("journal.tmp")] {
-            if p.exists() {
-                fs::remove_file(p).map_err(|e| e.to_string())?;
-            }
-        }
-        fs::remove_file(path)
-            .and_then(|_| fs::File::open(path.parent().unwrap())?.sync_all())
-            .map_err(|e| e.to_string())
-    }
-    fn recover(path: &Path) -> Result<(), String> {
-        let bytes = match fs::read(path) {
-            Ok(b) => b,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-            Err(e) => return Err(e.to_string()),
-        };
-        let journal: Self =
-            serde_json::from_slice(&bytes).map_err(|e| format!("prune journal: {e}"))?;
-        unsafe extern "C" {
-            fn kill(pid: i32, signal: i32) -> i32;
-        }
-        // A PID still present (or not inspectable) never grants permission to remove its lock.
-        if unsafe { kill(journal.pid as i32, 0) } == 0
-            || std::io::Error::last_os_error().raw_os_error() != Some(3)
-        {
-            return Err(
-                "prune: unfinished prune is still running; run prune after it finishes".into(),
-            );
-        }
-        journal.unlock()?;
-        let tracked = git::run(
-            &journal.root,
-            &["ls-tree", "-r", "--name-only", "HEAD", "--", ".whosaidso"],
-        )?;
-        for p in &journal.records {
-            let relative = p
-                .strip_prefix(&journal.root)
-                .map_err(|e| e.to_string())?
-                .to_str()
-                .ok_or("invalid record path")?;
-            if tracked.lines().any(|p| p == relative) {
-                let bytes = git::run_bytes(&journal.root, &["show", &format!("HEAD:{relative}")])?;
-                publish::write_bytes(p, &bytes)?;
-            }
-        }
-        for (from, to) in journal.moves.iter().rev() {
-            if to.is_file() && !from.exists() {
-                fs::rename(to, from).map_err(|e| e.to_string())?;
-            }
-        }
-        for (_, bundle) in &journal.archive {
-            let temp = bundle.with_file_name(format!(
-                ".tmp-{}",
-                bundle.file_name().unwrap().to_string_lossy()
-            ));
-            if temp.exists() {
-                fs::remove_file(temp).map_err(|e| e.to_string())?;
-            }
-        }
-        journal.finish(path)
-    }
-}
-pub fn prune(root: &Path) -> Result<(), String> {
+pub fn prune(root: &Path) -> Result<String, String> {
     let path = journal_path(root)?;
     fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
     let serial = fs::File::options()
@@ -198,7 +62,7 @@ pub fn prune(root: &Path) -> Result<(), String> {
     }
     result
 }
-fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<(), String> {
+fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<String, String> {
     git::main_tip(root)?;
     if git::run(root, &["branch", "--show-current"])?.trim() != "main" {
         return Err("prune: run on main after merging".into());
@@ -242,102 +106,22 @@ fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<()
         return Err("prune: commit or stash your .whosaidso changes first".into());
     }
     journal.unlock()?;
-    let before = goals::output(root);
+    let before = crate::goal_tree::snapshot(root);
     let head = git::run(root, &["rev-parse", "HEAD"])?;
-    let goals = git::run(
-        root,
-        &[
-            "ls-tree",
-            "-r",
-            "--name-only",
-            "HEAD",
-            "--",
-            ".whosaidso/goals/",
-        ],
-    )?;
-    let goals: HashSet<_> = goals
-        .lines()
-        .filter_map(|p| Path::new(p).file_stem().and_then(|s| s.to_str()))
-        .collect();
-    let mut removed = [0; 2];
-    let mut deletions = Vec::new();
     let candidates = record::read(root)?;
-    let required = required(&candidates);
-    for instrument in &candidates.instruments {
-        if !required.contains(instrument.id.as_str()) {
-            deletions.push(
-                root.join(".whosaidso/instruments")
-                    .join(format!("{}.json", instrument.id)),
-            );
-        }
-    }
-    let mut commits = HashMap::new();
-    for (path, value) in &candidates.records {
-        if matches!(record::kind(path), "proof" | "ask")
-            && (!goals.contains(value["goal"].as_str().unwrap_or(""))
-                || (record::kind(path) == "proof"
-                    && (!required.contains(value["instrument"].as_str().unwrap_or(""))
-                        || !*commits
-                            .entry(value["commit"].as_str().unwrap_or(""))
-                            .or_insert_with(|| {
-                                git::run(
-                                    root,
-                                    &[
-                                        "cat-file",
-                                        "-e",
-                                        &format!(
-                                            "{}^{{commit}}",
-                                            value["commit"].as_str().unwrap_or("")
-                                        ),
-                                    ],
-                                )
-                                .is_ok()
-                            }))))
-        {
-            removed[if record::kind(path) == "proof" { 0 } else { 1 }] += 1;
-            deletions.push(path.clone());
-        }
-    }
     let store = record::load(root)?;
-    let proofs = proofs_to_remove(root, &store)?;
-    for goal in &store.goals {
-        for ask in record::asks(&store, &goal.id)
-            .into_iter()
-            .skip(publish::MAX_ASKS_PER_GOAL)
-        {
-            removed[1] += 1;
-            deletions.push(
-                root.join(".whosaidso/asks")
-                    .join(format!("{}.json", ask.sha)),
-            );
-        }
-    }
-    let ordered = gallery::newest(&candidates);
-    let archived: Vec<_> = ordered
-        .into_iter()
-        .enumerate()
-        .filter_map(|(i, m)| {
-            (i >= gallery::LIVE_MEDIA || !goals.contains(m.goal.as_str())).then_some(m)
-        })
-        .collect();
-    for m in &archived {
-        deletions.push(
-            root.join(".whosaidso/media")
-                .join(format!("{}.json", m.sha)),
-        );
-    }
-    for proof in &proofs {
-        deletions.push(
-            root.join(".whosaidso/proofs")
-                .join(format!("{}.json", proof.sha)),
-        );
-    }
-    deletions.sort();
-    deletions.dedup();
+    let Selection {
+        deletions,
+        removed,
+        proofs,
+        archived,
+    } = selection::select(root, &candidates, &store)?;
     let shared = std::env::var_os("WHOSAIDSO_BLOBS").is_some();
-    if shared {
-        println!("prune: blob collection skipped (WHOSAIDSO_BLOBS shared store)");
-    }
+    let notice = if shared {
+        "prune: blob collection skipped (WHOSAIDSO_BLOBS shared store)\n"
+    } else {
+        ""
+    };
     let kept = if shared {
         HashSet::new()
     } else {
@@ -476,20 +260,19 @@ fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<()
         blob::clean_temporaries(root)?;
     }
     let media_archived = archived.len();
-    println!(
-        "prune: {} proofs, {} asks, {media_archived} media archived",
+    Ok(format!(
+        "{notice}prune: {} proofs, {} asks, {media_archived} media archived",
         proofs.len() + removed[0],
         removed[1]
-    );
-    Ok(())
+    ))
 }
 fn verify(
     root: &Path,
-    before: &Result<String, String>,
+    before: &Result<crate::goal_tree::Snapshot, String>,
     moved: &[(PathBuf, PathBuf, SystemTime)],
     shared: bool,
 ) -> Result<HashSet<String>, String> {
-    if &goals::output(root) != before {
+    if &crate::goal_tree::snapshot(root) != before {
         return Err("goal output changed".into());
     }
     let kept = if shared {

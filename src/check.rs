@@ -49,7 +49,7 @@ pub fn check(root: &Path) -> Result<(), String> {
             );
         }
     }
-    let superseded = prune::proofs_to_remove(root, &s)?.len();
+    let superseded = prune::selection::proofs_to_remove(root, &s)?.len();
     if superseded > 0 {
         println!("warning: {superseded} superseded proofs; run whosaidso prune");
     }

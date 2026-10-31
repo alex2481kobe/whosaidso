@@ -1,7 +1,10 @@
 // Run a goal's instrument and store its content-addressed proof.
 use crate::{
     git, publish,
-    record::{self, Instrument, Proof},
+    record::{
+        self,
+        model::{Instrument, Proof},
+    },
 };
 use sha2::{Digest, Sha256};
 use std::{
@@ -13,7 +16,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-pub const MAX_OUTPUT_TAIL_BYTES: usize = 16 * 1024;
+use crate::record::MAX_OUTPUT_TAIL_BYTES;
 
 fn clean(root: &Path) -> Result<bool, String> {
     Ok(git::run(
@@ -43,7 +46,7 @@ fn head_reflog(root: &Path) -> Result<Vec<u8>, String> {
     }
     Ok(log)
 }
-pub fn prove(root: &Path, id: &str) -> Result<(), String> {
+pub fn prove(root: &Path, id: &str) -> Result<String, String> {
     publish::record_dir(root, "proofs")?;
     if !clean(root)? {
         return Err("prove: commit or stash your changes first".into());
@@ -63,7 +66,7 @@ pub fn prove(root: &Path, id: &str) -> Result<(), String> {
         .ok_or_else(|| format!("unknown instrument {}", goal.check))?;
     run(root, &goal.id, instrument)
 }
-fn run(root: &Path, id: &str, instrument: &Instrument) -> Result<(), String> {
+fn run(root: &Path, id: &str, instrument: &Instrument) -> Result<String, String> {
     publish::record_dir(root, "proofs")?;
     if !clean(root)? {
         return Err("prove: commit or stash your changes first".into());
@@ -153,6 +156,9 @@ fn run(root: &Path, id: &str, instrument: &Instrument) -> Result<(), String> {
     }
     proof.output_tail.drain(..start);
     let sha = publish::write_new(&root.join(".whosaidso/proofs"), &proof)?;
-    println!("prove: {id} {} {}", record::result(exit_code), &sha[..12]);
-    Ok(())
+    Ok(format!(
+        "prove: {id} {} {}",
+        record::result(exit_code),
+        &sha[..12]
+    ))
 }

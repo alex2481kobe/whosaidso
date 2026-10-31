@@ -44,7 +44,7 @@ pub fn show(root: &Path, cwd: &Path, goal: &str, source: &str, shows: &str) -> R
 }
 
 pub const LIVE_MEDIA: usize = 100;
-pub fn newest(store: &record::Store) -> Vec<&Media> {
+pub fn newest(store: &record::model::Store) -> Vec<&Media> {
     publish::newest(store.media.iter().map(|m| (m, m.ran_at, m.sha.as_str())))
 }
 pub struct MediaType {

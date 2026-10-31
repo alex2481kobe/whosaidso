@@ -1,7 +1,7 @@
 // Capture owner requests; validation of recorded requests belongs in check.rs.
 use crate::{
     git, publish,
-    record::{self, Ask},
+    record::{self, model::Ask},
 };
 use std::path::Path;
 

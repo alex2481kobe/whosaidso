@@ -1,7 +1,7 @@
 // Goal states derived from Git history and recorded proofs.
 use crate::{
     git,
-    record::{Proof, Store},
+    record::model::{Proof, Store},
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -26,17 +26,17 @@ impl State {
         matches!(self, State::Landed | State::Done)
     }
 }
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Branch {
     pub name: String,
     pub author: String,
     pub time: i64,
     pub worktree: Option<String>,
 }
+#[derive(PartialEq, Eq)]
 pub struct GoalState {
     pub id: String,
     pub state: State,
-    pub active_branches: Vec<String>,
     pub branches: Vec<Branch>,
     pub proof: Option<usize>,
 }
@@ -247,16 +247,20 @@ pub fn states(root: &Path, store: &Store) -> Result<Vec<GoalState>, String> {
                 None => State::Open,
             },
         };
-        let mut active_branches: Vec<String> =
-            bs.into_iter().flatten().map(|b| b.name.clone()).collect();
-        active_branches.sort();
         result.push(GoalState {
             id: goal.id.clone(),
             state,
-            active_branches,
             branches: bs.cloned().unwrap_or_default(),
             proof: proof_index,
         });
     }
     Ok(result)
+}
+
+impl GoalState {
+    pub fn branch_names(&self) -> Vec<&str> {
+        let mut names: Vec<_> = self.branches.iter().map(|b| b.name.as_str()).collect();
+        names.sort_unstable();
+        names
+    }
 }

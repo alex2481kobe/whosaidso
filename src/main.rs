@@ -10,6 +10,7 @@ mod flow;
 mod gallery;
 mod gate;
 mod git;
+mod goal_tree;
 mod goals;
 mod hooks;
 mod index;
@@ -55,8 +56,8 @@ fn run() -> Result<(), String> {
         "ask <goal-id> <words...>", [cmd, id, words @ ..] if cmd == "ask" => ask::ask(&root, id, words);
         "show <id>", [cmd, id] if cmd == "show" => show::show(&root, id);
         "goals", [cmd] if cmd == "goals" => goals::goals(&root);
-        "prove <goal-id>", [cmd, id] if cmd == "prove" => prove::prove(&root, id);
-        "prune", [cmd] if cmd == "prune" => prune::prune(&root);
+        "prove <goal-id>", [cmd, id] if cmd == "prove" => { println!("{}", prove::prove(&root, id)?); Ok(()) };
+        "prune", [cmd] if cmd == "prune" => { println!("{}", prune::prune(&root)?); Ok(()) };
         "media <goal-id> <file> <title>", [cmd, goal, path, shows] if cmd == "media" => gallery::show(&root, &cwd, goal, path, shows);
         "ui [--port N] [--open]", [cmd, rest @ ..] if cmd == "ui" => ui::serve(&root, rest);
         "grep <text...> [--in <path-or-prefix>]...", [cmd, words @ ..] if cmd == "grep" => text::grep(&root, words);

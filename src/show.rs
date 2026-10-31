@@ -1,7 +1,7 @@
 // Concise record details; state and phase rollups come from their shared modules.
 use crate::{
     git, goals,
-    record::{self, Proof},
+    record::{self, model::Proof},
     state,
 };
 use std::path::Path;
@@ -37,7 +37,7 @@ pub fn show(root: &Path, id: &str) -> Result<(), String> {
         lines.push(format!("done when: {}", goal.done_when));
         lines.push(format!("state: {}", goals::label(current.state)));
         lines.push(format!("check: {}", goal.check));
-        lines.push(format!("branches: {}", current.active_branches.join(", ")));
+        lines.push(format!("branches: {}", current.branch_names().join(", ")));
         let asks = record::asks(&store, id);
         for ask in asks.iter().take(5) {
             lines.push(format!("ask: {}", ask.said));
@@ -53,7 +53,7 @@ pub fn show(root: &Path, id: &str) -> Result<(), String> {
         if let Some(i) = record::newest_media(&store, id) {
             lines.push(format!("media: {}", i.shows));
         }
-        for child in goals::children(&store.goals, id) {
+        for child in crate::goal_tree::children(&store.goals, id) {
             if let Some(s) = states.iter().find(|s| s.id == child.id) {
                 lines.push(format!(
                     "{} {}  {}",
@@ -65,10 +65,10 @@ pub fn show(root: &Path, id: &str) -> Result<(), String> {
         }
     } else if let Some(phase) = store.phases.iter().find(|p| p.id == id) {
         let states = state::states(root, &store)?;
-        let (_, _, counts) = goals::counts(&store.goals, &states, id);
+        let (_, _, counts) = crate::goal_tree::counts(&store.goals, &states, id);
         lines.push(format!("P{} {}  {}", phase.order, phase.title, counts));
         for g in &store.goals {
-            if goals::in_phase(g, id, &store.goals)
+            if crate::goal_tree::in_phase(g, id, &store.goals)
                 && let Some(s) = states.iter().find(|s| s.id == g.id)
             {
                 lines.push(format!("{} {}  {}", goals::label(s.state), g.id, g.title));

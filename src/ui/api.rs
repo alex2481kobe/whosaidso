@@ -2,7 +2,7 @@
 use super::{Reply, version};
 use crate::{
     blob, claims, gallery, goals,
-    record::{self, Store},
+    record::{self, model::Store},
     state::{self, GoalState},
 };
 use serde_json::{Value, json};
@@ -65,7 +65,7 @@ fn goals_screen(root: &Path, store: &Store) -> Result<(Value, i64), String> {
         .min()
         .unwrap_or(i64::MAX);
     let by_id: HashMap<&str, &GoalState> = states.iter().map(|s| (s.id.as_str(), s)).collect();
-    let mut proofs: HashMap<&str, &record::Proof> = HashMap::new();
+    let mut proofs: HashMap<&str, &record::model::Proof> = HashMap::new();
     for p in &store.proofs {
         if proofs
             .get(p.goal.as_str())
@@ -87,7 +87,7 @@ fn goals_screen(root: &Path, store: &Store) -> Result<(Value, i64), String> {
         let instrument = store.instruments.iter().find(|i| i.id == g.check).map(|i| json!({"id":i.id,"answers":i.answers,"run":i.run}));
         json!({
             "id":g.id, "title":g.title, "done_when":g.done_when,
-            "phase":store.phases.iter().find(|p| goals::in_phase(g, &p.id, &store.goals)).map(|p| &p.id),
+            "phase":store.phases.iter().find(|p| crate::goal_tree::in_phase(g, &p.id, &store.goals)).map(|p| &p.id),
             "state":s.map(|s| goals::label(s.state)), "branches":s.map(|s| &s.branches), "claim":held.get(&g.id), "instrument":instrument,
             "proof":proof.map(|(p, current)| json!({"instrument":p.instrument,"commit":p.commit,"exit_code":p.exit_code,"ran_at":p.ran_at,"output_tail":p.output_tail,"current":current})),
             "asks":record::asks(store, &g.id).into_iter().take(RECENT).map(|a| json!({"said":a.said,"ran_at":a.ran_at})).collect::<Vec<_>>(),
