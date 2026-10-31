@@ -88,7 +88,11 @@ fn goals_screen(root: &Path, store: &Store) -> Result<(Value, i64), String> {
             "id":g.id, "title":g.title, "done_when":g.done_when,
             "parent":g.parent, "milestone":crate::goal_tree::milestone(g, &store.goals),
             "check_changed":s.is_some_and(|s| s.check_changed), "state":s.map(|s| goals::label(s.state)), "branches":s.map(|s| &s.branches), "claim":held.get(&g.id), "check":g.check,
-            "proof":proof.map(|(p, current)| json!({"check":p.check,"commit":p.commit,"exit_code":p.exit_code,"ran_at":p.ran_at,"output_tail":p.output_tail,"current":current,"label":"ran","main":p.main,"reason":p.reason})),
+            "proof":proof.map(|(p, current)| {
+                let mut main = json!(p.main);
+                main["verdict"] = json!(record::result(p.main.exit_code));
+                json!({"check":p.check,"commit":p.commit,"exit_code":p.exit_code,"verdict":record::result(p.exit_code),"ran_at":p.ran_at,"output_tail":p.output_tail,"current":current,"label":"ran","main":main,"reason":p.reason})
+            }),
             "media":media.get(g.id.as_str()).into_iter().flatten().take(RECENT).map(|m| json!({"id":m.sha,"media_sha256":m.media_sha256,"tag":gallery::types::media_type(&m.ext).map_or("", |t| t.tag),"shows":m.shows,"label":"attached"})).collect::<Vec<_>>(),
         })
     }).collect::<Vec<_>>();

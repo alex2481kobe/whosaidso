@@ -28,12 +28,12 @@ function thumbs(media) {
   }));
 }
 function detail(g) {
-  const p = g.proof, fail = p && p.exit_code !== 0, verdict = fail ? "fail" : "pass";
+  const p = g.proof, verdict = p?.verdict;
   return el("div", "goal-detail",
     el("div", "", g.check && [mono(g.check.join(" ")), " · "],
       p ? [el("b", "verdict " + verdict + (p.current ? "" : " old"), "ran " + (p.current ? "" : "old ") + verdict), " · ", mono(p.commit.slice(0, 7)), " · " + stamp(p.ran_at)] : "no proof"),
-    p && p.main && el("div", "muted", p.main.exit_code === 0 ? "passed on main" : "failed on main", p.reason && ` · ${p.reason}`),
-    fail && p.current && p.output_tail && el("pre", "output", p.output_tail),
+    p && p.main && el("div", "muted", p.main.verdict === "pass" ? "passed on main" : "failed on main", p.reason && ` · ${p.reason}`),
+    verdict === "fail" && p.current && p.output_tail && el("pre", "output", p.output_tail),
     g.media.length > 0 && [el("span", "muted", "attached"), thumbs(g.media)]);
 }
 function row(g) {
