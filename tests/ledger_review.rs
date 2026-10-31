@@ -22,3 +22,46 @@ fn unlanded_evidence_never_completes_a_goal() {
         assert!(cli(&f.root, &["goals"]).contains("done    g"));
     }
 }
+
+#[test]
+fn a_bad_bundle_does_not_hide_other_children_or_live_questions() {
+    let f = Fixture::new();
+    for (id, parent) in [
+        ("g", None),
+        ("child", Some("g")),
+        ("bad", None),
+        ("bad-child", Some("bad")),
+    ] {
+        let p = r::goal(&f.root, id);
+        let mut v = value(&p);
+        v["parent"] = serde_json::json!(parent);
+        r::put(&f.root, "goals", id, &v);
+    }
+    commit(&f.root);
+    let p = r::proof(&f.root, &head(&f.root), 1, 0);
+    let mut proof = value(&p);
+    for id in ["child", "bad", "bad-child"] {
+        proof["goal"] = serde_json::json!(id);
+        r::put(&f.root, "proofs", "", &proof);
+    }
+    commit(&f.root);
+    cli(&f.root, &["prune"]);
+    commit(&f.root);
+    r::goal(&f.root, "live");
+    proof["goal"] = serde_json::json!("live");
+    // Record the live goal before evidence refers to its revision.
+    commit(&f.root);
+    proof["commit"] = serde_json::json!(head(&f.root));
+    r::put(&f.root, "proofs", "", &proof);
+    write(
+        &f.root.join(".whosaidso/notes/question.md"),
+        "---\n{\"type\":\"question\",\"status\":\"open\",\"title\":\"Unanswered\",\"goal\":\"live\"}\n---\nNeeds an answer.\n",
+    );
+    commit(&f.root);
+    write(&f.root.join(".whosaidso/done/bad.jsonl"), "malformed\n");
+    let out = command(&f.root, BIN, &["goals"]).output().unwrap();
+    let text = String::from_utf8(out.stdout).unwrap();
+    assert!(text.contains("child"), "{text}");
+    assert!(!text.contains("done    live"), "{text}");
+    assert!(cli(&f.root, &["note", "show", "question"]).contains("Needs an answer"));
+}
