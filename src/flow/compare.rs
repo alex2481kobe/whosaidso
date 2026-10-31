@@ -44,7 +44,7 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<Value, String> {
         let rows: Vec<_> = graph.definitions.iter().filter(|r| selected(node, r)).collect();
         for row in &rows { owners.entry(&row.symbol).or_default().push(&node.id); }
         let state = node_state(node, &rows, snapshot)?;
-        nodes.insert(node.id.clone(), json!({"state":state,"evidence":rows.first().map_or("authored", |r| strength(r.layer)),
+        nodes.insert(node.id.clone(), json!({"state":state,"binding_state":state,"evidence":rows.first().map_or("authored", |r| strength(r.layer)),
             "goal":node.goal,"risks":node.risks,"symbols":rows.iter().map(|r| &r.symbol).collect::<Vec<_>>() }));
     }
     let mut steps = BTreeMap::new();
@@ -81,7 +81,7 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<Value, String> {
     if !gaps.is_empty() { states.push("unknown"); }
     let state = if states.is_empty() { "planned" } else { rollup(states) };
     let leaves: Vec<_> = flow.nodes.iter().filter(|n| !flow.nodes.iter().any(|c| c.parent.as_deref()==Some(&n.id))).collect();
-    let built = leaves.iter().filter(|n| nodes[&n.id]["state"]=="built").count();
+    let built = leaves.iter().filter(|n| nodes[&n.id]["binding_state"]=="built").count();
     Ok(json!({"state":state,"revision":snapshot.id,"nodes":nodes,"steps":steps,"unplanned":unplanned,
         "unknown":gaps,"progress":{"built":built,"total":leaves.len()},"goal":flow.goal,"goal_effect":"progress only"}))
 }
