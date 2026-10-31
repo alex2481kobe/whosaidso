@@ -19,27 +19,6 @@ fn sync(root: &Path) -> Result<Counts, String> {
     let mut db = cache::db(root)?;
     db.execute_batch("CREATE TABLE IF NOT EXISTS text_files(path TEXT PRIMARY KEY, blob TEXT);
         CREATE VIRTUAL TABLE IF NOT EXISTS text_fts USING fts5(path UNINDEXED, body, tokenize='trigram', detail=none);").map_err(err)?;
-    let schema = |db: &rusqlite::Connection| {
-        db.query_row(
-            "SELECT sql FROM sqlite_master WHERE name='text_fts'",
-            [],
-            |r| r.get::<_, String>(0),
-        )
-        .map_err(err)
-    };
-    if !schema(&db)?.contains("detail=none") {
-        let tx = db
-            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
-            .map_err(err)?;
-        if !schema(&tx)?.contains("detail=none") {
-            tx.execute_batch("DROP TABLE text_fts; DELETE FROM text_files;
-            CREATE VIRTUAL TABLE text_fts USING fts5(path UNINDEXED, body, tokenize='trigram', detail=none);
-            CREATE TABLE IF NOT EXISTS tree_warm(source TEXT PRIMARY KEY,stamp TEXT,unchanged INTEGER,skipped INTEGER);
-            CREATE TABLE IF NOT EXISTS tree_skips(source TEXT,path TEXT,blob TEXT,PRIMARY KEY(source,path));
-            DELETE FROM tree_warm WHERE source='text_files'; DELETE FROM tree_skips WHERE source='text_files';").map_err(err)?;
-        }
-        tx.commit().map_err(err)?;
-    }
     let valid: HashSet<_> = record::load(root)?
         .records
         .into_iter()
