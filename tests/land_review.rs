@@ -122,6 +122,7 @@ fn resuming_a_receipt_publishes_media_to_the_current_remote() {
         &[
             "clone",
             "-q",
+            "--no-local",
             replacement.to_str().unwrap(),
             other.to_str().unwrap(),
         ],
