@@ -82,11 +82,11 @@ h1, h2, h3, p { margin: 0; }
 .s-done { --tone: var(--green); } .s-active { --tone: var(--blue); } .s-landed { --tone: var(--amber); } .s-failing { --tone: var(--red); }
 .s-stale { --tone: var(--purple); } .s-idle, .s-open { --tone: var(--slate); }
 
-/* goals: a phase is a header line and its rows */
+/* goals: a milestone is a header line and its rows */
 .goals { display: flex; flex-direction: column; gap: 10px; }
-.phase { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
-.phase-head { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--line-2); font-size: 12.5px; }
-.phase-head h2 { font-size: 14px; font-weight: 650; }
+.milestone { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+.milestone-head { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--line-2); font-size: 12.5px; }
+.milestone-head h2 { font-size: 14px; font-weight: 650; }
 .bar { flex: 0 1 140px; min-width: 60px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--green); }
 .goal + .goal { border-top: 1px solid var(--line-2); }

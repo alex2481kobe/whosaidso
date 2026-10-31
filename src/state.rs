@@ -1,10 +1,12 @@
+mod branches;
+mod rules;
 // Goal states derived from Git history and recorded proofs.
 use crate::{
     git,
     record::model::{Proof, Store},
 };
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     path::Path,
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
@@ -40,6 +42,7 @@ pub struct GoalState {
     pub state: State,
     pub branches: Vec<Branch>,
     pub proof: Option<usize>,
+    pub check_changed: bool,
 }
 // A command reads one clock snapshot, so its output is self-consistent; the viewer takes a new one per derivation.
 static NOW: Mutex<Option<Result<i64, String>>> = Mutex::new(None);
@@ -76,60 +79,6 @@ pub fn age(time: i64) -> String {
     };
     format!("{n}{unit} ago")
 }
-// Local names shadow the same branch on every remote, even if the local tip is older.
-pub fn branch_refs(root: &Path) -> Result<Vec<(String, String)>, String> {
-    let refs = git::run(
-        root,
-        &[
-            "for-each-ref",
-            "--format=%(refname)",
-            "refs/heads",
-            "refs/remotes",
-        ],
-    )?;
-    let main = crate::config::main(root)?;
-    let local: HashSet<_> = refs
-        .lines()
-        .filter_map(|r| r.strip_prefix("refs/heads/"))
-        .collect();
-    let mut selected = Vec::new();
-    for reference in refs.lines() {
-        let name = if let Some(name) = reference.strip_prefix("refs/heads/") {
-            if name == main {
-                continue;
-            }
-            name
-        } else if let Some(name) = reference.strip_prefix("refs/remotes/") {
-            let Some((_, branch)) = name.split_once('/') else {
-                continue;
-            };
-            if branch == "HEAD" || branch == main || local.contains(branch) {
-                continue;
-            }
-            name
-        } else {
-            continue;
-        };
-        selected.push((name.to_owned(), reference.to_owned()));
-    }
-    selected.sort();
-    Ok(selected)
-}
-fn worktrees(root: &Path) -> Result<HashMap<String, String>, String> {
-    let listing = git::run(root, &["worktree", "list", "--porcelain", "-z"])?;
-    let mut paths = HashMap::new();
-    let mut path = "";
-    for field in listing.split('\0') {
-        if let Some(value) = field.strip_prefix("worktree ") {
-            path = value;
-        }
-        if let Some(branch) = field.strip_prefix("branch refs/heads/") {
-            paths.insert(branch.to_owned(), path.to_owned());
-        }
-    }
-    Ok(paths)
-}
-
 fn trailers(log: &str) -> impl Iterator<Item = &str> {
     log.lines()
         .filter_map(|line| line.split_once('\t').map(|(_, value)| value))
@@ -178,55 +127,8 @@ pub fn states(root: &Path, store: &Store) -> Result<Vec<GoalState>, String> {
     let commits: HashSet<_> = revisions.lines().collect();
     let main = work_log(root, &["log", &tip, "--no-merges", format])?;
     let now = now()?;
-    let mut branches: HashMap<String, Vec<Branch>> = HashMap::new();
-    let goals: HashSet<_> = store.goals.iter().map(|g| g.id.as_str()).collect();
-    let mut paths = None;
-    for (name, reference) in branch_refs(root)? {
-        let range = format!("{tip}...{reference}");
-        let log = work_log(
-            root,
-            &[
-                "log",
-                "--no-merges",
-                "--cherry-pick",
-                "--right-only",
-                "--format=%H%x00%ct%x00%an%x00%(trailers:key=Goal,valueonly,separator=%x2C)",
-                &range,
-            ],
-        )?;
-        let mut newest: HashMap<&str, (i64, &str)> = HashMap::new();
-        for line in log.lines() {
-            let parts: Vec<_> = line.splitn(4, '\0').collect();
-            if let [_, time, author, goal] = parts.as_slice() {
-                if !goals.contains(goal) {
-                    continue;
-                }
-                if let Ok(time) = time.parse::<i64>() {
-                    let entry = newest.entry(goal).or_insert((time, author));
-                    if time > entry.0 {
-                        *entry = (time, author);
-                    }
-                }
-            }
-        }
-        let local = reference.starts_with("refs/heads/");
-        if local && !newest.is_empty() && paths.is_none() {
-            paths = Some(worktrees(root)?);
-        }
-        for (goal, (time, author)) in newest {
-            let worktree = if local {
-                paths.as_ref().and_then(|p| p.get(&name)).cloned()
-            } else {
-                None
-            };
-            branches.entry(goal.to_owned()).or_default().push(Branch {
-                name: name.clone(),
-                author: author.to_owned(),
-                time,
-                worktree,
-            });
-        }
-    }
+    let branches = branches::collect(root, store, &tip)?;
+    let changed = rules::changed(root, &tip, store)?;
     let mut result = Vec::new();
     for goal in &store.goals {
         let proof = newest_proof(store, &commits, &goal.id, goal.check.as_deref());
@@ -249,6 +151,17 @@ pub fn states(root: &Path, store: &Store) -> Result<Vec<GoalState>, String> {
                         State::Done
                     }
                 }
+                None if store.media.iter().any(|m| {
+                    m.goal == goal.id
+                        && commits.contains(m.commit.as_str())
+                        && !store
+                            .broken
+                            .iter()
+                            .any(|(k, id)| k == "media" && id == &m.sha)
+                }) =>
+                {
+                    State::Done
+                }
                 None if trailers(&main).any(|g| g == goal.id) => State::Landed,
                 None => match bs {
                     Some(bs) if bs.iter().any(|b| active(b.time, now)) => State::Active,
@@ -262,8 +175,10 @@ pub fn states(root: &Path, store: &Store) -> Result<Vec<GoalState>, String> {
             state,
             branches: bs.cloned().unwrap_or_default(),
             proof: proof_index,
+            check_changed: changed.contains(&goal.id),
         });
     }
+    rules::complete(store, &mut result);
     Ok(result)
 }
 

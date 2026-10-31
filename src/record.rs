@@ -1,4 +1,5 @@
 // Bounded record loading; invalid records retain their identity for every reader.
+pub mod fold;
 pub mod model;
 mod validate;
 use crate::{blob, gallery::Media, publish, title, tree};
@@ -41,7 +42,15 @@ pub fn kind(path: &Path) -> &str {
 }
 pub fn load(root: &Path) -> Result<Store, String> {
     let mut store = read(root)?;
-    for record in crate::note::store::load(root)? {
+    let notes = match crate::note::store::load(root) {
+        Ok(notes) => notes,
+        Err(e) => {
+            store.errors.push(format!("notes: {e}"));
+            store.broken.push(("note".into(), "directory".into()));
+            Vec::new()
+        }
+    };
+    for record in notes {
         let id = record.id;
         match record.note {
             Ok(note) => {
@@ -113,40 +122,7 @@ pub fn read(root: &Path) -> Result<Store, String> {
                     return Err("bad record filename".into());
                 }
                 let bytes = read_record(root, &path)?;
-                let value = match folder {
-                    "goals" => {
-                        let mut goal: Goal =
-                            serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-                        goal.id = id.into();
-                        let value = serde_json::to_value(&goal).map_err(|e| e.to_string())?;
-                        store.goals.push(goal);
-                        value
-                    }
-                    "proofs" => {
-                        let mut proof: Proof =
-                            serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-                        if id != sha256_hex(&bytes) {
-                            return Err("proof filename does not match sha256".into());
-                        }
-                        proof.sha = id.into();
-                        let value = serde_json::to_value(&proof).map_err(|e| e.to_string())?;
-                        store.proofs.push(proof);
-                        value
-                    }
-                    _ => {
-                        let (media, present) = media(root, id, &bytes)?;
-                        if !present {
-                            store.warnings.push(format!(
-                                "warning: media: missing media {}",
-                                media.media_sha256
-                            ));
-                        }
-                        let value = serde_json::to_value(&media).map_err(|e| e.to_string())?;
-                        store.media.push(media);
-                        value
-                    }
-                };
-                store.records.push((path.clone(), value));
+                insert(root, &path, &bytes, &mut store)?;
                 Ok::<(), String>(())
             })();
             if let Err(error) = parsed {
@@ -166,6 +142,7 @@ pub fn read(root: &Path) -> Result<Store, String> {
             }
         }
     }
+    fold::load(root, &mut store)?;
     Ok(store)
 }
 pub fn media(root: &Path, name: &str, bytes: &[u8]) -> Result<(Media, bool), String> {
@@ -190,4 +167,55 @@ pub fn newest_media<'a>(store: &'a Store, goal: &str) -> Option<&'a Media> {
         .iter()
         .filter(|m| m.goal == goal)
         .max_by(|a, b| (a.ran_at, &a.sha).cmp(&(b.ran_at, &b.sha)))
+}
+
+fn insert(root: &Path, path: &Path, bytes: &[u8], store: &mut Store) -> Result<(), String> {
+    if bytes.len() as u64 > MAX_RECORD_BYTES {
+        return Err("record file cap exceeded".into());
+    }
+    let folder = path
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|s| s.to_str())
+        .ok_or("invalid record path")?;
+    let id = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or("invalid record id")?;
+    let value = match folder {
+        "goals" => {
+            let mut goal: Goal = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
+            goal.id = id.into();
+            if store.goals.iter().any(|g| g.id == id) {
+                return Err(format!("duplicate goal {id}; reopen its milestone"));
+            }
+            let value = serde_json::to_value(&goal).map_err(|e| e.to_string())?;
+            store.goals.push(goal);
+            value
+        }
+        "proofs" => {
+            let mut proof: Proof = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
+            if id != sha256_hex(bytes) {
+                return Err("proof filename does not match sha256".into());
+            }
+            proof.sha = id.into();
+            let value = serde_json::to_value(&proof).map_err(|e| e.to_string())?;
+            store.proofs.push(proof);
+            value
+        }
+        _ => {
+            let (media, present) = media(root, id, bytes)?;
+            if !present {
+                store.warnings.push(format!(
+                    "warning: media: missing media {}",
+                    media.media_sha256
+                ));
+            }
+            let value = serde_json::to_value(&media).map_err(|e| e.to_string())?;
+            store.media.push(media);
+            value
+        }
+    };
+    store.records.push((path.to_owned(), value));
+    Ok(())
 }

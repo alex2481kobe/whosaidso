@@ -14,7 +14,12 @@ fn prune_keeps_selected_proof_and_is_idempotent() {
     commit(root);
     let before = cli(root, &["goals"]);
     assert!(cli(root, &["prune"]).contains("1 proofs"));
-    assert!(!old.exists() && kept.exists());
+    assert!(!old.exists() && !kept.exists());
+    assert!(
+        std::fs::read_to_string(root.join(".whosaidso/done/g.jsonl"))
+            .unwrap()
+            .contains(kept.file_stem().unwrap().to_str().unwrap())
+    );
     assert_eq!(cli(root, &["goals"]), before);
     commit(root);
     assert_eq!(cli(root, &["prune"]), "prune: 0 proofs, 0 media archived\n");

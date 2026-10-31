@@ -1,4 +1,4 @@
-// The change token the viewer polls: a hash of everything its screens read, cheap enough to ask every few seconds.
+// The change token the viewer polls: a hash of everything its screens read, cheap enough to poll every few seconds.
 use crate::{blob, gallery, git, record};
 use std::{
     collections::hash_map::DefaultHasher,
@@ -50,7 +50,10 @@ pub fn token(root: &Path) -> Result<String, String> {
     // Which worktree has which branch checked out (Goals shows it), and which media bytes are here (Gallery shows it).
     git::run(root, &["worktree", "list", "--porcelain"])?.hash(&mut hash);
     listing(&blob::dir(root)?).hash(&mut hash);
-    for folder in record::FOLDERS {
+    for folder in record::FOLDERS
+        .into_iter()
+        .chain(["notes", "done", "reopens"])
+    {
         listing(&root.join(".whosaidso").join(folder)).hash(&mut hash);
     }
     listing(&gallery::archive::archive_dir(root)?).hash(&mut hash);

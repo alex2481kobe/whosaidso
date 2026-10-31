@@ -1,173 +1,146 @@
-// Run a goal's check and store its content-addressed proof.
+// Paired evidence runs; results survive a non-interactive request for a reason.
+mod capture;
+mod scratch;
 use crate::{
     git, publish,
     record::{
         self,
-        model::{Goal, Proof},
+        model::{Goal, Proof, Run},
     },
 };
-use sha2::{Digest, Sha256};
-use std::{
-    collections::VecDeque,
-    fs,
-    io::Read,
-    os::{fd::OwnedFd, unix::net::UnixStream},
-    path::Path,
-    process::{Command, Stdio},
-};
+use serde::{Deserialize, Serialize};
+use std::{fs, path::Path};
 
-use crate::record::MAX_OUTPUT_TAIL_BYTES;
+#[derive(Deserialize, Serialize)]
+struct Pair {
+    candidate: Run,
+    main: Run,
+    ran_at: i64,
+}
 
-fn clean(root: &Path) -> Result<bool, String> {
-    Ok(git::run(
-        root,
-        &["status", "--porcelain", "--", ".", ":(exclude).whosaidso"],
-    )?
-    .is_empty()
-        && git::run(root, &["diff", "HEAD", "--name-only", "--", ".whosaidso"])?.is_empty())
-}
-fn head_reflog(root: &Path) -> Result<Vec<u8>, String> {
-    let reason = "prove: HEAD's reflog is off or unreadable (core.logAllRefUpdates); can't tell whether HEAD moved during the run";
-    if git::run(
-        root,
-        &["config", "--type=bool", "--get", "core.logAllRefUpdates"],
-    )
-    .is_ok_and(|v| v.trim() == "false")
-    {
-        return Err(reason.into());
+pub fn command(root: &Path, args: &[String]) -> Result<String, String> {
+    match args {
+        [id] => prove(root, id, None),
+        [id, flag, reason] if flag == "--reason" && !reason.trim().is_empty() => {
+            prove(root, id, Some(reason))
+        }
+        _ => Err("usage: prove <goal> [--reason <why>]".into()),
     }
-    // `git reflog show HEAD` can fall back to the branch log when HEAD's log is missing.
-    let path = git::run(root, &["rev-parse", "--git-path", "logs/HEAD"])
-        .map_err(|_| reason.to_string())?;
-    let log = fs::read(root.join(path.strip_suffix('\n').unwrap_or(&path)))
-        .map_err(|_| reason.to_string())?;
-    if log.is_empty() {
-        return Err(reason.into());
-    }
-    Ok(log)
 }
-pub fn prove(root: &Path, id: &str) -> Result<String, String> {
+pub fn prove(root: &Path, id: &str, reason: Option<&str>) -> Result<String, String> {
     publish::record_dir(root, "proofs")?;
-    if !clean(root)? {
-        return Err("prove: commit or stash your changes first".into());
-    }
     let store = record::load(root)?;
-    if store
-        .broken
-        .iter()
-        .any(|(kind, name)| kind == "goal" && name == id)
-    {
+    if !store.errors.is_empty() {
         return Err(store.errors.join("\n"));
     }
-    let goal = store.goals.iter().find(|g| g.id == id).ok_or_else(|| {
-        if store.errors.is_empty() {
-            format!("unknown goal {id}")
-        } else {
-            store.errors.join("\n")
-        }
-    })?;
-    run(root, &goal.id, goal)
-}
-fn run(root: &Path, id: &str, check: &Goal) -> Result<String, String> {
-    publish::record_dir(root, "proofs")?;
-    if !clean(root)? {
+    if let Some(milestone) = store.folded.get(id) {
+        return Err(format!(
+            "prove: reopen {milestone} before updating folded evidence"
+        ));
+    }
+    let goal = store
+        .goals
+        .iter()
+        .find(|g| g.id == id)
+        .ok_or_else(|| format!("unknown goal {id}"))?;
+    if !git::run(
+        root,
+        &[
+            "status",
+            "--porcelain",
+            "--",
+            ".",
+            ":(exclude).whosaidso/proofs",
+        ],
+    )?
+    .is_empty()
+    {
         return Err("prove: commit or stash your changes first".into());
     }
-    let reflog = head_reflog(root)?;
     let commit = git::run(root, &["rev-parse", "HEAD"])?.trim().to_owned();
     let bytes = git::run_bytes(
         root,
-        &[
-            "show",
-            &format!("{commit}:.whosaidso/goals/{}.json", check.id),
-        ],
+        &["show", &format!("{commit}:.whosaidso/goals/{id}.json")],
     )?;
-    let recorded: Goal =
-        serde_json::from_slice(&bytes).map_err(|e| format!("prove: check: {e}"))?;
-    let (mut output, pipe) = UnixStream::pair().map_err(|e| e.to_string())?;
-    let stderr = pipe.try_clone().map_err(|e| e.to_string())?;
-    let child = Command::new(
-        recorded
-            .check
-            .as_ref()
-            .ok_or("prove: goal has no check")?
-            .first()
-            .ok_or("prove: empty run")?,
-    )
-    .args(&recorded.check.as_ref().ok_or("prove: goal has no check")?[1..])
-    .current_dir(root)
-    .stdout(Stdio::from(OwnedFd::from(pipe)))
-    .stderr(Stdio::from(OwnedFd::from(stderr)))
-    .spawn();
-    let mut hash = Sha256::new();
-    let mut tail = VecDeque::with_capacity(MAX_OUTPUT_TAIL_BYTES);
-    let exit_code = match child {
-        Ok(mut child) => {
-            let mut buf = [0; 8192];
-            loop {
-                let n = output
-                    .read(&mut buf)
-                    .map_err(|e| format!("prove: read output: {e}"))?;
-                if n == 0 {
-                    break;
-                }
-                hash.update(&buf[..n]);
-                let excess = (tail.len() + n).saturating_sub(MAX_OUTPUT_TAIL_BYTES);
-                tail.drain(..excess);
-                tail.extend(&buf[..n]);
-            }
-            let status = child.wait().map_err(|e| format!("prove: wait: {e}"))?;
-            i64::from(status.code().unwrap_or(-1))
-        }
-        Err(e) => return Err(format!("prove: start check: {e}")),
+    let recorded: Goal = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    let check = recorded.check.ok_or("prove: goal has no check")?;
+    if goal.check.as_ref() != Some(&check) {
+        return Err("prove: uncommitted check".into());
+    }
+    let main = git::main_tip(root)?;
+    let limit = crate::config::load(root)?.limits.check_seconds;
+    let scratch = scratch::Scratch::lock(root)?;
+    let inputs = serde_json::to_vec(&(
+        &commit,
+        &main,
+        id,
+        &check,
+        &limit,
+        std::env::vars_os()
+            .collect::<Vec<_>>()
+            .iter()
+            .map(|(k, v)| (k.to_string_lossy(), v.to_string_lossy()))
+            .collect::<Vec<_>>(),
+    ))
+    .map_err(|e| e.to_string())?;
+    let kept = scratch
+        .dir
+        .join(format!("{}.json", record::sha256_hex(&inputs)));
+    let pair = if kept.exists() {
+        serde_json::from_slice::<Pair>(&fs::read(&kept).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?
+    } else {
+        let candidate = scratch.run(&commit, &check, limit.value())?;
+        let baseline = scratch.run(&main, &check, limit.value())?;
+        let pair = Pair {
+            candidate,
+            main: baseline,
+            ran_at: publish::ran_at()?,
+        };
+        publish::write_bytes(
+            &kept,
+            &serde_json::to_vec(&pair).map_err(|e| e.to_string())?,
+        )?;
+        pair
     };
-    if git::run(root, &["rev-parse", "HEAD"])?.trim() != commit {
-        return Err("prove: HEAD changed during check".into());
+    if pair.main.exit_code == 0 && reason.is_none() {
+        return Err(
+            "prove: passed on main; pass --reason <why>; results kept for unchanged inputs".into(),
+        );
     }
-    if !clean(root)? {
-        return Err("prove: working tree changed during check".into());
-    }
-    if head_reflog(root)? != reflog {
-        return Err("prove: HEAD reflog changed during check; no proof recorded".into());
-    }
-    let mut output_tail =
-        String::from_utf8_lossy(&tail.into_iter().collect::<Vec<_>>()).into_owned();
-    // Lossy decoding can expand invalid bytes; retain a UTF-8 suffix within the same byte cap.
-    let mut start = output_tail.len().saturating_sub(MAX_OUTPUT_TAIL_BYTES);
-    while !output_tail.is_char_boundary(start) {
-        start += 1;
-    }
-    output_tail.drain(..start);
-    let mut proof = Proof {
+    let proof = Proof {
         sha: String::new(),
         goal: id.into(),
-        check: check.check.clone().ok_or("prove: goal has no check")?,
-        commit,
-        exit_code,
-        output_sha256: hash.finalize().iter().map(|b| format!("{b:02x}")).collect(),
-        output_tail,
-        ran_at: publish::ran_at()?,
+        check,
+        commit: pair.candidate.commit,
+        exit_code: pair.candidate.exit_code,
+        output_sha256: pair.candidate.output_sha256,
+        output_tail: pair.candidate.output_tail,
+        ran_at: pair.ran_at,
+        elapsed_ms: pair.candidate.elapsed_ms,
+        timed_out: pair.candidate.timed_out,
+        main: pair.main,
+        reason: reason.map(str::to_owned),
     };
-    // JSON escapes control bytes, so budget the serialized suffix, including its newline.
-    let size = serde_json::to_vec(&proof).map_err(|e| e.to_string())?.len() + 1;
-    let mut excess = size.saturating_sub(record::MAX_RECORD_BYTES as usize);
-    let mut start = 0;
-    for c in proof.output_tail.chars() {
-        if excess == 0 {
-            break;
-        }
-        let escaped = serde_json::to_vec(&c.to_string())
-            .map_err(|e| e.to_string())?
-            .len()
-            - 2;
-        excess = excess.saturating_sub(escaped);
-        start += c.len_utf8();
-    }
-    proof.output_tail.drain(..start);
     let sha = publish::write_new(&root.join(".whosaidso/proofs"), &proof)?;
+    if proof.timed_out {
+        return Err(format!(
+            "limits.check_seconds: slow check {id} ({} ms); ran result kept",
+            proof.elapsed_ms
+        ));
+    }
     Ok(format!(
-        "prove: {id} {} {}",
-        record::result(exit_code),
-        &sha[..12]
+        "ran: {id} {} {} · {}{}",
+        record::result(proof.exit_code),
+        &sha[..12],
+        if proof.main.exit_code == 0 {
+            "passed on main"
+        } else {
+            "failed on main"
+        },
+        proof
+            .reason
+            .as_ref()
+            .map_or(String::new(), |r| format!(" · {r}"))
     ))
 }

@@ -22,7 +22,7 @@ fn killed_status_snapshot_recovers_its_own_index_lock() {
     let out = command(root, BIN, &["prune"])
         .env(
             "PATH",
-            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+            format!("{}:{}", bin.display(), tool_path().to_string_lossy()),
         )
         .env("REAL_GIT", real.trim())
         .output()
@@ -49,7 +49,8 @@ fn recovery_preserves_a_foreign_live_git_lock() {
     let root = &f.root;
 
     use std::process::Stdio;
-    r::gallery(root, 102, 40000);
+    r::media(root, &png(vec![222; 70000]), "png", 0);
+    fs::remove_file(root.join(".whosaidso/goals/g.json")).unwrap();
     commit(root);
     let out = command(
         root,
@@ -88,20 +89,19 @@ fn failed_rollback_keeps_the_journal_until_recovery_succeeds() {
     let f = Fixture::new();
     let root = &f.root;
 
-    let mut candidates = r::gallery(root, 101, 128);
-    candidates.sort_by_key(|p| (value(p)["ran_at"].as_i64().unwrap(), p.clone()));
+    let blocked = r::media(root, &png("rollback"), "png", 0);
+    fs::remove_file(root.join(".whosaidso/goals/g.json")).unwrap();
     commit(root);
     let before = snapshot(&root.join(".whosaidso/media"));
-    let blocked = &candidates[0];
     let out = command(root, BIN, &["prune"])
-        .env("BLOCKED", blocked)
+        .env("BLOCKED", &blocked)
         .env("WHOSAIDSO_PRUNE_HOOK", "mkdir \"$BLOCKED\"; false")
         .output()
         .unwrap();
     assert!(!out.status.success());
     let journal = root.join(".git/whosaidso/prune.journal");
     assert!(journal.exists());
-    fs::remove_dir(blocked).unwrap();
+    fs::remove_dir(&blocked).unwrap();
     failure(
         command(root, BIN, &["prune"])
             .env("WHOSAIDSO_PRUNE_HOOK", "false")
