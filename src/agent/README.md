@@ -42,12 +42,10 @@ the original utility with exactly its arguments. These compatibility adapters re
 files directly: they do not claim indexed acceleration or index completeness.
 Use `whosaidso grep` and `code` directly for indexed, budgeted answers.
 
-Other shell search/read forms are refused with a next action. Compound commands,
-expansion, multiple files, recursion, regex flags, and output modifiers are not
-translated. Native `Read`, `Grep`, `Glob`, file mentions, MCP tools, scripts,
-aliases, functions, and dynamically constructed commands are outside this hook's
-coverage. Native file tools pass through because a command hook cannot faithfully
-replace their result format or change their tool identity.
+Other recognized literal searches and whole-file reads receive a next action.
+Compound commands, redirects, expansions, `sed`, `awk`, bounded reads and uncertain
+forms pass through. The retrieval guard prefers passing an operation over refusing
+something that might edit or compute. The independent test-run gate still applies.
 
 Vendor references: [Claude Code hooks](https://code.claude.com/docs/en/hooks) and
 [Codex hooks](https://learn.chatgpt.com/docs/hooks). Their documented contract is
@@ -103,9 +101,15 @@ No native tool input or output is rewritten. Missing files, malformed input,
 filesystem failures and repositories without `.whosaidso` pass through.
 
 A whole `Read` of a supported source language with more than 200 lines is
-refused once per path/session, suggesting `code outline` and `code show`.
+given one hint suggesting `code outline` and `code show`.
 Any offset or limit passes; short, binary, non-code, image and PDF reads pass.
-Nudge markers are disposable files in the worktree's Git cache, not records.
+Explicit search paths outside the visible Git file set pass through.
+
+Each native kind (`Read`, `Grep`, `Glob`) can refuse only once per `session_id`;
+aliases and other repositories in that session share the limit. Later calls pass.
+A missing session id passes without a hint. Decisions and reasons append to
+`$HOME/.whosaidso/agent-hints.jsonl`; disposable session markers live under
+`$HOME/.whosaidso/cache/agent-hints`, outside project records.
 
 The same payload handlers recognize `read_file`, `grep_files` and `glob_files`
 when clients expose equivalent local tools with these argument shapes. Their
