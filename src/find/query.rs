@@ -31,9 +31,21 @@ fn exactness(hit: &Hit, words: &[String], corrected: &[(String, usize)]) -> u8 {
         &corrected.iter().map(|(w, _)| w.clone()).collect::<Vec<_>>(),
     ))
 }
-pub(super) struct Results {
+pub(crate) struct Results {
     pub hits: Vec<Hit>,
     pub total: i64,
+    db: rusqlite::Connection,
+}
+impl Results {
+    pub fn detail(&self, hit: &Hit) -> Result<String, String> {
+        self.db
+            .query_row(
+                "SELECT detail FROM docs WHERE key=?1 ORDER BY length(detail) DESC LIMIT 1",
+                [&hit.key],
+                |r| r.get(0),
+            )
+            .map_err(|e| e.to_string())
+    }
 }
 fn collect(hits: &mut HashMap<String, Hit>, rows: Vec<Hit>) {
     for row in rows {
@@ -42,16 +54,16 @@ fn collect(hits: &mut HashMap<String, Hit>, rows: Vec<Hit>) {
         }
     }
 }
-pub(super) fn search(
+pub(crate) fn search(
     root: &Path,
     words: &[String],
-    kind: Option<&str>,
+    kinds: &[&str],
     limit: usize,
 ) -> Result<Results, String> {
     let db = index::sync(root)?;
     let candidates = limit.saturating_mul(10).max(200).min(i64::MAX as usize);
     let mut corrected: Vec<_> = words.iter().map(|w| (w.clone(), 0)).collect();
-    let mut pool = Pool::new(words, &corrected, kind, candidates);
+    let mut pool = Pool::new(words, &corrected, kinds, candidates);
     let mut hits = HashMap::new();
     let all = pool.terms.join(" AND ");
     // Exact titles must reach reranking even when BM25 fills the candidate pool.
@@ -59,7 +71,7 @@ pub(super) fn search(
     collect(&mut hits, pool.fetch(&db, &all, None)?);
     if hits.len() < limit {
         corrected = correct(&db, words)?;
-        pool = Pool::new(words, &corrected, kind, candidates);
+        pool = Pool::new(words, &corrected, kinds, candidates);
         let all = pool.terms.join(" AND ");
         collect(&mut hits, pool.fetch(&db, &all, None)?);
     }
@@ -96,5 +108,6 @@ pub(super) fn search(
     Ok(Results {
         hits: ranked.into_iter().map(|(_, hit)| hit).collect(),
         total,
+        db,
     })
 }

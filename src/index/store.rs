@@ -17,14 +17,14 @@ pub(super) fn open(root: &Path, worktree: &str) -> Result<Connection, String> {
     db.execute_batch(&format!("CREATE TABLE IF NOT EXISTS payloads(id INTEGER PRIMARY KEY,address TEXT UNIQUE,kind TEXT,title TEXT,body TEXT,detail TEXT);
         CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(kind,title,body,content='payloads',content_rowid='id',tokenize='{TOKENIZER}');
         CREATE TABLE IF NOT EXISTS members(worktree TEXT,source TEXT,key TEXT,payload INTEGER,PRIMARY KEY(worktree,source,key,payload));
-        CREATE INDEX IF NOT EXISTS member_payload ON members(worktree,payload);
+        CREATE INDEX IF NOT EXISTS member_lookup ON members(worktree,payload,key);
         CREATE TABLE IF NOT EXISTS stamps(worktree TEXT,source TEXT,stamp TEXT,PRIMARY KEY(worktree,source));
         CREATE TABLE IF NOT EXISTS blob_templates(address TEXT PRIMARY KEY,templates TEXT);
         CREATE VIRTUAL TABLE IF NOT EXISTS all_vocab USING fts5vocab(docs_fts,'row');
         CREATE VIRTUAL TABLE IF NOT EXISTS instances USING fts5vocab(docs_fts,'instance');
         CREATE VIRTUAL TABLE IF NOT EXISTS search_trigrams USING fts5(term,tokenize='trigram');
         CREATE TEMP TABLE selection(worktree TEXT);
-        CREATE TEMP VIEW docs AS SELECT p.id,p.kind,m.key,CASE WHEN p.kind='file' THEN substr(m.key,6) ELSE p.title END AS title,p.body,p.detail FROM members m JOIN payloads p ON p.id=m.payload WHERE m.worktree=(SELECT worktree FROM selection);
+        CREATE TEMP VIEW docs AS SELECT p.id,p.kind,m.key,CASE WHEN p.kind='file' THEN substr(m.key,6) ELSE p.title END AS title,p.body,p.detail FROM members m INDEXED BY member_lookup JOIN payloads p ON p.id=m.payload WHERE m.worktree=(SELECT worktree FROM selection);
         CREATE TEMP VIEW manifest AS SELECT source,stamp FROM stamps WHERE worktree=(SELECT worktree FROM selection);
         CREATE TEMP VIEW source_docs AS SELECT DISTINCT source,key FROM members WHERE worktree=(SELECT worktree FROM selection);
         CREATE TEMP VIEW vocab AS SELECT v.term,count(DISTINCT m.key) AS doc,count(*) AS cnt FROM instances v JOIN members m ON m.payload=v.doc WHERE m.worktree=(SELECT worktree FROM selection) GROUP BY v.term;" )).map_err(err)?;

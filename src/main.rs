@@ -5,6 +5,7 @@ mod check;
 mod claims;
 pub mod code;
 mod config;
+mod context;
 mod find;
 mod flow;
 mod gallery;
@@ -35,7 +36,7 @@ fn run() -> Result<(), String> {
     }
     if args.as_slice() == ["help"] || args.as_slice() == ["--help"] || args.as_slice() == ["-h"] {
         println!(
-            "WhoSaidSo: goals and evidence in Git\n\ncheck | goals | show <id> | start <goal> | prove <goal> | gate [base] | prune\nmedia <goal> <file> <title> | sync [remote] | note | flow | find | grep | code | ui\n\nUse short end-to-end checks of real behavior. Run a full suite only when needed. See USAGE.md for formats and options."
+            "WhoSaidSo: goals and evidence in Git\n\ncheck | goals | show <id> | start <goal> | prove <goal> | gate [base] | prune\nmedia <goal> <file> <title> | sync [remote] | note | flow | context | find | grep | code | ui\n\nUse short end-to-end checks of real behavior. Run a full suite only when needed. See USAGE.md for formats and options."
         );
         return Ok(());
     }
@@ -69,6 +70,7 @@ fn run() -> Result<(), String> {
         "media <goal-id> <file> <title>", [cmd, goal, path, shows] if cmd == "media" => gallery::show(&root, &cwd, goal, path, shows);
         "ui [--port N] [--open]", [cmd, rest @ ..] if cmd == "ui" => ui::serve(&root, rest);
         "grep [--regex] [-i|-s] [-C N] [-g glob] [--in prefix] [--limit N] [--offset N] [-l|--files] [pattern...]", [cmd, words @ ..] if cmd == "grep" => text::grep(&root, words);
+        "context <topic...> [--budget N]", [cmd, words @ ..] if cmd == "context" => context::command(&root, words);
         "find <words...> [--limit N]", [cmd, words @ ..] if cmd == "find" => find::find(&root, words);
         "code import-scip <file>", [cmd, sub, file] if cmd == "code" && sub == "import-scip" => code::import_scip(&root, &cwd.join(file));
         "code defs|refs <name> / code deps|includers <path>", [cmd, sub, value] if cmd == "code" && ["defs", "refs", "deps", "includers"].contains(&sub.as_str()) => code::query(&root, sub, value);

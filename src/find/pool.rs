@@ -1,6 +1,6 @@
 use rusqlite::{Connection, params_from_iter, types::Value};
 
-pub(super) struct Hit {
+pub(crate) struct Hit {
     pub kind: String,
     pub key: String,
     pub title: String,
@@ -18,7 +18,7 @@ impl Pool {
     pub fn new(
         words: &[String],
         corrected: &[(String, usize)],
-        kind: Option<&str>,
+        kinds: &[&str],
         cap: usize,
     ) -> Self {
         // Reject weak partial matches independently of corpus-dependent BM25 scores.
@@ -26,7 +26,11 @@ impl Pool {
             Value::Null,
             Value::Integer(cap as i64),
             Value::Integer(words.len().div_ceil(2) as i64),
-            kind.map_or(Value::Null, |k| Value::Text(k.to_owned())),
+            if kinds.is_empty() {
+                Value::Null
+            } else {
+                Value::Text(format!("|{}|", kinds.join("|")))
+            },
             Value::Null,
         ];
         let mut coverage = Vec::new();
@@ -69,7 +73,7 @@ impl Pool {
     }
     fn source(&self) -> String {
         format!(
-            "FROM docs_fts JOIN docs ON docs.id=docs_fts.rowid WHERE docs_fts MATCH ?1 AND (?4 IS NULL OR docs.kind=?4) AND ({})>=?3",
+            "FROM docs_fts JOIN docs ON docs.id=docs_fts.rowid WHERE docs_fts MATCH ?1 AND (?4 IS NULL OR instr(?4,'|'||docs.kind||'|')>0) AND ({})>=?3",
             self.coverage
         )
     }
@@ -114,7 +118,7 @@ impl Pool {
     pub fn total(&mut self, db: &Connection) -> Result<i64, String> {
         self.bind(&self.terms.join(" OR "));
         db.query_row(
-            &format!("SELECT count(*) {}", self.source()),
+            &format!("SELECT count(DISTINCT docs.key) {}", self.source()),
             params_from_iter(&self.values),
             |r| r.get(0),
         )

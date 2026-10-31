@@ -4,6 +4,94 @@ use common::*;
 use std::fs;
 
 #[test]
+fn context_uses_search_rank_and_names_budget_omissions() {
+    let f = Fixture::new();
+    write(
+        &f.root.join("invoice.rs"),
+        "/// Renews a subscription.\nfn renewSubscription(customer: Customer) {}\n",
+    );
+    let goal = records::goal(&f.root, "renewal");
+    let mut v = value(&goal);
+    v["title"] = "Renew subscription".into();
+    records::put(&f.root, "goals", "renewal", &v);
+    write(
+        &f.root.join(".whosaidso/notes/renewal.md"),
+        "---\n{\"type\":\"doc\",\"status\":\"open\",\"title\":\"Renew subscription\"}\n---\nCustomer renewal procedure.\n",
+    );
+    let found = cli(&f.root, &["find", "renew subscription"]);
+    let context = cli(
+        &f.root,
+        &["context", "renew subscription", "--budget", "8000"],
+    );
+    assert!(context.len() <= 8000, "{}", context.len());
+    assert!(
+        context.starts_with(found.lines().next().unwrap()),
+        "{context}"
+    );
+    for expected in [
+        "file invoice.rs",
+        "symbol invoice.rs",
+        "goal renewal",
+        "note renewal",
+        "Customer",
+    ] {
+        assert!(context.contains(expected), "{expected}: {context}");
+    }
+    write(
+        &f.root.join("unicode.md"),
+        format!("# Renew subscription\n{}", "雪".repeat(2000)),
+    );
+    for budget in [128, 256, 512] {
+        let small = cli(
+            &f.root,
+            &[
+                "context",
+                "renew subscription",
+                "--budget",
+                &budget.to_string(),
+            ],
+        );
+        assert!(small.len() <= budget, "{}: {small}", small.len());
+        assert!(small.contains("omitted:"), "{small}");
+    }
+    assert!(cli(&f.root, &["context", "zxqjvzxqjv"]).contains("no indexed match"));
+    assert!(
+        !command(&f.root, BIN, &["context", "renew", "--budget", "0"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+}
+
+#[test]
+fn precise_documentation_is_fresh_and_worktree_scoped() {
+    use common::scip::{field, import};
+    let f = Fixture::empty();
+    write(&f.root.join("source.rs"), "fn indexedOnly() {}\n");
+    commit(&f.root);
+    let symbol = b"scip-test pkg project 1 indexedOnly().";
+    let mut occurrence = field(1, &[0, 3, 14]);
+    occurrence.extend(field(2, symbol));
+    occurrence.extend([24, 1]);
+    let mut info = field(1, symbol);
+    info.extend(field(3, b"Semantic ledger renewal"));
+    info.extend(field(6, b"indexedOnly"));
+    let mut document = field(1, b"source.rs");
+    document.extend(field(2, &occurrence));
+    document.extend(field(3, &info));
+    import(&f.root, &[field(2, &document)]);
+    let precise = cli(&f.root, &["find", "kind:symbol", "semantic ledger"]);
+    assert!(precise.contains("[precise]"), "{precise}");
+    let other = f.worktree("other");
+    assert!(cli(&other, &["find", "kind:symbol", "semantic ledger"]).contains("no indexed match"));
+    assert!(cli(&other, &["find", "kind:symbol", "indexedOnly"]).contains("[syntactic]"));
+    write(&f.root.join("source.rs"), "fn sourceChanged() {}\n");
+    assert!(cli(&f.root, &["find", "kind:symbol", "semantic ledger"]).contains("no indexed match"));
+    assert!(cli(&f.root, &["find", "kind:symbol", "sourceChanged"]).contains("[syntactic]"));
+}
+
+#[test]
 fn code_vocabulary_and_live_edits_are_searchable() {
     let f = Fixture::empty();
     for (path, body, name) in [
