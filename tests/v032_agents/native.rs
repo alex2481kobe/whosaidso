@@ -184,3 +184,24 @@ fn native_file_scope_does_not_expand_to_same_named_nested_files() {
         "app.rs:1:fn paywall(){}\n"
     );
 }
+
+#[test]
+fn explicitly_ignored_search_paths_pass_through() {
+    let f = Fixture::empty();
+    write(&f.root.join(".whosaidso/.keep"), "");
+    write(&f.root.join(".gitignore"), "ignored.rs\nignored-dir/\n");
+    write(&f.root.join("ignored.rs"), "fn needle() {}\n");
+    write(&f.root.join("ignored-dir/file.rs"), "fn needle() {}\n");
+    for path in ["ignored.rs", "ignored-dir"] {
+        assert_eq!(
+            call(
+                &f,
+                "claude",
+                "Grep",
+                json!({"pattern":"needle","path":path})
+            ),
+            json!({}),
+            "{path}"
+        );
+    }
+}

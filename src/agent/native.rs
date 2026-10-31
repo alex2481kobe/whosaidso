@@ -102,6 +102,9 @@ fn grep(scope: &Scope, args: &Value) -> Option<String> {
         None
     })?;
     let relative = scope.relative(&path)?;
+    if args.get("path").is_some() && !scope.searchable(&path) {
+        return None;
+    }
     if !relative.is_empty() {
         if args
             .get("glob")
