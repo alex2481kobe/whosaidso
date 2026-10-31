@@ -72,13 +72,23 @@ pub fn active(time: i64, now: i64) -> bool {
     now < lapse(time)
 }
 pub fn age(time: i64) -> String {
+    format!("{} ago", age_word(time))
+}
+fn age_word(time: i64) -> String {
     let seconds = now().unwrap_or(time).saturating_sub(time).max(0);
     let (n, unit) = if seconds < 86400 {
         (seconds / 3600, "h")
     } else {
         (seconds / 86400, "d")
     };
-    format!("{n}{unit} ago")
+    format!("{n}{unit}")
+}
+pub fn branch_age(root: &Path, branch: &str) -> Result<String, String> {
+    let tip = git::local_revision(root, branch)?;
+    let time = git::run(root, &["show", "-s", "--format=%ct", &tip])?;
+    let time = time.trim().parse::<i64>().map_err(|e| e.to_string())?;
+    renew();
+    Ok(age_word(time))
 }
 fn trailers(log: &str) -> impl Iterator<Item = &str> {
     log.lines()

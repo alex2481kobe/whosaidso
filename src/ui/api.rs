@@ -199,6 +199,14 @@ pub(super) fn answer(root: &Path, path: &str, params: &HashMap<String, String>) 
                 |v| Reply::json(&json!({"version":v})),
             ),
         "/api/goals" => goals_answer(root),
+        "/api/branch" => params
+            .get("name")
+            .ok_or_else(|| "missing branch".to_string())
+            .and_then(|name| state::branch_age(root, name))
+            .map_or_else(
+                |e| Reply::error(400, &e),
+                |age| Reply::json(&json!({"age":age})),
+            ),
         "/api/flows" => {
             let token = current_version(root);
             let result = params
