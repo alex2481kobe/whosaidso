@@ -1,5 +1,6 @@
 mod author;
 mod model;
+mod map;
 mod schema;
 mod store;
 mod validate;
@@ -9,6 +10,11 @@ use std::path::Path;
 
 pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
     match args {
+        [cmd, rest @ ..] if cmd == "map" && rest.len() <= 1 => {
+            let snapshot = crate::code::facts::Snapshot::current(root)?;
+            println!("{}", map::layer(&snapshot, rest.first().map(String::as_str), 0)?);
+            Ok(())
+        }
         [cmd, rest @ ..] if cmd == "check" && rest.len() <= 1 => {
             let records = store::load(root, rest.first().map(String::as_str))?;
             let mut broken = false;
