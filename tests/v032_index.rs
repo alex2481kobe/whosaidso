@@ -279,3 +279,42 @@ fn branch_snapshot_survives_another_worktrees_head_query() {
         String::from_utf8_lossy(&result.stderr)
     );
 }
+
+#[test]
+fn oversized_reread_cannot_poison_a_smaller_files_facts() {
+    let fixture = Fixture::sources(&[("tracked.rs", "fn tracked() {}\n")]);
+    let root = &fixture.root;
+    let small = "fn restored() {}\n";
+    fs::write(root.join("growing.rs"), small).unwrap();
+    fs::write(root.join(".git/grow"), "").unwrap();
+    let bin = root.join(".git/bin");
+    let real = std::env::split_paths(common::process::tool_path())
+        .map(|p| p.join("git"))
+        .find(|p| p.is_file())
+        .unwrap();
+    common::executable(
+        &bin.join("git"),
+        r##"#!/usr/bin/python3
+import os, pathlib, sys
+root = pathlib.Path.cwd()
+if sys.argv[1:2] == ['cat-file'] and (root/'.git/grow').exists():
+    with (root/'growing.rs').open('ab') as f: f.truncate(64*1024*1024+1)
+    (root/'.git/grow').unlink()
+os.execv(os.environ['REAL_GIT'], [os.environ['REAL_GIT'], *sys.argv[1:]])
+"##,
+    );
+    let path = std::env::join_paths(
+        std::iter::once(bin).chain(std::env::split_paths(common::process::tool_path())),
+    )
+    .unwrap();
+    let out = command(root, BIN, &["code", "defs", "restored"])
+        .env("PATH", path)
+        .env("REAL_GIT", real)
+        .output()
+        .unwrap();
+    common::process::success(out);
+    assert!(!root.join(".git/grow").exists(), "growth race did not run");
+    fs::write(root.join("growing.rs"), small).unwrap();
+    let answer = cli(root, &["code", "defs", "restored"]);
+    assert!(answer.contains("growing.rs:1"), "{answer}");
+}
