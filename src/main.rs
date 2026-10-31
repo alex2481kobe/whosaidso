@@ -39,7 +39,7 @@ fn run() -> Result<(), String> {
     }
     if args.as_slice() == ["help"] || args.as_slice() == ["--help"] || args.as_slice() == ["-h"] {
         println!(
-            "WhoSaidSo: goals and evidence in Git\n\ncheck | goals | show <id> | start <goal> | next | assign <goal> <agent:name|branch:name> | prove <goal> [--reason <why>] | gate [base] | prune\nevidence add <goal> <file> <shows> | reopen <milestone> <destination-revision> | media <goal> <file> <title> | sync [remote] | note | flow | find | grep | code | ui\n\nUse short end-to-end checks of real behavior. Tests stay smaller than source; checks default to 60 seconds. Run a full suite only when needed. See USAGE.md for formats and options."
+            "WhoSaidSo: goals and evidence in Git\n\ncheck | goals | show <id> | start <goal> | next | assign <goal> <agent:name|branch:name> | land [--reason <why>] [--override <name>] | prove <goal> [--reason <why>] | gate [base] | gate --ci <base>..<tip> | prune\nevidence add <goal> <file> <shows> | reopen <milestone> <destination-revision> | media <goal> <file> <title> | sync [remote] | note | flow | find | grep | code | ui\n\nUse short end-to-end checks of real behavior. Tests stay smaller than source; checks default to 60 seconds. Run a full suite only when needed. See USAGE.md for formats and options."
         );
         return Ok(());
     }
