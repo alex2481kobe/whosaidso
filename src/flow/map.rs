@@ -35,7 +35,7 @@ pub fn layer(snapshot: &Snapshot, parent: Option<&str>, offset: usize) -> Result
             "state":if f.precise=="fresh" || f.syntax=="indexed" {"built"} else {"unknown"},"children":f.definitions})).collect();
         return Ok(
             json!({"id":"derived","parent":parent,"revision":snapshot.id,"change_token":snapshot.change_token,"nodes":nodes,"steps":[],
-            "frontier":page.total.saturating_sub(offset+PAGE),"next":(offset+PAGE<page.total).then_some(offset+PAGE),"gaps":[]}),
+            "frontier":page.total.saturating_sub(offset+PAGE),"next":(offset+PAGE<page.total).then_some(offset+PAGE),"gaps":[],"freshness":page.freshness}),
         );
     };
     let graph = snapshot.graph_in(&[path.to_string()], &[])?;

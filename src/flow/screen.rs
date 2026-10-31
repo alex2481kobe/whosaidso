@@ -89,7 +89,9 @@ pub fn screen(
             json!({"flows":rows,"revision":revision,"next":(offset+map::PAGE<total).then_some(offset+map::PAGE)})
         }
     };
-    result["freshness"] = json!(snapshot.freshness()?);
+    if result.get("freshness").is_none() {
+        result["freshness"] = json!(snapshot.freshness()?);
+    }
     result["committed_only"] = json!(branch.is_some());
     result["branch"] = json!(branch);
     result["branches"] = json!(

@@ -82,4 +82,6 @@ fn top_counts_the_effective_precise_definitions_and_falls_back_after_an_edit() {
     );
     assert_eq!(top()["nodes"][0]["children"], 2);
     assert_eq!(top()["freshness"], "stale");
+    cli(&f.root, &["code", "import-scip", ".git/index.scip"]);
+    assert_eq!(top()["freshness"], "unknown");
 }
