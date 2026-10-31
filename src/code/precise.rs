@@ -30,12 +30,7 @@ pub struct Row {
     pub name: String,
     pub qualified: String,
 }
-pub fn rows(
-    db: &Connection,
-    files: &tree::Files,
-    value: &str,
-    def: bool,
-) -> Result<(HashSet<String>, Vec<Row>), String> {
+pub fn rows(db: &Connection, files: &tree::Files, value: &str, def: bool, paths: Option<&[String]>) -> Result<(HashSet<String>, Vec<Row>), String> {
     let bound: bool = db
         .query_row("SELECT status='fresh' FROM precise_freshness", [], |r| {
             r.get(0)
@@ -64,13 +59,15 @@ pub fn rows(
             "SELECT path,blob FROM precise_documents WHERE status='fresh' AND path IN ({syntax} UNION SELECT o.path FROM scip_occ o JOIN scip_syms s ON s.symbol=o.symbol WHERE (?1='' OR {column}=?1) AND o.is_def=?2)"
         )
     };
+    let scope = paths.map(serde_json::to_string).transpose().map_err(err)?;
+    let sql = if scope.is_some() { format!("{sql} AND path IN (SELECT value FROM json_each(?3))") } else { sql };
     let mut stmt = db.prepare(&sql).map_err(err)?;
     let map = |r: &rusqlite::Row<'_>| Ok((r.get(0)?, r.get(1)?));
-    let records = if value.is_empty() {
+    let records = if let Some(scope) = &scope {
+        stmt.query_map(params![leaf,def,scope],map)
+    } else if value.is_empty() {
         stmt.query_map([], map)
-    } else {
-        stmt.query_map(params![leaf, def], map)
-    }
+    } else { stmt.query_map(params![leaf, def], map) }
     .map_err(err)?;
     let blobs: HashMap<String, Option<String>> = records.collect::<Result<_, _>>().map_err(err)?;
     let fresh: HashSet<String> = files
@@ -83,9 +80,12 @@ pub fn rows(
         })
         .map(|f| f.path.clone())
         .collect();
-    let mut stmt = db.prepare(&format!("SELECT o.path,o.line,o.symbol,o.start,o.end_line,o.stop,o.container,o.encoding,o.enclosing_line,o.enclosing_start,o.enclosing_end_line,o.enclosing_stop,s.name FROM scip_occ o JOIN scip_syms s ON s.symbol=o.symbol WHERE (?1='' OR {column}=?1) AND o.is_def=?2 ORDER BY o.path,o.line")).map_err(err)?;
+    let filter = if scope.is_some() { "AND o.path IN (SELECT value FROM json_each(?3))" } else { "" };
+    let mut stmt = db.prepare(&format!("SELECT o.path,o.line,o.symbol,o.start,o.end_line,o.stop,o.container,o.encoding,o.enclosing_line,o.enclosing_start,o.enclosing_end_line,o.enclosing_stop,s.name FROM scip_occ o JOIN scip_syms s ON s.symbol=o.symbol WHERE (?1='' OR {column}=?1) AND o.is_def=?2 {filter} ORDER BY o.path,o.line")).map_err(err)?;
+    let mut parameters: Vec<rusqlite::types::Value> = vec![leaf.to_owned().into(),i64::from(def).into()];
+    if let Some(scope) = &scope { parameters.push(scope.clone().into()); }
     let rows = stmt
-        .query_map(params![leaf, def], |r| {
+        .query_map(rusqlite::params_from_iter(parameters), |r| {
             let line: Option<i64> = r.get(8)?;
             Ok(Row {
                 path: r.get(0)?,

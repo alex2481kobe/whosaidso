@@ -38,13 +38,11 @@ pub fn selected(node: &Node, row: &Row) -> bool {
                 .any(|s| s == &row.symbol || s == &row.name || s == &row.qualified))
         && (!node.paths.is_empty() || !node.symbols.is_empty())
 }
-fn node_state(node: &Node, rows: &[&Row], snapshot: &Snapshot) -> Result<&'static str, String> {
+fn node_state(node: &Node, rows: &[&Row], snapshot: &Snapshot, coverage: &[crate::code::facts::coverage::Coverage]) -> Result<&'static str, String> {
     if node.paths.is_empty() && node.symbols.is_empty() {
         return Ok("authored");
     }
-    let paths: Vec<_> = snapshot
-        .coverage()?
-        .into_iter()
+    let paths: Vec<_> = coverage.iter()
         .filter(|c| node.paths.iter().any(|p| matches(p, &c.path)))
         .collect();
     if paths
@@ -83,7 +81,7 @@ fn node_state(node: &Node, rows: &[&Row], snapshot: &Snapshot) -> Result<&'stati
     Ok("built")
 }
 pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<Value, String> {
-    let graph = snapshot.graph()?;
+    let (graph,coverage) = super::code::graph(flow,snapshot)?;
     let mut nodes = BTreeMap::new();
     let mut owners: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     for node in &flow.nodes {
@@ -95,7 +93,7 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<Value, String> {
         for row in &rows {
             owners.entry(&row.symbol).or_default().push(&node.id);
         }
-        let state = node_state(node, &rows, snapshot)?;
+        let state = node_state(node, &rows, snapshot, &coverage)?;
         nodes.insert(node.id.clone(), json!({"state":state,"binding_state":state,"evidence":rows.first().map_or("authored", |r| strength(r.layer)),
             "goal":node.goal,"risks":node.risks,"symbols":rows.iter().map(|r| &r.symbol).collect::<Vec<_>>() }));
     }
@@ -124,9 +122,7 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<Value, String> {
             }
         }
     }
-    let gaps: Vec<_> = snapshot
-        .coverage()?
-        .into_iter()
+    let gaps: Vec<_> = coverage.into_iter()
         .filter(|c| inside(flow, &c.path) && c.syntax != "indexed" && c.precise != "fresh")
         .map(|c| c.path)
         .collect();

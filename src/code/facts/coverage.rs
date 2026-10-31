@@ -6,9 +6,13 @@ pub struct Coverage {
     pub precise: String,
 }
 impl Snapshot {
-    pub fn coverage(&self) -> Result<Vec<Coverage>, String> {
-        let mut stmt=self.db.prepare("SELECT m.path,coalesce(c.status,'not indexed'),coalesce(d.status,'not indexed') FROM manifest_files m LEFT JOIN syntax_coverage c ON c.fact=m.fact LEFT JOIN precise_documents d ON d.path=m.path WHERE m.manifest=(SELECT manifest FROM selection) ORDER BY m.path").map_err(err)?;
-        stmt.query_map([], |r| {
+    pub fn coverage(&self) -> Result<Vec<Coverage>, String> { self.read_coverage(None) }
+    pub fn coverage_in(&self, paths: &[String]) -> Result<Vec<Coverage>,String> { self.read_coverage(Some(paths)) }
+    fn read_coverage(&self, paths: Option<&[String]>) -> Result<Vec<Coverage>, String> {
+        let scope = paths.map(serde_json::to_string).transpose().map_err(err)?;
+        let filter = if scope.is_some() { "AND m.path IN (SELECT value FROM json_each(?1))" } else { "" };
+        let mut stmt=self.db.prepare(&format!("SELECT m.path,coalesce(c.status,'not indexed'),coalesce(d.status,'not indexed') FROM manifest_files m LEFT JOIN syntax_coverage c ON c.fact=m.fact LEFT JOIN precise_documents d ON d.path=m.path WHERE m.manifest=(SELECT manifest FROM selection) {filter} ORDER BY m.path")).map_err(err)?;
+        stmt.query_map(rusqlite::params_from_iter(scope.iter()), |r| {
             Ok(Coverage {
                 path: r.get(0)?,
                 syntax: r.get(1)?,

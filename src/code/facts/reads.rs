@@ -40,16 +40,25 @@ pub struct Complete {
 }
 impl Snapshot {
     pub fn definitions(&self, value: &str) -> Result<Complete, String> {
-        self.lookup(value, true)
+        self.lookup(value, true, None, true)
     }
     pub fn references(&self, value: &str) -> Result<Complete, String> {
-        self.lookup(value, false)
+        self.lookup(value, false, None, true)
     }
     pub(super) fn all_references(&self) -> Result<Complete, String> {
-        self.lookup("", false)
+        self.lookup("", false, None, true)
     }
-    fn lookup(&self, value: &str, def: bool) -> Result<Complete, String> {
-        let (fresh, precise) = precise::rows(&self.db, &self.files, value, def)?;
+    pub fn definitions_in(&self, paths: &[String]) -> Result<Complete, String> {
+        self.lookup("", true, Some(paths), true)
+    }
+    pub fn references_in(&self, paths: &[String]) -> Result<Complete, String> {
+        self.lookup("", false, Some(paths), true)
+    }
+    pub(super) fn candidates(&self, value: &str, def: bool) -> Result<Complete,String> {
+        self.lookup(value,def,None,false)
+    }
+    fn lookup(&self, value: &str, def: bool, paths: Option<&[String]>, coverage: bool) -> Result<Complete, String> {
+        let (fresh, precise) = precise::rows(&self.db, &self.files, value, def, paths)?;
         let mut rows = Vec::new();
         let run: String = self
             .db
@@ -104,9 +113,13 @@ impl Snapshot {
         } else {
             "syntax_calls_callee"
         };
-        let sql = format!(
-            "SELECT m.path,d.line,d.{name},{kind},{caller},d.qualified,d.start,d.end_line,d.stop,f.blob,f.extractor FROM {table} d INDEXED BY {index} CROSS JOIN manifest_files m INDEXED BY manifest_fact ON m.fact=d.fact JOIN facts f ON f.id=m.fact WHERE m.manifest=(SELECT manifest FROM selection) {filter} ORDER BY m.path,d.line"
-        );
+        let source = if paths.is_some() {
+            format!("manifest_files m CROSS JOIN {table} d INDEXED BY {table}_fact ON d.fact=m.fact JOIN facts f ON f.id=m.fact")
+        } else {
+            format!("{table} d INDEXED BY {index} CROSS JOIN manifest_files m INDEXED BY manifest_fact ON m.fact=d.fact JOIN facts f ON f.id=m.fact")
+        };
+        let scope = if paths.is_some() { "AND m.path IN (SELECT value FROM json_each(?2))" } else { "" };
+        let sql = format!("SELECT m.path,d.line,d.{name},{kind},{caller},d.qualified,d.start,d.end_line,d.stop,f.blob,f.extractor FROM {source} WHERE m.manifest=(SELECT manifest FROM selection) {filter} {scope} ORDER BY m.path,d.line");
         let mut stmt = self.db.prepare(&sql).map_err(err)?;
         let map = |r: &rusqlite::Row<'_>| {
             let path: String = r.get(0)?;
@@ -139,12 +152,10 @@ impl Snapshot {
                 enclosing: None,
             })
         };
-        let syntax = stmt
-            .query_map(
-                rusqlite::params_from_iter((!value.is_empty()).then(|| leaf(value))),
-                map,
-            )
-            .map_err(err)?;
+        let mut parameters = Vec::new();
+        if !value.is_empty() || paths.is_some() { parameters.push(leaf(value).to_owned()); }
+        if let Some(paths) = paths { parameters.push(serde_json::to_string(paths).map_err(err)?); }
+        let syntax = stmt.query_map(rusqlite::params_from_iter(parameters), map).map_err(err)?;
         for row in syntax {
             let mut row = row.map_err(err)?;
             if !fresh.contains(&row.path) && (value.is_empty() || matches(&row.qualified, value)) {
@@ -152,21 +163,24 @@ impl Snapshot {
                 rows.push(row);
             }
         }
+        if !coverage { return Ok(Complete {rows,gaps:vec![]}); }
         let mut gaps = Vec::new();
         if rows.iter().any(|r| r.layer == Layer::Syntactic) {
             gaps.push(
                 "syntactic references match names; they do not resolve types or imports".into(),
             );
         }
-        let missing: i64 = self.db.query_row("SELECT count(*) FROM manifest_files m LEFT JOIN syntax_coverage c ON c.fact=m.fact WHERE m.manifest=(SELECT manifest FROM selection) AND (c.status IS NULL OR c.status<>'indexed')", [], |r| r.get(0)).map_err(err)?;
+        let scope = paths.map(serde_json::to_string).transpose().map_err(err)?;
+        let filter = if scope.is_some() { "AND m.path IN (SELECT value FROM json_each(?1))" } else { "" };
+        let missing: i64 = self.db.query_row(&format!("SELECT count(*) FROM manifest_files m LEFT JOIN syntax_coverage c ON c.fact=m.fact WHERE m.manifest=(SELECT manifest FROM selection) AND (c.status IS NULL OR c.status<>'indexed') {filter}"), rusqlite::params_from_iter(scope.iter()), |r| r.get(0)).map_err(err)?;
         if missing > 0 {
             gaps.push(format!("{missing} files have no syntax extraction"));
         }
         let stale: i64 = self
             .db
             .query_row(
-                "SELECT count(*) FROM precise_documents WHERE status='stale'",
-                [],
+                &format!("SELECT count(*) FROM precise_documents WHERE status='stale' {}", if scope.is_some() { "AND path IN (SELECT value FROM json_each(?1))" } else { "" }),
+                rusqlite::params_from_iter(scope.iter()),
                 |r| r.get(0),
             )
             .map_err(err)?;
@@ -178,8 +192,8 @@ impl Snapshot {
         let unknown: i64 = self
             .db
             .query_row(
-                "SELECT count(*) FROM precise_documents WHERE status='unknown'",
-                [],
+                &format!("SELECT count(*) FROM precise_documents WHERE status='unknown' {}", if scope.is_some() { "AND path IN (SELECT value FROM json_each(?1))" } else { "" }),
+                rusqlite::params_from_iter(scope.iter()),
                 |r| r.get(0),
             )
             .map_err(err)?;

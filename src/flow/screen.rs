@@ -27,7 +27,7 @@ pub fn screen(
                 let flow = record.flow.ok_or("unreadable flow")?;
                 let comparison = compare::compare(&flow, &snapshot)?;
                 let layer = view::layer(&flow, parent)?;
-                let graph = snapshot.graph()?;
+                let graph = super::code::graph(&flow,&snapshot)?.0;
                 let mut nodes: Vec<_> = layer
                     .nodes
                     .iter()
@@ -90,18 +90,7 @@ pub fn screen(
             json!({"flows":rows.into_iter().skip(offset).take(map::PAGE).collect::<Vec<_>>(),"revision":revision,"next":(offset+map::PAGE<total).then_some(offset+map::PAGE)})
         }
     };
-    let coverage = snapshot.coverage()?;
-    result["freshness"] = json!(if coverage.iter().any(|c| c.precise == "stale") {
-        "stale"
-    } else if coverage.iter().any(|c| {
-        // Files in no supported language are outside the map; a file it could not read is a gap.
-        let unread = !matches!(c.syntax.as_str(), "indexed" | "not indexed");
-        c.precise == "unknown" || (unread && c.precise != "fresh")
-    }) {
-        "unknown"
-    } else {
-        "fresh"
-    });
+    result["freshness"] = json!(snapshot.freshness()?);
     result["committed_only"] = json!(branch.is_some());
     result["branch"] = json!(branch);
     result["branches"] = json!(
