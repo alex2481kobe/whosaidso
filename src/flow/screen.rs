@@ -55,6 +55,10 @@ pub fn screen(root: &Path, id: Option<&str>, parent: Option<&str>, offset: usize
             json!({"flows":rows.into_iter().skip(offset).take(map::PAGE).collect::<Vec<_>>(),"revision":snapshot.id})
         }
     };
+    let coverage = snapshot.coverage()?;
+    result["freshness"] = json!(if coverage.iter().any(|c| c.precise == "stale") { "stale" }
+        else if coverage.iter().any(|c| c.precise == "unknown" || (c.syntax != "indexed" && c.precise != "fresh")) { "unknown" }
+        else { "fresh" });
     result["committed_only"] = json!(branch.is_some());
     result["branch"] = json!(branch);
     Ok(result)

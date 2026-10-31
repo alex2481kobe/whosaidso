@@ -34,6 +34,7 @@ fn listing(dir: &Path) -> Vec<(String, u64, u128)> {
 }
 pub fn token(root: &Path) -> Result<String, String> {
     let mut hash = DefaultHasher::new();
+    crate::flow::check::change_token(root)?.hash(&mut hash);
     // Local main, every branch the states read, and the claims; one process lists them all.
     git::run(
         root,

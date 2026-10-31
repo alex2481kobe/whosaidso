@@ -2,6 +2,7 @@ mod author;
 mod model;
 mod map;
 mod compare;
+pub mod check;
 mod hops;
 mod pattern;
 pub mod screen;
@@ -14,6 +15,7 @@ use std::path::Path;
 
 pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
     match args {
+        [cmd] if cmd == "drift-check" => check::check_drift(root),
         [cmd, rest @ ..] if cmd == "view" && rest.len() <= 3 => {
             let offset = rest.get(2).map_or(Ok(0), |s| s.parse::<usize>().map_err(|_| "invalid offset"))?;
             println!("{}", screen::screen(root,rest.first().map(String::as_str),rest.get(1).map(String::as_str),offset,None)?);

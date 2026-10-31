@@ -24,3 +24,20 @@ fn viewer_drills_from_screen_to_function_in_bounded_layers() {
     assert_eq!(functions["nodes"][0]["state"], "built");
     assert_eq!(viewer.get("/ui-flows.js", &cookie).0, 200);
 }
+
+#[test]
+fn viewer_version_moves_after_code_edit_within_three_seconds() {
+    let f = Fixture::new();
+    write(&f.root.join("app.rs"), "fn show() {}\n");
+    let viewer = Viewer::start(&f.root);
+    let cookie = viewer.cookie();
+    let before = viewer.json("/api/version", &cookie);
+    let start = std::time::Instant::now();
+    write(&f.root.join("app.rs"), "fn changed() {}\n");
+    assert_ne!(viewer.json("/api/version", &cookie)["version"], before["version"]);
+    assert!(start.elapsed().as_secs_f64() < 3.0);
+    let map = viewer.json("/api/flows?id=%24map", &cookie);
+    assert_eq!(map["freshness"], "fresh");
+    write(&f.root.join("app.xyz"), "unsupported language");
+    assert_eq!(viewer.json("/api/flows?id=%24map", &cookie)["freshness"], "unknown");
+}

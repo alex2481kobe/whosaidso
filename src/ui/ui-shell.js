@@ -125,7 +125,7 @@ export async function startViewer() {
   const usable = id => state.projects.some(p => p.id === id && p.available);
   state.project = usable(remembered) ? remembered : usable(list.current) ? list.current : state.projects.find(p => p.available)?.id || "";
   window.addEventListener("hashchange", route);
-  setInterval(poll, 2500);
+  setInterval(poll, 1000);
   document.addEventListener("visibilitychange", poll);
   await route();
 }

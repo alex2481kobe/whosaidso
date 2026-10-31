@@ -188,10 +188,11 @@ pub(super) fn answer(root: &Path, path: &str, params: &HashMap<String, String>) 
         ),
         "/api/goals" => goals_answer(root),
         "/api/flows" => {
+            let token = current_version(root);
             let result = params.get("offset").map_or(Ok(0), |s| s.parse::<usize>().map_err(|_| "invalid offset".to_string()))
                 .and_then(|offset| crate::flow::screen::screen(root, params.get("id").filter(|s| !s.is_empty()).map(String::as_str), params.get("parent").filter(|s| !s.is_empty()).map(String::as_str), offset, params.get("branch").filter(|s| !s.is_empty()).map(String::as_str)));
             match result {
-                Ok(mut value) => match current_version(root) {
+                Ok(mut value) => match token {
                     Ok(version) => { value["version"] = json!(version); Reply::json(&value) },
                     Err(e) => Reply::error(500, &e),
                 },
