@@ -38,7 +38,7 @@ pub fn temporary(path: &Path) -> bool {
         .and_then(|n| n.to_str())
         .is_some_and(|n| n.starts_with(".tmp-"))
 }
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub fn open(root: &Path, path: &str) -> Result<fs::File, String> {
     use std::{
         ffi::CString,
@@ -51,10 +51,11 @@ pub fn open(root: &Path, path: &str) -> Result<fs::File, String> {
     unsafe extern "C" {
         fn openat(dir: i32, path: *const std::ffi::c_char, flags: i32, ...) -> i32;
     }
-    const NO_FOLLOW: i32 = 0x20000;
-    const CLOSE_ON_EXEC: i32 = 0x80000;
-    const DIRECTORY: i32 = 0x10000;
-    const NONBLOCK: i32 = 0x800;
+    #[cfg(target_os = "linux")]
+    const FLAGS: (i32, i32, i32, i32) = (0x20000, 0x80000, 0x10000, 0x800);
+    #[cfg(target_os = "macos")]
+    const FLAGS: (i32, i32, i32, i32) = (0x100, 0x1000000, 0x100000, 0x4);
+    let (no_follow, close_on_exec, directory, nonblock) = FLAGS;
     let mut parent = fs::File::open(root).map_err(err)?;
     let mut parts = Path::new(path).components().peekable();
     while let Some(part) = parts.next() {
@@ -63,12 +64,12 @@ pub fn open(root: &Path, path: &str) -> Result<fs::File, String> {
         };
         let name = CString::new(name.as_bytes()).map_err(err)?;
         // O_NOFOLLOW at every directory descriptor prevents symlink replacement races.
-        let flags = NO_FOLLOW
-            | CLOSE_ON_EXEC
+        let flags = no_follow
+            | close_on_exec
             | if parts.peek().is_some() {
-                DIRECTORY
+                directory
             } else {
-                NONBLOCK
+                nonblock
             };
         let fd = unsafe { openat(parent.as_raw_fd(), name.as_ptr(), flags) };
         if fd < 0 {
@@ -81,7 +82,7 @@ pub fn open(root: &Path, path: &str) -> Result<fs::File, String> {
     }
     Ok(parent)
 }
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 pub fn open(root: &Path, path: &str) -> Result<fs::File, String> {
     if linked(root, Path::new(path), &mut HashMap::new())? {
         return Err(format!("{path}: refusing to follow symlink"));
