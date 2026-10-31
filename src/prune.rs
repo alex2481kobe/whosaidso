@@ -215,7 +215,7 @@ fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<St
     })();
     let kept = match applied {
         Ok(kept) => kept,
-        Err(_) => {
+        Err(error) => {
             for (path, bytes) in &records {
                 fs::create_dir_all(path.parent().ok_or("invalid record path")?)
                     .map_err(|e| e.to_string())?;
@@ -233,7 +233,7 @@ fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<St
             journal.records.clear();
             journal.moves.clear();
             journal.archive.clear();
-            return Err("refs changed during prune; nothing was removed; run it again".into());
+            return Err(format!("{error}; nothing was removed; run it again"));
         }
     };
     if !shared {

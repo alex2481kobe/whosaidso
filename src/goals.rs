@@ -84,9 +84,16 @@ pub fn output(root: &Path) -> Result<String, String> {
             &mut output,
         );
     }
+    for error in &store.errors {
+        output.push_str(&format!("{error}\n"));
+    }
     Ok(output)
 }
 pub fn goals(root: &Path) -> Result<(), String> {
     print!("{}", output(root)?);
-    Ok(())
+    if record::load(root)?.errors.is_empty() {
+        Ok(())
+    } else {
+        Err(String::new())
+    }
 }
