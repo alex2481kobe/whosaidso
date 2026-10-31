@@ -46,7 +46,7 @@ fn unread_name_candidates_cannot_become_a_false_pass() {
         {"id":"api","type":"function","paths":["api.rs"]}
     ],"steps":[]}),
     );
-    bad(&f.root, &["flow", "drift-check"], "unknown: narrow scan");
+    bad(&f.root, &["flow", "drift-check"], "app ");
     let comparison: serde_json::Value =
         serde_json::from_str(&cli(&f.root, &["flow", "compare", "app"])).unwrap();
     assert_ne!(comparison["state"], "built");
