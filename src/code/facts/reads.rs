@@ -83,7 +83,11 @@ impl Snapshot {
                 },
                 name: p.name,
                 qualified: p.qualified,
-                kind: String::new(),
+                kind: if p.symbol.ends_with('/') {
+                    "namespace".into()
+                } else {
+                    String::new()
+                },
                 caller: p.caller,
                 container: p.container.as_deref().map(id),
                 layer: Layer::Precise,

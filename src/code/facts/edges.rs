@@ -33,7 +33,7 @@ impl Snapshot {
         let refs = self.all_references()?;
         Ok(assemble(
             definitions,
-            refs.rows,
+            self.symbol_uses(refs.rows)?,
             self.all_relationships()?,
             refs.gaps,
         ))
@@ -45,6 +45,7 @@ impl Snapshot {
         for name in incoming {
             refs.rows.extend(self.candidates(name, false)?.rows);
         }
+        refs.rows = self.symbol_uses(refs.rows)?;
         let mut seen = HashSet::new();
         refs.rows.retain(|r| {
             seen.insert((
