@@ -53,12 +53,7 @@ impl Snapshot {
             .map_err(super::err)
     }
     pub fn outline(&self, path: &str) -> Result<Vec<Row>, String> {
-        Ok(self
-            .definitions("")?
-            .rows
-            .into_iter()
-            .filter(|r| r.path == path)
-            .collect())
+        Ok(self.definitions_in(&[path.to_owned()])?.rows)
     }
     pub fn symbol_body(&self, row: &Row) -> Result<Option<(Range, Vec<u8>)>, String> {
         let range = match row.layer {
