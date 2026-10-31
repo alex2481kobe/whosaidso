@@ -6,6 +6,7 @@ mod claims;
 pub mod code;
 mod config;
 mod context;
+mod database;
 mod evidence;
 mod find;
 mod flow;

@@ -58,9 +58,9 @@ impl Model {
             let start = self.offset + id * DIM * 4;
             for (sum, bytes) in mean
                 .iter_mut()
-                .zip(self.weights[start..start + DIM * 4].chunks_exact(4))
+                .zip(self.weights[start..start + DIM * 4].as_chunks::<4>().0)
             {
-                *sum += f32::from_le_bytes(bytes.try_into().expect("four bytes"));
+                *sum += f32::from_le_bytes(*bytes);
             }
         }
         // Averaging and summing have the same direction after normalization.
