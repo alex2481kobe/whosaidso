@@ -1,18 +1,16 @@
-// `--version` and `-V` print the package version, even outside a Git repository.
-use std::process::Command;
+mod common;
+use common::process::*;
+use common::*;
+
 #[test]
-fn version_flags_print_the_package_version() {
-    let outside = std::env::temp_dir();
+fn version_flags_work_outside_git() {
+    let f = Fixture::empty();
+    let root = &f.root;
+
     for flag in ["--version", "-V"] {
-        let out = Command::new(env!("CARGO_BIN_EXE_whosaidso"))
-            .arg(flag)
-            .current_dir(&outside)
-            .output()
-            .unwrap();
-        assert!(out.status.success(), "{out:?}");
         assert_eq!(
-            String::from_utf8_lossy(&out.stdout),
-            format!("whosaidso {}\n", env!("CARGO_PKG_VERSION"))
+            cli(root.parent().unwrap(), &[flag]).trim(),
+            format!("whosaidso {}", env!("CARGO_PKG_VERSION"))
         );
     }
 }

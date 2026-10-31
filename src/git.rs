@@ -139,7 +139,7 @@ pub fn read_objects(
             reader.read_exact(&mut bytes).map_err(|e| e.to_string())?;
             let mut newline = [0];
             reader.read_exact(&mut newline).map_err(|e| e.to_string())?;
-            if newline != [b'\n'] {
+            if newline != *b"\n" {
                 return Err("invalid git cat-file separator".into());
             }
             each(i, Some(bytes), true)?;
@@ -170,9 +170,13 @@ pub fn root(dir: &Path) -> Result<std::path::PathBuf, String> {
 }
 
 pub fn main_tip(root: &Path) -> Result<String, String> {
-    run(root, &["rev-parse", "--verify", "refs/heads/main"])
-        .map(|s| s.trim().to_owned())
-        .map_err(|_| "no local branch main".into())
+    let name = crate::config::main(root)?;
+    run(
+        root,
+        &["rev-parse", "--verify", &format!("refs/heads/{name}")],
+    )
+    .map(|s| s.trim().to_owned())
+    .map_err(|_| format!("no local branch {name}"))
 }
 pub fn local_revision(root: &Path, revision: &str) -> Result<String, String> {
     let end = revision.find(['~', '^']).unwrap_or(revision.len());

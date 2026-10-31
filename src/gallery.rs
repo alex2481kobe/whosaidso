@@ -44,7 +44,7 @@ pub fn show(root: &Path, cwd: &Path, goal: &str, source: &str, shows: &str) -> R
 }
 
 pub const LIVE_MEDIA: usize = 100;
-pub fn newest(store: &record::Store) -> Vec<&Media> {
+pub fn newest(store: &record::model::Store) -> Vec<&Media> {
     publish::newest(store.media.iter().map(|m| (m, m.ran_at, m.sha.as_str())))
 }
 pub struct MediaType {
@@ -151,9 +151,11 @@ fn bmff(bytes: &[u8]) -> Option<impl Iterator<Item = &[u8]>> {
     let brands = bytes.get(start..size)?;
     Some(
         brands
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .enumerate()
-            .filter_map(|(i, s)| (i != 1).then_some(s)),
+            .filter_map(|(i, s)| (i != 1).then_some(s.as_slice())),
     )
 }
 fn png(bytes: &[u8]) -> bool {

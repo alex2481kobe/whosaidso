@@ -1,222 +1,143 @@
-// End-to-end behavior in an isolated Git project.
-use sha2::{Digest, Sha256};
-use std::{
-    fs,
-    path::Path,
-    process::{Command, Output},
-    time::{SystemTime, UNIX_EPOCH},
-};
-fn run(dir: &Path, home: &Path, program: &str, args: &[&str]) -> Output {
-    let mut c = Command::new(program);
-    c.current_dir(dir)
-        .env("HOME", home)
-        .env("GIT_CONFIG_NOSYSTEM", "1");
-    if program == "git" {
-        c.args([
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.com",
-            "-c",
-            "init.defaultBranch=main",
-        ]);
-    }
-    c.args(args).output().unwrap()
-}
-fn ok(dir: &Path, home: &Path, program: &str, args: &[&str]) -> String {
-    let o = run(dir, home, program, args);
-    assert!(
-        o.status.success(),
-        "{:?}: {} {}",
-        args,
-        String::from_utf8_lossy(&o.stdout),
-        String::from_utf8_lossy(&o.stderr)
-    );
-    String::from_utf8(o.stdout).unwrap()
-}
-fn git(dir: &Path, home: &Path, args: &[&str]) -> String {
-    ok(dir, home, "git", args)
-}
-fn cli(dir: &Path, home: &Path, args: &[&str]) -> String {
-    ok(dir, home, env!("CARGO_BIN_EXE_whosaidso"), args)
-}
-fn write(path: &Path, data: &str) {
-    fs::create_dir_all(path.parent().unwrap()).unwrap();
-    fs::write(path, data).unwrap();
-}
-fn addressed(dir: &Path, data: &str) {
-    let hash = Sha256::digest(data.as_bytes())
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect::<String>();
-    write(&dir.join(format!("{hash}.json")), data);
-}
+mod common;
+use common::process::*;
+use common::{records as r, *};
+use std::fs;
+
 #[test]
-fn search_tracks_sources_and_widens_typos() {
-    let root = std::env::temp_dir().join(format!(
-        "find-{}-{}",
-        std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    fs::create_dir_all(&root).unwrap();
-    git(&root, &root, &["init", "--bare", "origin.git"]);
-    git(&root, &root, &["clone", "origin.git", "proj"]);
-    let proj = root.join("proj");
-    let records = proj.join(".whosaidso");
-    write(
-        &records.join("phases/p1.json"),
-        r#"{"title":"Phase one: buildings","order":1}"#,
-    );
-    let goal = records.join("goals/envelope.json");
-    write(
-        &goal,
-        r#"{"title":"Exterior walls and roof envelope","done_when":"done","check":"unit-tests","broader":"p1"}"#,
-    );
-    write(
-        &records.join("phases/p2.json"),
-        r#"{"title":"quartz","order":2}"#,
-    );
-    write(
-        &records.join("goals/ranking.json"),
-        &format!(
-            r#"{{"title":"quartz mosaic","done_when":"{}","check":"unit-tests","broader":"p1"}}"#,
-            "filler ".repeat(2000)
-        ),
-    );
-    write(
-        &records.join("instruments/unit-tests.json"),
-        r#"{"run":["test"],"answers":"works"}"#,
-    );
-    write(&proj.join("docs/walls.md"), "# Wall framing\n");
-    git(&proj, &root, &["add", "."]);
-    git(
-        &proj,
-        &root,
-        &[
-            "commit",
-            "-m",
-            "Frame the north wall",
-            "-m",
-            "Goal: envelope",
-        ],
-    );
-    git(&proj, &root, &["push", "-u", "origin", "main"]);
-    assert!(cli(&proj, &root, &["find", "wall"]).contains("docs/walls.md"));
-    let ranked = cli(&proj, &root, &["find", "quartz", "mosaic"]);
+fn records_files_and_main_history_are_searchable() {
+    let f = Fixture::new();
+    let root = &f.root;
+
+    write(&root.join("docs/walls.md"), "# Wall framing\n");
+    let mut v = value(&root.join(".whosaidso/goals/g.json"));
+    v["title"] = "Exterior walls and roof envelope".into();
+    r::put(root, "goals", "g", &v);
+    work(root, "north-wall", "g");
+    commit(root);
+    assert!(cli(root, &["find", "wall"]).contains("docs/walls.md"));
+    assert!(cli(root, &["find", "kind:goal", "walls"]).starts_with("goal g"));
+    assert!(cli(root, &["find", "north-wall", "kind:commit"]).contains("north-wall"));
+    let p = r::proof(root, &head(root), 1, 0);
+    let mut v = value(&p);
+    fs::remove_file(p).unwrap();
+    v["output_tail"] = format!("{} proofneedle", "x".repeat(2100)).into();
+    r::put(root, "proofs", "", &v);
+    assert!(cli(root, &["find", "proofneedle"]).contains("proof g"));
+}
+
+#[test]
+fn typos_widen_and_removed_vocabulary_is_evicted() {
+    let f = Fixture::new();
+    let root = &f.root;
+
+    let path = r::goal(root, "zamboni");
+    assert!(cli(root, &["find", "zambonx"]).contains("goal zamboni"));
+    assert!(cli(root, &["find", "zambon"]).contains("goal zamboni"));
+    assert!(cli(root, &["find", "qqqzzzxx"]).contains("no indexed match"));
+    fs::remove_file(path).unwrap();
+    r::goal(root, "zambony");
+    let text = cli(root, &["find", "zambonx"]);
     assert!(
-        ranked.lines().next().unwrap().starts_with("goal ranking "),
-        "{ranked}"
+        text.contains("zambony") && !text.contains("zamboni"),
+        "{text}"
     );
-    let filtered = cli(&proj, &root, &["find", "kind:goal", "walls"]);
-    assert!(
-        filtered.lines().any(|l| l.starts_with("goal envelope ")),
-        "{filtered}"
-    );
-    assert!(
-        filtered
-            .lines()
-            .all(|l| l.starts_with("goal ") || l.starts_with("shown ")),
-        "{filtered}"
-    );
-    let hits = cli(&proj, &root, &["find", "envelope", "walls"]);
-    assert!(
-        hits.lines().next().unwrap().starts_with("goal envelope "),
-        "{hits}"
-    );
-    assert!(
-        hits.lines()
-            .take(2)
-            .any(|l| l.starts_with("goal envelope ")),
-        "{hits}"
-    );
-    assert!(hits.contains("Frame the north wall"), "{hits}");
-    assert!(cli(&proj, &root, &["find", "envelop"]).contains("goal envelope"));
-    assert!(cli(&proj, &root, &["find", "envelqpe"]).contains("goal envelope"));
-    assert!(
-        cli(
-            &proj,
-            &root,
-            &["find", "what", "is", "the", "wall", "framing"]
-        )
-        .contains("docs/walls.md")
-    );
-    assert!(cli(&proj, &root, &["find", "qqqzzzxx"]).contains("find: no indexed match"));
-    // Only complete, valid records are indexed, so the fixtures carry every required field.
-    let head = git(&proj, &root, &["rev-parse", "HEAD"]).trim().to_string();
-    addressed(
-        &records.join("asks"),
-        &format!(
-            r#"{{"goal":"envelope","said":"velvet unicorn request","ran_at":1,"commit":"{head}"}}"#
-        ),
-    );
-    addressed(
-        &records.join("asks"),
-        &format!(
-            r#"{{"goal":"envelope","said":"another unique request","ran_at":2,"commit":"{head}"}}"#
-        ),
-    );
-    let asks = cli(&proj, &root, &["find", "velvet", "unicorn"]);
-    assert!(
-        asks.lines()
-            .any(|line| line == "ask envelope  velvet unicorn request"),
-        "{asks}"
-    );
-    assert!(cli(&proj, &root, &["find", "another", "unique"]).contains("ask envelope"));
-    addressed(
-        &records.join("proofs"),
-        &format!(
-            r#"{{"goal":"envelope","instrument":"unit-tests","commit":"{head}","exit_code":0,"output_sha256":"{}","output_tail":"{} proofneedle","ran_at":3}}"#,
-            "0".repeat(64),
-            "x".repeat(2100)
-        ),
-    );
-    assert!(
-        cli(&proj, &root, &["find", "proofneedle"])
-            .contains("proof envelope  envelope unit-tests pass")
-    );
-    for i in 0..150 {
-        write(
-            &records.join(format!("goals/rival{i}.json")),
-            &format!(
-                r#"{{"title":"{}","done_when":"done","check":"unit-tests","broader":"p1"}}"#,
-                if i % 2 == 0 { "zircon" } else { "obsidian" }
-            ),
+}
+
+#[test]
+fn exact_case_insensitive_title_survives_the_candidate_cap() {
+    let f = Fixture::new();
+    let root = &f.root;
+
+    for n in 0..201 {
+        let p = r::goal(root, &format!("rival{n}"));
+        let mut v = value(&p);
+        v["title"] = "mosaic quartz".into();
+        r::put(root, "goals", &format!("rival{n}"), &v);
+    }
+    let p = r::goal(root, "exact");
+    let mut v = value(&p);
+    v["title"] = "QuArTz MoSaIc".into();
+    v["done_when"] = "filler ".repeat(2000).into();
+    r::put(root, "goals", "exact", &v);
+    for args in [
+        &["find", "quartz", "mosaic"][..],
+        &["find", "kind:goal", "quartz", "mosaic"],
+    ] {
+        assert_eq!(
+            cli(root, args).lines().next(),
+            Some("goal exact  QuArTz MoSaIc")
         );
     }
-    write(
-        &records.join("goals/both.json"),
-        &format!(
-            r#"{{"title":"zircon obsidian","done_when":"{}","check":"unit-tests","broader":"p1"}}"#,
-            "filler ".repeat(2000)
-        ),
+}
+
+#[test]
+fn all_words_rank_above_shorter_partial_matches() {
+    let f = Fixture::new();
+    let root = &f.root;
+
+    for n in 0..150 {
+        let p = r::goal(root, &format!("rival{n}"));
+        let mut v = value(&p);
+        v["title"] = if n % 2 == 0 { "zircon" } else { "obsidian" }.into();
+        r::put(root, "goals", &format!("rival{n}"), &v);
+    }
+    let p = r::goal(root, "both");
+    let mut v = value(&p);
+    v["title"] = "zircon obsidian".into();
+    v["done_when"] = "filler ".repeat(2000).into();
+    r::put(root, "goals", "both", &v);
+    assert!(cli(root, &["find", "zircon", "obsidian"]).starts_with("goal both"));
+}
+
+#[test]
+fn invalid_records_are_evicted_from_a_warm_search() {
+    let f = Fixture::new();
+    let root = &f.root;
+
+    let p = r::proof(root, &head(root), 1, 0);
+    let mut v = value(&p);
+    fs::remove_file(p).unwrap();
+    v["output_tail"] = "validatorneedle".into();
+    let p = r::put(root, "proofs", "", &v);
+    assert!(cli(root, &["find", "validatorneedle"]).contains("proof g"));
+    fs::rename(&p, p.with_file_name("wrong.json")).unwrap();
+    assert!(cli(root, &["find", "validatorneedle"]).contains("no indexed match"));
+    r::clear(root, "proofs");
+    v["result"] = "pass".into();
+    r::put(root, "proofs", "", &v);
+    assert!(cli(root, &["find", "validatorneedle"]).contains("no indexed match"));
+    let p = r::goal(root, "validatorneedle");
+    cli(root, &["find", "validatorneedle"]);
+    write(&p, "{");
+    assert!(cli(root, &["find", "kind:goal", "validatorneedle"]).contains("no indexed match"));
+    assert!(p.exists());
+}
+
+#[test]
+fn history_tracks_main_removal_rewind_and_advance() {
+    let f = Fixture::new();
+    let root = &f.root;
+
+    let a = head(root);
+    git(
+        root,
+        &["commit", "--allow-empty", "-q", "-m", "spectraltamarind"],
     );
-    let ranked = cli(&proj, &root, &["find", "zircon", "obsidian"]);
-    assert!(
-        ranked.lines().next().unwrap().starts_with("goal both "),
-        "{ranked}"
-    );
-    let stale = records.join("goals/stale.json");
-    write(
-        &stale,
-        r#"{"title":"zamboni","done_when":"done","check":"unit-tests","broader":"p1"}"#,
-    );
-    assert!(cli(&proj, &root, &["find", "zambonx"]).contains("goal stale"));
-    fs::remove_file(stale).unwrap();
-    write(
-        &records.join("goals/live.json"),
-        r#"{"title":"zambony","done_when":"done","check":"unit-tests","broader":"p1"}"#,
-    );
-    let corrected = cli(&proj, &root, &["find", "zambonx"]);
-    assert!(corrected.contains("goal live"), "{corrected}");
-    write(
-        &goal,
-        r#"{"title":"Changed","done_when":"done","check":"unit-tests","broader":"p1"}"#,
-    );
-    assert!(
-        cli(&proj, &root, &["find", "Changed", "kind:goal"]).contains("goal envelope  Changed")
-    );
-    fs::remove_dir_all(root).unwrap();
+    let b = head(root);
+    for (tip, found) in [
+        (Some(a.as_str()), false),
+        (Some(b.as_str()), true),
+        (None, false),
+        (Some(b.as_str()), true),
+    ] {
+        if let Some(tip) = tip {
+            git(root, &["update-ref", "refs/heads/main", tip]);
+        } else {
+            git(root, &["update-ref", "-d", "refs/heads/main"]);
+        }
+        assert_eq!(
+            cli(root, &["find", "kind:commit", "spectraltamarind"]).contains("spectraltamarind"),
+            found
+        );
+    }
 }

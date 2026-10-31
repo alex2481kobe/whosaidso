@@ -1,7 +1,7 @@
 // Concise record details; state and phase rollups come from their shared modules.
 use crate::{
-    git, goals,
-    record::{self, Proof},
+    goals,
+    record::{self, model::Proof},
     state,
 };
 use std::path::Path;
@@ -36,24 +36,20 @@ pub fn show(root: &Path, id: &str) -> Result<(), String> {
         lines.push(format!("{}: {}", goal.id, goal.title));
         lines.push(format!("done when: {}", goal.done_when));
         lines.push(format!("state: {}", goals::label(current.state)));
-        lines.push(format!("check: {}", goal.check));
-        lines.push(format!("branches: {}", current.active_branches.join(", ")));
-        let asks = record::asks(&store, id);
-        for ask in asks.iter().take(5) {
-            lines.push(format!("ask: {}", ask.said));
+        if let Some(check) = &goal.check {
+            lines.push(format!(
+                "check: {}",
+                serde_json::to_string(check).map_err(|e| e.to_string())?
+            ));
         }
-        let revisions = git::run(root, &["rev-list", &git::main_tip(root)?])?;
-        let commits = revisions.lines().collect();
-        let check = goal.check.as_str();
-        if let Some(p) = state::newest_proof(&store, &commits, &goal.id, check) {
-            lines.push(format!("proof: {} · {check}", proof(p)));
-        } else {
-            lines.push(format!("instrument: {check} · no eligible proof"));
+        lines.push(format!("branches: {}", current.branch_names().join(", ")));
+        if let Some(index) = current.proof {
+            lines.push(format!("proof: {}", proof(&store.proofs[index])));
         }
         if let Some(i) = record::newest_media(&store, id) {
             lines.push(format!("media: {}", i.shows));
         }
-        for child in goals::children(&store.goals, id) {
+        for child in crate::goal_tree::children(&store.goals, id) {
             if let Some(s) = states.iter().find(|s| s.id == child.id) {
                 lines.push(format!(
                     "{} {}  {}",
@@ -62,27 +58,6 @@ pub fn show(root: &Path, id: &str) -> Result<(), String> {
                     child.title
                 ));
             }
-        }
-    } else if let Some(phase) = store.phases.iter().find(|p| p.id == id) {
-        let states = state::states(root, &store)?;
-        let (_, _, counts) = goals::counts(&store.goals, &states, id);
-        lines.push(format!("P{} {}  {}", phase.order, phase.title, counts));
-        for g in &store.goals {
-            if goals::in_phase(g, id, &store.goals)
-                && let Some(s) = states.iter().find(|s| s.id == g.id)
-            {
-                lines.push(format!("{} {}  {}", goals::label(s.state), g.id, g.title));
-            }
-        }
-    } else if let Some(i) = store.instruments.iter().find(|i| i.id == id) {
-        lines.push(format!(
-            "{}: {}",
-            i.id,
-            serde_json::to_string(&i.run).map_err(|e| e.to_string())?
-        ));
-        lines.push(format!("answers: {}", i.answers));
-        for g in store.goals.iter().filter(|g| g.check == id) {
-            lines.push(format!("goal: {}  {}", g.id, g.title));
         }
     } else {
         return Err(format!("show: no record {id}"));

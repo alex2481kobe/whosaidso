@@ -1,7 +1,7 @@
 // Goal states derived from Git history and recorded proofs.
 use crate::{
     git,
-    record::{Proof, Store},
+    record::model::{Proof, Store},
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -12,6 +12,7 @@ use std::{
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum State {
+    Broken,
     Open,
     Active,
     Idle,
@@ -26,17 +27,17 @@ impl State {
         matches!(self, State::Landed | State::Done)
     }
 }
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Branch {
     pub name: String,
     pub author: String,
     pub time: i64,
     pub worktree: Option<String>,
 }
+#[derive(PartialEq, Eq)]
 pub struct GoalState {
     pub id: String,
     pub state: State,
-    pub active_branches: Vec<String>,
     pub branches: Vec<Branch>,
     pub proof: Option<usize>,
 }
@@ -86,6 +87,7 @@ pub fn branch_refs(root: &Path) -> Result<Vec<(String, String)>, String> {
             "refs/remotes",
         ],
     )?;
+    let main = crate::config::main(root)?;
     let local: HashSet<_> = refs
         .lines()
         .filter_map(|r| r.strip_prefix("refs/heads/"))
@@ -93,7 +95,7 @@ pub fn branch_refs(root: &Path) -> Result<Vec<(String, String)>, String> {
     let mut selected = Vec::new();
     for reference in refs.lines() {
         let name = if let Some(name) = reference.strip_prefix("refs/heads/") {
-            if name == "main" {
+            if name == main {
                 continue;
             }
             name
@@ -101,7 +103,7 @@ pub fn branch_refs(root: &Path) -> Result<Vec<(String, String)>, String> {
             let Some((_, branch)) = name.split_once('/') else {
                 continue;
             };
-            if branch == "HEAD" || branch == "main" || local.contains(branch) {
+            if branch == "HEAD" || branch == main || local.contains(branch) {
                 continue;
             }
             name
@@ -143,18 +145,18 @@ pub fn newest_proof<'a>(
     store: &'a Store,
     commits: &HashSet<&str>,
     goal: &str,
-    instrument: &str,
+    check: Option<&[String]>,
 ) -> Option<&'a Proof> {
     store
         .proofs
         .iter()
         .filter(|p| {
             p.goal == goal
-                && p.instrument == instrument
-                && store
-                    .instrument_hashes
-                    .get(instrument)
-                    .is_some_and(|hash| store.proof_hashes.get(&p.sha) == Some(hash))
+                && Some(p.check.as_slice()) == check
+                && !store
+                    .broken
+                    .iter()
+                    .any(|(kind, id)| kind == "proof" && id == &p.sha)
                 && commits.contains(p.commit.as_str())
         })
         .max_by(|a, b| (a.ran_at, &a.sha).cmp(&(b.ran_at, &b.sha)))
@@ -227,36 +229,48 @@ pub fn states(root: &Path, store: &Store) -> Result<Vec<GoalState>, String> {
     }
     let mut result = Vec::new();
     for goal in &store.goals {
-        let proof = newest_proof(store, &commits, &goal.id, &goal.check);
+        let proof = newest_proof(store, &commits, &goal.id, goal.check.as_deref());
         let proof_index =
             proof.and_then(|p| store.proofs.iter().position(|item| std::ptr::eq(item, p)));
         let bs = branches.get(&goal.id);
-        let state = match proof {
-            Some(p) if p.exit_code != 0 => State::Failing,
-            Some(p) => {
-                if stale(root, p, &goal.id, format, &tip)? {
-                    State::Stale
-                } else {
-                    State::Done
+        let state = if store
+            .broken
+            .iter()
+            .any(|(kind, id)| kind == "goal" && id == &goal.id)
+        {
+            State::Broken
+        } else {
+            match proof {
+                Some(p) if p.exit_code != 0 => State::Failing,
+                Some(p) => {
+                    if stale(root, p, &goal.id, format, &tip)? {
+                        State::Stale
+                    } else {
+                        State::Done
+                    }
                 }
+                None if trailers(&main).any(|g| g == goal.id) => State::Landed,
+                None => match bs {
+                    Some(bs) if bs.iter().any(|b| active(b.time, now)) => State::Active,
+                    Some(_) => State::Idle,
+                    None => State::Open,
+                },
             }
-            None if trailers(&main).any(|g| g == goal.id) => State::Landed,
-            None => match bs {
-                Some(bs) if bs.iter().any(|b| active(b.time, now)) => State::Active,
-                Some(_) => State::Idle,
-                None => State::Open,
-            },
         };
-        let mut active_branches: Vec<String> =
-            bs.into_iter().flatten().map(|b| b.name.clone()).collect();
-        active_branches.sort();
         result.push(GoalState {
             id: goal.id.clone(),
             state,
-            active_branches,
             branches: bs.cloned().unwrap_or_default(),
             proof: proof_index,
         });
     }
     Ok(result)
+}
+
+impl GoalState {
+    pub fn branch_names(&self) -> Vec<&str> {
+        let mut names: Vec<_> = self.branches.iter().map(|b| b.name.as_str()).collect();
+        names.sort_unstable();
+        names
+    }
 }
