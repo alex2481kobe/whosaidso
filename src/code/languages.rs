@@ -118,7 +118,7 @@ const RUST_INDEX: Indexer = Indexer {
 };
 
 const C: &str = "[(function_definition) (struct_specifier) (enum_specifier)] @def\n(call_expression) @call\n(preproc_include) @include";
-const CPP: &str = "[(function_definition) (struct_specifier) (class_specifier) (enum_specifier) (namespace_definition)] @def\n(call_expression) @call\n(preproc_include) @include";
+const CPP: &str = "[(function_definition) (struct_specifier) (class_specifier) (union_specifier) (enum_specifier) (namespace_definition) (concept_definition) (alias_declaration) (type_definition) (preproc_def) (preproc_function_def)] @def\n[(call_expression) (new_expression)] @call\n(preproc_include) @include";
 const RUST: &str = "[(function_item) (struct_item) (enum_item) (trait_item) (impl_item) (mod_item)] @def\n(call_expression) @call\n(use_declaration) @include";
 const PYTHON: &str = "[(function_definition) (class_definition)] @def\n(call) @call\n[(import_statement) (import_from_statement)] @include";
 const GO: &str = "[(function_declaration) (method_declaration) (type_spec)] @def\n(call_expression) @call\n(import_spec) @include";
@@ -139,10 +139,13 @@ pub static LANGUAGES: &[Registration] = &[
     },
     Registration {
         name: "C++",
-        syntax_gap: "overloads, templates, preprocessor expansions and virtual dispatch remain unresolved",
+        syntax_gap: "overloads, templates, operators, preprocessor expansions and virtual dispatch remain unresolved; a function declared but not defined here is not listed",
         precise_gap: "build exclusions and dynamic dispatch may be unrecorded",
         indexer: None,
-        extensions: &["h", "hh", "hpp", "cc", "cpp", "cxx"],
+        extensions: &[
+            "h", "hh", "hpp", "hxx", "h++", "cc", "cpp", "cxx", "c++", "ipp", "tpp", "inl", "ixx",
+            "cppm",
+        ],
         grammar: || tree_sitter_cpp::LANGUAGE.into(),
         query: CPP,
     },

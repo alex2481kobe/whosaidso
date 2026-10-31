@@ -128,7 +128,8 @@ fn test_size(root: &Path, globs: &[String], ratio: f64) -> Result<Vec<String>, S
             .is_some_and(|e| {
                 [
                     "rs", "go", "py", "ts", "tsx", "js", "jsx", "c", "h", "cpp", "hpp", "cc",
-                    "cxx", "swift", "java", "kt", "cs", "rb", "php", "css", "html", "sh",
+                    "cxx", "hh", "hxx", "ipp", "tpp", "inl", "swift", "java", "kt", "cs", "rb",
+                    "php", "css", "html", "sh",
                 ]
                 .contains(&e)
             })

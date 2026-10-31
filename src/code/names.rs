@@ -20,6 +20,7 @@ pub(super) fn last_identifier(node: Node<'_>, bytes: &[u8]) -> String {
             | "namespace_identifier"
             | "simple_identifier"
             | "property_identifier"
+            | "operator_name"
     ) {
         return text(node, bytes).to_string();
     }
@@ -58,7 +59,11 @@ pub(super) fn definition(node: Node<'_>, bytes: &[u8]) -> Option<(String, String
         "class_definition" | "class_specifier" => "class",
         "struct_specifier" | "struct_item" => "struct",
         "enum_specifier" | "enum_item" => "enum",
+        "union_specifier" => "union",
         "namespace_definition" => "namespace",
+        "concept_definition" => "concept",
+        "alias_declaration" | "type_definition" => "type",
+        "preproc_def" | "preproc_function_def" => "macro",
         "function_item" => "fn",
         "function_declaration" | "generator_function_declaration" | "variable_declarator" => {
             "function"
@@ -98,7 +103,7 @@ fn conventional(kind: &str) -> Option<&'static str> {
 fn definition_name(node: Node<'_>, bytes: &[u8]) -> Option<String> {
     if matches!(
         node.kind(),
-        "struct_specifier" | "enum_specifier" | "class_specifier"
+        "struct_specifier" | "enum_specifier" | "class_specifier" | "union_specifier"
     ) && node.child_by_field_name("body").is_none()
     {
         return None;
