@@ -47,19 +47,19 @@ pub(super) fn build(
         } else {
             label
         };
-        let available = capacity.saturating_sub(output.len());
-        if available < label.len() + 32 {
-            omitted.push(label);
-            continue;
-        }
-        output.push_str(&label);
-        output.push('\n');
+        let mut heading = format!("{label}\n");
         if hit.kind == "symbol" {
-            output.push_str(&format!(
+            heading.push_str(&format!(
                 "file {}\n",
                 hit.source.strip_prefix("file:").unwrap_or(&hit.source)
             ));
         }
+        let available = capacity.saturating_sub(output.len());
+        if available < heading.len() + 25 {
+            omitted.push(label);
+            continue;
+        }
+        output.push_str(&heading);
         let detail = results.detail(hit)?;
         let available = capacity.saturating_sub(output.len() + 25).min(1600);
         output.push_str(prefix(&detail, available));
