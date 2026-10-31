@@ -1,62 +1,7 @@
+mod common;
+use common::{Fixture as Project, flow::FlowFixture};
 use serde_json::{Value, json};
-use std::{fs, path::PathBuf, process::Command};
-
-struct Project(PathBuf);
-impl Project {
-    fn new() -> Self {
-        let path = std::env::temp_dir().join(format!(
-            "whosaidso-flow-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(path.join(".whosaidso/flows")).unwrap();
-        assert!(
-            Command::new("git")
-                .args(["init", "-q"])
-                .current_dir(&path)
-                .env("HOME", path.join("home"))
-                .env("GIT_CONFIG_NOSYSTEM", "1")
-                .env("GIT_CONFIG_GLOBAL", "/dev/null")
-                .status()
-                .unwrap()
-                .success()
-        );
-        Self(path)
-    }
-    fn run(&self, args: &[&str], success: bool) -> String {
-        let out = Command::new(env!("CARGO_BIN_EXE_whosaidso"))
-            .args(args)
-            .current_dir(&self.0)
-            .env("WHOSAIDSO_HOME", self.0.join("home"))
-            .env("HOME", self.0.join("home"))
-            .env("GIT_CONFIG_NOSYSTEM", "1")
-            .env("GIT_CONFIG_GLOBAL", "/dev/null")
-            .output()
-            .unwrap();
-        let text = format!(
-            "{}{}",
-            String::from_utf8_lossy(&out.stdout),
-            String::from_utf8_lossy(&out.stderr)
-        );
-        assert_eq!(out.status.success(), success, "{args:?}: {text}");
-        text
-    }
-    fn write(&self, id: &str, flow: &Value) {
-        fs::write(
-            self.0.join(format!(".whosaidso/flows/{id}.json")),
-            flow.to_string(),
-        )
-        .unwrap();
-    }
-}
-impl Drop for Project {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
+use std::fs;
 
 fn plan() -> Value {
     json!({"covers":{"paths":["future/**"],"boundaries":["api"]},
@@ -70,7 +15,7 @@ fn plan() -> Value {
 
 #[test]
 fn structural_validation_keeps_broken_flows_and_reports_all_problems() {
-    let p = Project::new();
+    let p = Project::empty();
     p.write("paywall", &plan());
     let good = p.run(&["flow", "check"], true);
     assert!(good.contains("paywall authored"), "{good}");
@@ -90,7 +35,7 @@ fn structural_validation_keeps_broken_flows_and_reports_all_problems() {
     bad["steps"][0]["surprise"] = json!(true);
     bad["nodes"][1]["paths"] = json!(42);
     p.write("broken", &bad);
-    fs::write(p.0.join(".whosaidso/flows/syntax.json"), "{").unwrap();
+    fs::write(p.root.join(".whosaidso/flows/syntax.json"), "{").unwrap();
     let out = p.run(&["flow", "check"], false);
     for problem in [
         "paywall authored",
@@ -120,7 +65,7 @@ fn structural_validation_keeps_broken_flows_and_reports_all_problems() {
 
 #[test]
 fn builds_and_drills_into_a_paywall_plan_by_cli() {
-    let p = Project::new();
+    let p = Project::empty();
     p.run(
         &[
             "flow",
@@ -182,7 +127,7 @@ fn builds_and_drills_into_a_paywall_plan_by_cli() {
         ],
         true,
     );
-    let file = p.0.join(".whosaidso/flows/paywall.json");
+    let file = p.root.join(".whosaidso/flows/paywall.json");
     let before = fs::read(&file).unwrap();
     let flow: Value = serde_json::from_slice(&before).unwrap();
     assert_eq!(flow["steps"][0]["id"], "tap");
@@ -224,5 +169,5 @@ fn builds_and_drills_into_a_paywall_plan_by_cli() {
             .contains("broken broken")
     );
     p.run(&["flow", "rm", "broken"], true);
-    assert!(!p.0.join(".whosaidso/flows/broken.json").exists());
+    assert!(!p.root.join(".whosaidso/flows/broken.json").exists());
 }
