@@ -58,7 +58,7 @@ pub(super) fn special(root: &Path, paths: &[String]) -> Result<HashSet<String>, 
     }
     let fields: Vec<_> = out.stdout.split(|b| *b == 0).collect();
     let mut special = HashSet::new();
-    for entry in fields.chunks_exact(3) {
+    for entry in fields.as_chunks::<3>().0 {
         if entry[2] == b"set" || entry[2] == b"unset" {
             special.insert(
                 std::str::from_utf8(entry[0])

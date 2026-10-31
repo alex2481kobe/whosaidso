@@ -2,7 +2,7 @@
 use super::{TOKENIZER, err, terms};
 use crate::{git, record};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
-use std::{fs, path::Path, time::Duration};
+use std::{fs, path::Path};
 
 pub(super) fn open(root: &Path, worktree: &str) -> Result<Connection, String> {
     let common = git::run(
@@ -11,9 +11,7 @@ pub(super) fn open(root: &Path, worktree: &str) -> Result<Connection, String> {
     )?;
     let dir = Path::new(common.trim_end_matches('\n')).join("whosaidso/search");
     fs::create_dir_all(&dir).map_err(err)?;
-    let db = Connection::open(dir.join("search.db")).map_err(err)?;
-    db.busy_timeout(Duration::from_secs(60)).map_err(err)?;
-    db.pragma_update(None, "journal_mode", "WAL").map_err(err)?;
+    let db = crate::database::open(&dir.join("search.db"))?;
     db.execute_batch(&format!("CREATE TABLE IF NOT EXISTS payloads(id INTEGER PRIMARY KEY,address TEXT UNIQUE,kind TEXT,title TEXT,body TEXT,detail TEXT);
         CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(kind,title,body,content='payloads',content_rowid='id',tokenize='{TOKENIZER}');
         CREATE TABLE IF NOT EXISTS members(worktree TEXT,source TEXT,key TEXT,payload INTEGER,PRIMARY KEY(worktree,source,key,payload));
