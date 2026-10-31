@@ -1,7 +1,7 @@
 mod author;
 pub mod check;
-mod compare;
 mod code;
+mod compare;
 mod hops;
 mod map;
 mod model;
