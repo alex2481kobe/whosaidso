@@ -50,15 +50,14 @@ fn write(path: &Path, data: &str) {
 }
 #[test]
 fn project_workflow() {
-    let root = std::env::temp_dir()
-        .join(format!(
-            "project-workflow-{}-{}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
+    let root = std::env::temp_dir().join(format!(
+        "project-workflow-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
     fs::create_dir_all(&root).unwrap();
     git(&root, &root, &["init", "--bare", "origin.git"]);
     git(&root, &root, &["clone", "origin.git", "proj"]);
@@ -85,10 +84,7 @@ fn project_workflow() {
     git(&proj, &root, &["push", "-u", "origin", "main"]);
     assert!(cli(&proj, &root, &["check"]).contains("check: ok"));
     let unused = records.join("instruments/dup-one.json");
-    write(
-        &unused,
-        "{\"run\":[\"test\"],\"answers\":\"works\"}\n",
-    );
+    write(&unused, "{\"run\":[\"test\"],\"answers\":\"works\"}\n");
     bad(&proj, &root, &["check"], "duplicate tool");
     fs::remove_file(unused).unwrap();
     let missing = records.join("goals/missing.json");

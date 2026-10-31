@@ -20,8 +20,8 @@ mod record;
 mod show;
 mod state;
 mod sync;
-mod title;
 mod text;
+mod title;
 mod tree;
 mod ui;
 fn run() -> Result<(), String> {
@@ -31,7 +31,11 @@ fn run() -> Result<(), String> {
         return Ok(());
     }
     let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
-    let root = if args.first().is_some_and(|cmd| cmd == "ui") { cwd.clone() } else { git::root(&cwd)? };
+    let root = if args.first().is_some_and(|cmd| cmd == "ui") {
+        cwd.clone()
+    } else {
+        git::root(&cwd)?
+    };
     macro_rules! commands {
         ($($usage:literal, $pattern:pat $(if $guard:expr)? => $action:expr);+ $(;)?) => {
             match args.as_slice() {

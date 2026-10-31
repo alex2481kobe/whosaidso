@@ -13,20 +13,34 @@ pub fn install(root: &Path) -> Result<(), String> {
     Ok(())
 }
 pub fn start(root: &Path, cwd: &Path, id: &str) -> Result<(), String> {
-    let hook = git::run(root, &["rev-parse", "--git-path", "hooks/prepare-commit-msg"])?;
+    let hook = git::run(
+        root,
+        &["rev-parse", "--git-path", "hooks/prepare-commit-msg"],
+    )?;
     let installed = root.join(hook.trim());
-    if !fs::read(&installed).is_ok_and(|b| b == HOOK.as_bytes()) || !fs::metadata(&installed).is_ok_and(|m| m.permissions().mode() & 0o111 != 0) {
+    if !fs::read(&installed).is_ok_and(|b| b == HOOK.as_bytes())
+        || !fs::metadata(&installed).is_ok_and(|m| m.permissions().mode() & 0o111 != 0)
+    {
         return Err("start: run whosaidso install-hooks in this clone".into());
     }
     let store = record::load(root)?;
     if id != "none" && !store.goals.iter().any(|g| g.id == id) {
         return Err(format!("unknown goal {id}"));
     }
-    let states = if id == "none" { None } else {
-        match state::states(root, &store) { Ok(states) => Some(states), Err(e) if e == "no local branch main" => None, Err(e) => return Err(e) }
+    let states = if id == "none" {
+        None
+    } else {
+        match state::states(root, &store) {
+            Ok(states) => Some(states),
+            Err(e) if e == "no local branch main" => None,
+            Err(e) => return Err(e),
+        }
     };
     if id != "none" {
-        let settled = states.as_ref().and_then(|s| s.iter().find(|g| g.id == id)).is_some_and(|g| g.state.settled());
+        let settled = states
+            .as_ref()
+            .and_then(|s| s.iter().find(|g| g.id == id))
+            .is_some_and(|g| g.state.settled());
         claims::claim(root, cwd, id, settled)?;
     }
     claims::release(root, cwd, if id == "none" { "" } else { id })?;
@@ -42,8 +56,15 @@ pub fn start(root: &Path, cwd: &Path, id: &str) -> Result<(), String> {
         let now = state::now()?;
         if let Some(goal) = states.iter().find(|g| g.id == id) {
             for branch in &goal.branches {
-                if (branch.name != current.trim() || branch.worktree.as_deref() != root.to_str()) && state::active(branch.time, now) {
-                    println!("warning: {id} is active on {} ({}, {}); coordinate before working on it", branch.name, branch.author, state::age(branch.time));
+                if (branch.name != current.trim() || branch.worktree.as_deref() != root.to_str())
+                    && state::active(branch.time, now)
+                {
+                    println!(
+                        "warning: {id} is active on {} ({}, {}); coordinate before working on it",
+                        branch.name,
+                        branch.author,
+                        state::age(branch.time)
+                    );
                 }
             }
         }

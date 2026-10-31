@@ -1,6 +1,6 @@
 // Code search commands; parsing, storage and presentation live in their own modules.
-mod precise;
 mod parse;
+mod precise;
 mod query;
 mod store;
 
@@ -11,4 +11,6 @@ pub fn query(root: &Path, command: &str, value: &str) -> Result<(), String> {
     query::run(root, command, value, &files)
 }
 
-pub fn import_scip(root: &Path, file: &Path) -> Result<(), String> { precise::import(root, file) }
+pub fn import_scip(root: &Path, file: &Path) -> Result<(), String> {
+    precise::import(root, file)
+}
