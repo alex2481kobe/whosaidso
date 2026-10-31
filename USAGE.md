@@ -113,7 +113,7 @@ Search caches are disposable. Records remain the source of truth. Symlinks and s
 
 ## Media and viewer
 
-The gallery shows the newest 100 media items. Older media moves into monthly tar bundles and stays retrievable. Missing local bytes are warnings; use `sync` to fetch shared media. `WHOSAIDSO_BLOBS` and `WHOSAIDSO_ARCHIVE` can override storage locations. The viewer reads registered projects from `WHOSAIDSO_HOME/projects` and makes no changes to them.
+The gallery shows the newest 100 media items. Older media moves into monthly tar bundles and stays retrievable. Missing local bytes are warnings; use `sync` to fetch shared media. `WHOSAIDSO_BLOBS` and `WHOSAIDSO_ARCHIVE` can override storage locations. The viewer reads registered projects from `WHOSAIDSO_HOME/projects.list` and makes no changes to them.
 
 ## Tests
 

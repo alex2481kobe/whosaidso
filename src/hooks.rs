@@ -14,13 +14,15 @@ done
 "#;
 pub fn install(root: &Path) -> Result<(), String> {
     let dir = root.join(".whosaidso/hooks");
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let path = dir.join("prepare-commit-msg");
-    fs::write(&path, HOOK).map_err(|e| e.to_string())?;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
+    fs::write(&path, HOOK).map_err(|e| format!("{}: {e}", path.display()))?;
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o755))
+        .map_err(|e| format!("{}: {e}", path.display()))?;
     let push = dir.join("pre-push");
-    fs::write(&push, PRE_PUSH).map_err(|e| e.to_string())?;
-    fs::set_permissions(push, fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
+    fs::write(&push, PRE_PUSH).map_err(|e| format!("{}: {e}", push.display()))?;
+    fs::set_permissions(&push, fs::Permissions::from_mode(0o755))
+        .map_err(|e| format!("{}: {e}", push.display()))?;
     git::run(root, &["config", "core.hooksPath", ".whosaidso/hooks"])?;
     println!("hooks: installed");
     Ok(())
@@ -70,11 +72,8 @@ pub fn start(root: &Path, cwd: &Path, id: &str) -> Result<(), String> {
     }
     result?;
     let git_dir = git::run(cwd, &["rev-parse", "--git-dir"])?;
-    fs::write(
-        cwd.join(git_dir.trim()).join("whosaidso-goal"),
-        format!("{id}\n"),
-    )
-    .map_err(|e| e.to_string())?;
+    let path = cwd.join(git_dir.trim()).join("whosaidso-goal");
+    fs::write(&path, format!("{id}\n")).map_err(|e| format!("{}: {e}", path.display()))?;
     println!("start: {id}");
     if let Some(states) = states {
         let current = git::run(cwd, &["branch", "--show-current"])?;

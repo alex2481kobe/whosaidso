@@ -60,7 +60,7 @@ fn project_registry_is_external_idempotent_and_rejects_missing_projects() {
     cli(root, &["install-hooks"]);
     let viewer = Viewer::start(root);
     let cookie = viewer.cookie();
-    let registry = root.parent().unwrap().join("registry/projects");
+    let registry = root.parent().unwrap().join("registry/projects.list");
     let text = fs::read_to_string(&registry).unwrap();
     assert_eq!(text.lines().count(), 1);
     assert_eq!(
@@ -88,7 +88,7 @@ fn registered_projects_can_be_selected_from_outside_git() {
     let f = Fixture::new();
     let root = &f.root;
     let other = Fixture::new();
-    let registry = root.parent().unwrap().join("registry/projects");
+    let registry = root.parent().unwrap().join("registry/projects.list");
     write(
         &registry,
         format!(
