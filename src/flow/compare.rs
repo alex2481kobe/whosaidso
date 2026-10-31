@@ -28,7 +28,6 @@ pub fn rollup<'a>(states: impl IntoIterator<Item = &'a str>) -> &'static str {
 fn node_state(
     node: &Node,
     rows: &[&Row],
-    snapshot: &Snapshot,
     coverage: &[crate::code::facts::coverage::Coverage],
 ) -> Result<&'static str, String> {
     if node.paths.is_empty() && node.symbols.is_empty() {
@@ -58,7 +57,7 @@ fn node_state(
     let paths_missing = node
         .paths
         .iter()
-        .any(|p| !snapshot.files.entries.iter().any(|f| matches(p, &f.path)));
+        .any(|p| !coverage.iter().any(|f| matches(p, &f.path)));
     if paths_missing
         || present < node.symbols.len()
         || (node.symbols.is_empty() && paths.is_empty())
@@ -86,7 +85,7 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<(Value, Graph), Strin
         for row in &rows {
             owners.entry(&row.symbol).or_default().push(&node.id);
         }
-        let state = node_state(node, &rows, snapshot, &coverage)?;
+        let state = node_state(node, &rows, &coverage)?;
         nodes.insert(node.id.clone(), json!({"state":state,"binding_state":state,"evidence":rows.first().map_or("authored", |r| strength(r.layer)),
             "goal":node.goal,"risks":node.risks,"symbols":rows.iter().map(|r| &r.symbol).collect::<Vec<_>>() }));
     }
