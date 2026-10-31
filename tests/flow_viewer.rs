@@ -54,6 +54,65 @@ fn viewer_drills_from_screen_to_function_in_bounded_layers() {
             .any(|n| n["name"] == "save")
     );
     assert_eq!(viewer.get("/ui-flows.js", &cookie).0, 200);
+    assert_eq!(viewer.get("/ui-flow-layout.js", &cookie).0, 200);
+}
+
+#[test]
+fn opening_a_plan_returns_every_box_and_arrow_at_once() {
+    let f = Fixture::new();
+    write(&f.root.join("app.rs"), "fn show() {}\n");
+    f.write(
+        "app",
+        &json!({"covers":{"paths":["app.rs"]},"nodes":[
+        {"id":"app","type":"feature"},
+        {"id":"screen","type":"screen","parent":"app","paths":["app.rs"],"symbols":["show"]},
+        {"id":"store","type":"screen","parent":"app","paths":["app.rs"]}
+    ],"steps":[{"id":"saves","from":"screen","to":"store","when":"saved"}]}),
+    );
+    let viewer = Viewer::start(&f.root);
+    let cookie = viewer.cookie();
+    let plan = viewer.json("/api/flows?id=app", &cookie);
+    let tree = &plan["tree"];
+    let parents: Vec<_> = tree["nodes"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{plan}"))
+        .iter()
+        .map(|n| (n["id"].as_str().unwrap(), n["parent"].as_str()))
+        .collect();
+    assert_eq!(
+        parents,
+        [
+            ("app", None),
+            ("screen", Some("app")),
+            ("store", Some("app"))
+        ]
+    );
+    assert_eq!(tree["steps"][0]["when"], "saved");
+}
+
+#[test]
+fn code_without_a_plan_shows_which_folder_uses_which() {
+    let f = Fixture::new();
+    write(
+        &f.root.join("web/page.rs"),
+        "pub fn page() { fetch_rows(); }\n",
+    );
+    write(&f.root.join("data/rows.rs"), "pub fn fetch_rows() {}\n");
+    let viewer = Viewer::start(&f.root);
+    let cookie = viewer.cookie();
+    let map = viewer.json("/api/flows?id=%24map", &cookie);
+    let named = |id: &serde_json::Value| {
+        map["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|n| n["id"] == *id)
+            .unwrap()["name"]
+            .clone()
+    };
+    assert_eq!(map["steps"].as_array().unwrap().len(), 1, "{map}");
+    assert_eq!(named(&map["steps"][0]["from"]), "Web");
+    assert_eq!(named(&map["steps"][0]["to"]), "Data");
 }
 
 #[test]
@@ -153,7 +212,13 @@ fn viewer_version_moves_after_code_edit_within_three_seconds() {
         viewer.json("/api/flows?id=%24map", &cookie)["freshness"],
         "fresh"
     );
+    let before = viewer.json("/api/version", &cookie);
+    let start = std::time::Instant::now();
     std::fs::write(f.root.join("app.rs"), [0xff, 0xfe]).unwrap();
+    while viewer.json("/api/version", &cookie)["version"] == before["version"] {
+        assert!(start.elapsed().as_secs_f64() < 3.0);
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
     assert_eq!(
         viewer.json("/api/flows?id=%24map", &cookie)["freshness"],
         "unknown"

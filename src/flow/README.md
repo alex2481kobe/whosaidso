@@ -67,7 +67,8 @@ expands one layer at a time: 20 primary boxes and 20 arrows per page, with any
 arrow endpoints included as context boxes (at most 60 boxes). Risks and comparison
 details are also paged in groups of 20. Click a box to enter it; the separate
 Details control opens its paths, evidence, risks and notes. Breadcrumbs lead back.
-The code map starts with directories as areas; authored leaves enter their linked
+The code map starts with directories as areas, with an arrow where one uses another
+through a single certain call; authored leaves enter their linked
 files, then definitions and calls. No plan is needed for a code map.
 `next` is a page offset, `revision` identifies the snapshot, and `frontier` counts
 hidden descendants and remaining layer items. Branch views read the plan and

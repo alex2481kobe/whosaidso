@@ -1,6 +1,11 @@
-use super::{code, compare, map, model::Flow, view};
-use crate::code::facts::Snapshot;
+use super::{
+    code, compare, map,
+    model::{Flow, Node},
+    view,
+};
+use crate::code::facts::{Snapshot, edges::Graph};
 use serde_json::{Value, json};
+use std::sync::{Arc, Mutex};
 
 pub fn layer(
     flow: &Flow,
@@ -10,7 +15,8 @@ pub fn layer(
     parent: Option<&str>,
     offset: usize,
 ) -> Result<Value, String> {
-    let (comparison, graph) = compare::compare(flow, snapshot)?;
+    let compared = compared(flow, snapshot, id, revision)?;
+    let (comparison, graph) = &*compared;
     let (anchor, derived) = parent.map_or((None, None), |p| {
         let (a, d) = p.split_once('/').map_or((p, None), |(a, d)| (a, Some(d)));
         (Some(a), d)
@@ -34,7 +40,7 @@ pub fn layer(
             .iter()
             .find(|n| Some(n.id.as_str()) == anchor)
             .ok_or("unknown layer")?;
-        let mut result = map::linked(snapshot, node, &graph, derived, offset)?;
+        let mut result = map::linked(snapshot, node, graph, derived, offset)?;
         for crumb in result["breadcrumbs"].as_array().unwrap() {
             let mut crumb = crumb.clone();
             crumb["id"] = json!(format!("{}/{}", node.id, crumb["id"].as_str().unwrap()));
@@ -52,8 +58,11 @@ pub fn layer(
         if derived.is_some() {
             return Err("authored layer has children".into());
         }
-        let mut nodes: Vec<_>=layer.nodes.iter().map(|(n,children)| json!({"id":n.id,"name":map::name(&n.id),"type":n.r#type,"state":comparison["nodes"][&n.id]["state"],"evidence":comparison["nodes"][&n.id]["evidence"],
-            "children":if *children>0{*children}else{code::selected(n, &graph.definitions).len()},"paths":n.paths,"symbols":n.symbols,"note":n.note,"refs":n.refs,"goal":n.goal,"risks":n.risks})).collect();
+        let mut nodes: Vec<_> = layer
+            .nodes
+            .iter()
+            .map(|(n, children)| box_json(n, *children, comparison, graph))
+            .collect();
         // Out-of-layer arrows lead to the actual authored box through a context port.
         let steps: Vec<_>=layer.steps.iter().map(|s| {
             for endpoint in [&s.from,&s.to] {
@@ -118,5 +127,62 @@ pub fn layer(
             .collect::<Vec<_>>()
     );
     result["goal"] = json!(flow.goal);
+    if parent.is_none() {
+        result["tree"] = tree(flow, comparison, graph);
+    }
     Ok(result)
+}
+
+type Compared = Arc<(Value, Graph)>;
+
+// Opening boxes asks for many layers of one plan, and each would otherwise compare it again.
+fn compared(
+    flow: &Flow,
+    snapshot: &Snapshot,
+    id: &str,
+    revision: &str,
+) -> Result<Compared, String> {
+    static LAST: Mutex<Option<(String, Compared)>> = Mutex::new(None);
+    let key = format!("{id}:{revision}:{}", snapshot.id);
+    let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((_, kept)) = last.as_ref().filter(|k| k.0 == key) {
+        return Ok(kept.clone());
+    }
+    let kept = Arc::new(compare::compare(flow, snapshot)?);
+    *last = Some((key, kept.clone()));
+    Ok(kept)
+}
+
+fn box_json(n: &Node, children: usize, comparison: &Value, graph: &Graph) -> Value {
+    let children = if children > 0 {
+        children
+    } else {
+        code::selected(n, &graph.definitions).len()
+    };
+    json!({"id":n.id,"name":map::name(&n.id),"type":n.r#type,"state":comparison["nodes"][&n.id]["state"],"evidence":comparison["nodes"][&n.id]["evidence"],
+        "children":children,"paths":n.paths,"symbols":n.symbols,"note":n.note,"refs":n.refs,"goal":n.goal,"risks":n.risks})
+}
+
+// Every authored box and arrow at once, so the viewer can open boxes without asking again.
+fn tree(flow: &Flow, comparison: &Value, graph: &Graph) -> Value {
+    let nodes: Vec<_> = flow
+        .nodes
+        .iter()
+        .map(|n| {
+            let children = flow
+                .nodes
+                .iter()
+                .filter(|c| c.parent.as_deref() == Some(&n.id))
+                .count();
+            let mut value = box_json(n, children, comparison, graph);
+            value["parent"] = json!(n.parent);
+            value
+        })
+        .collect();
+    let steps: Vec<_> = flow
+        .steps
+        .iter()
+        .map(|s| json!({"id":s.id,"from":s.from,"to":s.to,"when":s.when,"state":comparison["steps"][&s.id]["state"]}))
+        .collect();
+    json!({"nodes":nodes,"steps":steps})
 }

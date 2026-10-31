@@ -1,4 +1,4 @@
-// The Goals screen: totals, one block per milestone, one expandable row per goal.
+// The Goals screen: one block per milestone, one expandable row per goal.
 import { el, api, apiURL, state, chip, mono, titleCase, ago, stamp, searchBox, icon } from "./ui.js";
 import { dropdown } from "./ui-parts.js";
 import { message } from "./ui-components.js";
@@ -6,7 +6,6 @@ import { message } from "./ui-components.js";
 const ORDER = ["done", "active", "failing", "landed", "stale", "idle", "open", "broken"];
 // Filters and open rows outlive a re-render and a visit to the other screen, but not a project switch.
 const kept = { project: "", search: "", state: "", open: new Set() };
-const parts = counts => ORDER.filter(s => counts[s]).map(s => `${counts[s]} ${s}`);
 
 // A long worktree path keeps its last segments; the whole path is the tooltip.
 const tail = path => { const parts = path.split("/"); return parts.length > 4 ? "…/" + parts.slice(-3).join("/") : path; };
@@ -33,13 +32,15 @@ function detail(g) {
 function row(g) {
   const d = el("details", "goal");
   d.dataset.id = g.id; d.open = kept.open.has(g.id);
-  d.append(el("summary", "goal-head", chip(g.state), el("span", "goal-title", g.title, g.check_changed && " · check changed"), el("span", "mono muted goal-id", g.id), work(g)));
+  d.append(el("summary", "goal-head", chip(g.state), el("span", "goal-title", g.title, g.check_changed && " · check changed"), work(g)));
   const fill = () => { if (!d.querySelector(".goal-detail")) d.append(detail(g)); };
   if (d.open) fill();
   d.addEventListener("toggle", () => { if (d.open) { kept.open.add(g.id); fill(); } else kept.open.delete(g.id); });
   return d;
 }
 function milestone(p, rows) {
+  // A goal with no subgoals is its own row, with no header repeating its title.
+  if (rows.length === 1 && rows[0].id === p.id) return el("section", "milestone", row(rows[0]));
   const {done, total} = p.progress, bar = el("progress", "bar");
   bar.setAttribute("max", String(total)); bar.setAttribute("value", String(done));
   bar.setAttribute("aria-label", `${p.title}: ${done} of ${total} done`);
@@ -49,9 +50,8 @@ export function goalsScreen() {
   if (kept.project !== state.project) Object.assign(kept, {project: state.project, search: "", state: ""}), kept.open.clear();
   let data, target = new URLSearchParams(location.hash.split("?")[1] || "").get("goal") || "";
   if (target) { kept.open.add(target); kept.search = ""; kept.state = ""; }
-  const totals = el("span", "totals"), list = el("div", "goals"), choice = el("span", "choice");
+  const list = el("div", "goals"), choice = el("span", "choice");
   const draw = () => {
-    totals.textContent = [`${data.goals.length} goals`, ...parts(data.totals)].join(" · ");
     const rows = data.goals.filter(g => target ? g.id === target : (!kept.state || g.state === kept.state) && (!kept.search || JSON.stringify(Object.fromEntries(Object.entries(g).filter(([key]) => key !== "work"))).toLowerCase().includes(kept.search)));
     const focused = document.activeElement?.closest?.("details.goal")?.dataset.id;
     list.replaceChildren(...data.milestones.map(p => { const mine = rows.filter(g => g.milestone === p.id); return mine.length ? milestone(p, mine) : null; }).filter(Boolean));
@@ -60,6 +60,6 @@ export function goalsScreen() {
   };
   const paint = () => choice.replaceChildren(dropdown({options: [["", "All"], ...ORDER.map(s => [s, titleCase(s)])], value: kept.state, onPick: v => { target = ""; kept.state = v; paint(); draw(); }}));
   paint();
-  const node = el("div", "screen", el("div", "toolbar", totals, searchBox("Search", v => { target = ""; kept.search = v; draw(); }, kept.search), choice), list);
+  const node = el("div", "screen", el("div", "toolbar", searchBox("Search", v => { target = ""; kept.search = v; draw(); }, kept.search), choice), list);
   return { node, async load() { data = await api("/api/goals"); draw(); return data.version; } };
 }
