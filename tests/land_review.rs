@@ -343,3 +343,59 @@ fn landing_uses_the_selected_remotes_default_branch() {
     assert_eq!(git(&remote, &["rev-parse", "main"]).trim(), original);
     assert_eq!(git(&remote, &["rev-parse", "master"]).trim(), head(&lane));
 }
+
+#[test]
+fn proving_uses_main_advanced_by_an_ordinary_pull() {
+    let f = Fixture::new();
+    r::goal(&f.root, "parent");
+    let mut goal = value(&f.root.join(".whosaidso/goals/g.json"));
+    goal["parent"] = serde_json::json!("parent");
+    r::put(&f.root, "goals", "g", &goal);
+    commit(&f.root);
+    f.remote();
+    let lane = f.worktree("worker");
+    work(&lane, "feature", "g");
+    cli(&lane, &["land", "--reason", "shared check"]);
+    git(&f.root, &["pull", "--ff-only"]);
+    let other = f.clone("other");
+    work(&other, "new-baseline", "none");
+    git(&other, &["push", "origin", "main"]);
+    git(&f.root, &["pull", "--ff-only"]);
+    let baseline = head(&f.root);
+    cli(&lane, &["prove", "g", "--reason", "shared check"]);
+    let proof = paths(&lane.join(".whosaidso/proofs"))
+        .iter()
+        .map(|p| value(p))
+        .find(|p| p["commit"] == head(&lane))
+        .unwrap();
+    assert_eq!(proof["main"]["commit"], baseline);
+}
+
+#[test]
+fn divergent_main_and_cached_destination_require_a_refresh() {
+    let f = Fixture::new();
+    f.remote();
+    let lane = f.worktree("worker");
+    work(&lane, "feature", "g");
+    let other = f.clone("other");
+    work(&other, "remote-change", "none");
+    git(&other, &["push", "origin", "main"]);
+    work(&f.root, "local-change", "none");
+    failure(
+        command(&lane, BIN, &["land", "--reason", "shared check"])
+            .env(
+                "WHOSAIDSO_LAND_HOOK",
+                "[ \"$WHOSAIDSO_LAND_STEP\" != fetch ]",
+            )
+            .output()
+            .unwrap(),
+        "fetch",
+    );
+    work(&other, "newer-remote", "none");
+    git(&other, &["push", "origin", "main"]);
+    cli(&lane, &["prove", "g", "--reason", "shared check"]);
+    let proof = value(&paths(&lane.join(".whosaidso/proofs"))[0]);
+    assert_eq!(proof["main"]["commit"], head(&other));
+    git(&lane, &["remote", "set-url", "origin", "unreachable"]);
+    bad(&lane, &["prove", "g", "--reason", "shared check"], "git:");
+}
