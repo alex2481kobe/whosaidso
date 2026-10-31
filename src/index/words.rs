@@ -6,7 +6,7 @@ const TRIGRAM_MIN: usize = 7;
 pub(super) fn init(tx: &Transaction<'_>) -> Result<(), String> {
     tx.execute_batch(&format!(
         "CREATE TEMP TABLE changed_terms(term TEXT PRIMARY KEY);
-        CREATE VIRTUAL TABLE temp.search_tokens USING fts5(body,tokenize='{TOKENIZER}');
+        CREATE VIRTUAL TABLE temp.search_tokens USING fts5(body,content='',tokenize='{TOKENIZER}');
         CREATE VIRTUAL TABLE temp.search_vocab USING fts5vocab(temp,search_tokens,'row');"
     ))
     .map_err(err)
@@ -18,8 +18,11 @@ pub(super) fn touch(tx: &Transaction<'_>, id: i64) -> Result<(), String> {
         [],
     )
     .map_err(err)?;
-    tx.execute("DELETE FROM temp.search_tokens", [])
-        .map_err(err)?;
+    tx.execute(
+        "INSERT INTO temp.search_tokens(search_tokens) VALUES('delete-all')",
+        [],
+    )
+    .map_err(err)?;
     Ok(())
 }
 pub(super) fn finish(tx: &Transaction<'_>) -> Result<(), String> {
