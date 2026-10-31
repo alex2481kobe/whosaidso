@@ -125,12 +125,43 @@ h1, h2, h3, p { margin: 0; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
 
-/* Flow layers reuse the viewer's rows and state chips. */
-.flow-row { flex-wrap: wrap; cursor: default; }
-a.flow-row { cursor: pointer; }
-.flow-row .goal-title { flex: 1 1 160px; }
-.flow-row .mono { overflow-wrap: anywhere; }
-.s-built { --tone: var(--green); }
-.s-drifted, .s-missing, .s-unplanned, .s-broken { --tone: var(--red); }
-.s-unknown, .s-ambiguous { --tone: var(--amber); }
-.s-planned, .s-authored { --tone: var(--slate); }
+/* Flowcharts share the viewer's surface, typography and single accent. */
+.flow-screen { min-width: 0; }
+.flow-toolbar { justify-content: space-between; }
+.flow-crumbs, .flow-choices { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.flow-crumbs a { overflow-wrap: anywhere; }
+.flow-link { border: 1px solid transparent; border-radius: 7px; padding: 5px 8px; background: none; cursor: pointer; font: inherit; }
+.flow-link:hover { background: var(--hover); }
+.flow-canvas { width: 100%; min-width: 0; background: var(--surface); border-radius: 16px; box-shadow: var(--shadow); }
+.flow-canvas[data-empty]:not([data-empty=""])::after { content: attr(data-empty); display: block; padding: 20px; color: var(--muted); text-align: center; }
+.flow-canvas[data-empty]:not([data-empty=""]) .flow-diagram { display: none; }
+.flow-diagram { width: 100%; display: block; overflow: visible; font-family: inherit; }
+.flow-box > a > rect { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; filter: drop-shadow(0 3px 5px #252d4410); }
+.flow-box[data-state="planned"] > a > rect { stroke-dasharray: 6 5; }
+.flow-box.selected > a > rect { fill: var(--surface-2); stroke: var(--blue); }
+.flow-box > a:hover > rect { fill: var(--surface-2); }
+.flow-name { font-size: 18px; font-weight: 550; fill: var(--text); }
+.flow-word { font-size: 12px; fill: var(--muted); }
+.flow-deeper { fill: var(--blue); font-size: 22px; }
+.flow-info { cursor: pointer; opacity: 0; }
+.flow-box:hover .flow-info, .flow-box:focus-within .flow-info { opacity: 1; }
+.flow-info rect { fill: var(--surface-2); }
+.flow-info text { fill: var(--muted); font-size: 11px; }
+.flow-diagram marker path { stroke: var(--blue); }
+.flow-arrows path { stroke: var(--blue); stroke-width: 1.4; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.flow-arrows [data-state="planned"] path, .flow-arrows [data-state="authored"] path { stroke-dasharray: 5 4; }
+.flow-arrows text { fill: var(--muted); font-size: 12px; paint-order: stroke; stroke: var(--surface); stroke-width: 6px; stroke-linejoin: round; }
+.flow-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(100%,220px),1fr)); gap: 14px; }
+.flow-card { display: flex; flex-direction: column; gap: 8px; padding: 20px; }
+.flow-card:hover { background: var(--surface-2); }
+.flow-card svg { width: 150px; height: 42px; max-width: 100%; }
+.flow-card rect { fill: var(--surface); stroke: var(--line); }
+.flow-card path { stroke: var(--blue); fill: none; }
+.flow-panel { position: fixed; z-index: 25; right: 20px; top: 70px; width: min(340px,calc(100vw - 24px)); max-height: calc(100dvh - 90px); overflow: auto; padding: 16px; }
+.flow-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.flow-panel h2 { font-size: 16px; overflow-wrap: anywhere; }
+.flow-fields { display: grid; gap: 12px; margin-top: 12px; }
+.flow-field { overflow-wrap: anywhere; }
+.flow-field > .muted { font-size: 12px; }
+@media (hover: none) { .flow-info { opacity: 1; } }
+@media (max-width: 700px) { .flow-panel { right: 12px; top: auto; bottom: 12px; max-height: 55dvh; } }

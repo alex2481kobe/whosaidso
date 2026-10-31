@@ -354,6 +354,7 @@ fn asset(path: &str) -> Option<(&'static str, &'static [u8])> {
         "ui-shell.js",
         "ui-goals.js",
         "ui-flows.js",
+        "ui-flow-diagram.js",
         "ui-gallery.js",
         "ui-gallery-media.js",
         "ui-gallery-actions.js",

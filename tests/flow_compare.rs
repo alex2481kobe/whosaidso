@@ -164,7 +164,12 @@ fn a_narrow_flow_can_anchor_an_opaque_symbol_id() {
         ("outside.rs", "fn unrelated() {}\n"),
     ]);
     let top: Value = serde_json::from_str(&cli(&f.root, &["flow", "map"])).unwrap();
-    let file = top["nodes"]
+    let area: Value = serde_json::from_str(&cli(
+        &f.root,
+        &["flow", "map", top["nodes"][0]["id"].as_str().unwrap()],
+    ))
+    .unwrap();
+    let file = area["nodes"]
         .as_array()
         .unwrap()
         .iter()

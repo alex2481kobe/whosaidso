@@ -1,39 +1,82 @@
-import { el, api, chip, mono } from "./ui.js";
+import { el, api } from "./ui.js";
 import { dropdown } from "./ui-parts.js";
-import { message } from "./ui-components.js";
+import { attention, diagram } from "./ui-flow-diagram.js";
 
-const route = (id = "", parent = "", branch = "", offset = 0) => "#/flows?" + new URLSearchParams({id, parent, branch, offset});
+const route = (id = "", parent = "", branch = "", offset = 0) => "#/flows?" + new URLSearchParams({id,parent,branch,offset});
 export function flowsScreen() {
   const query = new URLSearchParams(location.hash.split("?")[1] || "");
-  const id = query.get("id") || "", parent = query.get("parent") || "", branch = query.get("branch") || "";
-  const offset = query.get("offset") || "0";
-  const toolbar = el("div", "toolbar"), list = el("div", "milestone"), status = el("span", "totals");
-  const node = el("div", "screen", toolbar, list);
-  const link = (label, id, parent = "", page = 0) => Object.assign(el("a", "button", label), {href:route(id, parent, branch, page)});
-  const row = n => {
-    const label = el("span", "goal-title", n.name || n.id), data = [chip(n.state), label, el("span", "muted", n.type), n.evidence && el("span", "muted", n.evidence)];
-    if (n.path) data.push(mono(n.path + (n.line ? ":" + n.line : "")));
-    if (n.children) return Object.assign(el("a", "menu-row flow-row", data), {href:route(id, n.id, branch)});
-    return el("div", "menu-row flow-row", data);
+  const id = query.get("id") || "", parent = query.get("parent") || "", branch = query.get("branch") || "", offset = Number(query.get("offset") || 0);
+  const toolbar = el("div", "toolbar flow-toolbar"), crumbs = el("nav", "flow-crumbs"), choices = el("div", "flow-choices"), body = el("div", "flow-canvas"), pages = el("div", "toolbar"), panel = el("aside", "flow-panel card");
+  crumbs.setAttribute("aria-label","Breadcrumb"); panel.hidden = true; panel.setAttribute("aria-label","Details");
+  const node = el("div", "screen flow-screen", toolbar,body,pages,panel); toolbar.append(crumbs,choices);
+  let data, returnFocus, selected = null, navKey = "", detailKey = "", cardsKey = "";
+  const link = (name, target = id, layer = "", page = 0) => Object.assign(el("a", "flow-link", name), {href:route(target,layer,branch,page)});
+  const go = (n, href = false) => {
+    const path = route(id,n.target || n.id,branch);
+    if (href) return path;
+    location.hash = path;
   };
-  return {node, async load() {
-    const data = await api("/api/flows", {id, parent, offset, branch});
-    node.dataset.revision = data.revision || "";
-    status.replaceChildren(...[data.state && chip(data.state), data.progress && ` ${data.progress.built}/${data.progress.total}`, data.committed_only && " · committed-only", data.freshness && data.freshness !== "fresh" && ` · ${data.freshness}`].filter(Boolean));
-    toolbar.replaceChildren(...[link("Flows", ""), id && link(id === "$map" ? "Code" : id, id), parent && el("span", "muted", parent), status].filter(Boolean));
-    if (data.branches) toolbar.append(dropdown({options:[["", "Worktree"], ...data.branches.map(b => [b,b])], value:branch, onPick:b => { location.hash = route(id,"",b); }}));
-    if (!id) {
-      list.replaceChildren(Object.assign(el("a", "menu-row", "Code"), {href:route("$map", "", branch)}), ...(data.flows || []).map(f => Object.assign(el("a", "menu-row flow-row", chip(f.state), el("span", "goal-title", f.id), f.progress && `${f.progress.built}/${f.progress.total}`), {href:route(f.id,"",branch)})));
-    } else {
-      list.replaceChildren(...(data.nodes || []).map(row));
-      for (const s of data.steps || []) list.append(el("div", "menu-row flow-row", chip(s.state), mono(s.from), " → ", mono(Array.isArray(s.to) ? s.to.join(", ") : s.to), s.when && el("span", "muted", s.when), el("span", "muted", s.evidence)));
-      for (const r of data.risks || []) list.append(el("details", "goal", el("summary", "menu-row", r.risk.id), el("div", "goal-detail", r.risk.note, Object.entries(r.risk.mitigation).map(([type,id]) => el("span", "muted", `${type}:${id}`)))));
-      for (const p of data.problems || []) list.append(message(p, "error"));
-      for (const p of data.unknown || []) list.append(el("div", "menu-row", chip("unknown"), mono(p)));
-      for (const u of data.unplanned || []) list.append(el("div", "menu-row flow-row", chip(u.state), mono(u.path), mono(u.to)));
-      if (data.next != null) list.append(link("Next", id, parent, data.next));
+  const chart = diagram(go,n => show(n.id));
+  if (id) body.append(chart.node);
+  const close = () => {
+    const old = selected; selected = null; panel.hidden = true; chart.update(data);
+    if (returnFocus?.isConnected) returnFocus.focus();
+    else [...body.querySelectorAll("[data-node]")].find(n => n.dataset.node === old)?.querySelector("[role=button]")?.focus();
+  };
+  const heading = el("h2"), fields = el("div", "flow-fields"), closeButton = el("button", "flow-link", "Close");
+  closeButton.type = "button"; closeButton.onclick = close;
+  panel.append(el("div", "flow-panel-head",heading,closeButton),fields);
+  node.addEventListener("keydown",e => {if (e.key === "Escape" && !panel.hidden) close();});
+  function show(pick, focus = true) {
+    if (focus) returnFocus = document.activeElement;
+    selected = pick; panel.hidden = false; details(); chart.update(data,selected);
+    if (focus) closeButton.focus();
+  }
+  function details() {
+    if (selected == null || !data) return;
+    const n = selected === "$screen" ? data : data.nodes?.find(n => n.id === selected);
+    const next = JSON.stringify([n,data.steps,data.unplanned,data.unknown,data.risks,data.freshness]);
+    if (next === detailKey) return; detailKey = next;
+    heading.textContent = n?.name || (selected === "$screen" ? "Details" : "Removed");
+    const rows = [];
+    const field = (label,value) => {if (value != null && value !== "" && (!Array.isArray(value) || value.length)) rows.push(el("div", "flow-field",el("span","muted",label),el("div","",Array.isArray(value) ? value.join(", ") : value)));};
+    field("State",n?.state); field("Path",n?.path); field("Line",n?.line); field("Paths",n?.paths); field("Functions",n?.symbols);
+    field("Evidence",n?.evidence); field("Freshness",data.freshness); field("Note",n?.note); field("References",n?.refs);
+    if (n?.goal) rows.push(el("div","flow-field",el("span","muted","Goal"),Object.assign(el("a","flow-link",n.goal),{href:"#/goals?goal="+encodeURIComponent(n.goal)})));
+    const risks = selected === "$screen" ? (data.risks || []).map(r => r.risk) : n?.risks || [];
+    for (const r of risks) {field("Risk",r.note); field("Mitigation",Object.entries(r.mitigation).map(([k,v]) => `${k}: ${v}`));}
+    for (const s of data.steps || []) if (s.from === selected || s.to === selected) {field("When",s.when); field("Arrow",`${s.state} · ${s.evidence || ""}`);}
+    for (const u of data.unplanned || []) field("Not in plan",[u.path,u.to].filter(Boolean).join(" → "));
+    field("Not checked",data.unknown); field("Problems",data.problems); field("Code limits",data.gaps);
+    if (!n) field("Box","This box was removed.");
+    fields.replaceChildren(...rows);
+  }
+  function card(title, target, progress) {
+    const a = link(title,target); a.className = "flow-card card";
+    const preview = document.createElementNS("http://www.w3.org/2000/svg","svg"); preview.setAttribute("viewBox","0 0 180 42"); preview.setAttribute("aria-hidden","true");
+    for (let i=0;i<3;i++) {const r=document.createElementNS(preview.namespaceURI,"rect"); for (const [k,v] of Object.entries({x:i*66+1,y:5,width:44,height:30,rx:8})) r.setAttribute(k,v); preview.append(r); if(i<2){const p=document.createElementNS(preview.namespaceURI,"path");p.setAttribute("d",`M ${i*66+45} 20 h 20 m -5 -4 l 5 4 -5 4`);preview.append(p);}}
+    a.replaceChildren(preview,el("strong","",title),progress && el("span","muted",`${progress.built} of ${progress.total} built`)); return a;
+  }
+  return {node, dispose:chart.disconnect, async load() {
+    data = await api("/api/flows",{id,parent,offset,branch}); node.dataset.revision = data.revision || "";
+    const nav = JSON.stringify([data.breadcrumbs,data.branches,data.committed_only,data.next]);
+    if (nav !== navKey) {
+      navKey = nav;
+      const trail = [link("Flows", "")];
+      if (id) trail.push(link(id === "$map" ? "Code map" : id.replace(/[-_]/g," ").replace(/^./,c => c.toUpperCase())));
+      for (const c of data.breadcrumbs || []) trail.push(link(c.name,id,c.id));
+      crumbs.replaceChildren(...trail.flatMap((a,i) => i ? [el("span","muted",">"),a] : [a]));
+      const details = el("button","flow-link","Details"); details.type="button"; details.onclick=() => show("$screen");
+      choices.replaceChildren(...[id && details,data.branches?.length && dropdown({options:[["","Worktree"],...data.branches.map(b => [b,b])],value:branch,onPick:b => {location.hash=route(id,"",b);}}),data.committed_only && el("span","muted","committed only")].filter(Boolean));
+      pages.replaceChildren(...[offset > 0 && link("Previous",id,parent,Math.max(0,offset-20)),data.next != null && link("Next",id,parent,data.next)].filter(Boolean));
     }
-    if (!id && data.next != null) list.append(link("Next", "", "", data.next));
-    return data.version;
+    if (!id) {
+      const key=JSON.stringify(data.flows);
+      if (key !== cardsKey) {cardsKey=key; body.className="flow-grid"; body.replaceChildren(card("Code map","$map"),...(data.flows || []).map(f => card(f.id.replace(/[-_]/g," ").replace(/^./,c => c.toUpperCase()),f.id,f.progress)));}
+    } else {
+      chart.update(data,selected);
+      body.dataset.empty = data.nodes?.length ? "" : data.problems?.length ? "Plan needs attention" : attention[data.state] || "No calls here";
+    }
+    details(); return data.version;
   }};
 }

@@ -10,6 +10,7 @@ pub fn screen(
     offset: usize,
     branch: Option<&str>,
 ) -> Result<Value, String> {
+    let parent = parent.filter(|p| !p.is_empty());
     let (snapshot, commit) = snapshot(root, branch)?;
     let mut result = if id == Some("$map") {
         map::layer(&snapshot, parent, offset)?

@@ -85,6 +85,8 @@ const positions = new Map();
 let current = null, seen = null, last = "", checking = false;
 if ("scrollRestoration" in history) history.scrollRestoration = "manual";
 async function route() {
+  if (last) positions.set(last, main.scrollTop);
+  last = "";
   const mine = ++state.renders;
   const requested = location.hash.replace(/^#\//, "").split("?")[0];
   const screen = ["gallery", "flows"].includes(requested) ? requested : "goals";
@@ -92,9 +94,10 @@ async function route() {
     if (a.dataset.nav === screen) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   }
   renderMenu();
+  current?.dispose?.();
   current = null;
   if (!state.project) { main.replaceChildren(message("No workspace")); return; }
-  const shown = screen === "gallery" ? galleryScreen() : screen === "flows" ? flowsScreen() : goalsScreen(), key = state.project + screen;
+  const shown = screen === "gallery" ? galleryScreen() : screen === "flows" ? flowsScreen() : goalsScreen(), key = state.project + screen + (screen === "flows" ? location.hash : "");
   main.replaceChildren(shown.node);
   try { seen = await shown.load(); }
   catch (error) { if (mine === state.renders) main.replaceChildren(message(error.message, "error")); return; }

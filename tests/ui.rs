@@ -39,6 +39,7 @@ fn viewer_serves_current_screens_and_assets_without_writing_records() {
         "ui-shell.js",
         "ui-goals.js",
         "ui-flows.js",
+        "ui-flow-diagram.js",
         "ui-gallery.js",
         "ui-gallery-media.js",
         "ui-gallery-actions.js",

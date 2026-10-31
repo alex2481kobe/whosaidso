@@ -5,7 +5,10 @@ use serde_json::json;
 #[test]
 fn viewer_drills_from_screen_to_function_in_bounded_layers() {
     let f = Fixture::new();
-    write(&f.root.join("app.rs"), "fn show() {}\n");
+    write(
+        &f.root.join("app.rs"),
+        "fn show() { save(); }\nfn save() {}\n",
+    );
     f.write(
         "app",
         &json!({"covers":{"paths":["app.rs"]},"nodes":[
@@ -21,10 +24,35 @@ fn viewer_drills_from_screen_to_function_in_bounded_layers() {
     assert_eq!(top["nodes"][0]["id"], "app");
     let layer = viewer.json("/api/flows?id=app&parent=app", &cookie);
     assert_eq!(layer["nodes"][0]["type"], "screen");
-    let functions = viewer.json("/api/flows?id=app&parent=screen", &cookie);
+    let files = viewer.json("/api/flows?id=app&parent=screen", &cookie);
+    assert_eq!(files["nodes"][0]["type"], "file");
+    let file = files["nodes"][0]["id"].as_str().unwrap();
+    let functions = viewer.json(&format!("/api/flows?id=app&parent={file}"), &cookie);
+    assert_eq!(functions["breadcrumbs"][1]["name"], "Screen");
     assert_eq!(functions["nodes"][0]["type"], "function");
     assert_eq!(functions["nodes"][0]["name"], "show");
     assert_eq!(functions["nodes"][0]["state"], "built");
+    assert!(
+        functions["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n["id"] == functions["steps"][0]["to"])
+    );
+    let calls = viewer.json(
+        &format!(
+            "/api/flows?id=app&parent={}",
+            functions["nodes"][0]["id"].as_str().unwrap()
+        ),
+        &cookie,
+    );
+    assert!(
+        calls["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n["name"] == "save")
+    );
     assert_eq!(viewer.get("/ui-flows.js", &cookie).0, 200);
 }
 

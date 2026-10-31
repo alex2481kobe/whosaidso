@@ -1,15 +1,54 @@
-use crate::code::facts::{Snapshot, reads::Layer};
+mod areas;
+use crate::code::facts::{
+    Snapshot,
+    edges::Graph,
+    reads::{Layer, Row},
+};
 use serde_json::{Value, json};
+use std::collections::{BTreeMap, BTreeSet};
 
-pub const PAGE: usize = 100;
-pub fn file_id(path: &str) -> String {
-    format!("file-{}", &crate::record::sha256_hex(path.as_bytes())[..16])
-}
-pub fn symbol_id(path: &str, qualified: &str, line: i64) -> String {
+pub const PAGE: usize = 20;
+fn key(kind: &str, value: &str) -> String {
     format!(
-        "fn-{}",
-        &crate::record::sha256_hex(format!("{path}:{qualified}:{line}").as_bytes())[..16]
+        "{kind}-{}",
+        &crate::record::sha256_hex(value.as_bytes())[..16]
     )
+}
+pub fn file_id(path: &str) -> String {
+    key("file", path)
+}
+fn identities(definitions: &[Row]) -> BTreeMap<String, String> {
+    let mut ordered: Vec<_> = definitions.iter().collect();
+    ordered.sort_by(|a, b| {
+        (
+            &a.path,
+            &a.qualified,
+            a.range.line,
+            a.range.start,
+            &a.symbol,
+        )
+            .cmp(&(
+                &b.path,
+                &b.qualified,
+                b.range.line,
+                b.range.start,
+                &b.symbol,
+            ))
+    });
+    let mut counts = BTreeMap::new();
+    ordered
+        .into_iter()
+        .map(|r| {
+            let ordinal = counts.entry((&r.path, &r.qualified)).or_insert(0);
+            let id = format!(
+                "{}:{}",
+                file_id(&r.path),
+                key("fn", &format!("{}:{}:{ordinal}", r.path, r.qualified))
+            );
+            *ordinal += 1;
+            (r.symbol.clone(), id)
+        })
+        .collect()
 }
 pub fn strength(layer: Layer) -> &'static str {
     match layer {
@@ -17,62 +56,192 @@ pub fn strength(layer: Layer) -> &'static str {
         Layer::Syntactic => "syntactic",
     }
 }
+pub fn name(id: &str) -> String {
+    let text = id.replace(['-', '_'], " ");
+    let mut chars = text.chars();
+    chars.next().map_or_else(String::new, |c| {
+        c.to_uppercase().collect::<String>() + chars.as_str()
+    })
+}
+fn directories(path: &str) -> Vec<String> {
+    let parts: Vec<_> = path.split('/').collect();
+    (1..parts.len()).map(|i| parts[..i].join("/")).collect()
+}
 pub fn layer(snapshot: &Snapshot, parent: Option<&str>, offset: usize) -> Result<Value, String> {
-    let selected = parent
-        .map(|id| {
+    if let Some(layer) = areas::layer(snapshot, parent, offset)? {
+        return Ok(layer);
+    }
+    code_layer(snapshot, parent.ok_or("unknown map layer")?, offset, None)
+}
+
+// Authored leaves enter files before functions, constrained by their actual anchors.
+pub fn linked(
+    snapshot: &Snapshot,
+    node: &super::model::Node,
+    graph: &Graph,
+    parent: Option<&str>,
+    offset: usize,
+) -> Result<Value, String> {
+    let selected: BTreeSet<_> = graph
+        .definitions
+        .iter()
+        .filter(|r| super::code::selected(node, r))
+        .map(|r| r.path.clone())
+        .collect();
+    let paths: Vec<_> = snapshot
+        .files
+        .entries
+        .iter()
+        .filter(|f| {
+            selected.contains(&f.path)
+                || node
+                    .paths
+                    .iter()
+                    .any(|p| super::pattern::matches(p, &f.path))
+        })
+        .map(|f| f.path.clone())
+        .collect();
+    if let Some(parent) = parent {
+        return code_layer(snapshot, parent, offset, Some(&paths));
+    }
+    let coverage = snapshot.coverage_in(&paths)?;
+    let nodes = paths.iter().map(|path| json!({"id":file_id(path),"name":path.rsplit('/').next().unwrap(),"type":"file","path":path,
+        "state":if coverage.iter().any(|c| &c.path==path && (c.syntax=="indexed" || c.precise=="fresh")){"built"}else{"unknown"},
+        "children":graph.definitions.iter().filter(|r| &r.path==path).count()})).collect();
+    Ok(page(snapshot, nodes, vec![], None, offset, vec![]))
+}
+fn code_layer(
+    snapshot: &Snapshot,
+    parent: &str,
+    offset: usize,
+    scope: Option<&[String]>,
+) -> Result<Value, String> {
+    if parent.starts_with("call-") {
+        let mut result = page(snapshot, vec![], vec![], Some(parent), offset, vec![]);
+        result["state"] = json!("unknown");
+        return Ok(result);
+    }
+    let paths: Vec<_> = snapshot
+        .files
+        .entries
+        .iter()
+        .filter(|f| scope.is_none_or(|s| s.contains(&f.path)))
+        .map(|f| f.path.clone())
+        .collect();
+    let file = paths.iter().find(|p| file_id(p) == parent);
+    let source = file
+        .or_else(|| {
             snapshot
                 .files
                 .entries
                 .iter()
-                .find(|f| file_id(&f.path) == id)
-                .map(|f| f.path.as_str())
-                .ok_or("unknown map layer")
+                .find(|f| parent.starts_with(&(file_id(&f.path) + ":")))
+                .map(|f| &f.path)
         })
-        .transpose()?;
-    let Some(path) = selected else {
-        let page = snapshot.file_page(offset, PAGE)?;
-        let nodes: Vec<_> = page.rows.iter().map(|f| json!({"id":file_id(&f.path),"name":f.path,"path":f.path,"type":"file",
-            "state":if f.precise=="fresh" || f.syntax=="indexed" {"built"} else {"unknown"},"children":f.definitions})).collect();
-        return Ok(
-            json!({"id":"derived","parent":parent,"revision":snapshot.id,"change_token":snapshot.change_token,"nodes":nodes,"steps":[],
-            "frontier":page.total.saturating_sub(offset+PAGE),"next":(offset+PAGE<page.total).then_some(offset+PAGE),"gaps":[],"freshness":page.freshness}),
-        );
+        .ok_or("unknown code layer")?;
+    let graph = snapshot.graph_in(&[source.to_string()], &[])?;
+    let ids = identities(&graph.definitions);
+    let function = if file.is_none() {
+        Some(
+            graph
+                .definitions
+                .iter()
+                .find(|r| ids.get(&r.symbol).is_some_and(|id| id == parent))
+                .ok_or("unknown function layer")?,
+        )
+    } else {
+        None
     };
-    let graph = snapshot.graph_in(&[path.to_string()], &[])?;
-    let nodes: Vec<_> = graph
-        .definitions
-        .iter()
-        .filter(|r| r.path == path)
-        .map(|r| {
-            json!({
-                "id":symbol_id(&r.path, &r.qualified, r.range.line), "symbol":r.symbol,
-                "name":r.qualified, "type":"function", "path":r.path, "line":r.range.line,
-                "evidence":strength(r.layer), "state":"built", "children":0
-            })
-        })
-        .collect();
-    let visible: Vec<_> = nodes.iter().skip(offset).take(PAGE).cloned().collect();
-    let edges: Vec<_> = graph
-        .edges
-        .iter()
-        .filter(|e| path == e.occurrence.path)
-        .collect();
-    let name = |symbol: &str| {
+    let path = source;
+    let mut nodes: Vec<_> = graph.definitions.iter().filter(|r| {
+        if let Some(function)=function { r.symbol==function.symbol || graph.edges.iter().any(|e| e.source.as_deref()==Some(&function.symbol) && e.targets.contains(&r.symbol)) } else { &r.path==path || graph.edges.iter().any(|e| &e.occurrence.path==path && e.targets.contains(&r.symbol)) }
+    }).map(|r| json!({"id":ids[&r.symbol],"name":r.name,"type":"function","path":r.path,"line":r.range.line,"symbol":r.symbol,"state":"built","evidence":strength(r.layer),"children":graph.edges.iter().filter(|e| e.source.as_deref()==Some(&r.symbol)).count()})).collect();
+    // Retain each ambiguous candidate. Endpoints are stable box identities, never names.
+    let id = |symbol: &str| {
         graph
             .definitions
             .iter()
             .find(|r| r.symbol == symbol)
-            .map_or_else(|| symbol.to_string(), |r| r.qualified.clone())
+            .map(|r| ids[&r.symbol].clone())
     };
-    let steps: Vec<_> = edges.iter().skip(offset).take(PAGE).map(|e| json!({
-        "from":e.source.as_deref().map(name),"to":e.targets.iter().map(|s| name(s)).collect::<Vec<_>>(),
-        "state":if e.targets.is_empty() {"unknown"} else if e.targets.len()>1 {"ambiguous"} else {"built"},
-        "evidence":strength(e.occurrence.layer)
-    })).collect();
-    let count = nodes.len().max(edges.len());
-    Ok(
-        json!({"id":"derived", "parent":parent,"revision":snapshot.id,"change_token":snapshot.change_token,
-        "nodes":visible,"steps":steps,"frontier":count.saturating_sub(offset+PAGE),
-        "next":(offset+PAGE<count).then_some(offset+PAGE),"gaps":graph.gaps}),
-    )
+    let mut steps = Vec::new();
+    for (i, e) in graph
+        .edges
+        .iter()
+        .filter(|e| {
+            &e.occurrence.path == path
+                && function.is_none_or(|f| e.source.as_deref() == Some(&f.symbol))
+        })
+        .enumerate()
+    {
+        let Some(from) = e.source.as_deref().and_then(id) else {
+            continue;
+        };
+        let mut to: Vec<_> = e.targets.iter().filter_map(|s| id(s)).collect();
+        if to.is_empty() {
+            let target = key("call", &format!("{}:{i}", e.occurrence.path));
+            nodes.push(json!({"id":target,"name":e.occurrence.name,"type":"call","state":"unknown","path":e.occurrence.path,"line":e.occurrence.range.line,"children":0}));
+            to.push(target);
+        }
+        steps.push(json!({"id":format!("call-{i}"),"from":from,"to":to,"state":if e.targets.is_empty(){"unknown"}else if e.targets.len()>1{"ambiguous"}else{"built"},"evidence":strength(e.occurrence.layer)}));
+    }
+    let mut crumbs: Vec<_> = if scope.is_none() {
+        let mut dirs = directories(path);
+        if dirs.is_empty() {
+            dirs.push(String::new());
+        }
+        dirs.into_iter().map(|d| json!({"id":key("area",&d),"name":if d.is_empty(){"Code".into()}else{name(d.rsplit('/').next().unwrap())}})).collect()
+    } else {
+        vec![]
+    };
+    crumbs.push(json!({"id":file_id(path),"name":path.rsplit('/').next().unwrap()}));
+    if let Some(f) = function {
+        crumbs.push(json!({"id":parent,"name":f.name}));
+    }
+    let mut result = page(snapshot, nodes, steps, Some(parent), offset, crumbs);
+    result["gaps"] = json!(graph.gaps);
+    Ok(result)
+}
+
+pub fn page(
+    snapshot: &Snapshot,
+    nodes: Vec<Value>,
+    steps: Vec<Value>,
+    parent: Option<&str>,
+    offset: usize,
+    breadcrumbs: Vec<Value>,
+) -> Value {
+    let mut links = Vec::new();
+    for s in steps {
+        let targets: Vec<_> = s["to"]
+            .as_array()
+            .map(|a| a.iter().filter_map(Value::as_str).collect())
+            .unwrap_or_else(|| s["to"].as_str().into_iter().collect());
+        for to in targets {
+            let mut link = s.clone();
+            link["to"] = json!(to);
+            links.push(link);
+        }
+    }
+    let total = nodes.len().max(links.len());
+    let links: Vec<_> = links.into_iter().skip(offset).take(PAGE).collect();
+    let mut visible: Vec<_> = nodes.iter().skip(offset).take(PAGE).cloned().collect();
+    let mut ids: BTreeSet<String> = visible
+        .iter()
+        .filter_map(|n| n["id"].as_str().map(str::to_owned))
+        .collect();
+    for step in &links {
+        for end in [step["from"].as_str(), step["to"].as_str()]
+            .into_iter()
+            .flatten()
+        {
+            if ids.insert(end.to_string())
+                && let Some(n) = nodes.iter().find(|n| n["id"] == end)
+            {
+                visible.push(n.clone());
+            }
+        }
+    }
+    json!({"id":"derived","parent":parent,"revision":snapshot.id,"change_token":snapshot.change_token,"nodes":visible,"steps":links,"breadcrumbs":breadcrumbs,
+        "next":(offset+PAGE<total).then_some(offset+PAGE),"frontier":total.saturating_sub(offset+PAGE)})
 }

@@ -52,18 +52,19 @@ function milestone(p, rows) {
 }
 export function goalsScreen() {
   if (kept.project !== state.project) Object.assign(kept, {project: state.project, search: "", state: ""}), kept.open.clear();
-  let data;
+  let data, target = new URLSearchParams(location.hash.split("?")[1] || "").get("goal") || "";
+  if (target) { kept.open.add(target); kept.search = ""; kept.state = ""; }
   const totals = el("span", "totals"), list = el("div", "goals"), choice = el("span", "choice");
   const draw = () => {
     totals.textContent = [`${data.goals.length} goals`, ...parts(data.totals)].join(" · ");
-    const rows = data.goals.filter(g => (!kept.state || g.state === kept.state) && (!kept.search || JSON.stringify(g).toLowerCase().includes(kept.search)));
+    const rows = data.goals.filter(g => target ? g.id === target : (!kept.state || g.state === kept.state) && (!kept.search || JSON.stringify(g).toLowerCase().includes(kept.search)));
     const focused = document.activeElement?.closest?.("details.goal")?.dataset.id;
     list.replaceChildren(...data.milestones.map(p => { const mine = rows.filter(g => g.milestone === p.id); return mine.length ? milestone(p, mine) : null; }).filter(Boolean));
     if (!rows.length) list.append(message("None"));
     if (focused) list.querySelector(`details.goal[data-id="${CSS.escape(focused)}"] summary`)?.focus({preventScroll: true});
   };
-  const paint = () => choice.replaceChildren(dropdown({options: [["", "All"], ...ORDER.map(s => [s, titleCase(s)])], value: kept.state, onPick: v => { kept.state = v; paint(); draw(); }}));
+  const paint = () => choice.replaceChildren(dropdown({options: [["", "All"], ...ORDER.map(s => [s, titleCase(s)])], value: kept.state, onPick: v => { target = ""; kept.state = v; paint(); draw(); }}));
   paint();
-  const node = el("div", "screen", el("div", "toolbar", totals, searchBox("Search", v => { kept.search = v; draw(); }, kept.search), choice), list);
+  const node = el("div", "screen", el("div", "toolbar", totals, searchBox("Search", v => { target = ""; kept.search = v; draw(); }, kept.search), choice), list);
   return { node, async load() { data = await api("/api/goals"); draw(); return data.version; } };
 }
