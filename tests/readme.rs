@@ -47,7 +47,7 @@ fn documented_quick_start_runs_verbatim() {
                 .env("CARGO_TARGET_DIR", root.join("target"))
                 .env(
                     "PATH",
-                    format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+                    format!("{}:{}", bin.display(), tool_path().to_string_lossy()),
                 )
                 .env("README_GIT", real.trim())
                 .env("CARGO_NET_OFFLINE", "true")
@@ -79,7 +79,7 @@ fn documented_quick_start_runs_verbatim() {
             );
         } else if n == 1 {
             assert!(out.contains("landed  first-goal"));
-            assert!(out.contains("prove: first-goal pass"));
+            assert!(out.contains("ran: first-goal pass"));
             let proofs: Vec<_> = fs::read_dir(root.join(".whosaidso/proofs"))
                 .unwrap()
                 .collect();
@@ -91,7 +91,7 @@ fn documented_quick_start_runs_verbatim() {
         } else {
             assert!(out.contains("goal first-goal  First goal"));
             assert!(out.contains("grep: no match"));
-            assert_eq!(out.matches("code: none recorded").count(), 4);
+            assert_eq!(out.matches("code: not indexed").count(), 4);
             assert!(!root.join(".whosaidso/cache/view").exists());
         }
     }

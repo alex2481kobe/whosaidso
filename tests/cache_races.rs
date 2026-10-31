@@ -32,15 +32,15 @@ fn syntax_and_text_stamp_the_buffer_they_actually_read() {
         &bin.join("git"),
         "#!/bin/sh\nif test \"$1\" = cat-file; then printf 'fn race_b() {}\\n' > race.rs; fi\nexec \"$REAL_GIT\" \"$@\"\n",
     );
-    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let path = format!("{}:{}", bin.display(), tool_path().to_string_lossy());
     assert_eq!(
-        success(
+        code_rows_text(success(
             command(root, BIN, &["code", "defs", "race_b"])
                 .env("PATH", &path)
                 .env("REAL_GIT", real.trim())
                 .output()
                 .unwrap()
-        ),
+        )),
         "race.rs:1  fn race_b  [syntactic]\n"
     );
     assert!(cli(root, &["grep", "race_b"]).contains("race.rs:1"));

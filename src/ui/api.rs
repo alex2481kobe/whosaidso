@@ -18,6 +18,7 @@ fn media(root: &Path, m: &gallery::Media, store: &Store) -> Result<Value, String
     let path = blob::path(root, &m.media_sha256, &m.ext)?;
     let mut value = json!(m);
     value["id"] = json!(m.sha);
+    value["label"] = json!("attached");
     value["kind"] = json!(match kind.tag {
         "img" => "image",
         "video" => "video",
@@ -50,7 +51,7 @@ fn goals_screen(root: &Path, store: &Store) -> Result<(Value, i64), String> {
     state::renew();
     let states = state::states(root, store)?;
     let now = state::now()?;
-    let held: HashMap<String, claims::Held> = claims::held(root, &states, now)?
+    let held: HashMap<String, claims::view::Held> = claims::view::held(root, &states, now)?
         .into_iter()
         .map(|c| (c.goal.clone(), c))
         .collect();
@@ -86,9 +87,9 @@ fn goals_screen(root: &Path, store: &Store) -> Result<(Value, i64), String> {
         json!({
             "id":g.id, "title":g.title, "done_when":g.done_when,
             "parent":g.parent, "milestone":crate::goal_tree::milestone(g, &store.goals),
-            "state":s.map(|s| goals::label(s.state)), "branches":s.map(|s| &s.branches), "claim":held.get(&g.id), "check":g.check,
-            "proof":proof.map(|(p, current)| json!({"check":p.check,"commit":p.commit,"exit_code":p.exit_code,"ran_at":p.ran_at,"output_tail":p.output_tail,"current":current})),
-            "media":media.get(g.id.as_str()).into_iter().flatten().take(RECENT).map(|m| json!({"id":m.sha,"media_sha256":m.media_sha256,"tag":gallery::types::media_type(&m.ext).map_or("", |t| t.tag),"shows":m.shows})).collect::<Vec<_>>(),
+            "check_changed":s.is_some_and(|s| s.check_changed), "state":s.map(|s| goals::label(s.state)), "branches":s.map(|s| &s.branches), "claim":held.get(&g.id), "check":g.check,
+            "proof":proof.map(|(p, current)| json!({"check":p.check,"commit":p.commit,"exit_code":p.exit_code,"ran_at":p.ran_at,"output_tail":p.output_tail,"current":current,"label":"ran","main":p.main,"reason":p.reason})),
+            "media":media.get(g.id.as_str()).into_iter().flatten().take(RECENT).map(|m| json!({"id":m.sha,"media_sha256":m.media_sha256,"tag":gallery::types::media_type(&m.ext).map_or("", |t| t.tag),"shows":m.shows,"label":"attached"})).collect::<Vec<_>>(),
         })
     }).collect::<Vec<_>>();
     let milestones: Vec<_> = store.goals.iter().filter(|g| g.parent.is_none()).map(|g| json!({"id":g.id,"title":g.title,"counts":tally(rows.iter().filter(|r| r["milestone"] == g.id).filter_map(|r| r["state"].as_str()))})).collect();
@@ -169,7 +170,6 @@ fn media_file(root: &Path, sha: &str, params: &HashMap<String, String>) -> Reply
         }
         let kind = gallery::types::media_type(&m.ext)?;
         let mut reply = Reply::bytes(kind.mime, &bytes);
-        reply.header("Accept-Ranges", "bytes");
         if kind.download_only() || params.get("download").is_some_and(|v| v == "1") {
             reply.header(
                 "Content-Disposition",

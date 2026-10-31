@@ -83,6 +83,15 @@ pub(super) fn validate(root: &Path, store: &mut Store) -> Result<(), String> {
         if !goals.contains_key(proof.goal.as_str()) {
             errors.push(format!("unknown goal {}", proof.goal));
         }
+        if proof.main.exit_code == 0 && proof.reason.as_ref().is_none_or(|r| r.trim().is_empty()) {
+            errors.push("passed on main requires a reason".into());
+        }
+        if !hex(&proof.main.commit, 40)
+            || !hex(&proof.main.output_sha256, 64)
+            || proof.main.output_tail.len() > MAX_OUTPUT_TAIL_BYTES
+        {
+            errors.push("invalid main result".into());
+        }
         if !hex(&proof.commit, 40) {
             errors.push("invalid commit".into());
         }

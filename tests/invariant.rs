@@ -11,6 +11,11 @@ const LATE: &[&str] = &["WHOSAIDSO_PRUNE_HOOK", "WHOSAIDSO_PRUNE_DELETE_HOOK"];
 fn fault_sequence(seed: u64, hooks: &[&str]) {
     let f = Fixture::new();
     let root = &f.root;
+    r::goal(root, "milestone");
+    let mut goal = value(&root.join(".whosaidso/goals/g.json"));
+    goal["parent"] = serde_json::json!("milestone");
+    r::put(root, "goals", "g", &goal);
+    commit(root);
     let mut random = seed;
     for hook in hooks {
         random = random

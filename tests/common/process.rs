@@ -1,11 +1,33 @@
 use super::BIN;
 use std::{
+    ffi::OsString,
     path::Path,
     process::{Command, Output},
+    sync::OnceLock,
 };
+pub fn tool_path() -> &'static OsString {
+    static PATH: OnceLock<OsString> = OnceLock::new();
+    PATH.get_or_init(|| {
+        let path = std::env::var_os("PATH").unwrap_or_default();
+        // Apple's launcher repeats developer-tool discovery for every Git subprocess.
+        if cfg!(target_os = "macos")
+            && let Ok(out) = Command::new("xcrun").args(["--find", "git"]).output()
+            && out.status.success()
+            && let Ok(git) = std::str::from_utf8(&out.stdout)
+            && let Some(dir) = Path::new(git.trim()).parent()
+        {
+            return std::env::join_paths(
+                std::iter::once(dir.to_path_buf()).chain(std::env::split_paths(&path)),
+            )
+            .expect("tool search path");
+        }
+        path
+    })
+}
 pub fn command(root: &Path, program: &str, args: &[&str]) -> Command {
     let mut c = Command::new(program);
     c.current_dir(root)
+        .env("PATH", tool_path())
         .env("HOME", root.parent().unwrap())
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
@@ -72,4 +94,15 @@ pub fn input(root: &Path, args: &[&str], bytes: &[u8]) -> String {
         .unwrap();
     child.stdin.take().unwrap().write_all(bytes).unwrap();
     success(child.wait_with_output().unwrap()).trim().to_owned()
+}
+
+// Row equality stays independent of the separately tested coverage diagnostics.
+pub fn code_rows(root: &Path, args: &[&str]) -> String {
+    code_rows_text(cli(root, args))
+}
+pub fn code_rows_text(text: String) -> String {
+    text.lines()
+        .filter(|line| !line.starts_with("gap: ") && !line.starts_with("gaps: "))
+        .map(|line| format!("{line}\n"))
+        .collect()
 }

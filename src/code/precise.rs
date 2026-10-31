@@ -52,15 +52,22 @@ pub fn rows(
     } else {
         "SELECT path FROM calls WHERE callee=?1"
     };
-    let sql = format!(
-        "SELECT path,blob FROM scip_docs WHERE path IN ({syntax} UNION SELECT o.path FROM scip_occ o JOIN scip_syms s ON s.symbol=o.symbol WHERE (?1='' OR {column}=?1) AND o.is_def=?2)"
-    );
+    let sql = if value.is_empty() {
+        "SELECT path,blob FROM scip_docs".to_string()
+    } else {
+        format!(
+            "SELECT path,blob FROM scip_docs WHERE path IN ({syntax} UNION SELECT o.path FROM scip_occ o JOIN scip_syms s ON s.symbol=o.symbol WHERE (?1='' OR {column}=?1) AND o.is_def=?2)"
+        )
+    };
     let mut stmt = db.prepare(&sql).map_err(err)?;
-    let blobs: HashMap<String, Option<String>> = stmt
-        .query_map(params![leaf, def], |r| Ok((r.get(0)?, r.get(1)?)))
-        .map_err(err)?
-        .collect::<Result<_, _>>()
-        .map_err(err)?;
+    let map = |r: &rusqlite::Row<'_>| Ok((r.get(0)?, r.get(1)?));
+    let records = if value.is_empty() {
+        stmt.query_map([], map)
+    } else {
+        stmt.query_map(params![leaf, def], map)
+    }
+    .map_err(err)?;
+    let blobs: HashMap<String, Option<String>> = records.collect::<Result<_, _>>().map_err(err)?;
     let fresh: HashSet<String> = files
         .entries
         .iter()

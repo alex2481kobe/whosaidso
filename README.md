@@ -41,7 +41,7 @@ printf '%s\n' 'Example feature' > feature.txt
 git add feature.txt
 git commit -m 'Add feature'
 whosaidso goals
-whosaidso prove first-goal
+whosaidso prove first-goal --reason "demonstration on main"
 git add .whosaidso/proofs
 git commit -m 'Record evidence'
 ```

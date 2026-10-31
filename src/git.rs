@@ -72,7 +72,7 @@ fn object_size(reader: &mut impl BufRead, name: &str) -> Result<Option<usize>, S
         .map_err(|e: std::num::ParseIntError| e.to_string())?;
     Ok((kind == "blob").then_some(size))
 }
-// Ask for sizes before contents so skipped large blobs never cross the pipe.
+// Read sizes before contents so skipped large blobs never cross the pipe.
 pub fn read_objects(
     dir: &Path,
     names: &[String],

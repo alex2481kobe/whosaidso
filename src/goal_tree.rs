@@ -58,7 +58,7 @@ pub struct Snapshot {
 }
 pub fn snapshot(root: &std::path::Path) -> Result<Snapshot, String> {
     let store = crate::record::load(root)?;
-    Ok(Snapshot {
+    let mut snapshot = Snapshot {
         goals: store
             .goals
             .iter()
@@ -71,7 +71,10 @@ pub fn snapshot(root: &std::path::Path) -> Result<Snapshot, String> {
                 s
             })
             .collect(),
-    })
+    };
+    snapshot.goals.sort();
+    snapshot.states.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(snapshot)
 }
 
 pub fn milestone<'a>(goal: &'a Goal, goals: &'a [Goal]) -> &'a str {

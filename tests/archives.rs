@@ -47,7 +47,8 @@ fn archive_write_failure_preserves_records_and_retry_appends_losslessly() {
     let f = Fixture::new();
     let root = &f.root;
 
-    r::gallery(root, 101, 40000);
+    r::media(root, &png("original"), "png", 1767225600000000000);
+    fs::remove_file(root.join(".whosaidso/goals/g.json")).unwrap();
     commit(root);
     let before = snapshot(&root.join(".whosaidso/media"));
     let failed = root.join(".git/failed");
@@ -66,8 +67,8 @@ fn archive_write_failure_preserves_records_and_retry_appends_losslessly() {
     let bundle = root.join(".git/whosaidso/archive/media-2026-01.tar.gz");
     let old = fs::read(&bundle).unwrap();
     let old_entries = common::archive::entries(&bundle);
-    let p = r::media(root, &png(vec![222; 40000]), "png", 1767225600000000001);
-    r::media(root, &png(vec![223; 40000]), "png", 1767225600000000002);
+    let p = r::media(root, &png(vec![222; 70000]), "png", 1767225600000000000);
+    r::media(root, &png(vec![223; 70000]), "png", 1767225600000000000);
     commit(root);
     let pending = snapshot(&root.join(".whosaidso/media"));
     let out = command(

@@ -12,7 +12,7 @@ pub fn load(root: &Path) -> Result<Vec<Record>, String> {
     let dir = root.join(".whosaidso/notes");
     let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return record::fold::notes(root),
         Err(e) => return Err(e.to_string()),
     };
     let mut found = Vec::new();
@@ -33,6 +33,16 @@ pub fn load(root: &Path) -> Result<Vec<Record>, String> {
         };
         found.push(Record { id, note });
     }
+    for folded in record::fold::notes(root)? {
+        if found.iter().any(|n| n.id == folded.id) {
+            found.push(Record {
+                id: folded.id,
+                note: Err("duplicate folded note; reopen milestone".into()),
+            });
+        } else {
+            found.push(folded);
+        }
+    }
     found.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(found)
 }
@@ -44,6 +54,9 @@ pub fn change(
 ) -> Result<String, String> {
     if !record::valid_id(id) {
         return Err("invalid note id".into());
+    }
+    if record::fold::notes(root)?.iter().any(|n| n.id == id) {
+        return Err("folded note is read-only; reopen its milestone".into());
     }
     publish::record_dir(root, "notes")?;
     let _collection = crate::blob::lock(root, true)?;

@@ -113,7 +113,7 @@ fn batch(
 fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
-const EXTRACTOR_VERSION: &str = "syntax-3";
+const EXTRACTOR_VERSION: &str = "syntax-5";
 fn manifest_stamp(files: &tree::Files) -> String {
     format!("{EXTRACTOR_VERSION}:{}", tree::fingerprint(files))
 }

@@ -34,7 +34,7 @@ fn state_queries_batch_git_reads_and_oversized_text_fetches_metadata_only() {
         &bin.join("git"),
         "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$TRACE\"\nif test \"$1 $2\" = 'cat-file --batch-command' && test -n \"$REQUESTS\"; then tee \"$REQUESTS\" | \"$REAL_GIT\" \"$@\"; exit $?; fi\nexec \"$REAL_GIT\" \"$@\"\n",
     );
-    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let path = format!("{}:{}", bin.display(), tool_path().to_string_lossy());
     let shown = success(
         command(root, BIN, &["show", "g"])
             .env("PATH", &path)
@@ -45,9 +45,21 @@ fn state_queries_batch_git_reads_and_oversized_text_fetches_metadata_only() {
     );
     assert!(shown.contains("state: done"));
     let calls = fs::read_to_string(&trace).unwrap();
-    for call in ["rev-parse --git-common-dir", "cat-file --batch-command"] {
-        assert_eq!(calls.lines().filter(|l| *l == call).count(), 1, "{calls}");
-    }
+    assert_eq!(
+        calls
+            .lines()
+            .filter(|l| *l == "rev-parse --git-common-dir")
+            .count(),
+        1
+    );
+    let batches = calls
+        .lines()
+        .filter(|l| *l == "cat-file --batch-command")
+        .count();
+    assert!(
+        (1..=2).contains(&batches),
+        "historical proofs and first checks must be batched: {calls}"
+    );
     assert_eq!(
         calls.lines().filter(|l| l.starts_with("rev-list ")).count(),
         1
@@ -82,7 +94,7 @@ fn help_and_default_branch_work_in_a_master_repository() {
     cli(root, &["start", "g"]);
     work(root, "work", "g");
     cli(root, &["gate"]);
-    cli(root, &["prove", "g"]);
+    cli(root, &["prove", "g", "--reason", "behavior unchanged"]);
     commit(root);
     cli(root, &["prune"]);
     git(root, &["update-ref", "refs/remotes/origin/master", "HEAD"]);

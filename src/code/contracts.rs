@@ -1,4 +1,8 @@
-// Shared code-query names and bounded answers.
+// Shared code-query names and output budgets.
+pub(crate) const DEFAULT_LIMIT: usize = 20;
+pub(crate) const MAX_LIMIT: usize = 100;
+pub(crate) const GAP_LIMIT: usize = 8;
+pub(crate) const ROW_BYTES: usize = 500;
 #[derive(Default)]
 pub struct Answers {
     pub lines: Vec<String>,
@@ -7,7 +11,7 @@ pub struct Answers {
 impl Answers {
     pub fn push(&mut self, line: impl FnOnce() -> String) {
         self.total += 1;
-        if self.lines.len() < 20 {
+        if self.lines.len() < DEFAULT_LIMIT {
             self.lines.push(crate::text::cut(&line(), 200));
         }
     }

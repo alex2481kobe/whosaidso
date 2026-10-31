@@ -39,7 +39,7 @@ pub fn proof(root: &Path, commit: &str, at: i64, code: i32) -> PathBuf {
         root,
         "proofs",
         "",
-        &json!({"goal":"g","check": super::value(&root.join(".whosaidso/goals/g.json"))["check"],"commit":commit,"exit_code":code,"output_sha256":hash(b""),"output_tail":"","ran_at":at}),
+        &json!({"goal":"g","check": super::value(&root.join(".whosaidso/goals/g.json"))["check"],"commit":commit,"exit_code":code,"output_sha256":hash(b""),"output_tail":"","ran_at":at,"main":{"commit":commit,"exit_code":1,"output_sha256":hash(b""),"output_tail":"","elapsed_ms":0,"timed_out":false},"reason":null,"elapsed_ms":0,"timed_out":false}),
     )
 }
 
@@ -63,6 +63,10 @@ pub fn clear(root: &Path, kind: &str) {
 }
 
 pub fn gallery(root: &Path, count: usize, size: usize) -> Vec<PathBuf> {
+    goal(root, "gallery");
+    let mut child = super::value(&root.join(".whosaidso/goals/g.json"));
+    child["parent"] = json!("gallery");
+    put(root, "goals", "g", &child);
     let at = head(root);
     (0..count).map(|n| {
         let bytes = super::png(vec![n as u8; size]);

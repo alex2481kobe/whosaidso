@@ -14,6 +14,7 @@ pub(super) struct Journal {
     pub(super) records: Vec<PathBuf>,
     pub(super) moves: Vec<(PathBuf, PathBuf)>,
     pub(super) archive: Vec<(PathBuf, PathBuf)>,
+    pub(super) created: Vec<PathBuf>,
 }
 impl Journal {
     pub(super) fn save(&self, path: &Path) -> Result<(), String> {
@@ -84,6 +85,11 @@ impl Journal {
             if tracked.lines().any(|p| p == relative) {
                 let bytes = git::run_bytes(&journal.root, &["show", &format!("HEAD:{relative}")])?;
                 publish::write_bytes(p, &bytes)?;
+            }
+        }
+        for p in &journal.created {
+            if p.exists() {
+                fs::remove_file(p).map_err(|e| e.to_string())?;
             }
         }
         for (from, to) in journal.moves.iter().rev() {

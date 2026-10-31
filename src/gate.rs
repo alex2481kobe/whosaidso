@@ -4,6 +4,10 @@ use std::path::Path;
 pub fn gate(root: &Path, base: &str) -> Result<(), String> {
     let base = git::local_revision(root, base)?;
     let store = record::load(root)?;
+    let reopen = record::fold::reopen::required(root, &base)?;
+    if !reopen.is_empty() {
+        return Err(reopen.join("\n"));
+    }
     let merge_base = git::run(root, &["merge-base", &base, "HEAD"])?;
     let note_problems = crate::note::reconcile::required(root, merge_base.trim(), "HEAD", &base)?;
     if !note_problems.is_empty() {
@@ -24,7 +28,7 @@ pub fn gate(root: &Path, base: &str) -> Result<(), String> {
     let folders: Vec<String> = record::FOLDERS
         .iter()
         .copied()
-        .chain(["notes"])
+        .chain(["notes", "done", "reopens"])
         .map(|f| format!(".whosaidso/{f}"))
         .collect();
     let mut args = vec!["status", "--porcelain", "--untracked-files=all", "--"];

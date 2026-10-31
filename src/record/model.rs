@@ -28,9 +28,24 @@ pub struct Proof {
     pub output_sha256: String,
     pub output_tail: String,
     pub ran_at: i64,
+    pub elapsed_ms: u64,
+    pub timed_out: bool,
+    pub main: Run,
+    pub reason: Option<String>,
+}
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Run {
+    pub commit: String,
+    pub exit_code: i64,
+    pub output_sha256: String,
+    pub output_tail: String,
+    pub elapsed_ms: u64,
+    pub timed_out: bool,
 }
 #[derive(Default)]
 pub struct Store {
+    pub folded: std::collections::HashMap<String, String>,
     pub broken: Vec<(String, String)>,
     pub notes: Vec<crate::note::model::Note>,
     pub goals: Vec<Goal>,
