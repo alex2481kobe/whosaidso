@@ -41,11 +41,12 @@ pub fn screen(
                 )
             );
             let total = records.len();
-            let rows: Vec<_> = records.into_iter().skip(offset).take(map::PAGE).map(|r| {
-                if !r.problems.is_empty() { return Ok(json!({"id":r.id,"state":"unknown","problems":r.problems})); }
-                let comparison = compare::compare(&r.flow.ok_or("unreadable flow")?,&snapshot)?.0;
-                Ok(json!({"id":r.id,"state":comparison["state"],"progress":comparison["progress"]}))
-            }).collect::<Result<_,String>>()?;
+            let rows: Vec<_> = records
+                .into_iter()
+                .skip(offset)
+                .take(map::PAGE)
+                .map(|r| json!({"id":r.id,"problems":r.problems}))
+                .collect();
             json!({"flows":rows,"revision":revision,"next":(offset+map::PAGE<total).then_some(offset+map::PAGE)})
         }
     };

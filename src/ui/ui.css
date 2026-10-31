@@ -68,7 +68,6 @@ h1, h2, h3, p { margin: 0; }
 .page { position: absolute; inset: 0 0 0 212px; overflow: auto; padding: 14px 20px 24px 8px; }
 .screen { display: flex; flex-direction: column; gap: 12px; max-width: 1600px; margin: 0 auto; }
 .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
-.totals { margin-right: auto; color: var(--muted); font-size: 13px; }
 .search { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; flex: 0 1 260px; min-width: 150px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); }
 .search:focus-within { border-color: var(--blue); }
 .search-input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: none; color: var(--text); }
@@ -97,7 +96,6 @@ h1, h2, h3, p { margin: 0; }
 .goal-head::-webkit-details-marker { display: none; }
 .goal-head:hover { background: var(--hover); }
 .goal-title { font-weight: 550; overflow-wrap: anywhere; }
-.goal-id { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .works { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-size: 12.5px; }
 .work { display: flex; gap: 8px; min-width: 0; white-space: nowrap; }
 .work > * { flex: 0 0 auto; }
@@ -112,7 +110,7 @@ h1, h2, h3, p { margin: 0; }
 
 @media (max-width: 900px) {
   .goal-head { grid-template-columns: 64px minmax(0,1fr); }
-  .goal-id, .works { grid-column: 2; }
+  .works { grid-column: 2; }
   .goal-detail { padding-left: 12px; }
 }
 @media (max-width: 700px) {
@@ -127,43 +125,53 @@ h1, h2, h3, p { margin: 0; }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
 
 /* Flowcharts share the viewer's surface, typography and single accent. */
-.flow-screen { min-width: 0; }
-.flow-toolbar { justify-content: space-between; }
-.flow-crumbs, .flow-choices { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
-.flow-crumbs a { overflow-wrap: anywhere; }
-.flow-link { border: 1px solid transparent; border-radius: 7px; padding: 5px 8px; background: none; cursor: pointer; font: inherit; }
-.flow-link:hover { background: var(--hover); }
-.flow-canvas { width: 100%; min-width: 0; background: var(--surface); border-radius: 16px; box-shadow: var(--shadow); }
-.flow-canvas[data-empty]:not([data-empty=""])::after { content: attr(data-empty); display: block; padding: 20px; color: var(--muted); text-align: center; }
-.flow-canvas[data-empty]:not([data-empty=""]) .flow-diagram { display: none; }
-.flow-diagram { width: 100%; display: block; overflow: visible; font-family: inherit; }
-.flow-box > a > rect { fill: var(--surface); stroke: var(--line); stroke-width: 1.25; filter: drop-shadow(0 2px 4px #252d440c); }
-.flow-box[data-state="planned"] > a > rect { stroke-dasharray: 5 4; }
-.flow-box:is([data-state="drifted"], [data-state="missing"], [data-state="unplanned"]) > a > rect { stroke: #dd9a45; stroke-width: 1.5; }
-.flow-box:is([data-state="drifted"], [data-state="missing"], [data-state="unplanned"]) text:last-of-type { fill: #b5701c; }
-.flow-box.selected > a > rect, .flow-box > a:hover > rect, .flow-box > a:focus-visible > rect { fill: var(--surface-2); stroke: var(--blue); }
-.flow-box.dimmed { opacity: .4; }
-.flow-more { opacity: .65; }
-.flow-name { font-size: 16px; font-weight: 550; fill: var(--text); }
-.flow-word { font-size: 11px; fill: var(--muted); }
-.flow-deeper { fill: var(--muted); font-size: 17px; }
-.flow-info { cursor: pointer; opacity: 0; }
+.flow-screen { min-width: 0; max-width: none; height: 100%; }
+.flow-canvas { position: relative; flex: 1 1 auto; min-height: 420px; overflow: hidden; background: var(--surface); border-radius: 16px; box-shadow: var(--shadow); }
+.flow-canvas[data-empty]:not([data-empty=""])::after { content: attr(data-empty); position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
+.flow-diagram { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; user-select: none; background-image: radial-gradient(circle, var(--line) 1px, transparent 1.2px); }
+.flow-diagram[data-dragged] { cursor: grabbing; }
+.flow-diagram:focus-visible, .flow-box:focus { outline: none; }
+.flow-box { cursor: pointer; transition: opacity .18s ease; }
+.flow-box > rect { fill: var(--surface); stroke: var(--line); stroke-width: 1.25; filter: drop-shadow(0 1px 3px rgb(30 30 60 / .08)); transition: fill .15s ease, stroke .15s ease; }
+.flow-box:not(.flow-group):hover > rect, .flow-box:focus-visible > rect { stroke: var(--blue); fill: var(--surface-2); }
+.flow-group > rect { fill: color-mix(in srgb, var(--blue) 3%, var(--surface)); stroke: var(--line); filter: none; }
+.flow-group[data-depth="1"] > rect { fill: color-mix(in srgb, var(--blue) 6%, var(--surface)); }
+.flow-group[data-depth="2"] > rect { fill: color-mix(in srgb, var(--blue) 9%, var(--surface)); }
+.flow-group:focus-visible > rect { stroke: var(--blue); }
+.flow-box[data-state="planned"] > rect { stroke-dasharray: 5 4; }
+.flow-box:is([data-state="drifted"], [data-state="missing"], [data-state="unplanned"]) > rect { stroke: var(--amber); }
+.flow-box:is([data-state="drifted"], [data-state="missing"], [data-state="unplanned"]) .flow-word { fill: var(--amber); }
+.flow-box.dimmed { opacity: .5; }
+.flow-name { font-size: 14px; font-weight: 550; fill: var(--text); pointer-events: none; }
+.flow-group > .flow-name { font-size: 13px; fill: var(--muted); }
+.flow-word { font-size: 11px; fill: var(--muted); pointer-events: none; }
+.flow-more circle { fill: transparent; stroke: none; transition: fill .15s ease; }
+.flow-more path { stroke: var(--muted); stroke-width: 1.6; fill: none; stroke-linecap: round; }
+.flow-more.opened .flow-plus { display: none; }
+.flow-more:hover circle { fill: var(--hover); }
+.flow-box:hover .flow-more path { stroke: var(--blue); }
+.flow-info { cursor: pointer; opacity: 0; transition: opacity .12s ease; }
 .flow-box:hover .flow-info, .flow-box:focus-within .flow-info { opacity: 1; }
 .flow-info rect { fill: var(--surface-2); stroke: var(--line); }
 .flow-info text { fill: var(--muted); font-size: 11px; }
-.flow-head, .flow-arrows path { stroke: var(--flow-wire); stroke-width: 1.25; fill: none; stroke-linejoin: round; stroke-linecap: round; }
-.flow-head.active, .flow-arrows .active path { stroke: var(--blue); }
+.flow-arrows path { stroke: var(--flow-wire); stroke-width: 1.5; fill: none; stroke-linecap: round; transition: stroke .15s ease, opacity .15s ease; }
+.flow-arrows path[data-state="planned"] { stroke-dasharray: 5 5; }
+.flow-arrows path:is([data-state="drifted"], [data-state="missing"]) { stroke: var(--amber); }
+.flow-arrows path.active { stroke: var(--blue); stroke-width: 2; }
+.flow-arrows path.dimmed { opacity: .25; }
+.flow-head { stroke: var(--flow-wire); stroke-width: 1.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.flow-head.active { stroke: var(--blue); }
+.flow-label { pointer-events: none; opacity: 0; transition: opacity .15s ease; }
+.flow-label[data-fits="yes"], .flow-label.active[data-has="yes"] { opacity: 1; }
 .flow-label rect { fill: var(--surface); }
-.flow-label text, .flow-return text { fill: var(--muted); font-size: 11px; font-weight: 550; }
-.flow-return rect { fill: var(--surface-2); stroke: var(--line); stroke-width: 1; }
-.flow-return:hover rect, .flow-return:focus-visible rect, .active .flow-return rect { stroke: var(--blue); }
-.flow-return { cursor: pointer; }
-.flow-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(100%,220px),1fr)); gap: 14px; }
-.flow-card { display: flex; flex-direction: column; gap: 8px; padding: 20px; }
-.flow-card:hover { background: var(--surface-2); }
-.flow-card svg { width: 150px; height: 42px; max-width: 100%; }
-.flow-card rect { fill: var(--surface); stroke: var(--line); }
-.flow-card path { stroke: var(--flow-wire); fill: none; }
+.flow-label text { fill: var(--muted); font-size: 11px; font-weight: 550; }
+.flow-label.active text { fill: var(--blue); }
+.flow-plans { position: absolute; top: 12px; left: 12px; }
+.flow-tools { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); }
+.flow-tool { min-width: 30px; height: 30px; padding: 0 8px; border: 0; border-radius: 7px; background: none; color: var(--muted); cursor: pointer; font-weight: 550; }
+.flow-tool:hover { background: var(--hover); color: var(--text); }
+.flow-link { border: 1px solid transparent; border-radius: 7px; padding: 5px 8px; background: none; cursor: pointer; }
+.flow-link:hover { background: var(--hover); }
 .flow-panel { position: fixed; z-index: 25; right: 20px; top: 70px; width: min(340px,calc(100vw - 24px)); max-height: calc(100dvh - 90px); overflow: auto; padding: 16px; }
 .flow-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .flow-panel h2 { font-size: 16px; overflow-wrap: anywhere; }
