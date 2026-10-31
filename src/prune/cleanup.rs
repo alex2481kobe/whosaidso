@@ -17,7 +17,7 @@ pub(super) fn verify(
     let kept = if shared {
         HashSet::new()
     } else {
-        blob::referenced(root)?
+        blob::retention::referenced(root)?
     };
     if moved.iter().any(|(_, path, _)| {
         path.file_name()
@@ -27,7 +27,7 @@ pub(super) fn verify(
         return Err("trashed evidence referenced".into());
     }
     if !shared {
-        blob::restore(root, &kept)?;
+        blob::retention::restore(root, &kept)?;
     }
     Ok(kept)
 }
@@ -48,7 +48,7 @@ pub(super) fn hook(root: &Path, name: &str) -> Result<(), String> {
 }
 
 pub(super) fn temporaries(root: &Path, shared: bool) -> Result<(), String> {
-    for tree in blob::worktrees(root)? {
+    for tree in blob::retention::worktrees(root)? {
         for folder in record::FOLDERS {
             publish::record_dir(&tree, folder)?;
             if let Ok(entries) = fs::read_dir(tree.join(".whosaidso").join(folder)) {

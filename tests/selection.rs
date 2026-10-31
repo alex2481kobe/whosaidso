@@ -21,6 +21,9 @@ fn roadmap_is_unbounded_but_focus_dependencies_and_active_work_are_limited() {
     commit(root);
     cli(root, &["check"]);
     bad(root, &["start", "later-000"], "focus");
+    for n in 1..300 {
+        std::fs::remove_file(root.join(format!(".whosaidso/goals/later-{n:03}.json"))).unwrap();
+    }
     let p = r::goal(root, "child");
     let mut g = value(&p);
     g["parent"] = json!("g");

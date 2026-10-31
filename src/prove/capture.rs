@@ -15,6 +15,7 @@ use std::{
 pub(super) fn run(
     tree: &Path,
     output_dir: &Path,
+    target_dir: &Path,
     commit: &str,
     argv: &[String],
     limit: Option<f64>,
@@ -27,7 +28,7 @@ pub(super) fn run(
         .current_dir(tree)
         .env("WHOSAIDSO_OUTPUT", output_dir)
         .env("TMPDIR", output_dir)
-        .env("CARGO_TARGET_DIR", output_dir.join("target"))
+        .env("CARGO_TARGET_DIR", target_dir)
         .process_group(0)
         .stdin(Stdio::null())
         .stdout(Stdio::from(OwnedFd::from(pipe)))

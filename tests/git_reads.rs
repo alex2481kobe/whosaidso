@@ -34,7 +34,7 @@ fn state_queries_batch_git_reads_and_oversized_text_fetches_metadata_only() {
         &bin.join("git"),
         "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$TRACE\"\nif test \"$1 $2\" = 'cat-file --batch-command' && test -n \"$REQUESTS\"; then tee \"$REQUESTS\" | \"$REAL_GIT\" \"$@\"; exit $?; fi\nexec \"$REAL_GIT\" \"$@\"\n",
     );
-    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let path = format!("{}:{}", bin.display(), tool_path().to_string_lossy());
     let shown = success(
         command(root, BIN, &["show", "g"])
             .env("PATH", &path)

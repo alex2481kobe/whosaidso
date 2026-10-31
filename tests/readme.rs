@@ -47,7 +47,7 @@ fn documented_quick_start_runs_verbatim() {
                 .env("CARGO_TARGET_DIR", root.join("target"))
                 .env(
                     "PATH",
-                    format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+                    format!("{}:{}", bin.display(), tool_path().to_string_lossy()),
                 )
                 .env("README_GIT", real.trim())
                 .env("CARGO_NET_OFFLINE", "true")

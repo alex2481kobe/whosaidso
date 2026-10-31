@@ -107,7 +107,8 @@ pub(super) fn select<'a>(
                         .iter()
                         .any(|e| e == &m.sha || e == &m.media_sha256)
                 })
-                && (i >= gallery::LIVE_MEDIA || !goals.contains(m.goal.as_str())))
+                && (i >= gallery::LIVE_MEDIA
+                    || (!m.goal.is_empty() && !goals.contains(m.goal.as_str()))))
             .then_some(m)
         })
         .collect();

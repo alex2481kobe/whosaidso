@@ -108,7 +108,7 @@ pub(super) fn closed(
                 available.push(*m);
             }
         }
-        gallery::archive(root, &available)?;
+        gallery::archive::archive(root, &available)?;
         publish::write_bytes(&target, &record::fold::encode(&entries)?)?;
         for p in &paths {
             fs::remove_file(root.join(".whosaidso").join(p)).map_err(|e| e.to_string())?;

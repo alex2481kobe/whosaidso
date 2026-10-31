@@ -6,6 +6,7 @@ pub fn add(root: &Path, cwd: &Path, goal: &str, file: &str, shows: &str) -> Resu
             "evidence: reopen {milestone} before updating folded evidence"
         ));
     }
-    // Single media integration point; arbitrary file support belongs to that module.
-    crate::gallery::show(root, cwd, goal, file, shows)
+    let sha = crate::gallery::attach(root, cwd, goal, file, shows)?;
+    println!("media: {goal} {}", &sha[..12]);
+    Ok(())
 }

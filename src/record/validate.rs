@@ -118,7 +118,7 @@ pub(super) fn validate(root: &Path, store: &mut Store) -> Result<(), String> {
         }
     }
     for media in &store.media {
-        if !goals.contains_key(media.goal.as_str()) {
+        if !media.goal.is_empty() && !goals.contains_key(media.goal.as_str()) {
             store.broken.push(("media".into(), media.sha.clone()));
             store
                 .errors

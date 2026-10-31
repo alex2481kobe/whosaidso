@@ -7,15 +7,14 @@ fn code_collectors_bound_all_answers_and_keep_exact_counts() {
     let f = Fixture::empty();
     let root = &f.root;
 
-    write(&root.join("many.rs"), "fn repeated() {}\n");
-    cli(root, &["code", "defs", "repeated"]);
-    let db = rusqlite::Connection::open(root.join(".git/whosaidso/cache/index.db")).unwrap();
-    db.execute_batch("DELETE FROM defs; WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<25) INSERT INTO defs SELECT 'many.rs','repeated','fn',i,'repeated' FROM n; INSERT INTO calls SELECT path,name,line,'caller',qualified FROM defs; INSERT INTO includes SELECT path,'target.h',line FROM defs;").unwrap();
-    drop(db);
+    let source: String = (0..25)
+        .map(|_| "#include \"target.h\"\nvoid repeated() { repeated(); }\n")
+        .collect();
+    write(&root.join("many.cpp"), &source);
     for args in [
         &["code", "defs", "repeated"][..],
         &["code", "refs", "repeated"],
-        &["code", "deps", "many.rs"],
+        &["code", "deps", "many.cpp"],
         &["code", "includers", "target.h"],
     ] {
         let text = cli(root, args);

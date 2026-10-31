@@ -53,7 +53,14 @@ impl Scratch {
             .join(crate::publish::ran_at()?.to_string());
         fs::create_dir_all(&output).map_err(|e| e.to_string())?;
         let reflog = git::run(&tree, &["reflog", "show", "--format=%H%x00%gs", "HEAD"])?;
-        let result = super::capture::run(&tree, &output, commit, check, limit)?;
+        let result = super::capture::run(
+            &tree,
+            &output,
+            &self.dir.join("target"),
+            commit,
+            check,
+            limit,
+        )?;
         if git::run(&tree, &["rev-parse", "HEAD"])?.trim() != commit {
             return Err("prove: HEAD changed during check".into());
         }

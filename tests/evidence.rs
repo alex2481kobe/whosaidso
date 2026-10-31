@@ -96,7 +96,6 @@ fn a_new_check_can_fail_on_main_and_still_prove_the_candidate() {
 }
 
 #[test]
-#[ignore = "pending any-file media"]
 fn attached_text_report_is_gallery_evidence_by_hash() {
     use common::viewer::Viewer;
     let f = Fixture::new();
@@ -119,4 +118,75 @@ fn attached_text_report_is_gallery_evidence_by_hash() {
     assert_eq!(gallery["entries"][0]["media_sha256"], sha);
     assert!(cli(root, &["show", "g"]).contains("attached"));
     assert!(cli(root, &["goals"]).contains("done    g"));
+}
+
+#[test]
+fn paired_cargo_runs_reuse_builds_with_fresh_generated_output() {
+    let f = Fixture::new();
+    let root = &f.root;
+    write(
+        &root.join("Cargo.toml"),
+        "[package]\nname = \"check-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    write(
+        &root.join("src/main.rs"),
+        r#"fn main() {
+        let marker = std::path::PathBuf::from(std::env::var_os("WHOSAIDSO_OUTPUT").unwrap()).join("marker");
+        assert!(!marker.exists());
+        std::fs::write(marker, "fresh").unwrap();
+        println!("fresh output");
+    }"#,
+    );
+    write(
+        &root.join("build.rs"),
+        r#"fn main() {
+        use std::io::Write;
+        let mut count = std::fs::OpenOptions::new().create(true).append(true)
+            .open(std::env::var_os("BUILD_COUNTER").unwrap()).unwrap();
+        writeln!(count, "build").unwrap();
+        println!("cargo:rerun-if-changed=build.rs");
+    }"#,
+    );
+    r::check_command(root, &["cargo", "run", "--offline", "--quiet"]);
+    commit(root);
+    let count = root.join(".git/builds");
+    success(
+        command(root, BIN, &["prove", "g", "--reason", "unchanged behavior"])
+            .env("BUILD_COUNTER", &count)
+            .output()
+            .unwrap(),
+    );
+    let proof = value(&paths(&root.join(".whosaidso/proofs"))[0]);
+    assert_eq!(proof["exit_code"], 0);
+    assert_eq!(proof["main"]["exit_code"], 0);
+    assert_eq!(proof["output_tail"], "fresh output\n");
+    assert_eq!(proof["main"]["output_tail"], "fresh output\n");
+    assert_eq!(fs::read_to_string(count).unwrap().lines().count(), 1);
+
+    git(root, &["checkout", "-q", "-b", "candidate"]);
+    let source = root.join("src/main.rs");
+    write(
+        &source,
+        fs::read_to_string(&source)
+            .unwrap()
+            .replace("fresh output", "candidate output"),
+    );
+    commit(root);
+    success(
+        command(root, BIN, &["prove", "g", "--reason", "unchanged behavior"])
+            .env("BUILD_COUNTER", root.join(".git/builds"))
+            .output()
+            .unwrap(),
+    );
+    let proofs: Vec<_> = paths(&root.join(".whosaidso/proofs"))
+        .iter()
+        .map(|p| value(p))
+        .collect();
+    let proof = proofs
+        .iter()
+        .find(|p| p["output_tail"] == "candidate output\n")
+        .expect("candidate rebuilt after its source changed");
+    assert_eq!(proof["exit_code"], 0);
+    assert_eq!(proof["main"]["exit_code"], 0);
+    assert_eq!(proof["main"]["output_tail"], "fresh output\n");
 }

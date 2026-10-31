@@ -3,7 +3,7 @@ mod blob;
 mod cache;
 mod check;
 mod claims;
-mod code;
+pub mod code;
 mod config;
 mod evidence;
 mod find;
@@ -71,6 +71,7 @@ fn run() -> Result<(), String> {
         "evidence add <goal> <file> <shows>", [cmd, sub, goal, file, shows] if cmd == "evidence" && sub == "add" => evidence::add(&root, &cwd, goal, file, shows);
         "reopen <milestone> <destination-revision>", [cmd, id, revision] if cmd == "reopen" => record::fold::reopen::reopen(&root, id, revision);
         "prune", [cmd] if cmd == "prune" => { println!("{}", prune::prune(&root)?); Ok(()) };
+        "media restore <sha256>", [cmd, sub, sha] if cmd == "media" && sub == "restore" => gallery::restore(&root, sha);
         "media <goal-id> <file> <title>", [cmd, goal, path, shows] if cmd == "media" => evidence::add(&root, &cwd, goal, path, shows);
         "ui [--port N] [--open]", [cmd, rest @ ..] if cmd == "ui" => ui::serve(&root, rest);
         "grep [--regex] [-i|-s] [-C N] [-g glob] [--in prefix] [--limit N] [--offset N] [-l|--files] [pattern...]", [cmd, words @ ..] if cmd == "grep" => text::grep(&root, words);

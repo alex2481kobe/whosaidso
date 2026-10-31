@@ -28,28 +28,18 @@ fn gallery_cap_and_monthly_archive_keep_exact_record_and_media_bytes() {
     }
     assert!(cli(root, &["prune"]).contains("2 media archived"));
     assert_eq!(paths.iter().filter(|p| p.exists()).count(), 100);
-    let bundle = root.join(".git/whosaidso/archive/media-2026-01.tar");
-    let dir = root.join(".git/extracted");
-    fs::create_dir(&dir).unwrap();
-    success(
-        command(&dir, "tar", &["-xf", bundle.to_str().unwrap()])
-            .output()
-            .unwrap(),
-    );
+    let bundle = root.join(".git/whosaidso/archive/media-2026-01.tar.gz");
+    let archived = common::archive::entries(&bundle);
+    assert_eq!(archived.len(), 4);
     for path in expected.iter().skip(100) {
         let id = path.file_stem().unwrap().to_str().unwrap();
         let v: serde_json::Value = serde_json::from_slice(&before[path]).unwrap();
-        assert_eq!(
-            fs::read(dir.join(format!("{id}.json"))).unwrap(),
-            before[path]
-        );
-        assert_eq!(
-            hash(&fs::read(dir.join(format!("{id}.png"))).unwrap()),
-            v["media_sha256"]
-        );
+        assert_eq!(archived[&format!("{id}.json")], before[path]);
+        assert_eq!(hash(&archived[&format!("{id}.png")]), v["media_sha256"]);
     }
     let archive = viewer.json("/api/gallery", &cookie);
-    assert_eq!(archive["archives"][0]["count"], 2);
+    assert_eq!(archive["entries"].as_array().unwrap().len(), 100);
+    assert!(archive.get("archives").is_none());
 }
 
 #[test]
@@ -73,11 +63,13 @@ fn archive_write_failure_preserves_records_and_retry_appends_losslessly() {
     assert_eq!(snapshot(&root.join(".whosaidso/media")), before);
     cli(root, &["prune"]);
     commit(root);
-    let bundle = root.join(".git/whosaidso/archive/media-2026-01.tar");
+    let bundle = root.join(".git/whosaidso/archive/media-2026-01.tar.gz");
     let old = fs::read(&bundle).unwrap();
+    let old_entries = common::archive::entries(&bundle);
     let p = r::media(root, &png(vec![222; 40000]), "png", 1767225600000000001);
     r::media(root, &png(vec![223; 40000]), "png", 1767225600000000002);
     commit(root);
+    let pending = snapshot(&root.join(".whosaidso/media"));
     let out = command(
         root,
         "sh",
@@ -93,11 +85,20 @@ fn archive_write_failure_preserves_records_and_retry_appends_losslessly() {
     assert!(!out.status.success());
     assert_eq!(fs::read(&bundle).unwrap(), old);
     assert!(p.exists());
+    assert_eq!(snapshot(&root.join(".whosaidso/media")), pending);
     cli(root, &["prune"]);
-    let listing = success(
-        command(root, "tar", &["-tf", bundle.to_str().unwrap()])
-            .output()
-            .unwrap(),
-    );
-    assert_eq!(listing.lines().count(), 6);
+    let archived = common::archive::entries(&bundle);
+    assert_eq!(archived.len(), 6);
+    for (name, bytes) in old_entries {
+        assert_eq!(archived[&name], bytes);
+    }
+    for (path, bytes) in pending.iter().filter(|(path, _)| !path.exists()) {
+        let id = path.file_stem().unwrap().to_str().unwrap();
+        let record: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+        assert_eq!(archived[&format!("{id}.json")], *bytes);
+        assert_eq!(
+            hash(&archived[&format!("{id}.png")]),
+            record["media_sha256"]
+        );
+    }
 }
