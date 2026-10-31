@@ -32,7 +32,7 @@ pub fn start(root: &Path, cwd: &Path, id: &str) -> Result<(), String> {
     } else {
         match state::states(root, &store) {
             Ok(states) => Some(states),
-            Err(e) if e == "no local branch main" => None,
+            Err(e) if e.starts_with("no local branch ") => None,
             Err(e) => return Err(e),
         }
     };
@@ -41,9 +41,17 @@ pub fn start(root: &Path, cwd: &Path, id: &str) -> Result<(), String> {
             .as_ref()
             .and_then(|s| s.iter().find(|g| g.id == id))
             .is_some_and(|g| g.state.settled());
-        claims::claim(root, cwd, id, settled)?;
+        let (notices, result) = claims::claim(root, cwd, id, settled);
+        for notice in notices {
+            println!("{notice}");
+        }
+        result?;
     }
-    claims::release(root, cwd, if id == "none" { "" } else { id })?;
+    let (notices, result) = claims::release(root, cwd, if id == "none" { "" } else { id });
+    for notice in notices {
+        println!("{notice}");
+    }
+    result?;
     let git_dir = git::run(cwd, &["rev-parse", "--git-dir"])?;
     fs::write(
         cwd.join(git_dir.trim()).join("whosaidso-goal"),

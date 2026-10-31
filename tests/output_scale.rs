@@ -7,7 +7,7 @@ use common::{records as r, *};
 fn large_check_output_uses_bounded_memory_and_hashes_every_byte() {
     let f = Fixture::new();
     let root = &f.root;
-    r::instrument(root, &["head", "-c", "52428800", "/dev/zero"]);
+    r::check_command(root, &["head", "-c", "52428800", "/dev/zero"]);
     commit(root);
     success(
         command(

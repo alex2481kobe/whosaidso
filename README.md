@@ -1,6 +1,6 @@
 # WhoSaidSo
 
-A ledger in your git repo for goals worked on by many agents. Each goal has a check: a command that passes when the goal is done. Agents claim a goal, work on it and run its check, and the state of every goal is read from git.
+A ledger in your git repo for goals worked on by many agents. Goals have evidence: a recorded run or an attached file. Agents claim work and keep its proof; progress is derived from Git.
 
 <img src="assets/ui-goals.png" alt="Goals and branches" width="912" />
 <img src="assets/ui-gallery.png" alt="Evidence gallery" width="912" />
@@ -22,27 +22,31 @@ cargo install --git https://github.com/alex2481kobe/whosaidso --tag v0.3.1 --loc
 
 ## Quick start
 
-In a Git repository, create the first records:
+In a Git repository with an initial commit, create a goal:
 
 ```sh
-mkdir -p .whosaidso/phases .whosaidso/goals .whosaidso/instruments
-printf '%s\n' '{"title":"First phase","order":1}' > .whosaidso/phases/p1.json
-printf '%s\n' '{"run":["cargo","test"],"answers":"Tests pass"}' > .whosaidso/instruments/test.json
-printf '%s\n' '{"title":"First goal","done_when":"Tests pass","check":"test","broader":"p1"}' > .whosaidso/goals/first-goal.json
+mkdir -p .whosaidso/goals
+printf '%s\n' '{"title":"First goal","done_when":"The feature file exists","parent":null,"order":1,"after":[],"check":["sh","-c","test -f feature.txt"]}' > .whosaidso/goals/first-goal.json
 whosaidso check
 whosaidso install-hooks
 git add .whosaidso
 git commit -m 'Add records'
 ```
 
-Run `whosaidso install-hooks` once per clone. `whosaidso start first-goal` claims the goal; your commits then carry its `Goal:` trailer. After committing work:
+Claim the goal, commit the work, and keep its evidence:
 
 ```sh
+whosaidso start first-goal
+printf '%s\n' 'Example feature' > feature.txt
+git add feature.txt
+git commit -m 'Add feature'
 whosaidso goals
 whosaidso prove first-goal
+git add .whosaidso/proofs
+git commit -m 'Record evidence'
 ```
 
-`prove` runs the check and records the result; commit it. Attach a screenshot or video with `whosaidso media <goal> <file> <title>`.
+Run `install-hooks` once per clone. Goal state is derived from Git; evidence on the default branch completes a goal. A check is optional: a file attachment can also provide evidence. Keep checks short and focused on real behavior.
 
 ## Code search
 

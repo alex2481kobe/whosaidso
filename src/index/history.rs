@@ -3,9 +3,7 @@ use crate::git;
 use rusqlite::Transaction;
 use std::path::Path;
 pub(super) fn sync(root: &Path, tx: &Transaction<'_>) -> Result<(), String> {
-    let head = git::run(root, &["rev-parse", "--verify", "refs/heads/main"])
-        .ok()
-        .map(|s| s.trim().to_owned());
+    let head = git::main_tip(root).ok().map(|s| s.trim().to_owned());
     let old = stamp(tx, "git:main")?;
     let ancestor = match (&old, &head) {
         (Some(old), Some(head)) if old != head => {

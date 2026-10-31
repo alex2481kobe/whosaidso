@@ -52,7 +52,7 @@ pub fn attach(
 }
 
 pub const LIVE_MEDIA: usize = 100;
-pub fn newest(store: &record::Store) -> Vec<&Media> {
+pub fn newest(store: &record::model::Store) -> Vec<&Media> {
     publish::newest(store.media.iter().map(|m| (m, m.ran_at, m.sha.as_str())))
 }
 

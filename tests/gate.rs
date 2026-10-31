@@ -80,7 +80,7 @@ fn gate_refuses_untracked_modified_deleted_and_staged_records() {
     let f = Fixture::new();
     let root = &f.root;
 
-    for kind in ["phases", "goals", "instruments", "proofs", "asks", "media"] {
+    for kind in ["goals", "proofs", "media"] {
         let path = root.join(format!(".whosaidso/{kind}/new.json"));
         write(&path, "{}");
         bad(root, &["gate"], "uncommitted");

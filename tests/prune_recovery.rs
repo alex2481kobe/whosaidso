@@ -112,3 +112,17 @@ fn failed_rollback_keeps_the_journal_until_recovery_succeeds() {
     assert!(!journal.exists());
     assert_eq!(snapshot(&root.join(".whosaidso/media")), before);
 }
+
+#[test]
+fn prune_reports_the_failure_that_triggered_rollback() {
+    let f = Fixture::new();
+    failure(
+        command(&f.root, BIN, &["prune"])
+            .env("WHOSAIDSO_PRUNE_HOOK", "false")
+            .output()
+            .unwrap(),
+        "prune hook failed",
+    );
+    write(&f.root.join(".whosaidso/goals/g.json"), "{");
+    bad(&f.root, &["goals"], "g.json");
+}

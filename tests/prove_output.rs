@@ -10,7 +10,7 @@ fn output_tail_is_bounded_but_hash_covers_the_entire_stream() {
 
     let bytes = vec![b'x'; 20000];
     write(&root.join(".git/output"), &bytes);
-    r::instrument(root, &["cat", ".git/output"]);
+    r::check_command(root, &["cat", ".git/output"]);
     commit(root);
     cli(root, &["prove", "g"]);
     let v = value(&paths(&root.join(".whosaidso/proofs"))[0]);
@@ -28,7 +28,7 @@ fn escaped_unicode_and_invalid_output_fit_both_record_budgets() {
         ["\0\0\0\0é".repeat(8000).as_bytes(), b"END"].concat(),
     ] {
         write(&root.join(".git/output"), &bytes);
-        r::instrument(root, &["cat", ".git/output"]);
+        r::check_command(root, &["cat", ".git/output"]);
         commit(root);
         cli(root, &["prove", "g"]);
         let p = paths(&root.join(".whosaidso/proofs")).pop().unwrap();

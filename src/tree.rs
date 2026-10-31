@@ -1,6 +1,6 @@
 // Visible files, byte stamps and shared incremental reconciliation.
 use crate::{git, record};
-use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior};
+use rusqlite::{Connection, Transaction};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, HashSet},
@@ -8,6 +8,10 @@ use std::{
     io::Read,
     path::Path,
 };
+
+mod disk;
+mod reconciliation;
+use disk::{disk_stamp, linked};
 
 pub const BATCH_BYTES: usize = 64 * 1024 * 1024;
 #[derive(Clone)]
@@ -85,58 +89,6 @@ pub fn open(root: &Path, path: &str) -> Result<fs::File, String> {
     }
     fs::File::open(root.join(path)).map_err(|e| format!("{path}: {e}"))
 }
-fn disk_stamp(root: &Path, path: &str) -> Result<String, String> {
-    let mut input = open(root, path)?;
-    let mut hash = Sha256::new();
-    let mut buf = [0; 8192];
-    loop {
-        let n = input.read(&mut buf).map_err(err)?;
-        if n == 0 {
-            break;
-        }
-        hash.update(&buf[..n]);
-    }
-    Ok(hash.finalize().iter().map(|b| format!("{b:02x}")).collect())
-}
-// Directory entries expose symlink types without restatting every shared ancestor.
-fn linked(
-    root: &Path,
-    path: &Path,
-    dirs: &mut HashMap<std::path::PathBuf, Option<HashSet<std::ffi::OsString>>>,
-) -> Result<bool, String> {
-    let parent = path.parent().ok_or("invalid file path")?;
-    if let Some(links) = dirs.get(parent) {
-        return Ok(links
-            .as_ref()
-            .is_none_or(|links| path.file_name().is_some_and(|name| links.contains(name))));
-    }
-    let links = if !parent.as_os_str().is_empty() && linked(root, parent, dirs)? {
-        None
-    } else {
-        let mut links = HashSet::new();
-        match fs::read_dir(root.join(parent)) {
-            Ok(entries) => {
-                for entry in entries {
-                    let entry = entry.map_err(err)?;
-                    if entry.file_type().map_err(err)?.is_symlink() {
-                        links.insert(entry.file_name());
-                    }
-                }
-            }
-            Err(e)
-                if matches!(
-                    e.kind(),
-                    std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
-                ) => {}
-            Err(e) => return Err(format!("{}: {e}", parent.display())),
-        }
-        Some(links)
-    };
-    dirs.insert(parent.to_path_buf(), links);
-    Ok(dirs[parent]
-        .as_ref()
-        .is_none_or(|links| path.file_name().is_some_and(|name| links.contains(name))))
-}
 pub fn files(root: &Path) -> Result<Files, String> {
     files_in(root, |_| true)
 }
@@ -145,7 +97,7 @@ pub fn files_in(root: &Path, include: impl Fn(&str) -> bool) -> Result<Files, St
         let changed = scope.spawn(|| git::run_bytes(root, &["diff-files", "--name-only", "-z"]));
         let untracked =
             scope.spawn(|| git::run_bytes(root, &["ls-files", "-o", "--exclude-standard", "-z"]));
-        let listing = git::run_bytes(root, &["ls-files", "-s", "-z"])?;
+        let listing = git::run_bytes(root, &["ls-files", "-v", "-s", "-z"])?;
         let changed = changed.join().map_err(|_| "git listing thread failed")??;
         let mut links = HashMap::new();
         let changed: HashSet<&[u8]> = changed
@@ -161,6 +113,7 @@ pub fn files_in(root: &Path, include: impl Fn(&str) -> bool) -> Result<Files, St
                 .ok_or("invalid git ls-files output")?;
             let meta = std::str::from_utf8(&entry[..tab]).map_err(err)?;
             let mut parts = meta.split_ascii_whitespace();
+            let tag = parts.next().ok_or("missing git file status")?;
             let (mode, blob, stage) = (parts.next(), parts.next(), parts.next());
             if stage != Some("0") || parts.next().is_some() {
                 return Err("unmerged git index".into());
@@ -179,7 +132,7 @@ pub fn files_in(root: &Path, include: impl Fn(&str) -> bool) -> Result<Files, St
                 skipped += 1;
                 continue;
             }
-            if changed.contains(raw) {
+            if changed.contains(raw) || tag.bytes().any(|b| b.is_ascii_lowercase()) || tag == "S" {
                 if root.join(path).is_file() {
                     entries.push(File {
                         path: path.into(),
@@ -279,175 +232,9 @@ pub fn reconcile(
     supported: impl Fn(&str) -> bool,
     max_bytes: usize,
     clear: impl Fn(&Transaction<'_>, &str) -> Result<(), String>,
-    mut write: impl FnMut(
-        &Transaction<'_>,
-        Vec<(File, Option<Vec<u8>>)>,
-    ) -> Result<(usize, usize), String>,
+    write: impl FnMut(&Transaction<'_>, Vec<(File, Option<Vec<u8>>)>) -> Result<(usize, usize), String>,
 ) -> Result<Counts, String> {
-    let fingerprint = fingerprint(files);
-    db.execute_batch("CREATE TABLE IF NOT EXISTS tree_warm(source TEXT PRIMARY KEY,stamp TEXT,unchanged INTEGER,skipped INTEGER);
-        CREATE TABLE IF NOT EXISTS tree_skips(source TEXT,path TEXT,blob TEXT,PRIMARY KEY(source,path))").map_err(err)?;
-    if let Some((unchanged, skipped)) = db
-        .query_row(
-            "SELECT unchanged,skipped FROM tree_warm WHERE source=?1 AND stamp=?2",
-            [table, &fingerprint],
-            |r| Ok((r.get::<_, i64>(0)? as usize, r.get::<_, i64>(1)? as usize)),
-        )
-        .optional()
-        .map_err(err)?
-    {
-        return Ok(Counts {
-            unchanged,
-            skipped,
-            ..Counts::default()
-        });
-    }
-    let version: i64 = db
-        .pragma_query_value(None, "data_version", |r| r.get(0))
-        .map_err(err)?;
-    let skipped: HashMap<String, String> = {
-        let mut stmt = db
-            .prepare("SELECT path,blob FROM tree_skips WHERE source=?1")
-            .map_err(err)?;
-        stmt.query_map([table], |r| Ok((r.get(0)?, r.get(1)?)))
-            .map_err(err)?
-            .collect::<Result<_, _>>()
-            .map_err(err)?
-    };
-    let old: HashMap<String, String> = {
-        let mut stmt = db
-            .prepare(&format!("SELECT path,blob FROM {table}"))
-            .map_err(err)?;
-        stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
-            .map_err(err)?
-            .collect::<Result<_, _>>()
-            .map_err(err)?
-    };
-    let entries: Vec<_> = files
-        .entries
-        .iter()
-        .filter(|f| supported(&f.path))
-        .cloned()
-        .collect();
-    let paths: HashSet<_> = entries.iter().map(|f| f.path.as_str()).collect();
-    let gone: Vec<_> = old
-        .keys()
-        .filter(|p| !paths.contains(p.as_str()))
-        .cloned()
-        .collect();
-    let missing: Vec<_> = skipped
-        .keys()
-        .filter(|p| !paths.contains(p.as_str()))
-        .cloned()
-        .collect();
-    let mut count = Counts {
-        skipped: files.skipped,
-        removed: gone.len(),
-        ..Counts::default()
-    };
-    let changed: Vec<_> = entries
-        .into_iter()
-        .filter(|f| {
-            if old.get(&f.path) == Some(&f.blob) {
-                count.unchanged += 1;
-                false
-            } else if skipped.get(&f.path) == Some(&f.blob) {
-                count.skipped += 1;
-                false
-            } else {
-                true
-            }
-        })
-        .collect();
-
-    let expected: HashMap<_, _> = changed
-        .iter()
-        .map(|f| (f.path.as_str(), f.blob.as_str()))
-        .collect();
-    let mut stable = true;
-    let mut first = true;
-    let mut flush = |batch: Vec<(File, Option<Vec<u8>>)>| -> Result<(), String> {
-        let tx = db
-            .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(err)?;
-        tx.execute("DELETE FROM tree_warm WHERE source=?1", [table])
-            .map_err(err)?;
-        if first {
-            for path in &gone {
-                clear(&tx, path)?;
-            }
-            for path in &missing {
-                tx.execute(
-                    "DELETE FROM tree_skips WHERE source=?1 AND path=?2",
-                    [table, path],
-                )
-                .map_err(err)?;
-            }
-            first = false;
-        }
-        for (file, _) in &batch {
-            tx.prepare_cached("DELETE FROM tree_skips WHERE source=?1 AND path=?2")
-                .map_err(err)?
-                .execute([table, &file.path])
-                .map_err(err)?;
-            let exists = tx
-                .prepare_cached(&format!("SELECT 1 FROM {table} WHERE path=?1"))
-                .map_err(err)?
-                .query_row([&file.path], |_| Ok(()))
-                .optional()
-                .map_err(err)?
-                .is_some();
-            if exists {
-                clear(&tx, &file.path)?;
-            }
-        }
-        let (indexed, skipped) = write(&tx, batch)?;
-        tx.commit().map_err(err)?;
-        count.indexed += indexed;
-        count.skipped += skipped;
-        Ok(())
-    };
-    let mut batch = Vec::new();
-    let mut size = 0;
-    read(root, &changed, max_bytes.min(BATCH_BYTES), |file, bytes| {
-        stable &= expected.get(file.path.as_str()) == Some(&file.blob.as_str());
-        let n = bytes.as_ref().map_or(0, Vec::len);
-        if size + n > BATCH_BYTES {
-            flush(std::mem::take(&mut batch))?;
-            size = 0;
-        }
-        size += n;
-        batch.push((file.clone(), bytes));
-        if size == BATCH_BYTES {
-            flush(std::mem::take(&mut batch))?;
-            size = 0;
-        }
-        Ok(())
-    })?;
-    flush(batch)?;
-    // Publish only a complete snapshot, with no intervening writer or changed read buffer.
-    let tx = db
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(err)?;
-    if stable
-        && tx
-            .pragma_query_value(None, "data_version", |r| r.get::<_, i64>(0))
-            .map_err(err)?
-            == version
-    {
-        tx.execute(
-            "INSERT OR REPLACE INTO tree_warm VALUES (?1,?2,?3,?4)",
-            rusqlite::params![
-                table,
-                fingerprint,
-                (count.indexed + count.unchanged) as i64,
-                count.skipped as i64
-            ],
-        )
-        .map_err(err)?;
-    }
-    tx.commit().map_err(err)?;
-    Ok(count)
+    reconciliation::run(root, db, files, table, supported, max_bytes, clear, write)
 }
 pub fn blobs(files: &Files) -> HashMap<String, String> {
     files
