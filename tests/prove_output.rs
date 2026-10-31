@@ -9,8 +9,14 @@ fn output_tail_is_bounded_but_hash_covers_the_entire_stream() {
     let root = &f.root;
 
     let bytes = vec![b'x'; 20000];
-    write(&root.join(".git/output"), &bytes);
-    r::check_command(root, &["cat", root.join(".git/output").to_str().unwrap()]);
+    write(&root.parent().unwrap().join("output"), &bytes);
+    r::check_command(
+        root,
+        &[
+            "cat",
+            root.parent().unwrap().join("output").to_str().unwrap(),
+        ],
+    );
     commit(root);
     cli(root, &["prove", "g", "--reason", "behavior unchanged"]);
     let v = value(&paths(&root.join(".whosaidso/proofs"))[0]);
@@ -27,8 +33,14 @@ fn escaped_unicode_and_invalid_output_fit_both_record_budgets() {
         vec![0xff; 20000],
         ["\0\0\0\0é".repeat(8000).as_bytes(), b"END"].concat(),
     ] {
-        write(&root.join(".git/output"), &bytes);
-        r::check_command(root, &["cat", root.join(".git/output").to_str().unwrap()]);
+        write(&root.parent().unwrap().join("output"), &bytes);
+        r::check_command(
+            root,
+            &[
+                "cat",
+                root.parent().unwrap().join("output").to_str().unwrap(),
+            ],
+        );
         commit(root);
         cli(root, &["prove", "g", "--reason", "behavior unchanged"]);
         let p = paths(&root.join(".whosaidso/proofs")).pop().unwrap();
