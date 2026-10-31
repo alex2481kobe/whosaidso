@@ -1,5 +1,5 @@
 use super::{
-    code::{inside, selected},
+    code::{inside, known_coverage, selected, symbol_matches},
     map::strength,
     model::{Flow, Node},
     pattern::matches,
@@ -37,18 +37,12 @@ fn node_state(
         .iter()
         .filter(|c| node.paths.iter().any(|p| matches(p, &c.path)))
         .collect();
-    if paths
-        .iter()
-        .any(|c| c.syntax != "indexed" && c.precise != "fresh")
-    {
+    if paths.iter().any(|c| !known_coverage(c)) {
         return Ok("unknown");
     }
     let mut present = 0;
     for symbol in &node.symbols {
-        let found = rows
-            .iter()
-            .filter(|r| *symbol == r.symbol || *symbol == r.name || *symbol == r.qualified)
-            .count();
+        let found = rows.iter().filter(|r| symbol_matches(symbol, r)).count();
         if found > 1 {
             return Ok("ambiguous");
         }
@@ -91,11 +85,7 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<(Value, Graph), Strin
     }
     // A broad parent mapping does not create a second part inside each child.
     for ids in owners.values_mut() {
-        let all = ids.clone();
-        ids.retain(|id| {
-            !all.iter()
-                .any(|other| other != id && flow.contains(other, id))
-        });
+        super::code::deepest(flow, ids);
     }
     let mut steps = BTreeMap::new();
     for step in &flow.steps {
@@ -107,17 +97,15 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<(Value, Graph), Strin
     let unplanned = super::code::unplanned(flow, &graph, &owners);
     for item in &unplanned {
         let state = item["state"].as_str().unwrap_or("unplanned");
-        if let Some(ids) = item["from"].as_str().and_then(|s| owners.get(s)) {
-            for id in ids {
-                let own = nodes[*id]["state"].as_str().unwrap();
-                nodes.get_mut(*id).unwrap()["state"] = json!(rollup([own, state]));
-            }
+        if let Some(id) = item["from"].as_str() {
+            let own = nodes[id]["state"].as_str().unwrap();
+            nodes.get_mut(id).unwrap()["state"] = json!(rollup([own, state]));
         }
     }
     let mut gaps: Vec<_> = coverage
-        .into_iter()
-        .filter(|c| inside(flow, &c.path) && c.syntax != "indexed" && c.precise != "fresh")
-        .map(|c| c.path)
+        .iter()
+        .filter(|c| inside(flow, &c.path) && !known_coverage(c))
+        .map(|c| c.path.clone())
         .collect();
     gaps.extend(super::coverage::excluded(flow, snapshot)?);
     // Children are evaluated first, with step faults rolled into both endpoint layers.
@@ -200,9 +188,30 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<(Value, Graph), Strin
         .iter()
         .filter(|n| nodes[&n.id]["binding_state"] == "built")
         .count();
+    let unowned = super::code::unowned(flow, &graph, &coverage, &owners);
+    let totals = json!({"unplanned":unplanned.len(),"unknown":gaps.len(),"unowned":unowned.len(),
+        "crossing_states":{"unplanned":unplanned.iter().filter(|v| v["state"] == "unplanned").count(),
+            "unknown":unplanned.iter().filter(|v| v["state"] == "unknown").count()}});
+    for node in nodes.values_mut() {
+        let symbols = node["symbols"].as_array_mut().unwrap();
+        let total = symbols.len();
+        symbols.truncate(super::map::PAGE);
+        node["symbol_count"] = json!(total);
+    }
     Ok((
-        json!({"state":state,"revision":snapshot.id,"nodes":nodes,"steps":steps,"unplanned":unplanned,
-        "unknown":gaps,"progress":{"built":built,"total":leaves.len()},"goal":flow.goal,"goal_effect":"progress only"}),
+        json!({"state":state,"revision":snapshot.id,"nodes":nodes,"steps":steps,
+        "unplanned":unplanned,"unknown":gaps,"unowned":unowned,"totals":totals,
+        "progress":{"built":built,"total":leaves.len()},"goal":flow.goal,"goal_effect":"progress only"}),
         graph,
     ))
+}
+
+pub fn bounded(mut value: Value) -> Value {
+    for field in ["unplanned", "unknown", "unowned"] {
+        value[field]
+            .as_array_mut()
+            .unwrap()
+            .truncate(super::map::PAGE);
+    }
+    value
 }

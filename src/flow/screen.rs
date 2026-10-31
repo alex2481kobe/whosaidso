@@ -88,7 +88,8 @@ pub fn comparison(root: &Path, id: &str, branch: Option<&str>) -> Result<Value, 
     if !record.problems.is_empty() {
         return Err(record.problems.join("\n"));
     }
-    let mut value = compare::compare(&record.flow.ok_or("unreadable flow")?, &snapshot)?.0;
+    let mut value =
+        compare::bounded(compare::compare(&record.flow.ok_or("unreadable flow")?, &snapshot)?.0);
     value["committed_only"] = json!(branch.is_some());
     value["branch"] = json!(branch);
     Ok(value)
