@@ -11,6 +11,7 @@ pub enum Layer {
     Precise,
     Syntactic,
 }
+#[derive(Clone)]
 pub struct Range {
     pub encoding: i64,
     pub line: i64,
@@ -18,6 +19,7 @@ pub struct Range {
     pub end_line: i64,
     pub stop: Option<i64>,
 }
+#[derive(Clone)]
 pub struct Row {
     pub symbol: String,
     pub path: String,
@@ -150,8 +152,12 @@ impl Snapshot {
                 rows.push(row);
             }
         }
-        let mut gaps =
-            vec!["syntactic references match names; they do not resolve types or imports".into()];
+        let mut gaps = Vec::new();
+        if rows.iter().any(|r| r.layer == Layer::Syntactic) {
+            gaps.push(
+                "syntactic references match names; they do not resolve types or imports".into(),
+            );
+        }
         let missing: i64 = self.db.query_row("SELECT count(*) FROM manifest_files m LEFT JOIN syntax_coverage c ON c.fact=m.fact WHERE m.manifest=(SELECT manifest FROM selection) AND (c.status IS NULL OR c.status<>'indexed')", [], |r| r.get(0)).map_err(err)?;
         if missing > 0 {
             gaps.push(format!("{missing} files have no syntax extraction"));

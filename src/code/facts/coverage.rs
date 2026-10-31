@@ -20,3 +20,50 @@ impl Snapshot {
         .map_err(err)
     }
 }
+
+impl Snapshot {
+    pub fn blind_spots(&self, rows: &[super::reads::Row]) -> Result<Vec<String>, String> {
+        use super::reads::Layer;
+        let layers: Vec<_> = if rows.is_empty() {
+            self.coverage()?
+                .into_iter()
+                .filter_map(|c| {
+                    if c.precise == "fresh" {
+                        Some((c.path, Layer::Precise))
+                    } else if c.syntax == "indexed" {
+                        Some((c.path, Layer::Syntactic))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        } else {
+            rows.iter().map(|r| (r.path.clone(), r.layer)).collect()
+        };
+        let mut gaps = std::collections::BTreeSet::new();
+        for (path, layer) in layers {
+            if let Some(language) = crate::code::languages::for_path(&path) {
+                let (label, gap) = if layer == Layer::Precise {
+                    (
+                        "SCIP guidance, not locally reproduced",
+                        language.precise_gap,
+                    )
+                } else {
+                    ("syntactic", language.syntax_gap)
+                };
+                gaps.insert(format!("{} ({label}): {gap}", language.name));
+            } else {
+                gaps.insert(
+                    "precise language coverage not probed; completeness unknown".to_string(),
+                );
+            }
+        }
+        Ok(gaps.into_iter().collect())
+    }
+    pub fn coverage_summary(&self) -> Result<(usize, usize, usize), String> {
+        self.db.query_row("SELECT coalesce(sum(d.path IS NOT NULL AND d.blob=m.blob),0),coalesce(sum((d.path IS NULL OR d.blob IS NULL OR d.blob<>m.blob) AND c.status='indexed'),0),count(*) FROM manifest_files m LEFT JOIN syntax_coverage c ON c.fact=m.fact LEFT JOIN scip_docs d ON d.path=m.path WHERE m.manifest=(SELECT manifest FROM selection)", [], |r| {
+            let precise: i64 = r.get(0)?; let syntax: i64 = r.get(1)?; let total: i64 = r.get(2)?;
+            Ok((precise as usize, syntax as usize, (total-precise-syntax) as usize))
+        }).map_err(err)
+    }
+}

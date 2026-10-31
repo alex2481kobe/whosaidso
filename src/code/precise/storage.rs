@@ -50,6 +50,13 @@ pub(super) fn symbol_key(path: &str, symbol: &str) -> String {
     }
 }
 pub fn import(root: &Path, file: &Path) -> Result<Report, String> {
+    import_run(root, file, None)
+}
+pub(in crate::code) fn import_run(
+    root: &Path,
+    file: &Path,
+    expected: Option<&str>,
+) -> Result<Report, String> {
     let data = fs::read(file).map_err(|e| format!("{}: {e}", file.display()))?;
     let mut docs = Vec::new();
     let mut metadata = false;
@@ -78,6 +85,9 @@ pub fn import(root: &Path, file: &Path) -> Result<Report, String> {
     }
     let docs = merge_paths(docs)?;
     let (_, mut files) = super::super::store::index(root)?;
+    if expected.is_some_and(|stamp| tree::fingerprint(&files) != stamp) {
+        return Err("sources changed during indexing; old index retained".into());
+    }
     let paths: HashSet<_> = docs.iter().map(|d| d.path.as_str()).collect();
     let mut blobs = tree::blobs(&files);
     let sources: Vec<_> = files
@@ -103,6 +113,9 @@ pub fn import(root: &Path, file: &Path) -> Result<Report, String> {
         if let Some(blob) = effective.remove(&f.path) {
             f.blob = blob;
         }
+    }
+    if expected.is_some_and(|stamp| tree::fingerprint(&files) != stamp) {
+        return Err("sources changed during indexing; old index retained".into());
     }
     let mut db = super::super::store::open(root)?;
     schema(&db)?;

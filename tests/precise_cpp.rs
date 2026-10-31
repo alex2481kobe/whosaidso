@@ -1,5 +1,5 @@
 mod common;
-use common::process::*;
+use common::process::code_rows as cli;
 use common::*;
 use std::fs;
 
