@@ -139,7 +139,7 @@ fn select(snapshot: &Snapshot, value: &str) -> Result<Vec<Row>, String> {
     let value = value.strip_prefix("./").unwrap_or(value);
     let invalid = || {
         format!(
-            "code show: invalid selector {value:?}; use name, path:name, path:line:name, path::name or symbol id"
+            "code show: invalid selector {value:?}; use name, path:name, path:line, path:line:name, path::name or symbol id"
         )
     };
     if value.ends_with(" [label truncated]") {
@@ -157,7 +157,11 @@ fn select(snapshot: &Snapshot, value: &str) -> Result<Vec<Row>, String> {
         })
         .max_by_key(|(p, _)| p.len())
     {
-        let (name, line) = if let Some(name) = rest.strip_prefix(':') {
+        let location = rest.split(" [").next().unwrap_or(rest);
+        let (name, line) = if let Ok(line) = location.parse::<i64>() {
+            if line <= 0 { return Err(invalid()); }
+            ("", Some(line))
+        } else if let Some(name) = rest.strip_prefix(':') {
             (name, None)
         } else if let Some((line, name)) = rest.split_once(':').filter(|(_, n)| !n.starts_with(':'))
         {
@@ -170,7 +174,7 @@ fn select(snapshot: &Snapshot, value: &str) -> Result<Vec<Row>, String> {
         } else {
             (rest, None)
         };
-        if name.is_empty() {
+        if name.is_empty() && line.is_none() {
             return Err(invalid());
         }
         let mut name = name;

@@ -97,7 +97,7 @@ pub(crate) fn label(hit: &Hit) -> String {
         key
     };
     let title = hit.title.replace(['\n', '\r'], " ");
-    let label = match hit.kind.as_str() {
+    let mut label = match hit.kind.as_str() {
         "file" => key.to_string(),
         "symbol" => format!("symbol {key}"),
         "commit" => format!(
@@ -107,6 +107,13 @@ pub(crate) fn label(hit: &Hit) -> String {
         ),
         _ => format!("{} {}  {}", hit.kind, key, title),
     };
+    if hit.kind == "symbol" && label.len() + 32 > preview::ROW_BYTES {
+        let path = hit.source.strip_prefix("file:").unwrap_or(&hit.source);
+        if let Some((line, _)) = key.strip_prefix(path).and_then(|s| s.strip_prefix(':')).and_then(|s| s.split_once(':')) {
+            let layer = key.rsplit_once(" [").map_or("", |(_, tag)| tag);
+            label = format!("symbol {path}:{line} [{layer}");
+        }
+    }
     match hit.method {
         Some(method) => format!("{label} [{method}]"),
         None => label,
