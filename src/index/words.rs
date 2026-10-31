@@ -33,9 +33,14 @@ pub(super) fn finish(tx: &Transaction<'_>, before: i64) -> Result<(), String> {
     if !changed {
         return Ok(());
     }
-    // Payloads are immutable, so vocabulary only grows. Enumerate it once per batch,
+    // Payloads are immutable. Enumerate additions once per batch,
     // after the main FTS writer has flushed, rather than flushing for every payload.
     tx.execute(&format!("INSERT INTO search_trigrams(term) SELECT term FROM all_vocab WHERE length(term)>={TRIGRAM_MIN} AND term NOT IN (SELECT term FROM trigram_terms)"), []).map_err(err)?;
     tx.execute(&format!("INSERT OR IGNORE INTO trigram_terms SELECT term FROM all_vocab WHERE length(term)>={TRIGRAM_MIN}"), []).map_err(err)?;
     Ok(())
+}
+
+pub(super) fn collect(tx: &Transaction<'_>) -> Result<(), String> {
+    tx.execute_batch("DELETE FROM search_trigrams WHERE term NOT IN (SELECT term FROM all_vocab);
+        DELETE FROM trigram_terms WHERE term NOT IN (SELECT term FROM all_vocab);").map_err(err)
 }
