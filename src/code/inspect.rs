@@ -181,6 +181,9 @@ fn select(snapshot: &Snapshot, value: &str) -> Result<Vec<Row>, String> {
             (name, None)
         } else if let Some((line, name)) = rest.split_once(':').filter(|(_, n)| !n.starts_with(':'))
         {
+            if name.is_empty() {
+                return Err(invalid());
+            }
             let line = line
                 .parse::<i64>()
                 .ok()
