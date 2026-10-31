@@ -50,8 +50,16 @@ if (root/'.git/edit').exists(): (root/'main.go').write_text('package example\nfu
             .output()
             .unwrap()
     };
+    let query = || {
+        success(
+            command(root, BIN, &["code", "defs", "target"])
+                .env("PATH", &path)
+                .output()
+                .unwrap(),
+        )
+    };
     assert!(success(run()).contains("scip:"));
-    assert!(cli(root, &["code", "defs", "target"]).contains("[precise]"));
+    assert!(query().contains("[precise]"));
     for (flag, message) in [
         ("fail", "indexer failed"),
         ("bad", "SCIP"),
@@ -62,7 +70,7 @@ if (root/'.git/edit').exists(): (root/'main.go').write_text('package example\nfu
         failure(run(), message);
         std::fs::remove_file(root.join(format!(".git/{flag}"))).unwrap();
         if flag != "edit" {
-            assert!(cli(root, &["code", "defs", "target"]).contains("[precise]"));
+            assert!(query().contains("[precise]"));
         }
     }
 }

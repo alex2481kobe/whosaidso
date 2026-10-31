@@ -235,7 +235,9 @@ pub fn skip(tx: &Transaction<'_>, table: &str, file: &File) -> Result<(), String
 pub fn fingerprint(files: &Files) -> String {
     let mut hash = Sha256::new();
     hash.update(files.skipped.to_le_bytes());
-    for file in &files.entries {
+    let mut entries: Vec<_> = files.entries.iter().collect();
+    entries.sort_unstable_by(|a, b| a.path.cmp(&b.path));
+    for file in entries {
         hash.update(file.path.len().to_le_bytes());
         hash.update(file.path.as_bytes());
         hash.update(file.blob.as_bytes());

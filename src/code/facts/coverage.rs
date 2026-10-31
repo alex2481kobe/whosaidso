@@ -7,7 +7,7 @@ pub struct Coverage {
 }
 impl Snapshot {
     pub fn coverage(&self) -> Result<Vec<Coverage>, String> {
-        let mut stmt=self.db.prepare("SELECT m.path,coalesce(c.status,'not indexed'),CASE WHEN d.path IS NULL THEN 'not indexed' WHEN d.blob=m.blob THEN 'fresh' ELSE 'stale' END FROM manifest_files m LEFT JOIN syntax_coverage c ON c.fact=m.fact LEFT JOIN scip_docs d ON d.path=m.path WHERE m.manifest=(SELECT manifest FROM selection) ORDER BY m.path").map_err(err)?;
+        let mut stmt=self.db.prepare("SELECT m.path,coalesce(c.status,'not indexed'),coalesce(d.status,'not indexed') FROM manifest_files m LEFT JOIN syntax_coverage c ON c.fact=m.fact LEFT JOIN precise_documents d ON d.path=m.path WHERE m.manifest=(SELECT manifest FROM selection) ORDER BY m.path").map_err(err)?;
         stmt.query_map([], |r| {
             Ok(Coverage {
                 path: r.get(0)?,
@@ -61,7 +61,7 @@ impl Snapshot {
         Ok(gaps.into_iter().collect())
     }
     pub fn coverage_summary(&self) -> Result<(usize, usize, usize), String> {
-        self.db.query_row("SELECT coalesce(sum(d.path IS NOT NULL AND d.blob=m.blob),0),coalesce(sum((d.path IS NULL OR d.blob IS NULL OR d.blob<>m.blob) AND c.status='indexed'),0),count(*) FROM manifest_files m LEFT JOIN syntax_coverage c ON c.fact=m.fact LEFT JOIN scip_docs d ON d.path=m.path WHERE m.manifest=(SELECT manifest FROM selection)", [], |r| {
+        self.db.query_row("SELECT coalesce(sum(d.status='fresh'),0),coalesce(sum((d.path IS NULL OR d.status<>'fresh') AND c.status='indexed'),0),count(*) FROM manifest_files m LEFT JOIN syntax_coverage c ON c.fact=m.fact LEFT JOIN precise_documents d ON d.path=m.path WHERE m.manifest=(SELECT manifest FROM selection)", [], |r| {
             let precise: i64 = r.get(0)?; let syntax: i64 = r.get(1)?; let total: i64 = r.get(2)?;
             Ok((precise as usize, syntax as usize, (total-precise-syntax) as usize))
         }).map_err(err)

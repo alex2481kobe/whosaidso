@@ -318,3 +318,79 @@ os.execv(os.environ['REAL_GIT'], [os.environ['REAL_GIT'], *sys.argv[1:]])
     let answer = cli(root, &["code", "defs", "restored"]);
     assert!(answer.contains("growing.rs:1"), "{answer}");
 }
+
+#[test]
+fn changed_header_invalidates_precise_rows_coverage_and_relationships() {
+    let fixture = Fixture::sources(&[
+        ("api.h", "inline void target() {}\n"),
+        (
+            "caller.cpp",
+            "#include \"api.h\"\nvoid caller() { target(); }\n",
+        ),
+    ]);
+    let root = &fixture.root;
+    let target = "scip-test pkg project 1 target().";
+    let caller = "scip-test pkg project 1 caller().";
+    let mut document = field(1, b"caller.cpp");
+    let mut info = field(1, caller.as_bytes());
+    let mut relation = field(1, target.as_bytes());
+    relation.extend([24, 1]);
+    info.extend(field(4, &relation));
+    document.extend(field(3, &info));
+    common::scip::import(
+        root,
+        &[
+            common::scip::doc("api.h", target, "target", &[(&[0, 12, 18], true)]),
+            common::scip::doc("caller.cpp", caller, "caller", &[(&[1, 5, 11], true)]),
+            common::scip::doc("caller.cpp", target, "target", &[(&[1, 16, 22], false)]),
+            field(2, &document),
+        ],
+    );
+    assert!(cli(root, &["code", "refs", "target"]).contains("[precise]"));
+    assert!(
+        cli(root, &["code", "callers", "target", "--implementations"])
+            .contains("implementations: 1 recorded")
+    );
+    fs::write(root.join("api.h"), "inline void replacement() {}\n").unwrap();
+    let answer = cli(root, &["code", "refs", "target"]);
+    assert!(
+        answer.contains("caller.cpp:2")
+            && answer.contains("[syntactic]")
+            && answer.contains("precise documents are stale")
+            && !answer.contains("[precise]"),
+        "{answer}"
+    );
+    let coverage = cli(root, &["code", "callers", "caller", "--implementations"]);
+    assert!(
+        coverage.contains("precise=0") && coverage.contains("implementations: 0 recorded"),
+        "{coverage}"
+    );
+}
+
+#[test]
+fn changed_build_environment_invalidates_the_precise_run() {
+    let fixture = Fixture::sources(&[("one.rs", "fn target() {}\n")]);
+    let root = &fixture.root;
+    common::scip::import(
+        root,
+        &[common::scip::doc(
+            "one.rs",
+            "scip-test pkg project 1 target().",
+            "target",
+            &[(&[0, 3, 9], true)],
+        )],
+    );
+    assert!(cli(root, &["code", "defs", "target"]).contains("[precise]"));
+    let answer = common::process::success(
+        command(root, BIN, &["code", "defs", "target"])
+            .env("RUSTFLAGS", "--cfg changed")
+            .output()
+            .unwrap(),
+    );
+    assert!(
+        answer.contains("[syntactic]")
+            && answer.contains("precise documents are stale")
+            && !answer.contains("[precise]"),
+        "{answer}"
+    );
+}
