@@ -1,63 +1,16 @@
+mod common;
+use common::{
+    BIN, Fixture,
+    process::{cli, command, git},
+    scip::field,
+};
 use std::{
     fs,
-    path::{Path, PathBuf},
-    process::{Command, Stdio},
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    path::Path,
+    process::Stdio,
+    time::{Duration, Instant},
 };
 
-fn command(root: &Path, program: &str, args: &[&str]) -> Command {
-    let mut c = Command::new(program);
-    c.current_dir(root)
-        .env("HOME", root)
-        .env("WHOSAIDSO_HOME", root.join("home"))
-        .env("GIT_CONFIG_NOSYSTEM", "1");
-    if program == "git" {
-        c.args([
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.com",
-            "-c",
-            "init.defaultBranch=main",
-        ]);
-    }
-    c.args(args);
-    c
-}
-fn run(root: &Path, program: &str, args: &[&str]) -> String {
-    let o = command(root, program, args).output().unwrap();
-    assert!(
-        o.status.success(),
-        "{args:?}: {} {}",
-        String::from_utf8_lossy(&o.stdout),
-        String::from_utf8_lossy(&o.stderr)
-    );
-    String::from_utf8(o.stdout).unwrap()
-}
-fn cli(root: &Path, args: &[&str]) -> String {
-    run(root, env!("CARGO_BIN_EXE_whosaidso"), args)
-}
-fn git(root: &Path, args: &[&str]) -> String {
-    run(root, "git", args)
-}
-fn fixture() -> PathBuf {
-    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let root = std::env::temp_dir().join(format!(
-        "index-{}-{unique}-{}",
-        std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    fs::create_dir_all(&root).unwrap();
-    git(&root, &["init"]);
-    fs::write(root.join("shared.rs"), "fn shared() {}\n").unwrap();
-    git(&root, &["add", "shared.rs"]);
-    git(&root, &["commit", "-qm", "sources"]);
-    root
-}
 fn database(root: &Path) -> rusqlite::Connection {
     let common = git(
         root,
@@ -73,7 +26,8 @@ fn scalar(db: &rusqlite::Connection, sql: &str) -> i64 {
 
 #[test]
 fn worktrees_share_facts_without_sharing_files() {
-    let root = fixture();
+    let fixture = Fixture::sources(&[("shared.rs", "fn shared() {}\n")]);
+    let root = fixture.root.clone();
     let mut trees = Vec::new();
     for i in 0..4 {
         let path = root.join(format!("tree{i}"));
@@ -115,20 +69,17 @@ fn worktrees_share_facts_without_sharing_files() {
 
 #[test]
 fn killed_writer_keeps_last_published_generation() {
-    let root = fixture();
+    let fixture = Fixture::sources(&[("shared.rs", "fn shared() {}\n")]);
+    let root = fixture.root.clone();
     cli(&root, &["code", "defs", "shared"]);
     let before = scalar(&database(&root), "SELECT max(id) FROM generations");
     fs::write(root.join("shared.rs"), "fn replacement() {}\n").unwrap();
     let ready = root.join("writer-ready");
-    let mut child = command(
-        &root,
-        env!("CARGO_BIN_EXE_whosaidso"),
-        &["code", "defs", "replacement"],
-    )
-    .env("WHOSAIDSO_INDEX_PAUSE", &ready)
-    .stdout(Stdio::null())
-    .spawn()
-    .unwrap();
+    let mut child = command(&root, BIN, &["code", "defs", "replacement"])
+        .env("WHOSAIDSO_INDEX_PAUSE", &ready)
+        .stdout(Stdio::null())
+        .spawn()
+        .unwrap();
     let start = Instant::now();
     while !ready.exists() && start.elapsed() < Duration::from_secs(3) {
         std::thread::sleep(Duration::from_millis(10));
@@ -155,7 +106,8 @@ fn killed_writer_keeps_last_published_generation() {
 
 #[test]
 fn disk_edits_staging_deletes_and_renames_remain_visible() {
-    let root = fixture();
+    let fixture = Fixture::sources(&[("shared.rs", "fn shared() {}\n")]);
+    let root = fixture.root.clone();
     cli(&root, &["code", "defs", "shared"]);
     fs::write(root.join("shared.rs"), "fn staged() {}\n").unwrap();
     git(&root, &["add", "shared.rs"]);
@@ -175,7 +127,8 @@ fn disk_edits_staging_deletes_and_renames_remain_visible() {
 
 #[test]
 fn recreated_worktree_gets_a_new_identity() {
-    let root = fixture();
+    let fixture = Fixture::sources(&[("shared.rs", "fn shared() {}\n")]);
+    let root = fixture.root.clone();
     let path = root.join("tree");
     for _ in 0..2 {
         git(
@@ -198,7 +151,8 @@ fn recreated_worktree_gets_a_new_identity() {
 
 #[test]
 fn fallback_sees_edits_even_when_git_assumes_unchanged() {
-    let root = fixture();
+    let fixture = Fixture::sources(&[("shared.rs", "fn shared() {}\n")]);
+    let root = fixture.root.clone();
     git(&root, &["config", "core.fsmonitor", "false"]);
     cli(&root, &["code", "defs", "shared"]);
     git(&root, &["update-index", "--assume-unchanged", "shared.rs"]);
@@ -206,24 +160,10 @@ fn fallback_sees_edits_even_when_git_assumes_unchanged() {
     assert!(cli(&root, &["code", "defs", "edited"]).contains("shared.rs:1"));
 }
 
-fn field(n: usize, bytes: &[u8]) -> Vec<u8> {
-    fn varint(mut n: usize) -> Vec<u8> {
-        let mut out = Vec::new();
-        while n >= 128 {
-            out.push(n as u8 | 128);
-            n >>= 7;
-        }
-        out.push(n as u8);
-        out
-    }
-    let mut out = varint(n * 8 + 2);
-    out.extend(varint(bytes.len()));
-    out.extend(bytes);
-    out
-}
 #[test]
 fn precise_import_retains_containers_relationships_and_docs() {
-    let root = fixture();
+    let fixture = Fixture::sources(&[("shared.rs", "fn shared() {}\n")]);
+    let root = fixture.root.clone();
     fs::write(
         root.join("calls.rs"),
         "fn target() {}\nfn outer() {\n    target();\n}\n",

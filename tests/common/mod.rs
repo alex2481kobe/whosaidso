@@ -38,6 +38,15 @@ impl Fixture {
         Self { root }
     }
 
+    pub fn sources(files: &[(&str, &str)]) -> Self {
+        let f = Self::empty();
+        for (path, body) in files {
+            write(&f.root.join(path), body);
+        }
+        commit(&f.root);
+        f
+    }
+
     pub fn new() -> Self {
         let f = Self::empty();
         records::goal(&f.root, "g");
