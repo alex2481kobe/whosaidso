@@ -79,3 +79,36 @@ fn name_only_calls_stay_in_their_language_family() {
     let report: Value = serde_json::from_str(&cli(&f.root, &["flow", "compare", "web"])).unwrap();
     assert_eq!(report["steps"]["call"]["state"], "built");
 }
+
+#[test]
+fn landing_refuses_covered_files_missing_from_the_manifest() {
+    for ignored in [false, true] {
+        let f = Fixture::new();
+        write(&f.root.join("app.rs"), "fn ready() {}\n");
+        f.write("app",&json!({"covers":{"paths":["app.rs","linked.rs","generated/**","future/**"]},"nodes":[{"id":"ready","type":"function","symbols":["ready"]}],"steps":[]}));
+        cli(&f.root, &["flow", "drift-check"]);
+        commit(&f.root);
+        f.remote();
+        let lane = f.worktree("worker");
+        if ignored {
+            write(&lane.join(".gitignore"), "generated/\n");
+            write(&lane.join("generated/hidden.rs"), "fn hidden() {}\n");
+        } else {
+            let dir = git(&lane, &["rev-parse", "--absolute-git-dir"]);
+            let target = std::path::Path::new(dir.trim()).join("hidden.rs");
+            write(&target, "fn hidden() {}\n");
+            std::os::unix::fs::symlink(target, lane.join("linked.rs")).unwrap();
+        }
+        commit(&lane);
+        let before = git(&lane, &["ls-remote", "origin", "refs/heads/main"]);
+        bad(
+            &lane,
+            &["land", "--reason", "unchanged behavior"],
+            "app unknown",
+        );
+        assert_eq!(
+            before,
+            git(&lane, &["ls-remote", "origin", "refs/heads/main"])
+        );
+    }
+}

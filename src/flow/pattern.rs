@@ -6,13 +6,31 @@ pub fn literal(pattern: &str) -> bool {
 
 // Git paths are byte strings; only a double star crosses a path separator.
 pub fn matches(pattern: &str, path: &str) -> bool {
+    evaluate(pattern, path, false)
+}
+pub fn below(pattern: &str, directory: &str) -> bool {
+    evaluate(
+        pattern,
+        &if directory.is_empty() {
+            String::new()
+        } else {
+            format!("{directory}/")
+        },
+        true,
+    )
+}
+fn evaluate(pattern: &str, path: &str, prefix: bool) -> bool {
     fn visit(
         p: &[u8],
         s: &[u8],
         i: usize,
         j: usize,
         memo: &mut HashMap<(usize, usize), bool>,
+        prefix: bool,
     ) -> bool {
+        if prefix && j == s.len() {
+            return true;
+        }
         if let Some(found) = memo.get(&(i, j)) {
             return *found;
         }
@@ -26,10 +44,12 @@ pub fn matches(pattern: &str, path: &str) -> bool {
                 } else {
                     end
                 };
-                visit(p, s, skip, j, memo)
-                    || (j < s.len() && (double || s[j] != b'/') && visit(p, s, i, j + 1, memo))
+                visit(p, s, skip, j, memo, prefix)
+                    || (j < s.len()
+                        && (double || s[j] != b'/')
+                        && visit(p, s, i, j + 1, memo, prefix))
             }
-            Some(b'?') => j < s.len() && s[j] != b'/' && visit(p, s, i + 1, j + 1, memo),
+            Some(b'?') => j < s.len() && s[j] != b'/' && visit(p, s, i + 1, j + 1, memo, prefix),
             Some(b'[') => {
                 if let Some(end) = p[i + 1..]
                     .iter()
@@ -51,12 +71,12 @@ pub fn matches(pattern: &str, path: &str) -> bool {
                     j < s.len()
                         && s[j] != b'/'
                         && (included != negate)
-                        && visit(p, s, end + 1, j + 1, memo)
+                        && visit(p, s, end + 1, j + 1, memo, prefix)
                 } else {
                     false
                 }
             }
-            Some(c) => s.get(j) == Some(c) && visit(p, s, i + 1, j + 1, memo),
+            Some(c) => s.get(j) == Some(c) && visit(p, s, i + 1, j + 1, memo, prefix),
         };
         memo.insert((i, j), found);
         found
@@ -67,5 +87,6 @@ pub fn matches(pattern: &str, path: &str) -> bool {
         0,
         0,
         &mut HashMap::new(),
+        prefix,
     )
 }

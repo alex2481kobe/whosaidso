@@ -3,6 +3,7 @@ mod authored;
 pub mod check;
 mod code;
 mod compare;
+mod coverage;
 mod hops;
 mod map;
 mod model;

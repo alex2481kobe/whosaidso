@@ -114,11 +114,12 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<(Value, Graph), Strin
             }
         }
     }
-    let gaps: Vec<_> = coverage
+    let mut gaps: Vec<_> = coverage
         .into_iter()
         .filter(|c| inside(flow, &c.path) && c.syntax != "indexed" && c.precise != "fresh")
         .map(|c| c.path)
         .collect();
+    gaps.extend(super::coverage::excluded(flow, snapshot)?);
     // Children are evaluated first, with step faults rolled into both endpoint layers.
     fn visit(
         id: &str,

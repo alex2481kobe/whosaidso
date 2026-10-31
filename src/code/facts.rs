@@ -19,12 +19,13 @@ pub struct Snapshot {
     pub project: String,
     pub worktree: String,
     pub files: tree::Files,
+    pub source_root: Option<std::path::PathBuf>,
     pub(crate) db: Connection,
 }
 impl Snapshot {
     pub fn current(root: &Path) -> Result<Self, String> {
         let (db, _, _) = store::indexed(root)?;
-        Self::from_db(db)
+        Self::from_db(db, Some(root))
     }
     pub fn sources_outside(root: &Path, include: impl Fn(&str) -> bool) -> Result<bool, String> {
         let listing =
@@ -36,23 +37,26 @@ impl Snapshot {
     }
     pub fn current_in(root: &Path, include: impl Fn(&str) -> bool) -> Result<Self, String> {
         let (db, _, _) = store::indexed_in(root, include)?;
-        Self::from_db(db)
+        Self::from_db(db, Some(root))
     }
     pub fn published(root: &Path) -> Result<Self, String> {
         let db = store::open(root)?;
-        Self::from_db(db)
+        Self::from_db(db, Some(root))
     }
     pub fn branch(root: &Path, branch: &str) -> Result<Self, String> {
-        Self::from_db(store::branch::open_snapshot(root, branch)?)
+        Self::from_db(store::branch::open_snapshot(root, branch)?, None)
     }
     pub fn branch_in(
         root: &Path,
         branch: &str,
         include: impl Fn(&str) -> bool,
     ) -> Result<Self, String> {
-        Self::from_db(store::branch::open_snapshot_in(root, branch, include)?)
+        Self::from_db(
+            store::branch::open_snapshot_in(root, branch, include)?,
+            None,
+        )
     }
-    fn from_db(db: Connection) -> Result<Self, String> {
+    fn from_db(db: Connection, root: Option<&Path>) -> Result<Self, String> {
         precise::storage::schema(&db)?;
         db.execute_batch("BEGIN DEFERRED").map_err(err)?;
         store::snapshot(&db)?;
@@ -77,6 +81,7 @@ impl Snapshot {
             project,
             worktree,
             files,
+            source_root: root.map(Path::to_path_buf),
             db,
         })
     }

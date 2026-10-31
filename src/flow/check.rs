@@ -100,8 +100,14 @@ fn check(root: &Path, destination: Option<&str>) -> Result<(), String> {
 
 pub fn change_token(root: &Path) -> Result<String, String> {
     let snapshot = Snapshot::current(root)?;
-    let mut token = snapshot.change_token;
+    let mut token = snapshot.change_token.clone();
     for record in store::load(root, None)? {
+        if let Some(flow) = &record.flow {
+            token.push_str(&format!(
+                "{:?}",
+                super::coverage::excluded(flow, &snapshot)?
+            ));
+        }
         token.push_str(&format!(
             "{}:{}:{:?}",
             record.id, record.revision, record.problems
