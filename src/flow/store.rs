@@ -161,6 +161,13 @@ pub fn change(root: &Path, id: &str, change: super::author::Change) -> Result<()
         Some(flow) => {
             let mut bytes = serde_json::to_vec_pretty(&flow).map_err(|e| e.to_string())?;
             bytes.push(b'\n');
+            if bytes.len() as u64 > crate::record::MAX_RECORD_BYTES {
+                return Err(format!(
+                    "record file cap {} bytes: count {}",
+                    crate::record::MAX_RECORD_BYTES,
+                    bytes.len()
+                ));
+            }
             crate::publish::write_bytes(&target, &bytes)
         }
         None => fs::remove_file(target).map_err(|e| e.to_string()),

@@ -112,3 +112,21 @@ fn landing_refuses_covered_files_missing_from_the_manifest() {
         );
     }
 }
+
+#[test]
+fn authoring_refuses_a_flow_that_committed_reads_cannot_load() {
+    let f = Fixture::new();
+    let mut plan = json!({"covers":{"paths":["future.rs"]},"nodes":[{"id":"future","type":"function"}],"steps":[]});
+    cli(&f.root, &["flow", "put", "app", &plan.to_string()]);
+    let file = f.root.join(".whosaidso/flows/app.json");
+    let before = std::fs::read(&file).unwrap();
+    plan["nodes"][0]["note"] = json!("x".repeat(65536));
+    bad(
+        &f.root,
+        &["flow", "put", "app", &plan.to_string()],
+        "record file cap",
+    );
+    assert_eq!(std::fs::read(file).unwrap(), before);
+    commit(&f.root);
+    cli(&f.root, &["flow", "view", "app", "--branch", "main"]);
+}
