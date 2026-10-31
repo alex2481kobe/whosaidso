@@ -4,7 +4,7 @@ pub mod facts;
 mod impact;
 mod indexer;
 mod inspect;
-mod languages;
+pub(crate) mod languages;
 mod parse;
 mod precise;
 mod query;

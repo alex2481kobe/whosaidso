@@ -59,7 +59,7 @@ pub(super) fn command(args: &[String]) -> Result<String, String> {
     if !uninstall {
         let bin = std::env::current_exe().map_err(|e| e.to_string())?;
         let bin = bin.to_str().ok_or("executable path is not UTF-8")?;
-        groups.push(json!({"matcher":"^Bash$", "hooks":[{"type":"command",
+        groups.push(json!({"matcher":"^(Bash|Read|Grep|Glob|read_file|grep_files|glob_files)$", "hooks":[{"type":"command",
             "command":format!("{} agent-hook {client} || :{MARKER}",quote(bin)),"timeout":5}]}));
     }
     if groups.is_empty() {

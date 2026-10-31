@@ -82,3 +82,23 @@ Unknown syntax is not proof that no full run occurred. A broken payload or
 handler never blocks unrelated work. Use explicit reasons for wrappers the
 hook cannot inspect, and verify enforcement on the actual host before relying
 on it. Test-run denials contain one line explaining how to scope or override.
+
+## Native file tools
+
+In a Git worktree containing `.whosaidso`, native `Grep`/`Glob` calls with
+supported arguments receive one-line command suggestions through a normal
+PreToolUse denial. Grep suggestions preserve case, pattern, path/glob, supported
+output mode, context and page arguments; multiline, PCRE-only constructs,
+unknown flags, count mode and untranslatable glob syntax pass through.
+No native tool input or output is rewritten. Missing files, malformed input,
+filesystem failures and repositories without `.whosaidso` pass through.
+
+A whole `Read` of a supported source language with more than 200 lines is
+refused once per path/session, suggesting `code outline` and `code show`.
+Any offset or limit passes; short, binary, non-code, image and PDF reads pass.
+Nudge markers are disposable files in the worktree's Git cache, not records.
+
+The same payload handlers recognize `read_file`, `grep_files` and `glob_files`
+when clients expose equivalent local tools with these argument shapes. Their
+availability and exact live payloads must be verified on each client; aliases
+in fixture tests do not establish that an installed client exposes them.

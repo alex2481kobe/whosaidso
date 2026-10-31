@@ -1,6 +1,7 @@
 // Agent integration boundary. Hook errors deliberately leave the original tool call intact.
 mod gate;
 mod install;
+mod native;
 mod redirect;
 mod run;
 mod runners;
@@ -27,7 +28,11 @@ pub fn hook(args: &[String]) -> Result<(), String> {
             .read_to_end(&mut bytes)
             .ok()?;
         let input: Value = serde_json::from_slice(&bytes).ok()?;
-        redirect::response(&input)
+        if input.get("tool_name")?.as_str()? == "Bash" {
+            redirect::response(&input)
+        } else {
+            native::response(&input)
+        }
     })()
     .unwrap_or_else(|| json!({}));
     // A closed pipe is a hook infrastructure failure, not a tool denial.

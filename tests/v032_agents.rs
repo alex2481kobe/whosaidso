@@ -5,6 +5,12 @@ use serde_json::{Value, json};
 use std::{io::Write, process::Stdio};
 
 fn hook(f: &Fixture, client: &str, command_text: &str) -> Value {
+    let payload = json!({"hook_event_name":"PreToolUse", "cwd":f.root,
+        "tool_name":"Bash", "tool_input":{"command":command_text,"description":"keep me","timeout":1234}});
+    hook_value(f, client, payload)
+}
+
+fn hook_value(f: &Fixture, client: &str, payload: Value) -> Value {
     let mut child = command(&f.root, BIN, &["agent-hook", client])
         .env_remove("FULL_SUITE")
         .env_remove("WHOSAIDSO_ESCAPE")
@@ -12,8 +18,6 @@ fn hook(f: &Fixture, client: &str, command_text: &str) -> Value {
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
-    let payload = json!({"hook_event_name":"PreToolUse", "cwd":f.root,
-        "tool_name":"Bash", "tool_input":{"command":command_text,"description":"keep me","timeout":1234}});
     child
         .stdin
         .take()
@@ -196,3 +200,6 @@ fn broken_installed_executable_fails_open() {
 
 #[path = "v032_agents/gate.rs"]
 mod gate;
+
+#[path = "v032_agents/native.rs"]
+mod native;
