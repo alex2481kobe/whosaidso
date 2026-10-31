@@ -30,21 +30,44 @@ pub fn check(root: &Path, range: &str) -> Result<(), String> {
     if !after.errors.is_empty() {
         return Err(after.errors.join("\n"));
     }
-    for goal in state::states_at(&tree, &after, &tip)?
-        .iter()
-        .filter(|s| s.state == state::State::Done && !done.contains(&s.id))
-    {
+    let log = git::run(
+        &tree,
+        &[
+            "log",
+            "--format=%(trailers:key=Goal,valueonly,separator=%x2C)%x09%(trailers:key=WhoSaidSo-Receipt,valueonly)",
+            &format!("{base}..{tip}"),
+        ],
+    )?;
+    let mut queued = HashSet::new();
+    for line in log.lines().filter(|s| !s.is_empty()) {
+        let (goal, receipt) = line.split_once('\t').ok_or("gate --ci: invalid log")?;
+        if !goal.is_empty() && goal != "none" {
+            queued.insert(goal.to_owned());
+        }
+        if !receipt.is_empty() {
+            let receipt: crate::land::receipt::Receipt =
+                serde_json::from_str(receipt).map_err(|e| e.to_string())?;
+            queued.extend(receipt.goals);
+        }
+    }
+    queued.extend(
+        state::states_at(&tree, &after, &tip)?
+            .into_iter()
+            .filter(|s| s.state == state::State::Done && !done.contains(&s.id))
+            .map(|s| s.id),
+    );
+    for id in queued {
         if let Some(check) = after
             .goals
             .iter()
-            .find(|g| g.id == goal.id)
+            .find(|g| g.id == id)
             .and_then(|g| g.check.as_deref())
         {
             let run = crate::prove::verify_at(&tree, &tip, check)?;
             if run.exit_code != 0 || run.timed_out {
                 return Err(format!(
                     "gate --ci: queued check failed for {}: {}",
-                    goal.id, run.output_tail
+                    id, run.output_tail
                 ));
             }
         }

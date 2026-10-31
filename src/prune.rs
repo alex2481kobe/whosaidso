@@ -50,6 +50,7 @@ pub fn prune(root: &Path) -> Result<String, String> {
     let mut journal = Journal {
         pid: std::process::id(),
         root: root.into(),
+        head: git::run(root, &["rev-parse", "HEAD"])?.trim().into(),
         index,
         token,
         records: Vec::new(),

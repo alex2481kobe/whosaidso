@@ -53,12 +53,13 @@ impl Scratch {
             .join(crate::publish::ran_at()?.to_string());
         fs::create_dir_all(&output).map_err(|e| e.to_string())?;
         let reflog = git::run(&tree, &["reflog", "show", "--format=%H%x00%gs", "HEAD"])?;
+        let argv = super::command::arguments(&tree, check)?;
         let result = super::capture::run(
             &tree,
             &output,
             &self.dir.join("target"),
             commit,
-            check,
+            &argv,
             limit,
         )?;
         if git::run(&tree, &["rev-parse", "HEAD"])?.trim() != commit {

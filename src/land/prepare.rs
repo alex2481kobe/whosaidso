@@ -32,7 +32,14 @@ pub(super) fn build(
     if !runs.is_empty() {
         let prover = crate::prove::Prover::open(&tree, baseline, &runs)?;
         for id in &runs {
-            println!("{}", prover.prove(id, reason)?);
+            let (proof, message) = prover.prove(id, reason)?;
+            println!("{message}");
+            if proof.exit_code != 0 || proof.timed_out {
+                return Err(format!(
+                    "land: {id} candidate check failed: {}",
+                    proof.output_tail
+                ));
+            }
         }
     }
     worktree::hook(root, "check")?;
@@ -58,27 +65,7 @@ pub(super) fn build(
             fs::remove_file(tree.join(".whosaidso").join(e.path)).map_err(|e| e.to_string())?;
         }
     }
-    let published = crate::state::evidence::landed(root, baseline)?;
-    let new_media: Vec<_> = proven
-        .media
-        .iter()
-        .filter(|m| !published.contains(&m.sha))
-        .collect();
-    if !new_media.is_empty() {
-        crate::sync::sync(&tree, remote)?;
-    }
-    for m in new_media {
-        if !crate::blob::verify(&tree, &m.media_sha256, &m.ext, m.byte_size)? {
-            let bytes = crate::gallery::archive::read::restore(&tree, &m.media_sha256)
-                .map_err(|e| format!("land: missing media {}: {e}", m.media_sha256))?;
-            let kind = crate::gallery::types::media_type(&m.ext)?;
-            if bytes.len() as u64 != m.byte_size
-                || (!kind.download_only() && crate::gallery::types::detect(&bytes)?.ext != m.ext)
-            {
-                return Err("land: archived media metadata mismatch".into());
-            }
-        }
-    }
+    media(&tree, remote, baseline, &proven)?;
     worktree::hook(root, "media")?;
     receipt.proofs = proven
         .proofs
@@ -108,4 +95,34 @@ pub(super) fn build(
     receipt::verify(&tree, &tip, receipt)?;
     crate::gate::gate(&tree, candidate)?;
     Ok(tip)
+}
+
+pub(super) fn media(
+    root: &Path,
+    remote: &str,
+    baseline: &str,
+    store: &record::model::Store,
+) -> Result<(), String> {
+    let published = crate::state::evidence::landed(root, baseline)?;
+    let new_media: Vec<_> = store
+        .media
+        .iter()
+        .filter(|m| !published.contains(&m.sha))
+        .collect();
+    if !store.media.is_empty() {
+        crate::sync::sync(root, remote)?;
+    }
+    for m in new_media {
+        if !crate::blob::verify(root, &m.media_sha256, &m.ext, m.byte_size)? {
+            let bytes = crate::gallery::archive::read::restore(root, &m.media_sha256)
+                .map_err(|e| format!("land: missing media {}: {e}", m.media_sha256))?;
+            let kind = crate::gallery::types::media_type(&m.ext)?;
+            if bytes.len() as u64 != m.byte_size
+                || (!kind.download_only() && crate::gallery::types::detect(&bytes)?.ext != m.ext)
+            {
+                return Err("land: archived media metadata mismatch".into());
+            }
+        }
+    }
+    Ok(())
 }

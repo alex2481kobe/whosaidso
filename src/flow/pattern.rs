@@ -1,5 +1,9 @@
 use std::collections::HashMap;
 
+pub fn literal(pattern: &str) -> bool {
+    !pattern.bytes().any(|c| matches!(c, b'*' | b'?' | b'['))
+}
+
 // Git paths are byte strings; only a double star crosses a path separator.
 pub fn matches(pattern: &str, path: &str) -> bool {
     fn visit(

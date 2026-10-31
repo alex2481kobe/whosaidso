@@ -4,7 +4,7 @@ pub mod facts;
 mod impact;
 mod indexer;
 mod inspect;
-mod languages;
+pub(crate) mod languages;
 mod parse;
 mod precise;
 mod query;
@@ -41,8 +41,8 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
             println!("{}", impact::answer(root, sub, value, rest)?);
             Ok(())
         }
-        [sub, language] if sub == "index" => {
-            println!("{}", indexer::run(root, language)?);
+        [sub, language, rest @ ..] if sub == "index" => {
+            println!("{}", indexer::run(root, language, rest)?);
             Ok(())
         }
         [sub, values @ ..] if (sub == "show" && !values.is_empty()) || (sub == "outline" && values.len() == 1) => {
@@ -51,6 +51,6 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
             Ok(())
         }
         [sub, value] => query(root, sub, value),
-        _ => Err("usage: code defs|refs|deps|includers|show|outline|index <value>; callers|callees|affected <symbol|path> [--depth N] [--limit N] [--offset N] [--snapshot ID] [--implementations]; help coverage".into()),
+        _ => Err("usage: code defs|refs|deps|includers|show|outline|index <value>; callers|callees|affected <symbol|path> [--depth N] [--limit N] [--offset N] [--snapshot ID] [--implementations]; index <language> [--timeout <seconds>]; help coverage".into()),
     }
 }

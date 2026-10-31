@@ -91,15 +91,12 @@ pub fn main(root: &Path) -> Result<String, String> {
             heads.insert(remote, branch);
         }
     }
-    if let Some(branch) = heads.get("origin") {
-        return Ok((*branch).into());
-    }
-    // Without a remote HEAD there is no discovery to do; offline reads need no remote queries.
-    if !heads.is_empty()
-        && let Some(remote) = remote(root)?
-        && let Some(branch) = heads.get(remote.as_str())
-    {
-        return Ok((*branch).into());
+    // Cached origin discovery remains useful when the remote itself is no longer configured.
+    if !heads.is_empty() {
+        let selected = remote(root)?;
+        if let Some(branch) = heads.get(selected.as_deref().unwrap_or("origin")) {
+            return Ok((*branch).into());
+        }
     }
     let name = load(root)?.main.unwrap_or_else(|| "main".into());
     crate::git::run(root, &["check-ref-format", &format!("refs/heads/{name}")])?;
