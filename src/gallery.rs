@@ -61,3 +61,12 @@ pub fn show(root: &Path, cwd: &Path, goal: &str, source: &str, shows: &str) -> R
     println!("media: {goal} {}", &sha[..12]);
     Ok(())
 }
+
+pub fn restore(root: &Path, sha: &str) -> Result<(), String> {
+    use std::io::Write;
+    let bytes = archive::read::restore(root, sha)?;
+    std::io::stdout()
+        .lock()
+        .write_all(&bytes)
+        .map_err(|e| e.to_string())
+}

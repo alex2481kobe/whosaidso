@@ -65,6 +65,11 @@ fn gallery_shows_only_the_newest_hundred_and_allows_media_without_a_goal() {
     assert_eq!(entries[0]["media_sha256"], hash(bytes));
     assert!(entries[0]["goal"].is_null());
     assert!(entries[0]["goal_title"].is_null());
+    commit(root);
+    cli(root, &["prune"]);
+    let after = viewer.json("/api/gallery", &cookie);
+    assert_eq!(after["entries"].as_array().unwrap().len(), 100);
+    assert_eq!(after["entries"][0]["media_sha256"], hash(bytes));
     let mut expected = paths(&root.join(".whosaidso/media"))
         .iter()
         .map(|p| {
@@ -87,4 +92,96 @@ fn gallery_shows_only_the_newest_hundred_and_allows_media_without_a_goal() {
             .map(|(_, id)| id)
             .collect::<Vec<_>>()
     );
+}
+
+#[test]
+fn compressed_archive_restores_exact_bytes_by_hash_after_sync_to_another_clone() {
+    let f = Fixture::new();
+    let root = &f.root;
+    let bytes = b"<html><script>window.executed=true</script></html>".repeat(1000);
+    write(&root.join(".git/report.html"), &bytes);
+    cli(root, &["media", "g", ".git/report.html", "report"]);
+    let old = paths(&root.join(".whosaidso/media")).pop().unwrap();
+    let mut record = value(&old);
+    record["ran_at"] = serde_json::json!(1);
+    fs::remove_file(old).unwrap();
+    r::put(root, "media", "", &record);
+    r::gallery(root, 100, 80);
+    commit(root);
+    cli(root, &["prune"]);
+    let bundle = fs::read_dir(root.join(".git/whosaidso/archive"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .find(|p| p.to_string_lossy().ends_with(".tar.gz"))
+        .unwrap();
+    let compressed = fs::read(&bundle).unwrap();
+    assert!(compressed.starts_with(&[0x1f, 0x8b]));
+    assert!(compressed.len() < bytes.len() / 2);
+    let sha = hash(&bytes);
+    let blob = root.join(format!(".git/whosaidso/blobs/{sha}.bin"));
+    fs::remove_file(&blob).unwrap();
+    let restored = command(root, BIN, &["media", "restore", &sha])
+        .output()
+        .unwrap();
+    assert!(restored.status.success(), "{restored:?}");
+    assert_eq!(restored.stdout, bytes);
+    assert!(paths(&root.join(".whosaidso/media")).len() == 100);
+    commit(root);
+    let remote = f.remote();
+    cli(root, &["sync"]);
+    let listing = git(&remote, &["ls-tree", "-r", "refs/whosaidso/blobs"]);
+    assert!(listing.contains(bundle.file_name().unwrap().to_str().unwrap()));
+    let clone = f.clone("other");
+    cli(&clone, &["sync"]);
+    assert!(
+        !clone
+            .join(format!(".git/whosaidso/blobs/{sha}.bin"))
+            .exists()
+    );
+    let restored = command(&clone, BIN, &["media", "restore", &sha])
+        .output()
+        .unwrap();
+    assert!(restored.status.success(), "{restored:?}");
+    assert_eq!(restored.stdout, bytes);
+    bad(&clone, &["media", "restore", &"f".repeat(64)], "not found");
+    bad(&clone, &["media", "restore", "../bad"], "sha256");
+    for (repo, payload, at) in [
+        (root, b"first extension".as_slice(), 2),
+        (&clone, b"second extension".as_slice(), 3),
+    ] {
+        r::media(repo, payload, "bin", at);
+        commit(repo);
+        cli(repo, &["prune"]);
+    }
+    cli(root, &["sync"]);
+    cli(&clone, &["sync"]);
+    cli(root, &["sync"]);
+    let other_bundle = clone
+        .join(".git/whosaidso/archive")
+        .join(bundle.file_name().unwrap());
+    assert_eq!(fs::read(&bundle).unwrap(), fs::read(&other_bundle).unwrap());
+    for repo in [root, &clone] {
+        for payload in [bytes.as_slice(), b"first extension", b"second extension"] {
+            let restored = command(repo, BIN, &["media", "restore", &hash(payload)])
+                .output()
+                .unwrap();
+            assert!(restored.status.success(), "{restored:?}");
+            assert_eq!(restored.stdout, payload);
+        }
+    }
+    let viewer = Viewer::start(&clone);
+    let cookie = viewer.cookie();
+    assert_eq!(
+        viewer.json("/api/gallery", &cookie)["archives"][0]["count"],
+        3
+    );
+    let mut corrupted = fs::read(&other_bundle).unwrap();
+    corrupted.truncate(corrupted.len() - 4);
+    write(&other_bundle, corrupted);
+    let restored = command(&clone, BIN, &["media", "restore", &sha])
+        .output()
+        .unwrap();
+    assert!(!restored.status.success());
+    assert!(restored.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&restored.stderr).contains("gzip"));
 }

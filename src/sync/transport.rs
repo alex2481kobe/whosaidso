@@ -59,8 +59,8 @@ fn destination(stores: &Stores, path: &str) -> Result<PathBuf, String> {
         return blob::path_in(&stores.blobs, sha, ext);
     }
     if let Some(name) = path.strip_prefix("archive/")
-        && name.ends_with(".tar")
-        && name.len() > 4
+        && name.ends_with(".tar.gz")
+        && name.len() > 7
         && name
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
@@ -157,7 +157,7 @@ fn verify(path: &str, bytes: &[u8]) -> Result<(), String> {
             return Err(format!("sync: media byte cap exceeded {name}"));
         }
     } else {
-        if bytes.len() < 1024 {
+        if bytes.len() < 2 {
             return Err(format!("sync: truncated archive {path}"));
         }
         gallery::archive::merge_archives(bytes, &[])?;

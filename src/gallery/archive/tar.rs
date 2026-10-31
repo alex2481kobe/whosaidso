@@ -49,3 +49,45 @@ pub(super) fn archive_size(header: &[u8]) -> Result<u64, String> {
     }
     octal(&header[124..136])
 }
+
+pub(super) fn entries(
+    mut bytes: &[u8],
+) -> Result<std::collections::BTreeMap<&str, (usize, &[u8])>, String> {
+    let mut entries = std::collections::BTreeMap::new();
+    while !bytes.is_empty() {
+        let header = bytes.get(..512).ok_or("truncated media archive")?;
+        if header == [0; 512] {
+            if bytes.len() < 1024 || bytes.iter().any(|b| *b != 0) {
+                return Err("invalid media archive end".into());
+            }
+            break;
+        }
+        let size = usize::try_from(archive_size(header)?).map_err(|e| e.to_string())?;
+        let name = std::str::from_utf8(&header[..100])
+            .map_err(|e| e.to_string())?
+            .trim_end_matches('\0');
+        let (sha, ext) = name.split_once('.').ok_or("invalid archive entry name")?;
+        if sha.len() != 64
+            || !sha.bytes().all(|b| b.is_ascii_hexdigit())
+            || (ext != "json" && crate::gallery::types::media_type(ext).is_err())
+        {
+            return Err(format!("invalid archive entry {name}"));
+        }
+        let end = size
+            .checked_add(511)
+            .and_then(|n| (n / 512).checked_mul(512))
+            .and_then(|n| n.checked_add(512))
+            .ok_or("invalid archive size")?;
+        let entry = bytes.get(..end).ok_or("truncated media archive")?;
+        if let Some((old_size, old)) = entries.insert(name, (size, entry))
+            && (old_size != size || old[512..512 + size] != entry[512..512 + size])
+        {
+            return Err(format!("conflicting archive entry {name}"));
+        }
+        bytes = &bytes[end..];
+        if bytes.is_empty() {
+            return Err("missing media archive end".into());
+        }
+    }
+    Ok(entries)
+}
