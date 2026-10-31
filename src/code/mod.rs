@@ -51,6 +51,6 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
             Ok(())
         }
         [sub, value] => query(root, sub, value),
-        _ => Err("usage: code defs|refs|deps|includers|show|outline|index <value>; callers|callees|affected <symbol|path> [--depth N] [--limit N] [--offset N] [--snapshot ID] [--implementations]; index <language> [--timeout <seconds>]; help coverage".into()),
+        _ => Err("usage: code defs|refs|deps|includers|show|outline|index <value>; outline <path> [name-part] [--limit N] [--offset N]; callers|callees|affected <symbol|path> [--depth N] [--limit N] [--offset N] [--snapshot ID] [--implementations]; index <language> [--timeout <seconds>]; help coverage".into()),
     }
 }
