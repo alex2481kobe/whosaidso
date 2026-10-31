@@ -23,6 +23,9 @@ pub struct Snapshot {
     pub(crate) db: Connection,
 }
 impl Snapshot {
+    pub fn extractor_version(&self) -> &str {
+        self.change_token.split(':').next().unwrap_or_default()
+    }
     pub fn current(root: &Path) -> Result<Self, String> {
         let (db, _, _) = store::indexed(root)?;
         Self::from_db(db, Some(root))

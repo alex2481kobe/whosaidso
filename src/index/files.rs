@@ -24,13 +24,14 @@ fn address(file: &tree::File, snapshot: &Snapshot, precise: &HashSet<String>) ->
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("");
+    let extractor = snapshot.extractor_version();
     if precise.contains(&file.path) {
         format!(
-            "v1:{}:{extension}:{}:{}",
+            "v2:{extractor}:{}:{extension}:{}:{}",
             file.blob, snapshot.worktree, snapshot.change_token
         )
     } else {
-        format!("v1:{}:{extension}", file.blob)
+        format!("v2:{extractor}:{}:{extension}", file.blob)
     }
 }
 fn excerpt(row: &Row, body: &str) -> String {
@@ -66,7 +67,8 @@ pub(super) fn sync(
     seen: &mut HashSet<String>,
 ) -> Result<bool, String> {
     let features_ready = stamp(tx, "features:files")?.as_deref() == Some(features::VERSION);
-    if features_ready && stamp(tx, "tree:files")?.as_deref() == Some(&snapshot.change_token) {
+    let extractor_ready = stamp(tx, "extractor:files")?.as_deref() == Some(snapshot.extractor_version());
+    if features_ready && extractor_ready && stamp(tx, "tree:files")?.as_deref() == Some(&snapshot.change_token) {
         return Ok(true);
     }
     let coverage = snapshot.coverage()?;
@@ -217,6 +219,7 @@ pub(super) fn sync(
         store::link(tx, &source, &source, path_id)?;
         store::set_stamp(tx, &source, &address(file, snapshot, &precise))?;
     }
+    store::set_stamp(tx, "extractor:files", snapshot.extractor_version())?;
     store::set_stamp(tx, "tree:files", &snapshot.change_token)?;
     store::set_stamp(tx, "features:files", features::VERSION)?;
     Ok(false)
