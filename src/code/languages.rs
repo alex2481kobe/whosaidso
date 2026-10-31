@@ -18,8 +18,10 @@ pub struct Indexer {
     pub root_flag: Option<&'static str>,
     pub defaults: &'static [&'static str],
     pub build_env: &'static [&'static str],
+    pub manifests: &'static [&'static str],
 }
 const GO_INDEX: Indexer = Indexer {
+    manifests: &["go.mod", "go.sum", "go.work", "go.work.sum"],
     tool: "scip-go",
     version: "0.2.7",
     subcommand: "index",
@@ -40,6 +42,17 @@ const GO_INDEX: Indexer = Indexer {
     ],
 };
 const TS_INDEX: Indexer = Indexer {
+    manifests: &[
+        "package.json",
+        "package-lock.json",
+        "npm-shrinkwrap.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "bun.lock",
+        "bun.lockb",
+        "tsconfig.json",
+        "jsconfig.json",
+    ],
     tool: "scip-typescript",
     version: "0.4.0",
     subcommand: "index",
@@ -48,6 +61,16 @@ const TS_INDEX: Indexer = Indexer {
     build_env: &["NODE_OPTIONS"],
 };
 const PY_INDEX: Indexer = Indexer {
+    manifests: &[
+        "pyproject.toml",
+        "poetry.lock",
+        "uv.lock",
+        "Pipfile",
+        "Pipfile.lock",
+        "requirements.txt",
+        "setup.py",
+        "setup.cfg",
+    ],
     tool: "scip-python",
     version: "0.6.6",
     subcommand: "index",
@@ -56,6 +79,14 @@ const PY_INDEX: Indexer = Indexer {
     build_env: &["PYTHONPATH", "VIRTUAL_ENV"],
 };
 const RUST_INDEX: Indexer = Indexer {
+    manifests: &[
+        "Cargo.toml",
+        "Cargo.lock",
+        ".cargo/config",
+        ".cargo/config.toml",
+        "rust-toolchain",
+        "rust-toolchain.toml",
+    ],
     tool: "rust-analyzer",
     version: "1.96.0 (ac68faa2 2026-05-25)",
     subcommand: "scip",
@@ -73,6 +104,7 @@ const RUST_INDEX: Indexer = Indexer {
     ],
 };
 const SWIFT_INDEX: Indexer = Indexer {
+    manifests: &["Package.swift", "Package.resolved"],
     tool: "scip-swift",
     version: "0.3.0-sapline.3",
     subcommand: "index",
@@ -217,4 +249,17 @@ pub fn family(path: &str) -> Option<&'static str> {
         "JavaScript" | "JSX" | "TypeScript" | "TSX" => "JavaScript",
         _ => name,
     })
+}
+
+impl Registration {
+    pub fn build_manifest(&self, path: &str) -> bool {
+        self.indexer.is_some_and(|indexer| {
+            indexer.manifests.iter().any(|name| {
+                path == *name
+                    || path
+                        .strip_suffix(name)
+                        .is_some_and(|prefix| prefix.ends_with('/'))
+            })
+        })
+    }
 }

@@ -81,7 +81,7 @@ pub(super) fn run(root: &Path, language: &str, args: &[String]) -> Result<String
         ));
     }
     let before = Snapshot::current(root)?;
-    let input = crate::tree::fingerprint(&before.files);
+    let input = precise::binding::input(&before.files, entry.name)?;
     let context = precise::binding::context(entry.name);
     drop(before);
     let mut command = Command::new(adapter.tool);
@@ -112,7 +112,7 @@ pub(super) fn run(root: &Path, language: &str, args: &[String]) -> Result<String
         return Err(format!("indexer failed ({status}): {}", tail(&log_path)?));
     }
     let after = Snapshot::current(root)?;
-    if crate::tree::fingerprint(&after.files) != input {
+    if precise::binding::input(&after.files, entry.name)? != input {
         return Err("sources changed during indexing; old index retained".into());
     }
     drop(after);

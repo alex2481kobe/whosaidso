@@ -20,7 +20,7 @@ pub(in crate::code) fn schema(db: &Connection) -> Result<(), String> {
         .query_row("PRAGMA precise.user_version", [], |r| r.get(0))
         .map_err(err)?;
     let path_index: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM precise.sqlite_master WHERE type='index' AND name='scip_occ_path')",[],|r| r.get(0)).map_err(err)?;
-    if version == 3 && path_index {
+    if version == 4 && path_index {
         return Ok(());
     }
     let tx =
@@ -28,7 +28,7 @@ pub(in crate::code) fn schema(db: &Connection) -> Result<(), String> {
     let version: i64 = tx
         .query_row("PRAGMA precise.user_version", [], |r| r.get(0))
         .map_err(err)?;
-    if version != 3 {
+    if version != 4 {
         tx.execute_batch("DROP TABLE IF EXISTS precise.scip_run; DROP TABLE IF EXISTS precise.scip_docs; DROP TABLE IF EXISTS precise.scip_occ; DROP TABLE IF EXISTS precise.scip_syms; DROP TABLE IF EXISTS precise.scip_docs_text; DROP TABLE IF EXISTS precise.scip_relationships;").map_err(err)?;
         tx.execute_batch("CREATE TABLE IF NOT EXISTS precise.scip_run(worktree TEXT, input_manifest TEXT, build_context TEXT, artifact TEXT, language TEXT);
         CREATE TABLE IF NOT EXISTS precise.scip_docs(path TEXT PRIMARY KEY, blob TEXT, validated INTEGER NOT NULL CHECK(validated IN (0,1)));
@@ -41,7 +41,7 @@ pub(in crate::code) fn schema(db: &Connection) -> Result<(), String> {
         CREATE INDEX IF NOT EXISTS precise.scip_rel_target ON scip_relationships(target);
         CREATE INDEX IF NOT EXISTS precise.scip_occ_symbol ON scip_occ(symbol);
         CREATE INDEX IF NOT EXISTS precise.scip_syms_name ON scip_syms(name);
-        CREATE INDEX IF NOT EXISTS precise.scip_descriptor_name ON scip_syms(descriptor_name); PRAGMA precise.user_version=3;").map_err(err)?;
+        CREATE INDEX IF NOT EXISTS precise.scip_descriptor_name ON scip_syms(descriptor_name); PRAGMA precise.user_version=4;").map_err(err)?;
     }
     tx.execute_batch(PATH_INDEX).map_err(err)?;
     tx.commit().map_err(err)
@@ -89,9 +89,10 @@ pub(in crate::code) fn import_run(
     }
     let docs = merge_paths(docs)?;
     let (_, mut files) = super::super::store::index(root)?;
-    if expected.is_some_and(|(stamp, context, language)| {
-        tree::fingerprint(&files) != stamp || super::binding::context(language) != context
-    }) {
+    if let Some((stamp, context, language)) = expected
+        && (super::binding::input(&files, language)? != stamp
+            || super::binding::context(language) != context)
+    {
         return Err("sources changed during indexing; old index retained".into());
     }
     let paths: HashSet<_> = docs.iter().map(|d| d.path.as_str()).collect();
@@ -119,9 +120,10 @@ pub(in crate::code) fn import_run(
             f.blob = blob.clone();
         }
     }
-    if expected.is_some_and(|(stamp, context, language)| {
-        tree::fingerprint(&files) != stamp || super::binding::context(language) != context
-    }) {
+    if let Some((stamp, context, language)) = expected
+        && (super::binding::input(&files, language)? != stamp
+            || super::binding::context(language) != context)
+    {
         return Err("sources changed during indexing; old index retained".into());
     }
     let mut db = super::super::store::open(root)?;
