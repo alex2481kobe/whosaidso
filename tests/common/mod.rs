@@ -80,6 +80,8 @@ impl Fixture {
             &[
                 "clone",
                 "-q",
+                // A local copy of objects races the gc a push can leave running.
+                "--no-local",
                 self.root
                     .parent()
                     .unwrap()
