@@ -93,7 +93,11 @@ pub fn screen(
     let coverage = snapshot.coverage()?;
     result["freshness"] = json!(if coverage.iter().any(|c| c.precise == "stale") {
         "stale"
-    } else if coverage.iter().any(|c| c.precise == "unknown" || unread(c)) {
+    } else if coverage.iter().any(|c| {
+        // Files in no supported language are outside the map; a file it could not read is a gap.
+        let unread = !matches!(c.syntax.as_str(), "indexed" | "not indexed");
+        c.precise == "unknown" || (unread && c.precise != "fresh")
+    }) {
         "unknown"
     } else {
         "fresh"
@@ -138,9 +142,4 @@ pub fn comparison(root: &Path, id: &str, branch: Option<&str>) -> Result<Value, 
     value["committed_only"] = json!(branch.is_some());
     value["branch"] = json!(branch);
     Ok(value)
-}
-
-// Files in no supported language are outside the map; a file it should read and could not is a gap.
-fn unread(c: &crate::code::facts::Coverage) -> bool {
-    !matches!(c.syntax.as_str(), "indexed" | "not indexed") && c.precise != "fresh"
 }
