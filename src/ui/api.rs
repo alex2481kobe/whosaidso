@@ -120,10 +120,7 @@ fn gallery_screen(root: &Path) -> Result<Value, String> {
         .take(gallery::LIVE_MEDIA)
         .map(|m| media(root, m, &store))
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(json!({"version":token,"entries":entries,"archives":archives(root)?}))
-}
-fn archives(root: &Path) -> Result<Vec<Value>, String> {
-    gallery::archive::read::summaries(root)
+    Ok(json!({"version":token,"entries":entries}))
 }
 // The goals answer is the slowest to derive, so it is kept per project until the change token moves or a branch lapses to idle.
 // The lock is held while deriving: a second caller (the start-up warm-up and the first page load) waits for the answer rather than deriving it again.

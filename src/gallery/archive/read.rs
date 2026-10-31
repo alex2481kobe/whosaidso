@@ -5,7 +5,6 @@ use crate::{
     gallery::{Media, types},
     record,
 };
-use serde_json::{Value, json};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -93,13 +92,4 @@ pub fn restore(root: &Path, sha: &str) -> Result<Vec<u8>, String> {
         }
     }
     Err(format!("media not found {sha}"))
-}
-pub fn summaries(root: &Path) -> Result<Vec<Value>, String> {
-    bundles(root)?
-        .into_iter()
-        .map(|(month, path)| {
-            let bytes = gzip::decode(&fs::read(&path).map_err(|e| e.to_string())?)?;
-            Ok(json!({"month": month, "count": items(&bytes)?.len(), "path": path}))
-        })
-        .collect()
 }

@@ -172,8 +172,11 @@ fn compressed_archive_restores_exact_bytes_by_hash_after_sync_to_another_clone()
     let viewer = Viewer::start(&clone);
     let cookie = viewer.cookie();
     assert_eq!(
-        viewer.json("/api/gallery", &cookie)["archives"][0]["count"],
-        3
+        viewer.json("/api/gallery", &cookie)["entries"]
+            .as_array()
+            .unwrap()
+            .len(),
+        100
     );
     let mut corrupted = fs::read(&other_bundle).unwrap();
     corrupted.truncate(corrupted.len() - 4);
