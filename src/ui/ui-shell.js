@@ -98,6 +98,17 @@ async function route() {
   current = null;
   if (!state.project) { main.replaceChildren(message("No workspace")); return; }
   const shown = screen === "gallery" ? galleryScreen() : screen === "flows" ? flowsScreen() : goalsScreen(), key = state.project + screen + (screen === "flows" ? location.hash : "");
+  const branch = screen === "flows" && new URLSearchParams(location.hash.split("?")[1] || "").get("branch");
+  if (branch) {
+    const load = shown.load;
+    shown.load = async () => {
+      const version = await load(), {age} = await api("/api/branch", {name:branch});
+      const label = el("span", "muted branch-age", age); label.setAttribute("aria-label", "Branch age " + age);
+      shown.node.querySelector(".branch-age")?.remove();
+      shown.node.querySelector(".toolbar").append(label);
+      return version;
+    };
+  }
   main.replaceChildren(shown.node);
   try { seen = await shown.load(); }
   catch (error) { if (mine === state.renders) main.replaceChildren(message(error.message, "error")); return; }

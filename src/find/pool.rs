@@ -9,6 +9,8 @@ pub(crate) struct Hit {
     pub matched: usize,
     pub edits: usize,
     pub bm: f64,
+    pub priority: i64,
+    pub text_bytes: i64,
 }
 pub(super) struct Pool {
     values: Vec<Value>,
@@ -116,7 +118,7 @@ impl Pool {
         };
         let sql = if exact_title.is_some() {
             format!(
-                "SELECT docs.kind,docs.key,docs.title,({}) AS matched,({}) AS edits,bm25(docs_fts,0,1,1) AS bm,docs.source {} AND (?5 IS NULL OR docs.title=?5 COLLATE NOCASE) ORDER BY matched DESC,edits,bm,docs.id LIMIT ?2",
+                "SELECT docs.kind,docs.key,docs.title,({}) AS matched,({}) AS edits,bm25(docs_fts,0,1,1) AS bm,docs.source,docs.priority,docs.text_bytes {} AND (?5 IS NULL OR docs.title=?5 COLLATE NOCASE) ORDER BY matched DESC,edits,bm,docs.id LIMIT ?2",
                 matched,
                 self.edits,
                 self.source(!all)
@@ -129,10 +131,18 @@ impl Pool {
             } else {
                 "WHERE matched>=?3".to_owned()
             };
+            let features = crate::index::features::projection("m");
+            let size = crate::index::features::SIZE_BUCKET;
+            let order = format!("priority DESC,matched DESC,edits,text_bytes/{size},bm,id,key");
+            let selected_order = order
+                .split(',')
+                .map(|part| format!("r.{part}"))
+                .collect::<Vec<_>>()
+                .join(",");
             // Keep a source's best file row and best symbol before applying the
             // candidate cap, then read only those compact winners' payloads.
             format!(
-                "WITH postings AS MATERIALIZED (SELECT docs_fts.rowid AS id,m.key,m.source,({coverage}) AS matched,({edits}) AS edits,bm25(docs_fts,0,1,1) AS bm FROM docs_fts CROSS JOIN members m INDEXED BY member_lookup WHERE docs_fts MATCH ?1 AND m.worktree=(SELECT worktree FROM selection) AND m.payload=docs_fts.rowid), ranked AS MATERIALIZED (SELECT *,row_number() OVER (PARTITION BY source,(key LIKE 'symbol:%') ORDER BY matched DESC,edits,bm,id,key) AS position FROM postings {floor}), selected AS MATERIALIZED (SELECT * FROM ranked WHERE position=1 ORDER BY matched DESC,edits,bm,id,key LIMIT ?2) SELECT p.kind,r.key,CASE WHEN p.kind='file' THEN substr(r.key,6) ELSE p.title END,r.matched,r.edits,r.bm,r.source FROM selected r JOIN payloads p ON p.id=r.id ORDER BY r.matched DESC,r.edits,r.bm,r.id,r.key"
+                "WITH postings AS MATERIALIZED (SELECT docs_fts.rowid AS id,m.key,m.source,{features},({coverage}) AS matched,({edits}) AS edits,bm25(docs_fts,0,1,1) AS bm FROM docs_fts CROSS JOIN members m INDEXED BY member_lookup WHERE docs_fts MATCH ?1 AND m.worktree=(SELECT worktree FROM selection) AND m.payload=docs_fts.rowid), ranked AS MATERIALIZED (SELECT *,row_number() OVER (PARTITION BY source,(key LIKE 'symbol:%') ORDER BY {order}) AS position FROM postings {floor}), selected AS MATERIALIZED (SELECT * FROM ranked WHERE position=1 ORDER BY {order} LIMIT ?2) SELECT p.kind,r.key,CASE WHEN p.kind='file' THEN substr(r.key,6) ELSE p.title END,r.matched,r.edits,r.bm,r.source,r.priority,r.text_bytes FROM selected r JOIN payloads p ON p.id=r.id ORDER BY {selected_order}"
             )
         };
         let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
@@ -148,6 +158,8 @@ impl Pool {
                     matched: r.get::<_, i64>(3)? as usize,
                     edits: r.get::<_, i64>(4)? as usize,
                     bm: r.get(5)?,
+                    priority: r.get(7)?,
+                    text_bytes: r.get(8)?,
                 })
             })
             .map_err(|e| e.to_string())?

@@ -66,7 +66,7 @@ fn bodies_and_outlines_preserve_ranges_and_report_ambiguity() {
     );
     let ambiguous = cli(root, &["code", "show", "duplicate"]);
     assert!(
-        ambiguous.contains("ambiguous: 2") && !ambiguous.contains("fn duplicate()"),
+        ambiguous.contains("ambiguous: 2") && ambiguous.contains("fn duplicate()"),
         "{ambiguous}"
     );
     assert!(cli(root, &["code", "show", "two.rs::duplicate"]).contains("fn duplicate() {}"));

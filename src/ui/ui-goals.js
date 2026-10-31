@@ -10,15 +10,10 @@ const parts = counts => ORDER.filter(s => counts[s]).map(s => `${counts[s]} ${s}
 
 // A long worktree path keeps its last segments; the whole path is the tooltip.
 const tail = path => { const parts = path.split("/"); return parts.length > 4 ? "…/" + parts.slice(-3).join("/") : path; };
-// The claim folds into the branch line it was made from (the same branch, locally or as a remote's copy, in the
-// same worktree or one this clone cannot see); a claim from anywhere else gets its own line.
-const claimedBy = (b, c) => (b.name === c.branch || b.name.endsWith("/" + c.branch)) && (!b.worktree || b.worktree === c.path);
 function work(g) {
-  const line = (label, name, who, time, path) => el("div", "work", label && el("b", "", label), mono(name), el("span", "muted", `${who} · ${ago(time)}`), path && Object.assign(el("span", "mono muted path", tail(path)), {title: path}));
-  const c = g.claim, held = c ? g.branches.find(b => claimedBy(b, c)) : null;
-  return el("div", "works",
-    g.branches.map(b => b === held ? line("claimed", b.name, b.author, b.time, b.worktree || c.path) : line("", b.name, b.author, b.time, b.worktree)),
-    c && !held && line("claimed", c.branch, c.author, c.since, c.path));
+  return el("div", "works", g.work.map(w => el("div", "work",
+    w.claimed && el("b", "", "claimed"), mono(w.name), el("span", "muted", `${w.author} · ${ago(w.time)}`),
+    w.path && Object.assign(el("span", "mono muted path", tail(w.path)), {title: w.path}))));
 }
 function thumbs(media) {
   return el("div", "thumbs", media.map(m => {
@@ -57,7 +52,7 @@ export function goalsScreen() {
   const totals = el("span", "totals"), list = el("div", "goals"), choice = el("span", "choice");
   const draw = () => {
     totals.textContent = [`${data.goals.length} goals`, ...parts(data.totals)].join(" · ");
-    const rows = data.goals.filter(g => target ? g.id === target : (!kept.state || g.state === kept.state) && (!kept.search || JSON.stringify(g).toLowerCase().includes(kept.search)));
+    const rows = data.goals.filter(g => target ? g.id === target : (!kept.state || g.state === kept.state) && (!kept.search || JSON.stringify(Object.fromEntries(Object.entries(g).filter(([key]) => key !== "work"))).toLowerCase().includes(kept.search)));
     const focused = document.activeElement?.closest?.("details.goal")?.dataset.id;
     list.replaceChildren(...data.milestones.map(p => { const mine = rows.filter(g => g.milestone === p.id); return mine.length ? milestone(p, mine) : null; }).filter(Boolean));
     if (!rows.length) list.append(message("None"));

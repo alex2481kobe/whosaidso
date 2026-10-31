@@ -72,13 +72,23 @@ pub fn active(time: i64, now: i64) -> bool {
     now < lapse(time)
 }
 pub fn age(time: i64) -> String {
+    format!("{} ago", age_word(time))
+}
+fn age_word(time: i64) -> String {
     let seconds = now().unwrap_or(time).saturating_sub(time).max(0);
     let (n, unit) = if seconds < 86400 {
         (seconds / 3600, "h")
     } else {
         (seconds / 86400, "d")
     };
-    format!("{n}{unit} ago")
+    format!("{n}{unit}")
+}
+pub fn branch_age(root: &Path, branch: &str) -> Result<String, String> {
+    let tip = git::local_revision(root, branch)?;
+    let time = git::run(root, &["show", "-s", "--format=%ct", &tip])?;
+    let time = time.trim().parse::<i64>().map_err(|e| e.to_string())?;
+    renew();
+    Ok(age_word(time))
 }
 fn trailers(log: &str) -> impl Iterator<Item = &str> {
     log.lines()
@@ -165,22 +175,38 @@ pub fn candidate_states(root: &Path, store: &Store, tip: &str) -> Result<Vec<Goa
     derive(root, store, tip, true)
 }
 fn derive(root: &Path, store: &Store, tip: &str, pending: bool) -> Result<Vec<GoalState>, String> {
-    let landed = if pending {
-        None
-    } else {
-        Some(evidence::landed(root, tip)?)
-    };
-
-    let format = "--format=%H%x09%(trailers:key=Goal,valueonly,separator=%x2C)";
-    let revisions = git::run(root, &["rev-list", tip])?;
     if store.goals.is_empty() {
+        if !pending {
+            evidence::landed(root, tip)?;
+        }
+        git::run(root, &["rev-list", tip])?;
         return Ok(Vec::new());
     }
+    let format = "--format=%H%x09%(trailers:key=Goal,valueonly,separator=%x2C)";
+    let (landed, revisions, main, now, branches, changed) = std::thread::scope(|scope| {
+        // These reads share a pinned destination; none depends on another's output.
+        let landed = scope.spawn(|| {
+            if pending {
+                Ok(None)
+            } else {
+                evidence::landed(root, tip).map(Some)
+            }
+        });
+        let revisions = scope.spawn(|| git::run(root, &["rev-list", tip]));
+        let main = scope.spawn(|| work_log(root, &["log", tip, "--no-merges", format]));
+        let branches = scope.spawn(|| branches::collect(root, store, tip));
+        let changed = scope.spawn(|| rules::changed(root, tip, store));
+        let join_error = |_| "state read thread failed".to_string();
+        Ok::<_, String>((
+            landed.join().map_err(join_error)??,
+            revisions.join().map_err(join_error)??,
+            main.join().map_err(join_error)??,
+            now()?,
+            branches.join().map_err(join_error)??,
+            changed.join().map_err(join_error)??,
+        ))
+    })?;
     let commits: HashSet<_> = revisions.lines().collect();
-    let main = work_log(root, &["log", tip, "--no-merges", format])?;
-    let now = now()?;
-    let branches = branches::collect(root, store, tip)?;
-    let changed = rules::changed(root, tip, store)?;
     let mut result = Vec::new();
     for goal in &store.goals {
         let eligible = |sha: &str| landed.as_ref().is_none_or(|set| set.contains(sha));

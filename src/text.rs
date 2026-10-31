@@ -12,6 +12,14 @@ use std::{
     path::Path,
 };
 
+pub(crate) fn prefix(text: &str, bytes: usize) -> &str {
+    let mut end = bytes.min(text.len());
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
+}
+
 pub fn cut(line: &str, limit: usize) -> String {
     if line.chars().count() <= limit {
         return line.to_owned();
@@ -27,6 +35,9 @@ pub fn grep(root: &Path, args: &[String]) -> Result<(), String> {
     let stdout = std::io::stdout();
     let mut out = BufWriter::new(stdout.lock());
     let options = options::parse(args)?;
+    if options.regex && !options.files {
+        eprintln!("grep: Git extended regex (--regex); | is alternation");
+    }
     let (rows, total) = search::run(root, &options)?;
     if total == 0 {
         writeln!(out, "grep: no matches").map_err(|e| e.to_string())?;

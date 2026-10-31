@@ -133,10 +133,12 @@ pub enum Land {
 // Prefer the branch's upstream, then origin, then a sole configured remote.
 pub fn remote(root: &Path) -> Result<Option<String>, String> {
     let branch = crate::git::run(root, &["branch", "--show-current"])?;
-    for name in [
+    let mut names = vec![
         branch.trim().to_owned(),
         load(root)?.main.unwrap_or_else(|| "main".into()),
-    ] {
+    ];
+    names.dedup();
+    for name in names {
         if let Ok(remote) =
             crate::git::run(root, &["config", "--get", &format!("branch.{name}.remote")])
         {

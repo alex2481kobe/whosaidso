@@ -1,14 +1,7 @@
 // Selection preserves find's ordering; all output, including omission metadata, counts against the budget.
-use crate::find;
+use crate::{find, text::prefix};
 use std::path::Path;
 
-fn prefix(text: &str, bytes: usize) -> &str {
-    let mut end = bytes.min(text.len());
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    &text[..end]
-}
 fn footer(names: &[String], outside: usize, budget: usize) -> String {
     if names.is_empty() && outside == 0 {
         return "omitted: none\n".into();

@@ -83,3 +83,32 @@ fn viewer_version_moves_after_code_edit_within_three_seconds() {
         "unknown"
     );
 }
+
+#[test]
+fn branch_age_uses_the_selected_committed_tip() {
+    use common::process::*;
+    let f = Fixture::new();
+    git(&f.root, &["switch", "-qc", "older"]);
+    let then = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        - 7 * 86400;
+    success(
+        command(
+            &f.root,
+            "git",
+            &["commit", "-q", "--allow-empty", "-m", "Older work"],
+        )
+        .env("GIT_COMMITTER_DATE", format!("{then} +0000"))
+        .output()
+        .unwrap(),
+    );
+    git(&f.root, &["switch", "-q", "main"]);
+    let viewer = Viewer::start(&f.root);
+    let cookie = viewer.cookie();
+    assert_eq!(viewer.json("/api/branch?name=older", &cookie)["age"], "7d");
+    assert_eq!(viewer.json("/api/branch?name=main", &cookie)["age"], "0h");
+    assert_eq!(viewer.get("/api/branch?name=missing", &cookie).0, 400);
+    assert_eq!(git(&f.root, &["branch", "--show-current"]).trim(), "main");
+}

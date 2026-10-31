@@ -1,12 +1,15 @@
 // Transactional reconciliation for the per-worktree retrieval cache.
-use super::{BATCH_BYTES, Counts, File, Files, err, fingerprint, read};
+use super::{Counts, File, Files, err, fingerprint, read};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior};
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
 };
 
-// Both indexes reconcile the same way; callers only interpret and store a bounded batch.
+// Keep transaction inputs small; the individual file cap is independent.
+const BATCH_BYTES: usize = 4 * 1024 * 1024;
+
+// Callers interpret and store one bounded batch.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn run(
     root: &Path,

@@ -1,5 +1,5 @@
 // Project source text and symbol excerpts come only from the generation-bound facts contract.
-use super::{err, stamp, store};
+use super::{err, features, stamp, store};
 use crate::{
     code::facts::{
         Snapshot,
@@ -65,7 +65,8 @@ pub(super) fn sync(
     tx: &Transaction<'_>,
     seen: &mut HashSet<String>,
 ) -> Result<bool, String> {
-    if stamp(tx, "tree:files")?.as_deref() == Some(&snapshot.change_token) {
+    let features_ready = stamp(tx, "features:files")?.as_deref() == Some(features::VERSION);
+    if features_ready && stamp(tx, "tree:files")?.as_deref() == Some(&snapshot.change_token) {
         return Ok(true);
     }
     let coverage = snapshot.coverage()?;
@@ -91,7 +92,7 @@ pub(super) fn sync(
         let source = format!("file:{}", file.path);
         seen.insert(source.clone());
         let address = address(file, snapshot, &precise);
-        if stamp(tx, &source)?.as_deref() == Some(&address) {
+        if features_ready && stamp(tx, &source)?.as_deref() == Some(&address) {
             continue;
         }
         store::forget(tx, &source)?;
@@ -191,6 +192,12 @@ pub(super) fn sync(
             continue;
         };
         let source = format!("file:{}", file.path);
+        features::remember(
+            tx,
+            templates[0].payload,
+            &file.path,
+            code.contains(&file.path) || precise.contains(&file.path),
+        )?;
         for t in templates {
             let key = if t.suffix.is_empty() {
                 source.clone()
@@ -211,5 +218,6 @@ pub(super) fn sync(
         store::set_stamp(tx, &source, &address(file, snapshot, &precise))?;
     }
     store::set_stamp(tx, "tree:files", &snapshot.change_token)?;
+    store::set_stamp(tx, "features:files", features::VERSION)?;
     Ok(false)
 }

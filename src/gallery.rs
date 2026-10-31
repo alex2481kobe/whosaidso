@@ -29,7 +29,9 @@ pub fn attach(
     publish::record_dir(root, "media")?;
     let store = record::load(root)?;
     if !goal.is_empty() && !store.goals.iter().any(|g| g.id == goal) {
-        return Err(format!("unknown goal {goal}"));
+        return Err(format!(
+            "unknown goal {goal}; create .whosaidso/goals/{goal}.json first (format: USAGE.md#goals), then run whosaidso check"
+        ));
     }
     if let Some(reason) = title::title_problem(shows) {
         return Err(format!("bad title: {reason}"));

@@ -82,6 +82,13 @@ const DOWNLOAD: MediaType = MediaType {
     signature: |_| false,
 };
 impl MediaType {
+    pub fn kind(&self) -> &'static str {
+        match self.tag {
+            "img" => "image",
+            "video" => "video",
+            _ => "document",
+        }
+    }
     pub fn download_only(&self) -> bool {
         self.mime == DOWNLOAD.mime
     }

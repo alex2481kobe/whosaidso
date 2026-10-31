@@ -140,6 +140,16 @@ pub fn verify(root: &Path, sha: &str, ext: &str, byte_size: u64) -> Result<bool,
     }
 }
 
+// Read-time integrity is independent of the earlier record validation.
+pub fn read_recorded(root: &Path, media: &crate::gallery::Media) -> Result<Vec<u8>, String> {
+    let bytes =
+        fs::read(path(root, &media.media_sha256, &media.ext)?).map_err(|e| e.to_string())?;
+    if bytes.len() as u64 != media.byte_size || record::sha256_hex(&bytes) != media.media_sha256 {
+        return Err("media changed while reading".into());
+    }
+    Ok(bytes)
+}
+
 pub fn trash(root: &Path) -> Result<PathBuf, String> {
     Ok(dir(root)?.join("trash"))
 }

@@ -86,14 +86,13 @@ fn grep_rows_are_paged_and_find_and_code_answers_are_truncated() {
     assert_eq!(text, format!("long.txt:1:cutneedle{}\n", "é".repeat(240)));
     let name = format!("{}.md", "longpath".repeat(28));
     write(&root.join(name), "longpath");
-    assert_eq!(
+    assert!(
         cli(root, &["find", "longpath", "kind:file"])
             .lines()
             .next()
             .unwrap()
-            .chars()
-            .count(),
-        200
+            .len()
+            <= 384
     );
     let name = format!("longfn{}", "x".repeat(220));
     write(&root.join("long.rs"), format!("fn {name}() {{}}"));

@@ -57,11 +57,11 @@ pub fn layer(
         // Out-of-layer arrows lead to the actual authored box through a context port.
         let steps: Vec<_>=layer.steps.iter().map(|s| {
             for endpoint in [&s.from,&s.to] {
-                if let Some(target)=endpoint.strip_prefix("outside:") {
-                    if !nodes.iter().any(|n| n["id"]==**endpoint) {
-                        let n=flow.nodes.iter().find(|n| n.id==target).unwrap();
-                        nodes.push(json!({"id":endpoint,"name":map::name(target),"target":n.id,"state":comparison["nodes"][target]["state"],"children":1,"note":n.note}));
-                    }
+                if let Some(target)=endpoint.strip_prefix("outside:")
+                    && !nodes.iter().any(|n| n["id"]==**endpoint)
+                {
+                    let n=flow.nodes.iter().find(|n| n.id==target).unwrap();
+                    nodes.push(json!({"id":endpoint,"name":map::name(target),"target":n.id,"state":comparison["nodes"][target]["state"],"children":1,"note":n.note}));
                 }
             }
             json!({"id":s.step.id,"from":s.from,"to":s.to,"when":s.step.when,"state":comparison["steps"][&s.step.id]["state"],"evidence":comparison["steps"][&s.step.id]["evidence"]})

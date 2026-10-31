@@ -139,7 +139,7 @@ fn code_layer(
                 .map(|f| &f.path)
         })
         .ok_or("unknown code layer")?;
-    let graph = snapshot.graph_in(&[source.to_string()], &[])?;
+    let graph = snapshot.graph_in(std::slice::from_ref(source), &[])?;
     let ids = identities(&graph.definitions);
     let function = if file.is_none() {
         Some(

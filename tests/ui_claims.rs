@@ -30,8 +30,10 @@ fn viewer_hides_expired_claims_and_keeps_live_claims() {
     for goal in goals["goals"].as_array().unwrap() {
         if goal["id"] == "g" {
             assert_eq!(goal["claim"]["author"], "Ghost");
+            assert_eq!(goal["work"][0]["claimed"], true);
         } else {
             assert_eq!(goal["claim"], serde_json::Value::Null);
+            assert_eq!(goal["work"], serde_json::json!([]));
         }
     }
 }
@@ -56,8 +58,22 @@ fn viewer_keeps_a_claim_until_its_goal_is_done() {
         viewer.json("/api/goals", &cookie)["goals"][0]["claim"]["author"],
         "Ghost"
     );
+    let work = viewer.json("/api/goals", &cookie)["goals"][0]["work"].clone();
+    assert_eq!(work.as_array().unwrap().len(), 2);
+    assert_eq!(work[0]["claimed"], false);
+    assert_eq!(work[1]["claimed"], true);
+    // Git reports resolved paths, and a claim is recorded from Git.
+    let lane = std::fs::canonicalize(&lane).unwrap();
+    let body = body.replace("/ghost/tree", lane.to_str().unwrap());
+    let oid = input(root, &["hash-object", "-w", "--stdin"], body.as_bytes());
+    git(root, &["update-ref", "refs/whosaidso/claims/g", &oid]);
+    let work = viewer.json("/api/goals", &cookie)["goals"][0]["work"].clone();
+    assert_eq!(work.as_array().unwrap().len(), 1);
+    assert_eq!(work[0]["claimed"], true);
+    assert_eq!(work[0]["path"], lane.to_str().unwrap());
     git(root, &["merge", "-q", "--no-ff", "worker", "-m", "land"]);
     let goal = viewer.json("/api/goals", &cookie)["goals"][0].clone();
     assert_eq!(goal["state"], "landed");
+    assert_eq!(goal["work"].as_array().unwrap().len(), 1);
     assert_eq!(goal["claim"]["author"], "Ghost");
 }
