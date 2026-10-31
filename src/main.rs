@@ -1,4 +1,5 @@
 // CLI dispatch; record and command rules live in their respective modules.
+mod agent;
 mod blob;
 mod cache;
 mod check;
@@ -41,7 +42,7 @@ fn run() -> Result<(), String> {
     }
     if args.as_slice() == ["help"] || args.as_slice() == ["--help"] || args.as_slice() == ["-h"] {
         println!(
-            "WhoSaidSo: goals and evidence in Git\n\ncheck | goals | show <id> | start <goal> | next | assign <goal> <agent:name|branch:name> | land [--reason <why>] [--override <name>] | prove <goal> [--reason <why>] | gate [base] | gate --ci <base>..<tip> | prune\nevidence add <goal> <file> <shows> | reopen <milestone> <destination-revision> | media <goal> <file> <title> | sync [remote] | note | flow | context | find | grep | code | model fetch | ui\n\nUse short end-to-end checks of real behavior. Tests stay smaller than source; checks default to 60 seconds. Run a full suite only when needed. See USAGE.md for formats and options."
+            "WhoSaidSo: goals and evidence in Git\n\ncheck | goals | show <id> | start <goal> | next | assign <goal> <agent:name|branch:name> | land [--reason <why>] [--override <name>] | prove <goal> [--reason <why>] | gate [base] | gate --ci <base>..<tip> | prune\nevidence add <goal> <file> <shows> | reopen <milestone> <destination-revision> | media <goal> <file> <title> | sync [remote] | note | flow | context | find | grep | code | model fetch | install-agent claude|codex [--uninstall] | ui\n\nUse short end-to-end checks of real behavior. Tests stay smaller than source; checks default to 60 seconds. Run a full suite only when needed. See USAGE.md for formats and options."
         );
         return Ok(());
     }
@@ -50,6 +51,14 @@ fn run() -> Result<(), String> {
     {
         println!("{}", index::embedding::command(rest)?);
         return Ok(());
+    }
+    if let [cmd, rest @ ..] = args.as_slice() {
+        match cmd.as_str() {
+            "install-agent" => return agent::install(rest),
+            "agent-hook" => return agent::hook(rest),
+            "agent-run" => return agent::run(rest),
+            _ => {}
+        }
     }
     let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
     let root = if args.first().is_some_and(|cmd| cmd == "ui") {
