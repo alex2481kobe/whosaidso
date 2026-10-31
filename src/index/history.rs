@@ -22,10 +22,7 @@ pub(super) fn sync(root: &Path, tx: &Transaction<'_>) -> Result<(), String> {
         for key in keys {
             remove(tx, &key)?;
         }
-        tx.prepare_cached("DELETE FROM manifest WHERE source='git:main'")
-            .map_err(err)?
-            .execute([])
-            .map_err(err)?;
+        super::store::forget(tx, "git:main")?;
     }
     if let Some(head) = head
         && old.as_deref() != Some(&head)
@@ -56,10 +53,7 @@ pub(super) fn sync(root: &Path, tx: &Transaction<'_>) -> Result<(), String> {
             };
             put(tx, "commit", &format!("commit:{sha}"), title, &body)?;
         }
-        tx.prepare_cached("INSERT OR REPLACE INTO manifest VALUES ('git:main',?1)")
-            .map_err(err)?
-            .execute([head])
-            .map_err(err)?;
+        super::store::set_stamp(tx, "git:main", &head)?;
     }
     Ok(())
 }
