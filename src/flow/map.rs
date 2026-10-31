@@ -19,7 +19,7 @@ pub fn file_id(path: &str) -> String {
 }
 // Variables and modules are facts about code, not boxes a reader follows.
 fn boxed(row: &Row) -> bool {
-    !matches!(row.kind.as_str(), "local" | "namespace" | "mod")
+    !super::code::namespace(row) && row.kind != "local"
 }
 fn identities(definitions: &[Row]) -> BTreeMap<String, String> {
     let mut ordered: Vec<_> = definitions.iter().collect();

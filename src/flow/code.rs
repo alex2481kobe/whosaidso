@@ -87,8 +87,11 @@ pub fn selected<'a>(node: &Node, definitions: &'a [Row]) -> Vec<&'a Row> {
         .filter(|row| matches_node(node, row))
         .collect()
 }
+pub(super) fn namespace(row: &Row) -> bool {
+    matches!(row.kind.as_str(), "namespace" | "mod")
+}
 fn matches_node(node: &Node, row: &Row) -> bool {
-    let namespace = matches!(row.kind.as_str(), "namespace" | "mod");
+    let namespace = namespace(row);
     let non_function = matches!(
         row.kind.as_str(),
         "struct" | "class" | "enum" | "trait" | "type" | "interface" | "impl"
