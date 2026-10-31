@@ -82,29 +82,21 @@ pub fn known_coverage(c: &Coverage) -> bool {
             })
 }
 pub fn selected<'a>(node: &Node, definitions: &'a [Row]) -> Vec<&'a Row> {
-    let rows: Vec<_> = definitions
+    definitions
         .iter()
-        .filter(|row| row.kind != "local")
         .filter(|row| matches_node(node, row))
-        .collect();
-    let namespace = |row: &Row| matches!(row.kind.as_str(), "namespace" | "mod");
-    rows.iter()
-        .copied()
-        .filter(|row| {
-            !namespace(row)
-                || node.symbols.is_empty()
-                || node.symbols.iter().any(|s| {
-                    symbol_matches(s, row)
-                        && (s == &row.symbol
-                            || !rows
-                                .iter()
-                                .any(|other| !namespace(other) && symbol_matches(s, other)))
-                })
-        })
         .collect()
 }
 fn matches_node(node: &Node, row: &Row) -> bool {
-    (node.paths.is_empty() || node.paths.iter().any(|p| matches(p, &row.path)))
+    let namespace = matches!(row.kind.as_str(), "namespace" | "mod");
+    let non_function = matches!(
+        row.kind.as_str(),
+        "struct" | "class" | "enum" | "trait" | "type" | "interface" | "impl"
+    );
+    row.kind != "local"
+        && (node.symbols.is_empty() || !namespace)
+        && (node.r#type != "function" || (!namespace && !non_function))
+        && (node.paths.is_empty() || node.paths.iter().any(|p| matches(p, &row.path)))
         && (node.symbols.is_empty() || node.symbols.iter().any(|s| symbol_matches(s, row)))
         && (!node.paths.is_empty() || !node.symbols.is_empty())
 }

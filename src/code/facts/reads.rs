@@ -93,6 +93,8 @@ impl Snapshot {
                     "local".into()
                 } else if p.symbol.ends_with('/') {
                     "namespace".into()
+                } else if p.symbol.ends_with('#') {
+                    "type".into()
                 } else {
                     String::new()
                 },

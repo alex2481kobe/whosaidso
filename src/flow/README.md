@@ -75,8 +75,8 @@ code at one commit and are labelled `committed_only`.
 
 Node paths use slash-separated globs (`*`, `**`, `?`, and character classes).
 Symbols match names, qualified names or snapshot symbol ids; paths constrain
-symbol selection. Local variables are excluded; a named definition takes precedence
-over a namespace matching the same selector. Missing planned anchors stay `planned`; other absent anchors
+symbol selection. Local variables, modules and namespaces do not bind name anchors.
+Function nodes reject definitions known to be types. Missing planned anchors stay `planned`; other absent anchors
 are `missing`; partial anchors are `drifted`. Multiple symbol candidates are
 `ambiguous`. HTML and HTM are documents like CSS; inline script is not read.
 Unextracted files and unresolved calls inside `covers` remain
@@ -125,3 +125,8 @@ no prior binding state is stored in the plan. Flow records must be regular files
 with the shared record size limit enforced before authoring and on both read paths.
 Name-only calls resolve within a language family; a cross-language hop needs declared
 evidence such as a literal bridge or precise identity.
+
+Landing and `flow drift-check` discard precise evidence for an indexed language if
+any of its documents is stale or unvalidated, or a new document in that language is
+not indexed. The viewer remains per-document and labels stale evidence. Commit,
+index the language, then land; a strict refusal names the indexing command once.
