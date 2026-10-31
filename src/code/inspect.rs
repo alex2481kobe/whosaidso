@@ -1,5 +1,6 @@
 // Budgeted presentation for symbol bodies and file structure.
-use super::contracts::{DEFAULT_LIMIT, GAP_LIMIT, ROW_BYTES};
+mod outline;
+use super::contracts::{GAP_LIMIT, ROW_BYTES};
 const BODY_LINES: usize = 100;
 const BODY_BYTES: usize = 16_384;
 const SHOW_LIMIT: usize = 3;
@@ -31,12 +32,20 @@ pub(super) fn location(row: &Row) -> String {
         r.stop.unwrap_or(0)
     )
 }
-pub(super) fn answer(snapshot: &Snapshot, command: &str, value: &str) -> Result<String, String> {
-    let rows = if command == "show" {
-        select(snapshot, value)?
+pub(super) fn answer(snapshot: &Snapshot, command: &str, args: &[String]) -> Result<String, String> {
+    let (value, filter, offset, limit) = if command == "outline" {
+        outline::parse(args)?
     } else {
-        snapshot.outline(value)?
+        (args.join(" "), None, 0, SHOW_LIMIT)
     };
+    let mut rows = if command == "show" {
+        select(snapshot, &value)?
+    } else {
+        snapshot.outline(&value)?
+    };
+    if let Some(part) = filter {
+        rows.retain(|row| row.qualified.contains(&part));
+    }
     let mut out = Vec::new();
     if rows.is_empty() {
         let coverage = snapshot.coverage()?;
@@ -69,13 +78,8 @@ pub(super) fn answer(snapshot: &Snapshot, command: &str, value: &str) -> Result<
             rows.len()
         ));
     }
-    let limit = if command == "show" {
-        SHOW_LIMIT
-    } else {
-        DEFAULT_LIMIT
-    };
     let (mut lines_left, mut bytes_left) = (BODY_LINES, BODY_BYTES);
-    for row in rows.iter().take(limit) {
+    for row in rows.iter().skip(offset).take(limit) {
         out.push(crate::text::cut(
             &format!(
                 "{} {} {} [{}]{}",
@@ -116,7 +120,10 @@ pub(super) fn answer(snapshot: &Snapshot, command: &str, value: &str) -> Result<
             }
         }
     }
-    if rows.len() > limit {
+    let shown = rows.len().saturating_sub(offset).min(limit);
+    if command == "outline" && (offset > 0 || shown < rows.len()) {
+        out.push(format!("shown {shown} of {} rows; offset {offset}; limit {limit}", rows.len()));
+    } else if rows.len() > limit {
         out.push(format!("shown {limit} of {}", rows.len()));
     }
     let gaps = snapshot.blind_spots(&rows)?;
