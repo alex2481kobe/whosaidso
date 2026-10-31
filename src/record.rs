@@ -47,7 +47,14 @@ fn valid_id(id: &str) -> bool {
 }
 pub fn load(root: &Path) -> Result<Store, String> {
     let mut store = read(root)?;
+    let goals = store.goals.clone();
     validate::validate(root, &mut store);
+    for goal in goals {
+        if !store.goals.iter().any(|g| g.id == goal.id) {
+            store.broken.push(("goal".into(), goal.id.clone()));
+            store.goals.push(goal);
+        }
+    }
     Ok(store)
 }
 pub fn kind(path: &Path) -> &str {
@@ -82,11 +89,13 @@ pub fn read(root: &Path) -> Result<Store, String> {
             {
                 continue;
             }
+            let before = store.errors.len();
             let label = path.display().to_string();
             let bytes = match read_record(root, &path) {
                 Ok(b) => b,
                 Err(e) => {
                     store.errors.push(format!("{label}: {e}"));
+                    broken(&mut store, folder, &path);
                     continue;
                 }
             };
@@ -195,6 +204,9 @@ pub fn read(root: &Path) -> Result<Store, String> {
                     Err(e) => store.errors.push(format!("{label}: {e}")),
                 },
             }
+            if store.errors.len() > before {
+                broken(&mut store, folder, &path);
+            }
         }
     }
     Ok(store)
@@ -240,4 +252,24 @@ pub fn newest_media<'a>(store: &'a Store, goal: &str) -> Option<&'a Media> {
 
 pub fn result(exit_code: i64) -> &'static str {
     if exit_code == 0 { "pass" } else { "fail" }
+}
+
+fn broken(store: &mut Store, folder: &str, path: &Path) {
+    let id = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("?")
+        .to_owned();
+    store
+        .broken
+        .push((folder.trim_end_matches('s').into(), id.clone()));
+    if folder == "goals" && !store.goals.iter().any(|g| g.id == id) {
+        store.goals.push(Goal {
+            id: id.clone(),
+            title: id,
+            done_when: String::new(),
+            check: String::new(),
+            broader: String::new(),
+        });
+    }
 }

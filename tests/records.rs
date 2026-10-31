@@ -207,3 +207,28 @@ fn publication_refuses_record_paths_that_are_files_or_symlinks() {
     );
     assert_eq!(fs::read_dir(outside).unwrap().count(), 0);
 }
+
+#[test]
+fn broken_check_stays_in_progress_and_invalid_json_is_visible() {
+    let f = Fixture::new();
+    let root = &f.root;
+    r::goal(root, "h");
+    commit(root);
+    r::proof(root, &head(root), 1, 0);
+    std::fs::remove_file(root.join(".whosaidso/instruments/test.json")).unwrap();
+    r::put(
+        root,
+        "instruments",
+        "good",
+        &json!({"run":["true"],"answers":"works"}),
+    );
+    let mut g = value(&root.join(".whosaidso/goals/g.json"));
+    g["check"] = "good".into();
+    r::put(root, "goals", "g", &g);
+    commit(root);
+    cli(root, &["prove", "g"]);
+    let out = bad(root, &["goals"], "1/2 done");
+    assert!(out.contains("broken  h"), "{out}");
+    write(&root.join(".whosaidso/goals/h.json"), "{");
+    assert!(bad(root, &["goals"], "broken  h").contains("1/2 done"));
+}

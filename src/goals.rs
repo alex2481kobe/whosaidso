@@ -57,6 +57,7 @@ fn walk(
 }
 pub fn label(state: State) -> &'static str {
     match state {
+        State::Broken => "broken",
         State::Open => "open",
         State::Active => "active",
         State::Idle => "idle",
@@ -70,6 +71,11 @@ pub fn output(root: &Path) -> Result<String, String> {
     let mut output = String::new();
     let store = record::load(root)?;
     let states = state::states(root, &store)?;
+    let done = states.iter().filter(|s| s.state == State::Done).count();
+    output.push_str(&format!("{done}/{} done\n", store.goals.len()));
+    for (kind, id) in &store.broken {
+        output.push_str(&format!("broken  {id} ({kind})\n"));
+    }
     let mut phases: Vec<_> = store.phases.iter().collect();
     phases.sort_by_key(|p| p.order);
     for phase in phases {

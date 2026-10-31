@@ -53,6 +53,7 @@ pub struct Ask {
 }
 #[derive(Default)]
 pub struct Store {
+    pub broken: Vec<(String, String)>,
     pub phases: Vec<Phase>,
     pub goals: Vec<Goal>,
     pub instruments: Vec<Instrument>,

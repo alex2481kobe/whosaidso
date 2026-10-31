@@ -12,6 +12,7 @@ use std::{
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum State {
+    Broken,
     Open,
     Active,
     Idle,
@@ -231,21 +232,29 @@ pub fn states(root: &Path, store: &Store) -> Result<Vec<GoalState>, String> {
         let proof_index =
             proof.and_then(|p| store.proofs.iter().position(|item| std::ptr::eq(item, p)));
         let bs = branches.get(&goal.id);
-        let state = match proof {
-            Some(p) if p.exit_code != 0 => State::Failing,
-            Some(p) => {
-                if stale(root, p, &goal.id, format, &tip)? {
-                    State::Stale
-                } else {
-                    State::Done
+        let state = if store
+            .broken
+            .iter()
+            .any(|(kind, id)| kind == "goal" && id == &goal.id)
+        {
+            State::Broken
+        } else {
+            match proof {
+                Some(p) if p.exit_code != 0 => State::Failing,
+                Some(p) => {
+                    if stale(root, p, &goal.id, format, &tip)? {
+                        State::Stale
+                    } else {
+                        State::Done
+                    }
                 }
+                None if trailers(&main).any(|g| g == goal.id) => State::Landed,
+                None => match bs {
+                    Some(bs) if bs.iter().any(|b| active(b.time, now)) => State::Active,
+                    Some(_) => State::Idle,
+                    None => State::Open,
+                },
             }
-            None if trailers(&main).any(|g| g == goal.id) => State::Landed,
-            None => match bs {
-                Some(bs) if bs.iter().any(|b| active(b.time, now)) => State::Active,
-                Some(_) => State::Idle,
-                None => State::Open,
-            },
         };
         result.push(GoalState {
             id: goal.id.clone(),
