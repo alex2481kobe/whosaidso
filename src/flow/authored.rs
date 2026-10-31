@@ -1,0 +1,58 @@
+use super::model::Flow;
+use super::{compare, map, view};
+use crate::code::facts::Snapshot;
+use serde_json::{Value, json};
+
+pub fn layer(
+    flow: &Flow,
+    snapshot: &Snapshot,
+    id: &str,
+    revision: &str,
+    parent: Option<&str>,
+    offset: usize,
+) -> Result<Value, String> {
+    let (comparison, graph) = compare::compare(flow, snapshot)?;
+    let layer = view::layer(flow, parent)?;
+    let mut nodes: Vec<_> = layer
+                    .nodes
+                    .iter()
+                    .map(|(n, children)| {
+                        json!({"id":n.id,"name":n.id,"type":n.r#type,
+                            "state":comparison["nodes"][&n.id]["state"],"evidence":comparison["nodes"][&n.id]["evidence"],
+                            "children":if *children>0 { *children } else { graph.definitions.iter().filter(|r| super::code::selected(n,r)).count() }})
+                    })
+                    .collect();
+    if nodes.is_empty()
+        && let Some(node) = flow.nodes.iter().find(|n| Some(n.id.as_str()) == parent)
+    {
+        nodes = graph.definitions.iter().filter(|r| super::code::selected(node,r)).map(|r| json!({
+                        "id":map::symbol_id(&r.path,&r.qualified,r.range.line),"name":r.qualified,"type":"function",
+                        "path":r.path,"line":r.range.line,"symbol":r.symbol,"children":0,
+                        "state":"built","evidence":map::strength(r.layer)
+                    })).collect();
+    }
+    let total = nodes.len();
+    let steps: Vec<_> = layer.steps.iter().skip(offset).take(map::PAGE).map(|s| json!({
+                    "id":s.step.id,"from":s.from,"to":s.to,"when":s.step.when,
+                    "state":comparison["steps"][&s.step.id]["state"],"evidence":comparison["steps"][&s.step.id]["evidence"]
+                })).collect();
+    let risks: Vec<_> = layer
+        .risks
+        .iter()
+        .skip(offset)
+        .take(map::PAGE)
+        .map(|(node, r)| json!({"node":node,"risk":r}))
+        .collect();
+    let count = total
+        .max(layer.steps.len())
+        .max(layer.risks.len())
+        .max(comparison["unplanned"].as_array().unwrap().len())
+        .max(comparison["unknown"].as_array().unwrap().len());
+    Ok(
+        json!({"id":id,"parent":parent,"revision":format!("{}:{}",revision,snapshot.id),"state":comparison["state"],
+                    "progress":comparison["progress"],"goal":flow.goal,
+                    "nodes":nodes.into_iter().skip(offset).take(map::PAGE).collect::<Vec<_>>(),"steps":steps,"risks":risks,
+                    "frontier":layer.frontier+count.saturating_sub(offset+map::PAGE),"next":(offset+map::PAGE<count).then_some(offset+map::PAGE),
+                    "unplanned":comparison["unplanned"].as_array().unwrap().iter().skip(offset).take(map::PAGE).collect::<Vec<_>>(),"unknown":comparison["unknown"].as_array().unwrap().iter().skip(offset).take(map::PAGE).collect::<Vec<_>>()}),
+    )
+}

@@ -1,4 +1,5 @@
 mod author;
+mod authored;
 pub mod check;
 mod code;
 mod compare;
