@@ -73,15 +73,17 @@ cached projects by themselves:
 
 ## Precise support
 
-Skip this unless name matching is not enough. It needs a SCIP indexer that writes to
-a path given by `--output`. Add an `Indexer` const and set `indexer: Some(&THAT)`:
+Skip this unless name matching is not enough. It needs a SCIP indexer. Add an `Indexer`
+const and set `indexer: Some(&THAT)`:
 
 - `tool`, `subcommand`, `defaults`: the command to run.
+- `output`: the flag that names the index file.
 - `version`: `Some("1.2.3")` to require that release. Use `None` only when the tool
   ships with the language's own toolchain.
-- `root`: `Root::Flag("--cwd")` or `Root::Argument`, for how it is told where the
-  project is.
+- `root`: `Root::Flag("--cwd")`, `Root::Argument` or `Root::Cwd`, for how it is told
+  where the project is.
 - `without`: an extra flag used only when a file is missing from the project root.
+- `build_file`: a generated file the indexer needs, with what to do when it is missing.
 - `manifests`: build files that change what the indexer sees.
 - `build_env`: variables that change what the indexer sees.
 

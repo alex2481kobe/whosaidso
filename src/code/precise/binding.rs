@@ -15,11 +15,12 @@ pub(in crate::code) fn context(language: &str) -> String {
         let root = match profile.root {
             Root::Flag(flag) => flag,
             Root::Argument => "argument",
+            Root::Cwd => "cwd",
         };
         for value in [
             profile.tool,
             profile.version.unwrap_or(""),
-            profile.subcommand,
+            profile.subcommand.unwrap_or(""),
             root,
         ]
         .into_iter()

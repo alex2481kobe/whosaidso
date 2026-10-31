@@ -71,7 +71,13 @@ pub(super) fn run(root: &Path, language: &str, args: &[String]) -> Result<String
     if actual.len() > 16384 {
         return Err("indexer version output exceeds 16 KiB".into());
     }
-    let normalized = actual.trim().replace(" v", " ");
+    // Some indexers add lines after the version, such as their compiler build.
+    let normalized = actual
+        .lines()
+        .next()
+        .unwrap_or("")
+        .trim()
+        .replace(" v", " ");
     let accepted = adapter.version.is_none_or(|pinned| {
         normalized == pinned || normalized == format!("{} {pinned}", adapter.tool)
     });
@@ -83,6 +89,17 @@ pub(super) fn run(root: &Path, language: &str, args: &[String]) -> Result<String
             crate::text::cut(actual.trim(), 200)
         ));
     }
+    let build_file = adapter
+        .build_file
+        .as_ref()
+        .map(|file| {
+            file.paths
+                .iter()
+                .find(|path| root.join(path).is_file())
+                .map(|path| format!("{}={path}", file.flag))
+                .ok_or(file.missing)
+        })
+        .transpose()?;
     let before = Snapshot::current(root)?;
     let input = precise::binding::input(&before.files, entry.name)?;
     let context = precise::binding::context(entry.name);
@@ -90,8 +107,9 @@ pub(super) fn run(root: &Path, language: &str, args: &[String]) -> Result<String
     let mut command = Command::new(adapter.tool);
     command
         .current_dir(root)
-        .arg(adapter.subcommand)
-        .args(adapter.defaults);
+        .args(adapter.subcommand)
+        .args(adapter.defaults)
+        .args(build_file);
     if let Some((file, flag)) = adapter.without
         && !root.join(file).is_file()
     {
@@ -104,9 +122,10 @@ pub(super) fn run(root: &Path, language: &str, args: &[String]) -> Result<String
         languages::Root::Argument => {
             command.arg(root);
         }
+        languages::Root::Cwd => {}
     }
     command
-        .arg("--output")
+        .arg(adapter.output)
         .arg(&artifact)
         .stdin(Stdio::null())
         .stdout(

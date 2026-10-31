@@ -16,16 +16,26 @@ pub struct Registration {
 pub enum Root {
     Flag(&'static str),
     Argument,
+    // The indexer takes the project from its working directory.
+    Cwd,
+}
+// A generated file the indexer cannot run without.
+pub struct BuildFile {
+    pub flag: &'static str,
+    pub paths: &'static [&'static str],
+    pub missing: &'static str,
 }
 pub struct Indexer {
     pub tool: &'static str,
     // None accepts any version: the tool ships with the language's own toolchain.
     pub version: Option<&'static str>,
-    pub subcommand: &'static str,
+    pub subcommand: Option<&'static str>,
     pub root: Root,
+    pub output: &'static str,
     pub defaults: &'static [&'static str],
     // Passed only when this file is absent from the project root.
     pub without: Option<(&'static str, &'static str)>,
+    pub build_file: Option<BuildFile>,
     pub build_env: &'static [&'static str],
     pub manifests: &'static [&'static str],
 }
@@ -33,10 +43,12 @@ const GO_INDEX: Indexer = Indexer {
     manifests: &["go.mod", "go.sum", "go.work", "go.work.sum"],
     tool: "scip-go",
     version: Some("0.2.7"),
-    subcommand: "index",
+    subcommand: Some("index"),
     root: Root::Flag("--module-root"),
+    output: "--output",
     defaults: &["--module-version=v0.0.0"],
     without: None,
+    build_file: None,
     build_env: &[
         "GOFLAGS",
         "GOOS",
@@ -65,10 +77,12 @@ const TS_INDEX: Indexer = Indexer {
     ],
     tool: "scip-typescript",
     version: Some("0.4.0"),
-    subcommand: "index",
+    subcommand: Some("index"),
     root: Root::Flag("--cwd"),
+    output: "--output",
     defaults: &["--no-progress-bar"],
     without: Some(("tsconfig.json", "--infer-tsconfig")),
+    build_file: None,
     build_env: &["NODE_OPTIONS"],
 };
 const PY_INDEX: Indexer = Indexer {
@@ -84,10 +98,12 @@ const PY_INDEX: Indexer = Indexer {
     ],
     tool: "scip-python",
     version: Some("0.6.6"),
-    subcommand: "index",
+    subcommand: Some("index"),
     root: Root::Flag("--cwd"),
+    output: "--output",
     defaults: &["--project-version=0.0.0"],
     without: None,
+    build_file: None,
     build_env: &["PYTHONPATH", "VIRTUAL_ENV"],
 };
 const RUST_INDEX: Indexer = Indexer {
@@ -101,10 +117,12 @@ const RUST_INDEX: Indexer = Indexer {
     ],
     tool: "rust-analyzer",
     version: None,
-    subcommand: "scip",
+    subcommand: Some("scip"),
     root: Root::Argument,
+    output: "--output",
     defaults: &[],
     without: None,
+    build_file: None,
     build_env: &[
         "RUSTFLAGS",
         "CARGO_ENCODED_RUSTFLAGS",
@@ -115,6 +133,29 @@ const RUST_INDEX: Indexer = Indexer {
         "CFLAGS",
         "CXXFLAGS",
     ],
+};
+const CLANG_INDEX: Indexer = Indexer {
+    manifests: &[
+        "compile_commands.json",
+        "CMakeLists.txt",
+        "CMakePresets.json",
+        "meson.build",
+        "Makefile",
+        "BUILD.bazel",
+    ],
+    tool: "scip-clang",
+    version: Some("0.4.1"),
+    subcommand: None,
+    root: Root::Cwd,
+    output: "--index-output-path",
+    defaults: &["--no-progress-report"],
+    without: None,
+    build_file: Some(BuildFile {
+        flag: "--compdb-path",
+        paths: &["compile_commands.json", "build/compile_commands.json"],
+        missing: "no compile_commands.json; for CMake run cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+    }),
+    build_env: &[],
 };
 
 const C: &str = "[(function_definition) (struct_specifier) (enum_specifier)] @def\n(call_expression) @call\n(preproc_include) @include";
@@ -131,8 +172,8 @@ pub static LANGUAGES: &[Registration] = &[
     Registration {
         name: "C",
         syntax_gap: "preprocessor expansions and function-pointer targets remain unknown",
-        precise_gap: "build exclusions, macro expansions and indirect calls may be unrecorded",
-        indexer: None,
+        precise_gap: "build exclusions, macro expansions and indirect calls may be unrecorded; after changing build options, run code index again",
+        indexer: Some(&CLANG_INDEX),
         extensions: &["c"],
         grammar: || tree_sitter_c::LANGUAGE.into(),
         query: C,
@@ -140,8 +181,8 @@ pub static LANGUAGES: &[Registration] = &[
     Registration {
         name: "C++",
         syntax_gap: "overloads, templates, operators, preprocessor expansions and virtual dispatch remain unresolved; a function declared but not defined here is not listed",
-        precise_gap: "build exclusions and dynamic dispatch may be unrecorded",
-        indexer: None,
+        precise_gap: "build exclusions and dynamic dispatch may be unrecorded; after changing build options, run code index again",
+        indexer: Some(&CLANG_INDEX),
         extensions: &[
             "h", "hh", "hpp", "hxx", "h++", "cc", "cpp", "cxx", "c++", "ipp", "tpp", "inl", "ixx",
             "cppm",

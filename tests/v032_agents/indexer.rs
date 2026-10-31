@@ -72,3 +72,35 @@ fn version_probe_has_a_deadline_and_invalid_timeouts_never_start_a_tool() {
         );
     }
 }
+#[test]
+fn clang_index_runs_from_the_project_with_its_compile_database() {
+    let f = Fixture::sources(&[("main.cpp", "int target() { return 1; }\n")]);
+    let mut bytes = field(1, &[]);
+    bytes.extend(doc(
+        "main.cpp",
+        "cxx . . $ target(49f6e7a06ebc5aa8).",
+        "target",
+        &[(&[0, 4, 10], true)],
+    ));
+    write(&f.root.join(".git/input.scip"), bytes);
+    executable(
+        &f.root.join(".git/bound-bin/scip-clang"),
+        r##"#!/usr/bin/python3
+import pathlib,sys
+root=pathlib.Path.cwd()
+if '--version' in sys.argv:
+ print('scip-clang 0.4.1\nBased on Clang/LLVM 2078da43e25a4623cab2d0d60decddf709aaea28');sys.exit()
+assert (root/sys.argv[[a.split('=')[0] for a in sys.argv].index('--compdb-path')].split('=')[1]).is_file()
+out=pathlib.Path(sys.argv[sys.argv.index('--index-output-path')+1]);out.write_bytes((root/'.git/input.scip').read_bytes())
+"##,
+    );
+    failure(
+        command(&f.root, BIN, &["code", "index", "cpp"])
+            .output()
+            .unwrap(),
+        "no compile_commands.json",
+    );
+    write(&f.root.join("build/compile_commands.json"), "[]");
+    cli(&f.root, &["code", "index", "cpp"]);
+    assert!(cli(&f.root, &["code", "defs", "target"]).contains("[precise]"));
+}
