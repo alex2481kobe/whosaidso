@@ -58,11 +58,24 @@ impl Snapshot {
         source_paths.extend(refs.rows.iter().map(|r| r.path.clone()));
         source_paths.sort();
         source_paths.dedup();
-        let mut definitions = self.definitions_in(&source_paths)?.rows;
         let names: HashSet<_> = refs.rows.iter().map(|r| r.name.as_str()).collect();
-        for name in names {
-            definitions.extend(self.candidates(name, true)?.rows);
-        }
+        let encoded = serde_json::to_string(&names).map_err(super::err)?;
+        // Resolve all candidate paths together: one lookup per name repeatedly scans SCIP.
+        let mut stmt = self.db.prepare("SELECT m.path FROM json_each(?1) n JOIN syntax_defs d INDEXED BY syntax_defs_name ON d.name=n.value JOIN manifest_files m INDEXED BY manifest_fact ON m.fact=d.fact WHERE m.manifest=(SELECT manifest FROM selection) UNION SELECT o.path FROM json_each(?1) n CROSS JOIN scip_syms s INDEXED BY scip_syms_name ON s.name=n.value CROSS JOIN scip_occ o INDEXED BY scip_occ_symbol ON o.symbol=s.symbol WHERE o.is_def=1").map_err(super::err)?;
+        let mut candidate_paths = source_paths.clone();
+        candidate_paths.extend(
+            stmt.query_map([encoded], |r| r.get::<_, String>(0))
+                .map_err(super::err)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(super::err)?,
+        );
+        candidate_paths.sort();
+        candidate_paths.dedup();
+        let mut definitions = self.definitions_in(&candidate_paths)?.rows;
+        definitions.sort_by_key(|r| source_paths.binary_search(&r.path).is_err());
+        definitions.retain(|r| {
+            source_paths.binary_search(&r.path).is_ok() || names.contains(r.name.as_str())
+        });
         let mut seen = HashSet::new();
         definitions.retain(|r| {
             seen.insert((
@@ -72,15 +85,12 @@ impl Snapshot {
                 r.range.start,
             ))
         });
-        let mut relationships = Vec::new();
         let sources: BTreeSet<_> = definitions
             .iter()
             .filter(|r| r.layer == Layer::Precise && source_paths.binary_search(&r.path).is_ok())
             .map(|r| r.symbol.as_str())
             .collect();
-        for source in sources {
-            relationships.extend(self.relationships(source, Direction::Forward)?);
-        }
+        let relationships = self.relationships_from(&sources.into_iter().collect::<Vec<_>>())?;
         Ok(assemble(definitions, refs.rows, relationships, refs.gaps))
     }
     pub fn edges(&self, symbol: &str, direction: Direction) -> Result<Edges, String> {

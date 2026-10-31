@@ -42,7 +42,11 @@ pub fn graph(flow: &Flow, snapshot: &Snapshot) -> Result<(Graph, Vec<Coverage>),
         }
     }
     let paths: Vec<_> = paths.into_iter().collect();
-    let anchored = snapshot.definitions_in(&paths)?.rows;
+    let anchored = if flow.covers.boundaries.is_empty() {
+        Vec::new()
+    } else {
+        snapshot.definitions_in(&paths)?.rows
+    };
     let mut incoming = BTreeSet::new();
     for boundary in &flow.covers.boundaries {
         for node in flow.nodes.iter().filter(|n| flow.contains(&n.id, boundary)) {
