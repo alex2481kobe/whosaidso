@@ -25,9 +25,8 @@ pub fn screen(
                 json!({"id":id,"revision":format!("{}:{}",record.revision,snapshot.id),"state":"unknown","problems":record.problems,"nodes":[],"steps":[]})
             } else {
                 let flow = record.flow.ok_or("unreadable flow")?;
-                let comparison = compare::compare(&flow, &snapshot)?;
+                let (comparison,graph) = compare::compare(&flow, &snapshot)?;
                 let layer = view::layer(&flow, parent)?;
-                let graph = super::code::graph(&flow,&snapshot)?.0;
                 let mut nodes: Vec<_> = layer
                     .nodes
                     .iter()
@@ -83,7 +82,7 @@ pub fn screen(
             );
             let rows: Vec<_> = records.into_iter().map(|r| {
                 if !r.problems.is_empty() { return Ok(json!({"id":r.id,"state":"unknown","problems":r.problems})); }
-                let comparison = compare::compare(&r.flow.ok_or("unreadable flow")?,&snapshot)?;
+                let comparison = compare::compare(&r.flow.ok_or("unreadable flow")?,&snapshot)?.0;
                 Ok(json!({"id":r.id,"state":comparison["state"],"progress":comparison["progress"]}))
             }).collect::<Result<_,String>>()?;
             let total = rows.len();
@@ -127,7 +126,7 @@ pub fn comparison(root: &Path, id: &str, branch: Option<&str>) -> Result<Value, 
     if !record.problems.is_empty() {
         return Err(record.problems.join("\n"));
     }
-    let mut value = compare::compare(&record.flow.ok_or("unreadable flow")?, &snapshot)?;
+    let mut value = compare::compare(&record.flow.ok_or("unreadable flow")?, &snapshot)?.0;
     value["committed_only"] = json!(branch.is_some());
     value["branch"] = json!(branch);
     Ok(value)

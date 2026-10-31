@@ -18,7 +18,7 @@ pub fn check_drift(root: &Path) -> Result<(), String> {
             ));
             continue;
         }
-        let report = compare::compare(&record.flow.ok_or("unreadable flow")?, &snapshot)?;
+        let report = compare::compare(&record.flow.ok_or("unreadable flow")?, &snapshot)?.0;
         let state = report["state"].as_str().ok_or("flow has no verdict")?;
         if !["built", "planned"].contains(&state) {
             faults.push(format!("{} {state}", record.id));

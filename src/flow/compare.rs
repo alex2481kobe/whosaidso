@@ -80,7 +80,7 @@ fn node_state(node: &Node, rows: &[&Row], snapshot: &Snapshot, coverage: &[crate
     }
     Ok("built")
 }
-pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<Value, String> {
+pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<(Value,Graph), String> {
     let (graph,coverage) = super::code::graph(flow,snapshot)?;
     let mut nodes = BTreeMap::new();
     let mut owners: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
@@ -206,10 +206,10 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<Value, String> {
         .iter()
         .filter(|n| nodes[&n.id]["binding_state"] == "built")
         .count();
-    Ok(
+    Ok((
         json!({"state":state,"revision":snapshot.id,"nodes":nodes,"steps":steps,"unplanned":unplanned,
-        "unknown":gaps,"progress":{"built":built,"total":leaves.len()},"goal":flow.goal,"goal_effect":"progress only"}),
-    )
+        "unknown":gaps,"progress":{"built":built,"total":leaves.len()},"goal":flow.goal,"goal_effect":"progress only"}), graph,
+    ))
 }
 fn unplanned(flow: &Flow, graph: &Graph, owners: &BTreeMap<&str, Vec<&str>>) -> Vec<Value> {
     let mut seen = BTreeSet::new();
