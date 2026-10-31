@@ -74,6 +74,15 @@ fn static_vectors_match_reference_and_share_across_worktrees() {
         result.contains("charge_subscription") && result.contains("embedding"),
         "{result}"
     );
+    let mismatch = "periodic membership payment";
+    let lexical = success(
+        command(&f.root, BIN, &["find", mismatch])
+            .env("WHOSAIDSO_MODEL", f.root.join("absent"))
+            .output()
+            .unwrap(),
+    );
+    assert!(lexical.contains("no indexed match"), "{lexical}");
+    assert!(run(&f.root, mismatch).contains("charge_subscription"));
     let db = rusqlite::Connection::open(f.root.join(".git/whosaidso/search/search.db")).unwrap();
     let vector:Vec<u8>=db.query_row("SELECT v.vector FROM vectors v JOIN payloads p ON p.id=v.payload WHERE p.kind='file' AND p.detail=?1",[text],|r|r.get(0)).unwrap();
     // Independent NumPy mean/normalization over token IDs 6674,6674,1776,752,867,12752.
@@ -141,6 +150,7 @@ fn pinned_model_fetches_once_from_local_url_and_verifies_bytes() {
     let base = format!("file://{}", model.canonicalize().unwrap().display());
     let fetch = |url: &str| {
         command(&f.root, BIN, &["model", "fetch", "--from", url])
+            .current_dir(f.root.parent().unwrap())
             .env("XDG_CACHE_HOME", &cache)
             .output()
             .unwrap()

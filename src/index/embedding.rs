@@ -22,6 +22,7 @@ const FILES: &[(&str, &str)] = &[
 ];
 const REVISION: &str = "bf8b056651a2c21b8d2565580b8569da283cab23";
 const DIM: usize = 256;
+const TOKENS: usize = 29528;
 // Include inference and chunking rules in the identity, not just the weights.
 fn identity() -> String {
     format!(

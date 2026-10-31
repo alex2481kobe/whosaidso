@@ -11,6 +11,9 @@ pub(super) fn fuse(
     model: &Model,
     cap: usize,
 ) -> Result<Vec<Hit>, String> {
+    if !kinds.is_empty() && kinds.iter().all(|kind| !["file", "symbol"].contains(kind)) {
+        return Ok(lexical);
+    }
     let Some(query) = model.encode(&words.join(" ")) else {
         return Ok(lexical);
     };
@@ -18,14 +21,14 @@ pub(super) fn fuse(
     let mut ranked = HashMap::new();
     for (rank, mut hit) in lexical.into_iter().enumerate() {
         hit.method = Some("bm25");
-        ranked.insert(hit.key.clone(), (1.0 / (60.0 + rank as f64 + 1.0), hit));
+        ranked.insert(hit.key.clone(), (contribution(rank + 1), hit));
     }
     let mut stmt = db
         .prepare("SELECT kind,key,title,source FROM docs WHERE id=?1 ORDER BY key")
         .map_err(|e| e.to_string())?;
     let mut seen = std::collections::HashSet::new();
     let mut rank = 0;
-    for candidate in semantic {
+    'candidates: for candidate in semantic {
         let rows = stmt
             .query_map([candidate.payload], |r| {
                 Ok(Hit {
@@ -47,8 +50,11 @@ pub(super) fn fuse(
             {
                 continue;
             }
+            if rank >= cap {
+                break 'candidates;
+            }
             rank += 1;
-            let score = 1.0 / (60.0 + rank as f64);
+            let score = contribution(rank);
             if let Some((old, hit)) = ranked.get_mut(&hit.key) {
                 *old += score;
                 hit.method = Some("bm25+embedding");
@@ -60,4 +66,8 @@ pub(super) fn fuse(
     let mut ranked = ranked.into_values().collect::<Vec<_>>();
     ranked.sort_by(|(a, ah), (b, bh)| b.total_cmp(a).then_with(|| ah.key.cmp(&bh.key)));
     Ok(ranked.into_iter().map(|(_, hit)| hit).collect())
+}
+
+fn contribution(rank: usize) -> f64 {
+    1.0 / (60.0 + rank as f64)
 }

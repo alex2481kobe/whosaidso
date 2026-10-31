@@ -1,4 +1,4 @@
-use super::{err, unicode::Unicode};
+use super::{TOKENS, err, unicode::Unicode};
 use std::collections::HashMap;
 pub(super) struct Tokenizer {
     vocab: HashMap<String, usize>,
@@ -16,7 +16,7 @@ impl Tokenizer {
         }
         let vocab: HashMap<String, usize> =
             serde_json::from_value(model["vocab"].clone()).map_err(err)?;
-        if vocab.len() != 29528 || vocab.values().any(|&v| v >= 29528) {
+        if vocab.len() != TOKENS || vocab.values().any(|&v| v >= TOKENS) {
             return Err("model: unsupported vocabulary".into());
         }
         let unknown = *vocab

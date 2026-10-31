@@ -19,7 +19,10 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
             topic.push(arg.clone());
         }
     }
-    let result = pack::build(root, &topic, budget)?;
+    let (result, notice) = pack::build(root, &topic, budget)?;
+    if let Some(notice) = notice {
+        eprintln!("{notice}");
+    }
     print!("{result}");
     Ok(())
 }

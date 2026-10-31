@@ -65,7 +65,6 @@ pub(super) fn payload(
         .map_err(err)?
         .execute(params![id, kind, title, body])
         .map_err(err)?;
-    super::words::touch(tx, id)?;
     Ok(id)
 }
 pub(super) fn link(

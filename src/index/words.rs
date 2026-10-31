@@ -3,7 +3,7 @@ use rusqlite::{OptionalExtension, Transaction};
 
 const TRIGRAM_MIN: usize = 7;
 
-pub(super) fn init(tx: &Transaction<'_>) -> Result<(), String> {
+pub(super) fn init(tx: &Transaction<'_>) -> Result<i64, String> {
     let exists = tx
         .query_row(
             "SELECT 1 FROM sqlite_master WHERE name='trigram_terms'",
@@ -13,7 +13,8 @@ pub(super) fn init(tx: &Transaction<'_>) -> Result<(), String> {
         .optional()
         .map_err(err)?
         .is_some();
-    tx.execute_batch("CREATE TABLE IF NOT EXISTS trigram_terms(term TEXT PRIMARY KEY); CREATE TEMP TABLE changed_payloads(id INTEGER PRIMARY KEY);").map_err(err)?;
+    tx.execute_batch("CREATE TABLE IF NOT EXISTS trigram_terms(term TEXT PRIMARY KEY);")
+        .map_err(err)?;
     if !exists {
         tx.execute(
             "INSERT OR IGNORE INTO trigram_terms SELECT term FROM search_trigrams",
@@ -21,21 +22,14 @@ pub(super) fn init(tx: &Transaction<'_>) -> Result<(), String> {
         )
         .map_err(err)?;
     }
-    Ok(())
+    last_payload(tx)
 }
-pub(super) fn touch(tx: &Transaction<'_>, id: i64) -> Result<(), String> {
-    tx.prepare_cached("INSERT INTO changed_payloads VALUES (?1)")
-        .map_err(err)?
-        .execute([id])
-        .map_err(err)?;
-    Ok(())
+fn last_payload(tx: &Transaction<'_>) -> Result<i64, String> {
+    tx.query_row("SELECT coalesce(max(id),0) FROM payloads", [], |r| r.get(0))
+        .map_err(err)
 }
-pub(super) fn finish(tx: &Transaction<'_>) -> Result<(), String> {
-    let changed: bool = tx
-        .query_row("SELECT EXISTS(SELECT 1 FROM changed_payloads)", [], |r| {
-            r.get(0)
-        })
-        .map_err(err)?;
+pub(super) fn finish(tx: &Transaction<'_>, before: i64) -> Result<(), String> {
+    let changed = last_payload(tx)? != before;
     if !changed {
         return Ok(());
     }

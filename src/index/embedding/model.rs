@@ -1,10 +1,11 @@
-use super::{DIM, FILES, err, fetch, tokenizer::Tokenizer};
+use super::{DIM, FILES, TOKENS, err, fetch, tokenizer::Tokenizer};
 use crate::record::sha256_hex;
 use std::fs;
 
 pub struct Model {
     tokenizer: Tokenizer,
-    weights: Vec<f32>,
+    weights: Vec<u8>,
+    offset: usize,
 }
 impl Model {
     pub fn load() -> Result<Self, String> {
@@ -30,21 +31,22 @@ impl Model {
                 .map_err(err)?;
         let tensor = &header["embeddings"];
         if tensor["dtype"] != "F32"
-            || tensor["shape"] != serde_json::json!([29528, DIM])
-            || tensor["data_offsets"] != serde_json::json!([0, 29528 * DIM * 4])
+            || tensor["shape"] != serde_json::json!([TOKENS, DIM])
+            || tensor["data_offsets"] != serde_json::json!([0, TOKENS * DIM * 4])
         {
             return Err("model: unsupported tensor shape".into());
         }
         let data = bytes.get(8 + n..).ok_or("model: truncated tensor")?;
-        if data.len() != 29528 * DIM * 4 {
+        if data.len() != TOKENS * DIM * 4 {
             return Err("model: truncated tensor".into());
         }
-        let weights = data
-            .chunks_exact(4)
-            .map(|b| f32::from_le_bytes(b.try_into().expect("four bytes")))
-            .collect();
         let tokenizer = Tokenizer::load(&files[1])?;
-        Ok(Self { tokenizer, weights })
+        let weights = files.remove(0);
+        Ok(Self {
+            tokenizer,
+            weights,
+            offset: 8 + n,
+        })
     }
     pub fn encode(&self, text: &str) -> Option<Vec<u8>> {
         let ids = self.tokenizer.ids(text);
@@ -53,8 +55,12 @@ impl Model {
         }
         let mut mean = [0f32; DIM];
         for id in ids {
-            for (sum, weight) in mean.iter_mut().zip(&self.weights[id * DIM..(id + 1) * DIM]) {
-                *sum += weight;
+            let start = self.offset + id * DIM * 4;
+            for (sum, bytes) in mean
+                .iter_mut()
+                .zip(self.weights[start..start + DIM * 4].chunks_exact(4))
+            {
+                *sum += f32::from_le_bytes(bytes.try_into().expect("four bytes"));
             }
         }
         // Averaging and summing have the same direction after normalization.

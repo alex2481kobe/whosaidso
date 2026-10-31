@@ -116,7 +116,7 @@ impl Pool {
         };
         let sql = if exact_title.is_some() {
             format!(
-                "SELECT docs.kind,docs.key,docs.title,({}) AS matched,({}) AS edits,bm25(docs_fts,0,1,1) AS bm,docs.source {} AND (?5 IS NULL OR docs.title=?5 COLLATE NOCASE) ORDER BY matched DESC,edits,bm,docs.id LIMIT CASE WHEN ?5 IS NULL THEN ?2 ELSE -1 END",
+                "SELECT docs.kind,docs.key,docs.title,({}) AS matched,({}) AS edits,bm25(docs_fts,0,1,1) AS bm,docs.source {} AND (?5 IS NULL OR docs.title=?5 COLLATE NOCASE) ORDER BY matched DESC,edits,bm,docs.id LIMIT ?2",
                 matched,
                 self.edits,
                 self.source(!all)
