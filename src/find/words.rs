@@ -4,7 +4,6 @@ pub(super) const STOP: &[&str] = &[
     "a", "an", "the", "of", "to", "in", "on", "for", "and", "or", "is", "are", "was", "what",
     "where", "how", "why", "which", "who", "does", "do", "with", "by", "it", "this", "that",
 ];
-pub(super) use crate::index::terms::tokens;
 // Typo distance is optimal string alignment (a transposition is one edit), with a budget by word length.
 fn distance(a: &[char], b: &[char], max: usize) -> Option<usize> {
     if a.len().abs_diff(b.len()) > max {

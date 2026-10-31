@@ -2,8 +2,9 @@
 mod pool;
 mod query;
 mod words;
+use crate::index::terms::tokens;
 use std::path::Path;
-use words::{STOP, tokens};
+use words::STOP;
 
 struct Request {
     words: Vec<String>,

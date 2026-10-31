@@ -1,8 +1,8 @@
 use super::{
     pool::{Hit, Pool},
-    words::{STOP, correct, drop_order, tokens},
+    words::{STOP, correct, drop_order},
 };
-use crate::index;
+use crate::index::{self, terms::tokens};
 use std::{collections::HashMap, path::Path};
 
 fn exactness(hit: &Hit, words: &[String], corrected: &[(String, usize)]) -> u8 {
