@@ -58,13 +58,18 @@ separate files for merging; conflicting edits still require Git reconciliation.
 
 ## Code map and comparison
 
-`flow map [<file-id>]` derives a file/function map from `code::facts` without
+`flow map [<layer-id>]` derives an area/file/function/call map from `code::facts` without
 creating a plan. `flow compare <flow>` compares anchored nodes and steps in one
 index snapshot. Both commands accept `--branch <revision>` for committed code.
 `flow view [<flow> [<parent> [<offset>]]]` returns the same bounded layers as the
 viewer; `$map` selects the derived map. The viewer includes a Flows screen and
-expands one layer at a time, at most 100 nodes, steps and risks per response.
-`next` is an offset, `revision` identifies the snapshot, and `frontier` counts
+expands one layer at a time: 20 primary boxes and 20 arrows per page, with any
+arrow endpoints included as context boxes (at most 60 boxes). Risks and comparison
+details are also paged in groups of 20. Click a box to enter it; the separate
+Details control opens its paths, evidence, risks and notes. Breadcrumbs lead back.
+The code map starts with directories as areas; authored leaves enter their linked
+files, then definitions and calls. No plan is needed for a code map.
+`next` is a page offset, `revision` identifies the snapshot, and `frontier` counts
 hidden descendants and remaining layer items. Branch views read the plan and
 code at one commit and are labelled `committed_only`.
 
@@ -94,7 +99,7 @@ second; code edits, plan changes and precise freshness move its change token.
 Precise evidence is labelled stale after an edit while syntax updates. Timing
 on large projects depends on index refresh cost.
 
-The top map reads file rows and counts definitions only for its page. A file
+The top map groups file coverage into areas without hydrating symbols. A file
 layer reads that file's calls, resolving name candidates across the index so
 narrowing never hides ambiguity. Comparison reads covered paths, anchors and
 incoming calls to declared boundaries. Broad covers still require broad reads.
@@ -102,3 +107,19 @@ The viewer's version poll returns the last verified code token while one index
 refresh runs in the background. Screen and CLI reads still verify current
 sources. A large fallback filesystem scan can therefore dominate a map request
 without loading the repository's symbol graph.
+
+Landing refreshes only covered paths and explicit path anchors. When unread source
+could supply global name candidates, symbol-only anchors or incoming boundary calls,
+the narrow scan reports unknown and refuses landing. It never treats a partial scan
+as proof that those candidates are absent. Existing covered symlinks and ignored
+files absent from the manifest also report unknown; inspection visits at most 4096
+entries under cover prefixes and reports unknown if it cannot finish. Future globs
+with no matching files remain allowed.
+
+Landing compares unchanged node plans against the destination commit. A binding
+built there that is no longer built on the candidate is drifted, even when its
+default authored status is planned. Changing that node's plan is an explicit replan;
+no prior binding state is stored in the plan. Flow records must be regular files,
+with the shared record size limit enforced before authoring and on both read paths.
+Name-only calls resolve within a language family; a cross-language hop needs declared
+evidence such as a literal bridge or precise identity.
