@@ -30,7 +30,9 @@ pub fn command(root: &Path, args: &[String]) -> Result<String, String> {
     }
 }
 fn prove(root: &Path, id: &str, reason: Option<&str>) -> Result<String, String> {
-    Prover::open(root, &git::main_tip(root)?, &[id.to_owned()])?.prove(id, reason)
+    Prover::open(root, &git::main_tip(root)?, &[id.to_owned()])?
+        .prove(id, reason)
+        .map(|(_, message)| message)
 }
 
 // One committed snapshot and scratch lock for all checks in a landing.
@@ -43,7 +45,7 @@ pub struct Prover<'a> {
     scratch: scratch::Scratch,
 }
 impl Prover<'_> {
-    pub fn prove(&self, id: &str, reason: Option<&str>) -> Result<String, String> {
+    pub fn prove(&self, id: &str, reason: Option<&str>) -> Result<(Proof, String), String> {
         let root = self.root;
         let main = self.main;
         let commit = &self.commit;
@@ -116,7 +118,7 @@ impl Prover<'_> {
                 proof.elapsed_ms
             ));
         }
-        Ok(format!(
+        let message = format!(
             "ran: {id} {} {} · {}{}",
             record::result(proof.exit_code),
             &sha[..12],
@@ -129,7 +131,8 @@ impl Prover<'_> {
                 .reason
                 .as_ref()
                 .map_or(String::new(), |r| format!(" · {r}"))
-        ))
+        );
+        Ok((proof, message))
     }
 }
 

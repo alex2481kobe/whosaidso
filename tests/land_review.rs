@@ -1,0 +1,30 @@
+mod common;
+use common::process::*;
+use common::{records as r, *};
+
+#[test]
+fn a_fresh_candidate_failure_blocks_a_future_dated_pass() {
+    let f = Fixture::new();
+    r::check_command(&f.root, &["sh", "-c", "test ! -f broken"]);
+    commit(&f.root);
+    work(&f.root, "feature", "g");
+    f.remote();
+    let lane = f.worktree("worker");
+    cli(&lane, &["install-hooks"]);
+    commit(&lane);
+    cli(&lane, &["start", "g"]);
+    r::proof(&f.root, &head(&f.root), i64::MAX - 1, 0);
+    commit(&f.root);
+    git(&f.root, &["push", "origin", "main"]);
+    work(&lane, "broken", "none");
+    let before = git(&f.root, &["ls-remote", "origin", "refs/heads/main"]);
+    bad(
+        &lane,
+        &["land", "--reason", "existing behavior"],
+        "candidate check failed",
+    );
+    assert_eq!(
+        before,
+        git(&f.root, &["ls-remote", "origin", "refs/heads/main"])
+    );
+}

@@ -32,7 +32,14 @@ pub(super) fn build(
     if !runs.is_empty() {
         let prover = crate::prove::Prover::open(&tree, baseline, &runs)?;
         for id in &runs {
-            println!("{}", prover.prove(id, reason)?);
+            let (proof, message) = prover.prove(id, reason)?;
+            println!("{message}");
+            if proof.exit_code != 0 || proof.timed_out {
+                return Err(format!(
+                    "land: {id} candidate check failed: {}",
+                    proof.output_tail
+                ));
+            }
         }
     }
     worktree::hook(root, "check")?;
