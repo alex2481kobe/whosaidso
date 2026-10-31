@@ -171,6 +171,18 @@ pub fn root(dir: &Path) -> Result<std::path::PathBuf, String> {
 
 pub fn main_tip(root: &Path) -> Result<String, String> {
     let name = crate::config::main(root)?;
+    if let Some(remote) = crate::config::remote(root)?
+        && let Ok(tip) = run(
+            root,
+            &[
+                "rev-parse",
+                "--verify",
+                &crate::config::destination_ref(&remote, &format!("refs/heads/{name}")),
+            ],
+        )
+    {
+        return Ok(tip.trim().to_owned());
+    }
     run(
         root,
         &["rev-parse", "--verify", &format!("refs/heads/{name}")],

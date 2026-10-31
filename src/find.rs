@@ -1,9 +1,11 @@
 // CLI parsing and rendering for ranked search.
+mod fusion;
 mod pool;
 mod query;
 mod words;
+use crate::index::terms::tokens;
 use std::path::Path;
-use words::{STOP, tokens};
+use words::STOP;
 
 struct Request {
     words: Vec<String>,
@@ -48,37 +50,72 @@ fn parse(args: &[String]) -> Result<Request, String> {
 
 pub fn find(root: &Path, args: &[String]) -> Result<(), String> {
     let Request { words, kind, limit } = parse(args)?;
-    let results = query::search(root, &words, kind.as_deref(), limit)?;
+    let results = query::search(
+        root,
+        &words,
+        &kind.as_deref().into_iter().collect::<Vec<_>>(),
+        limit,
+    )?;
+    if let Some(notice) = &results.notice {
+        eprintln!("{notice}");
+    }
     if results.hits.is_empty() {
         println!("find: no indexed match");
         return Ok(());
     }
     for hit in results.hits.iter().take(limit) {
-        let key = hit
-            .key
-            .strip_prefix(&format!("{}:", hit.kind))
-            .unwrap_or(&hit.key);
-        let key = if hit.kind == "proof" {
-            key.split_once(':').map_or(key, |(goal, _)| goal)
-        } else {
-            key
-        };
-        let title = hit.title.replace(['\n', '\r'], " ");
-        let line = match hit.kind.as_str() {
-            "file" => key.to_string(),
-            "commit" => format!(
-                "{}  {}",
-                key.chars().take(10).collect::<String>(),
-                crate::text::cut(&title, 72)
-            ),
-            _ => format!("{} {}  {}", hit.kind, key, title),
-        };
-        println!("{}", crate::text::cut(&line, 200));
+        println!("{}", crate::text::cut(&label(hit), 200));
     }
+    let bound = if results.lower_bound { "at least " } else { "" };
     println!(
-        "shown {} of {}",
+        "shown {} of {bound}{}",
         results.hits.len().min(limit),
         results.total
     );
     Ok(())
+}
+
+use pool::Hit;
+use query::Results;
+pub(crate) fn ranked(
+    root: &Path,
+    args: &[String],
+    kinds: &[&str],
+    limit: usize,
+) -> Result<Results, String> {
+    let request = parse(args)?;
+    if let Some(kind) = request.kind.as_deref() {
+        if !kinds.contains(&kind) {
+            return Err(format!("context: unsupported kind {kind}"));
+        }
+        query::search(root, &request.words, &[kind], limit)
+    } else {
+        query::search(root, &request.words, kinds, limit)
+    }
+}
+pub(crate) fn label(hit: &Hit) -> String {
+    let key = hit
+        .key
+        .strip_prefix(&format!("{}:", hit.kind))
+        .unwrap_or(&hit.key);
+    let key = if hit.kind == "proof" {
+        key.split_once(':').map_or(key, |(goal, _)| goal)
+    } else {
+        key
+    };
+    let title = hit.title.replace(['\n', '\r'], " ");
+    let label = match hit.kind.as_str() {
+        "file" => key.to_string(),
+        "symbol" => format!("symbol {key}"),
+        "commit" => format!(
+            "{}  {}",
+            key.chars().take(10).collect::<String>(),
+            crate::text::cut(&title, 72)
+        ),
+        _ => format!("{} {}  {}", hit.kind, key, title),
+    };
+    match hit.method {
+        Some(method) => format!("{label} [{method}]"),
+        None => label,
+    }
 }

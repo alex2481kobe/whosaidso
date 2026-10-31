@@ -95,7 +95,7 @@ fn stress(count: usize, mut seed: u64, collect: bool) {
             s.spawn(move || {
                 for id in batch {
                     write(&path.join(format!(".whosaidso/notes/{id}.md")),format!("---\n{{\"type\":\"idea\",\"status\":\"resolved\",\"title\":\"Measured work\",\"goal\":\"{id}\"}}\n---\n{id} result\n"));
-                    write(&path.join(format!(".whosaidso/flows/{id}.json")),json!({"covers":{"paths":[format!("{id}.txt")],"boundaries":[]},"goal":id,"nodes":[{"id":"work","type":"action","paths":[format!("{id}.txt")],"goal":id}],"steps":[]}).to_string());
+                    write(&path.join(format!(".whosaidso/flows/{id}.json")),json!({"covers":{"paths":[format!("{id}.rs")],"boundaries":[]},"goal":id,"nodes":[{"id":"work","type":"action","paths":[format!("{id}.rs")],"goal":id}],"steps":[]}).to_string());
                     work(path,&format!("{id}.txt"),id);
                 }
                 commit(path);

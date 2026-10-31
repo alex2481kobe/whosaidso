@@ -88,11 +88,21 @@ fn goals_screen(root: &Path, store: &Store) -> Result<(Value, i64), String> {
             "id":g.id, "title":g.title, "done_when":g.done_when,
             "parent":g.parent, "milestone":crate::goal_tree::milestone(g, &store.goals),
             "check_changed":s.is_some_and(|s| s.check_changed), "state":s.map(|s| goals::label(s.state)), "branches":s.map(|s| &s.branches), "claim":held.get(&g.id), "check":g.check,
-            "proof":proof.map(|(p, current)| json!({"check":p.check,"commit":p.commit,"exit_code":p.exit_code,"ran_at":p.ran_at,"output_tail":p.output_tail,"current":current,"label":"ran","main":p.main,"reason":p.reason})),
+            "proof":proof.map(|(p, current)| {
+                let mut main = json!(p.main);
+                main["verdict"] = json!(record::result(p.main.exit_code));
+                json!({"check":p.check,"commit":p.commit,"exit_code":p.exit_code,"verdict":record::result(p.exit_code),"ran_at":p.ran_at,"output_tail":p.output_tail,"current":current,"label":"ran","main":main,"reason":p.reason})
+            }),
             "media":media.get(g.id.as_str()).into_iter().flatten().take(RECENT).map(|m| json!({"id":m.sha,"media_sha256":m.media_sha256,"tag":gallery::types::media_type(&m.ext).map_or("", |t| t.tag),"shows":m.shows,"label":"attached"})).collect::<Vec<_>>(),
         })
     }).collect::<Vec<_>>();
-    let milestones: Vec<_> = store.goals.iter().filter(|g| g.parent.is_none()).map(|g| json!({"id":g.id,"title":g.title,"counts":tally(rows.iter().filter(|r| r["milestone"] == g.id).filter_map(|r| r["state"].as_str()))})).collect();
+    let milestones: Vec<_> = crate::goal_tree::children(&store.goals, "")
+        .into_iter()
+        .map(|g| {
+            let (done, total, _) = crate::goal_tree::counts(&store.goals, &states, &g.id);
+            json!({"id":g.id,"title":g.title,"progress":{"done":done,"total":total}})
+        })
+        .collect();
     Ok((
         json!({"totals":tally(rows.iter().filter_map(|g| g["state"].as_str())),"milestones":milestones,"goals":rows}),
         lapses,
@@ -187,6 +197,42 @@ pub(super) fn answer(root: &Path, path: &str, params: &HashMap<String, String>) 
             |v| Reply::json(&json!({"version":v})),
         ),
         "/api/goals" => goals_answer(root),
+        "/api/flows" => {
+            let token = current_version(root);
+            let result = params
+                .get("offset")
+                .map_or(Ok(0), |s| {
+                    s.parse::<usize>().map_err(|_| "invalid offset".to_string())
+                })
+                .and_then(|offset| {
+                    crate::flow::screen::screen(
+                        root,
+                        params
+                            .get("id")
+                            .filter(|s| !s.is_empty())
+                            .map(String::as_str),
+                        params
+                            .get("parent")
+                            .filter(|s| !s.is_empty())
+                            .map(String::as_str),
+                        offset,
+                        params
+                            .get("branch")
+                            .filter(|s| !s.is_empty())
+                            .map(String::as_str),
+                    )
+                });
+            match result {
+                Ok(mut value) => match token {
+                    Ok(version) => {
+                        value["version"] = json!(version);
+                        Reply::json(&value)
+                    }
+                    Err(e) => Reply::error(500, &e),
+                },
+                Err(e) => Reply::error(400, &e),
+            }
+        }
         "/api/gallery" => match gallery_screen(root) {
             Ok(value) => Reply::json(&value),
             Err(e) => Reply::error(500, &e),

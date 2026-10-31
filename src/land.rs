@@ -113,8 +113,7 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
         let candidate = head.clone();
         worktree::hook(root, "merge")?;
         crate::gate::gate(root, &baseline)?;
-        crate::flow::command(root, &["check".into()])?;
-        // Merge integration: crate::flow::check::check_drift(root)?;
+        crate::flow::check::check_drift(root)?;
         limits(root, &baseline, line_override)?;
         let store = record::load(root)?;
         let problems = crate::check::budgets::problems(root, &store)?;

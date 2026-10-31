@@ -4,12 +4,6 @@ pub(super) const STOP: &[&str] = &[
     "a", "an", "the", "of", "to", "in", "on", "for", "and", "or", "is", "are", "was", "what",
     "where", "how", "why", "which", "who", "does", "do", "with", "by", "it", "this", "that",
 ];
-pub(super) fn tokens(s: &str) -> Vec<String> {
-    s.split(|c: char| !c.is_alphanumeric())
-        .filter(|w| !w.is_empty())
-        .map(str::to_lowercase)
-        .collect()
-}
 // Typo distance is optimal string alignment (a transposition is one edit), with a budget by word length.
 fn distance(a: &[char], b: &[char], max: usize) -> Option<usize> {
     if a.len().abs_diff(b.len()) > max {
@@ -96,12 +90,15 @@ pub(super) fn correct(db: &Connection, words: &[String]) -> Result<Vec<(String, 
                     continue;
                 }
                 if let Some(edits) = distance(&chars, &have, budget) {
-                    let df = db
+                    let df: Option<i64> = db
                         .query_row("SELECT doc FROM vocab WHERE term=?1", [&candidate], |r| {
                             r.get(0)
                         })
+                        .optional()
                         .map_err(|e| e.to_string())?;
-                    consider(candidate, edits, df);
+                    if let Some(df) = df {
+                        consider(candidate, edits, df);
+                    }
                 }
             }
         }
@@ -138,13 +135,4 @@ fn one_edit(word: &[char]) -> std::collections::HashSet<String> {
         }
     }
     out
-}
-pub(super) fn drop_order(db: &Connection, words: &[(String, usize)]) -> Result<Vec<usize>, String> {
-    let mut frequencies = Vec::new();
-    for (i, (word, _)) in words.iter().enumerate() {
-        let frequency: i64 = db.query_row("SELECT coalesce((SELECT doc FROM vocab WHERE term=?1),(SELECT max(doc) FROM vocab WHERE term>=?1 AND term<?1||char(1114111)),0)", [word], |r| r.get(0)).map_err(|e| e.to_string())?;
-        frequencies.push((i, frequency));
-    }
-    frequencies.sort_by_key(|(i, df)| (*df != 0, std::cmp::Reverse(*df), *i));
-    Ok(frequencies.into_iter().map(|(i, _)| i).collect())
 }

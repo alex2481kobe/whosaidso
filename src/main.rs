@@ -5,6 +5,7 @@ mod check;
 mod claims;
 pub mod code;
 mod config;
+mod context;
 mod evidence;
 mod find;
 mod flow;
@@ -39,8 +40,14 @@ fn run() -> Result<(), String> {
     }
     if args.as_slice() == ["help"] || args.as_slice() == ["--help"] || args.as_slice() == ["-h"] {
         println!(
-            "WhoSaidSo: goals and evidence in Git\n\ncheck | goals | show <id> | start <goal> | next | assign <goal> <agent:name|branch:name> | land [--reason <why>] [--override <name>] | prove <goal> [--reason <why>] | gate [base] | gate --ci <base>..<tip> | prune\nevidence add <goal> <file> <shows> | reopen <milestone> <destination-revision> | media <goal> <file> <title> | sync [remote] | note | flow | find | grep | code | ui\n\nUse short end-to-end checks of real behavior. Tests stay smaller than source; checks default to 60 seconds. Run a full suite only when needed. See USAGE.md for formats and options."
+            "WhoSaidSo: goals and evidence in Git\n\ncheck | goals | show <id> | start <goal> | next | assign <goal> <agent:name|branch:name> | land [--reason <why>] [--override <name>] | prove <goal> [--reason <why>] | gate [base] | gate --ci <base>..<tip> | prune\nevidence add <goal> <file> <shows> | reopen <milestone> <destination-revision> | media <goal> <file> <title> | sync [remote] | note | flow | context | find | grep | code | model fetch | ui\n\nUse short end-to-end checks of real behavior. Tests stay smaller than source; checks default to 60 seconds. Run a full suite only when needed. See USAGE.md for formats and options."
         );
+        return Ok(());
+    }
+    if let [cmd, rest @ ..] = args.as_slice()
+        && cmd == "model"
+    {
+        println!("{}", index::embedding::command(rest)?);
         return Ok(());
     }
     let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
@@ -80,6 +87,7 @@ fn run() -> Result<(), String> {
         "media <goal-id> <file> <title>", [cmd, goal, path, shows] if cmd == "media" => evidence::add(&root, &cwd, goal, path, shows);
         "ui [--port N] [--open]", [cmd, rest @ ..] if cmd == "ui" => ui::serve(&root, rest);
         "grep [--regex] [-i|-s] [-C N] [-g glob] [--in prefix] [--limit N] [--offset N] [-l|--files] [pattern...]", [cmd, words @ ..] if cmd == "grep" => text::grep(&root, words);
+        "context <topic...> [--budget N]", [cmd, words @ ..] if cmd == "context" => context::command(&root, words);
         "find <words...> [--limit N]", [cmd, words @ ..] if cmd == "find" => find::find(&root, words);
         "code import-scip <file>", [cmd, sub, file] if cmd == "code" && sub == "import-scip" => code::import_scip(&root, &cwd.join(file));
         "code <command> [<args>...]", [cmd, rest @ ..] if cmd == "code" => code::command(&root, rest);

@@ -1,51 +1,41 @@
-use super::{TOKENIZER, err};
+use super::err;
 use rusqlite::{OptionalExtension, Transaction};
 
 const TRIGRAM_MIN: usize = 7;
 
-pub(super) fn init(tx: &Transaction<'_>) -> Result<(), String> {
+pub(super) fn init(tx: &Transaction<'_>) -> Result<i64, String> {
     let exists = tx
         .query_row(
-            "SELECT 1 FROM sqlite_master WHERE name='search_trigrams'",
+            "SELECT 1 FROM sqlite_master WHERE name='trigram_terms'",
             [],
             |_| Ok(()),
         )
         .optional()
         .map_err(err)?
         .is_some();
-    tx.execute_batch(&format!(
-        "CREATE VIRTUAL TABLE IF NOT EXISTS search_trigrams USING fts5(term,tokenize='trigram');
-        CREATE TEMP TABLE changed_terms(term TEXT PRIMARY KEY);
-        CREATE VIRTUAL TABLE temp.search_tokens USING fts5(body,tokenize='{TOKENIZER}');
-        CREATE VIRTUAL TABLE temp.search_vocab USING fts5vocab(temp,search_tokens,'row');"
-    ))
-    .map_err(err)?;
+    tx.execute_batch("CREATE TABLE IF NOT EXISTS trigram_terms(term TEXT PRIMARY KEY);")
+        .map_err(err)?;
     if !exists {
         tx.execute(
-            &format!("INSERT INTO search_trigrams(term) SELECT term FROM vocab WHERE length(term)>={TRIGRAM_MIN}"),
+            "INSERT OR IGNORE INTO trigram_terms SELECT term FROM search_trigrams",
             [],
         )
         .map_err(err)?;
     }
-    Ok(())
+    last_payload(tx)
 }
-pub(super) fn touch(tx: &Transaction<'_>, key: &str) -> Result<(), String> {
-    tx.prepare_cached("INSERT INTO temp.search_tokens(rowid,body) SELECT 1,title||' '||body FROM docs WHERE key=?1").map_err(err)?.execute([key]).map_err(err)?;
-    tx.execute(
-        "INSERT OR IGNORE INTO changed_terms SELECT term FROM temp.search_vocab",
-        [],
-    )
-    .map_err(err)?;
-    tx.execute("DELETE FROM temp.search_tokens", [])
-        .map_err(err)?;
-    Ok(())
+fn last_payload(tx: &Transaction<'_>) -> Result<i64, String> {
+    tx.query_row("SELECT coalesce(max(id),0) FROM payloads", [], |r| r.get(0))
+        .map_err(err)
 }
-pub(super) fn finish(tx: &Transaction<'_>) -> Result<(), String> {
-    tx.execute(
-        "DELETE FROM search_trigrams WHERE term IN (SELECT term FROM changed_terms)",
-        [],
-    )
-    .map_err(err)?;
-    tx.execute(&format!("INSERT INTO search_trigrams(term) SELECT term FROM vocab JOIN changed_terms USING(term) WHERE length(term)>={TRIGRAM_MIN}"), []).map_err(err)?;
+pub(super) fn finish(tx: &Transaction<'_>, before: i64) -> Result<(), String> {
+    let changed = last_payload(tx)? != before;
+    if !changed {
+        return Ok(());
+    }
+    // Payloads are immutable, so vocabulary only grows. Enumerate it once per batch,
+    // after the main FTS writer has flushed, rather than flushing for every payload.
+    tx.execute(&format!("INSERT INTO search_trigrams(term) SELECT term FROM all_vocab WHERE length(term)>={TRIGRAM_MIN} AND term NOT IN (SELECT term FROM trigram_terms)"), []).map_err(err)?;
+    tx.execute(&format!("INSERT OR IGNORE INTO trigram_terms SELECT term FROM all_vocab WHERE length(term)>={TRIGRAM_MIN}"), []).map_err(err)?;
     Ok(())
 }

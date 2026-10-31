@@ -17,6 +17,7 @@ pub struct Indexer {
     pub subcommand: &'static str,
     pub root_flag: Option<&'static str>,
     pub defaults: &'static [&'static str],
+    pub build_env: &'static [&'static str],
 }
 const GO_INDEX: Indexer = Indexer {
     tool: "scip-go",
@@ -24,6 +25,19 @@ const GO_INDEX: Indexer = Indexer {
     subcommand: "index",
     root_flag: Some("--module-root"),
     defaults: &["--module-version=v0.0.0"],
+    build_env: &[
+        "GOFLAGS",
+        "GOOS",
+        "GOARCH",
+        "CGO_ENABLED",
+        "CC",
+        "CXX",
+        "CGO_CFLAGS",
+        "CGO_CXXFLAGS",
+        "CGO_LDFLAGS",
+        "GOWORK",
+        "GOEXPERIMENT",
+    ],
 };
 const TS_INDEX: Indexer = Indexer {
     tool: "scip-typescript",
@@ -31,6 +45,7 @@ const TS_INDEX: Indexer = Indexer {
     subcommand: "index",
     root_flag: Some("--cwd"),
     defaults: &["--no-progress-bar"],
+    build_env: &["NODE_OPTIONS"],
 };
 const PY_INDEX: Indexer = Indexer {
     tool: "scip-python",
@@ -38,6 +53,7 @@ const PY_INDEX: Indexer = Indexer {
     subcommand: "index",
     root_flag: Some("--cwd"),
     defaults: &["--project-version=0.0.0"],
+    build_env: &["PYTHONPATH", "VIRTUAL_ENV"],
 };
 const RUST_INDEX: Indexer = Indexer {
     tool: "rust-analyzer",
@@ -45,6 +61,16 @@ const RUST_INDEX: Indexer = Indexer {
     subcommand: "scip",
     root_flag: None,
     defaults: &[],
+    build_env: &[
+        "RUSTFLAGS",
+        "CARGO_ENCODED_RUSTFLAGS",
+        "CARGO_BUILD_TARGET",
+        "RUSTUP_TOOLCHAIN",
+        "CC",
+        "CXX",
+        "CFLAGS",
+        "CXXFLAGS",
+    ],
 };
 const SWIFT_INDEX: Indexer = Indexer {
     tool: "scip-swift",
@@ -52,6 +78,13 @@ const SWIFT_INDEX: Indexer = Indexer {
     subcommand: "index",
     root_flag: None,
     defaults: &[],
+    build_env: &[
+        "SDKROOT",
+        "DEVELOPER_DIR",
+        "SWIFT_EXEC",
+        "CFLAGS",
+        "CXXFLAGS",
+    ],
 };
 
 const C: &str = "[(function_definition) (struct_specifier) (enum_specifier)] @def\n(call_expression) @call\n(preproc_include) @include";
