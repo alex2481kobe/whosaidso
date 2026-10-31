@@ -25,30 +25,30 @@ fn syntax_reports_definitions_references_and_dependencies() {
         "pub fn area_twice(w: i32) -> i32 { helper(w) * 2 }\nfn helper(w: i32) -> i32 { w }\n",
     );
     fs::write(root.join("bad.c"), [0xff, 0xfe]).unwrap();
-    git(&root, &["add", "."]);
-    git(&root, &["commit", "-m", "sources"]);
-    let stdout = cli(&root, &["code", "defs", "area"]);
+    git(root, &["add", "."]);
+    git(root, &["commit", "-m", "sources"]);
+    let stdout = cli(root, &["code", "defs", "area"]);
     assert!(stdout.contains("geom/area.cpp:2"), "{stdout}");
-    assert!(cli(&root, &["code", "refs", "go"]).contains("tool/run.py:4  in <top level>"));
-    let defs = cli(&root, &["code", "defs", "area"]);
+    assert!(cli(root, &["code", "refs", "go"]).contains("tool/run.py:4  in <top level>"));
+    let defs = cli(root, &["code", "defs", "area"]);
     assert!(
         defs.contains("geom/area.cpp:2  function area  [syntactic]"),
         "{defs}"
     );
-    let refs = cli(&root, &["code", "refs", "area"]);
+    let refs = cli(root, &["code", "refs", "area"]);
     assert!(
         refs.contains("app/main.cpp:2  in main  [syntactic]"),
         "{refs}"
     );
-    let refs = cli(&root, &["code", "refs", "helper"]);
+    let refs = cli(root, &["code", "refs", "helper"]);
     assert!(
         refs.contains("src/lib.rs:1  in area_twice  [syntactic]"),
         "{refs}"
     );
-    let deps = cli(&root, &["code", "includers", "geom/area.h"]);
+    let deps = cli(root, &["code", "includers", "geom/area.h"]);
     assert!(deps.contains("included by app/main.cpp:1"), "{deps}");
     assert!(deps.contains("included by geom/area.cpp:1"), "{deps}");
-    assert!(cli(&root, &["code", "defs", "go"]).contains("tool/run.py"));
+    assert!(cli(root, &["code", "defs", "go"]).contains("tool/run.py"));
 }
 
 #[test]
@@ -65,9 +65,9 @@ fn generic_calls_refer_to_function_not_type_arguments() {
         "struct Widget {};\ntemplate<class T> void f() {}\nvoid caller() { f<Widget>(); }\n",
     );
     // 8: Generic calls refer to the function rather than its type argument.
-    assert!(cli(&root, &["code", "refs", "target"]).contains("calls.rs:3  in caller  [syntactic]"));
-    assert!(cli(&root, &["code", "refs", "f"]).contains("calls.cpp:3  in caller  [syntactic]"));
-    assert!(!cli(&root, &["code", "refs", "Widget"]).contains("calls."));
+    assert!(cli(root, &["code", "refs", "target"]).contains("calls.rs:3  in caller  [syntactic]"));
+    assert!(cli(root, &["code", "refs", "f"]).contains("calls.cpp:3  in caller  [syntactic]"));
+    assert!(!cli(root, &["code", "refs", "Widget"]).contains("calls."));
 }
 
 #[test]
@@ -91,20 +91,20 @@ fn qualified_names_select_their_enclosing_scope() {
         "fn cross() {}\nfn use_it() { cross(); }\n",
     );
     assert_eq!(
-        cli(&root, &["code", "defs", "physics::cross"]),
+        cli(root, &["code", "defs", "physics::cross"]),
         "scope.cpp:2  function cross  [syntactic]\nscope.rs:2  fn cross  [syntactic]\n",
         "qualified C++ and Rust defs"
     );
     assert_eq!(
-        cli(&root, &["code", "defs", "physics::Type::cross"]),
+        cli(root, &["code", "defs", "physics::Type::cross"]),
         "scope.cpp:4  method cross  [syntactic]\nscope.rs:5  fn cross  [syntactic]\n"
     );
     assert_eq!(
-        cli(&root, &["code", "defs", "Trait.cross"]),
+        cli(root, &["code", "defs", "Trait.cross"]),
         "scope.rs:6  fn cross  [syntactic]\n"
     );
     assert_eq!(
-        cli(&root, &["code", "refs", "physics::cross"]),
+        cli(root, &["code", "refs", "physics::cross"]),
         "scope.cpp:3  in use  [syntactic]\nscope.cpp:9  in direct  [syntactic]\nscope.rs:3  in use_it  [syntactic]\n"
     );
 }

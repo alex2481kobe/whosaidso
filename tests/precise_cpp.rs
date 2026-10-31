@@ -79,21 +79,21 @@ fn descriptor_names_and_unicode_encodings_match_source_bytes() {
             encoding,
         ));
     }
-    assert!(import(&root, &real).contains("1 stale documents"));
+    assert!(import(root, &real).contains("1 stale documents"));
     for name in ["ns::Widget", "ns::Widget::method", "generated"] {
-        let answer = cli(&root, &["code", "defs", name]);
+        let answer = cli(root, &["code", "defs", name]);
         assert!(
             answer.contains("[precise]") && !answer.contains("[syntactic]"),
             "{name}: {answer}"
         );
     }
     assert!(
-        cli(&root, &["code", "defs", "unicode"])
+        cli(root, &["code", "defs", "unicode"])
             .lines()
             .all(|l| l.ends_with("[precise]"))
     );
     assert_eq!(
-        cli(&root, &["code", "defs", "fallback"]),
+        cli(root, &["code", "defs", "fallback"]),
         "unchecked.cpp:1  function fallback  [syntactic]\n"
     );
     write(
@@ -103,9 +103,9 @@ fn descriptor_names_and_unicode_encodings_match_source_bytes() {
             .replace("method", "edited"),
     );
     fs::copy(root.join(".git/index.scip"), root.join(".git/copied.scip")).unwrap();
-    assert!(cli(&root, &["code", "import-scip", ".git/copied.scip"]).contains("2 stale documents"));
+    assert!(cli(root, &["code", "import-scip", ".git/copied.scip"]).contains("2 stale documents"));
     assert_eq!(
-        cli(&root, &["code", "defs", "ns::Widget::edited"]),
+        cli(root, &["code", "defs", "ns::Widget::edited"]),
         "real.cpp:6  method edited  [syntactic]\n"
     );
 }
@@ -116,7 +116,7 @@ fn reference_mismatches_expire_but_implicit_references_do_not() {
     let root = &f.root;
     use common::scip::*;
     write(&root.join("main.rs"), "fn main() { old(); }\n");
-    assert!(cli(&root, &["code", "defs", "main"]).contains("main.rs:1"));
+    assert!(cli(root, &["code", "defs", "main"]).contains("main.rs:1"));
     let mut doc = field(1, b"main.rs");
     for (range, symbol, role) in [
         ([0, 3, 7], "scip-test pkg project 1 main().", 1),
@@ -133,22 +133,22 @@ fn reference_mismatches_expire_but_implicit_references_do_not() {
     write(&root.join("main.rs"), "fn main() { new(); }\n");
     assert!(
         cli(
-            &root,
+            root,
             &["code", "import-scip", ".whosaidso/cache/index.scip"]
         )
         .contains("1 stale documents"),
         "2: reference mismatch expires document"
     );
     assert!(
-        !cli(&root, &["code", "refs", "old"]).contains("[precise]"),
+        !cli(root, &["code", "refs", "old"]).contains("[precise]"),
         "2: stale reference cannot be precise"
     );
     assert_eq!(
-        cli(&root, &["code", "refs", "new"]),
+        cli(root, &["code", "refs", "new"]),
         "main.rs:1  in main  [syntactic]\n"
     );
     assert_eq!(
-        cli(&root, &["code", "defs", "main"]),
+        cli(root, &["code", "defs", "main"]),
         "main.rs:1  fn main  [syntactic]\n"
     );
 
@@ -174,14 +174,14 @@ fn reference_mismatches_expire_but_implicit_references_do_not() {
         index.extend(field(2, &doc));
         write(&root.join(".whosaidso/cache/index.scip"), index);
         let imported = cli(
-            &root,
+            root,
             &["code", "import-scip", ".whosaidso/cache/index.scip"],
         );
         assert!(
             imported.contains(&format!("{role} stale documents")),
             "reference exemptions: {imported}"
         );
-        let answer = cli(&root, &["code", "defs", "anchor"]);
+        let answer = cli(root, &["code", "defs", "anchor"]);
         assert_eq!(
             answer,
             if role == 0 {
