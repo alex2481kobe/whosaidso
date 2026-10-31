@@ -1,8 +1,6 @@
 mod common;
 use common::process::*;
 use common::{records as r, *};
-use serde_json::json;
-use std::fs;
 
 #[test]
 fn states_follow_work_and_only_landed_proofs() {
@@ -65,46 +63,13 @@ fn newest_proof_uses_nanoseconds_then_hash() {
 }
 
 #[test]
-fn proof_requires_current_check_bytes_at_head_and_worktree() {
+fn changing_the_current_check_invalidates_the_old_run() {
     let f = Fixture::new();
     let root = &f.root;
-
     r::proof(root, &head(root), 1, 0);
     assert!(cli(root, &["goals"]).contains("done    g"));
-    let path = root.join(".whosaidso/instruments/test.json");
-    let original = fs::read(&path).unwrap();
-    r::instrument(root, &["false"]);
+    r::check_command(root, &["false"]);
     assert!(cli(root, &["goals"]).contains("open    g"));
-    commit(root);
-    write(&path, original);
-    assert!(cli(root, &["goals"]).contains("open    g"));
-}
-
-#[test]
-fn unlanded_or_wrong_check_proofs_cannot_replace_selected_evidence() {
-    let f = Fixture::new();
-    let root = &f.root;
-
-    let at = head(root);
-    r::proof(root, &at, 1, 0);
-    git(root, &["checkout", "-q", "-b", "worker"]);
-    work(root, "branch", "g");
-    let branch = head(root);
-    git(root, &["checkout", "-q", "main"]);
-    r::proof(root, &branch, 3, 1);
-    let p = r::proof(root, &at, 4, 1);
-    let mut v = value(&p);
-    fs::remove_file(p).unwrap();
-    r::put(
-        root,
-        "instruments",
-        "other",
-        &json!({"run":["false"],"answers":"other"}),
-    );
-    v["instrument"] = "other".into();
-    r::put(root, "proofs", "", &v);
-    assert!(cli(root, &["goals"]).contains("done    g"));
-    assert!(cli(root, &["show", "g"]).contains(&at[..7]));
 }
 
 #[test]

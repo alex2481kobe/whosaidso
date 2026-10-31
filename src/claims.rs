@@ -64,13 +64,13 @@ fn read(root: &Path, reference: &str) -> Option<Claim> {
 fn shared(root: &Path) -> bool {
     git::run(root, &["remote", "get-url", "origin"]).is_ok()
 }
-fn warn(what: &str, e: &str) {
-    println!(
+fn warn(notices: &mut Vec<String>, what: &str, e: &str) {
+    notices.push(format!(
         "warning: {what}: {}",
         e.trim_start_matches("git: ").lines().next().unwrap_or("")
-    );
+    ));
 }
-fn sync(root: &Path) {
+fn sync(root: &Path, notices: &mut Vec<String>) {
     if let Err(e) = git::run(
         root,
         &[
@@ -82,7 +82,7 @@ fn sync(root: &Path) {
             &format!("+{LOCAL}*:{ORIGIN}*"),
         ],
     ) {
-        warn("claims not synced with origin", &e);
+        warn(notices, "claims not synced with origin", &e);
     }
 }
 fn describe(c: &Claim) -> String {
@@ -109,141 +109,154 @@ fn lost(root: &Path, id: &str) -> String {
         holder(root, id).map_or_else(|| "another worker".to_owned(), |c| describe(&c))
     )
 }
-pub fn claim(root: &Path, cwd: &Path, id: &str, settled: bool) -> Result<(), String> {
-    let me = worker(cwd)?;
-    let published = shared(root);
-    if published {
-        sync(root);
-    }
-    let now = state::now()?;
-    let (origin_ref, local_ref) = (format!("{ORIGIN}{id}"), format!("{LOCAL}{id}"));
-    // Both values are read once: the decision below and the compare-and-set that follows rest on the same refs,
-    // even though this clone's other worktrees share them.
-    let (origin_oid, local_oid) = (ref_oid(root, &origin_ref), ref_oid(root, &local_ref));
-    if let Some(c) = at(root, origin_oid.as_deref()).or_else(|| at(root, local_oid.as_deref()))
-        && c.worker != me
-        && binds(&c, now, settled)
-    {
-        return Err(format!(
-            "start: {id} is claimed by {}; it is released when that worktree starts another goal or none",
-            describe(&c)
-        ));
-    }
-    let branch = git::run(cwd, &["branch", "--show-current"])?
-        .trim()
-        .to_owned();
-    let author = git::run(cwd, &["config", "user.name"])
-        .map(|s| s.trim().to_owned())
-        .ok()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "unknown".to_owned());
-    let path = git::run(cwd, &["rev-parse", "--show-toplevel"])?
-        .trim()
-        .to_owned();
-    let body = cache::dir(root)?.join(format!("claim-{me}"));
-    fs::write(
-        &body,
-        format!("worker {me}\nbranch {branch}\npath {path}\nauthor {author}\nsince {now}\n"),
-    )
-    .map_err(|e| e.to_string())?;
-    let oid = git::run(
-        root,
-        &[
-            "hash-object",
-            "-w",
-            body.to_str().ok_or("invalid cache path")?,
-        ],
-    )?
-    .trim()
-    .to_owned();
-    let _ = fs::remove_file(&body);
-    if published {
-        // The lease makes the push fail when anyone else published first, so exactly one racing worker wins.
-        // It expects the ref's real value, whatever it holds.
-        let lease = format!(
-            "--force-with-lease={local_ref}:{}",
-            origin_oid.unwrap_or_default()
-        );
-        match git::run(
+pub fn claim(
+    root: &Path,
+    cwd: &Path,
+    id: &str,
+    settled: bool,
+) -> (Vec<String>, Result<(), String>) {
+    let mut notices = Vec::new();
+    let result = (|| {
+        let me = worker(cwd)?;
+        let published = shared(root);
+        if published {
+            sync(root, &mut notices);
+        }
+        let now = state::now()?;
+        let (origin_ref, local_ref) = (format!("{ORIGIN}{id}"), format!("{LOCAL}{id}"));
+        // Both values are read once: the decision below and the compare-and-set that follows rest on the same refs,
+        // even though this clone's other worktrees share them.
+        let (origin_oid, local_oid) = (ref_oid(root, &origin_ref), ref_oid(root, &local_ref));
+        if let Some(c) = at(root, origin_oid.as_deref()).or_else(|| at(root, local_oid.as_deref()))
+            && c.worker != me
+            && binds(&c, now, settled)
+        {
+            return Err(format!(
+                "start: {id} is claimed by {}; it is released when that worktree starts another goal or none",
+                describe(&c)
+            ));
+        }
+        let branch = git::run(cwd, &["branch", "--show-current"])?
+            .trim()
+            .to_owned();
+        let author = git::run(cwd, &["config", "user.name"])
+            .map(|s| s.trim().to_owned())
+            .ok()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "unknown".to_owned());
+        let path = git::run(cwd, &["rev-parse", "--show-toplevel"])?
+            .trim()
+            .to_owned();
+        let body = cache::dir(root)?.join(format!("claim-{me}"));
+        fs::write(
+            &body,
+            format!("worker {me}\nbranch {branch}\npath {path}\nauthor {author}\nsince {now}\n"),
+        )
+        .map_err(|e| e.to_string())?;
+        let oid = git::run(
             root,
             &[
-                "push",
-                "-q",
-                "--no-verify",
-                &lease,
-                "origin",
-                &format!("{oid}:{local_ref}"),
+                "hash-object",
+                "-w",
+                body.to_str().ok_or("invalid cache path")?,
             ],
-        ) {
-            Ok(_) => {
-                git::run(root, &["update-ref", &origin_ref, &oid])?;
-                return git::run(root, &["update-ref", &local_ref, &oid]).map(|_| ());
-            }
-            Err(e) if e.contains("stale info") || e.contains("rejected") => {
-                sync(root);
-                return Err(lost(root, id));
-            }
-            Err(e) => warn("claim not published to origin", &e),
-        }
-    }
-    // Only this clone's refs bind here. They are shared by its worktrees, so the write expects the value that was checked.
-    match git::run(
-        root,
-        &[
-            "update-ref",
-            &local_ref,
-            &oid,
-            &local_oid.unwrap_or_default(),
-        ],
-    ) {
-        Ok(_) => Ok(()),
-        Err(e) if e.contains("but expected") => Err(lost(root, id)),
-        Err(e) => Err(e),
-    }
-}
-// Releases every claim this worktree holds except `keep`, here and on origin. Origin's copy is judged by its own
-// worker id, so a release does not depend on this clone's local ref having survived a race between its worktrees.
-pub fn release(root: &Path, cwd: &Path, keep: &str) -> Result<(), String> {
-    let me = worker(cwd)?;
-    if shared(root) {
-        sync(root);
-    }
-    let listing = git::run(
-        root,
-        &["for-each-ref", "--format=%(refname)", LOCAL, ORIGIN],
-    )?;
-    let ids: std::collections::BTreeSet<&str> = listing
-        .lines()
-        .filter_map(|r| r.strip_prefix(LOCAL).or_else(|| r.strip_prefix(ORIGIN)))
-        .collect();
-    for id in ids {
-        if id == keep {
-            continue;
-        }
-        let (local_ref, origin_ref) = (format!("{LOCAL}{id}"), format!("{ORIGIN}{id}"));
-        if let Some(c) = read(root, &local_ref).filter(|c| c.worker == me) {
-            git::run(root, &["update-ref", "-d", &local_ref, &c.oid])?;
-        }
-        if let Some(c) = read(root, &origin_ref).filter(|c| c.worker == me) {
+        )?
+        .trim()
+        .to_owned();
+        let _ = fs::remove_file(&body);
+        if published {
+            // The lease makes the push fail when anyone else published first, so exactly one racing worker wins.
+            // It expects the ref's real value, whatever it holds.
+            let lease = format!(
+                "--force-with-lease={local_ref}:{}",
+                origin_oid.unwrap_or_default()
+            );
             match git::run(
                 root,
                 &[
                     "push",
                     "-q",
                     "--no-verify",
-                    &format!("--force-with-lease={local_ref}:{}", c.oid),
+                    &lease,
                     "origin",
-                    &format!(":{local_ref}"),
+                    &format!("{oid}:{local_ref}"),
                 ],
             ) {
                 Ok(_) => {
-                    git::run(root, &["update-ref", "-d", &origin_ref])?;
+                    git::run(root, &["update-ref", &origin_ref, &oid])?;
+                    return git::run(root, &["update-ref", &local_ref, &oid]).map(|_| ());
                 }
-                Err(e) => warn("claim release not published to origin", &e),
+                Err(e) if e.contains("stale info") || e.contains("rejected") => {
+                    sync(root, &mut notices);
+                    return Err(lost(root, id));
+                }
+                Err(e) => warn(&mut notices, "claim not published to origin", &e),
             }
         }
-    }
-    Ok(())
+        // Only this clone's refs bind here. They are shared by its worktrees, so the write expects the value that was checked.
+        match git::run(
+            root,
+            &[
+                "update-ref",
+                &local_ref,
+                &oid,
+                &local_oid.unwrap_or_default(),
+            ],
+        ) {
+            Ok(_) => Ok(()),
+            Err(e) if e.contains("but expected") => Err(lost(root, id)),
+            Err(e) => Err(e),
+        }
+    })();
+    (notices, result)
+}
+// Releases every claim this worktree holds except `keep`, here and on origin. Origin's copy is judged by its own
+// worker id, so a release does not depend on this clone's local ref having survived a race between its worktrees.
+pub fn release(root: &Path, cwd: &Path, keep: &str) -> (Vec<String>, Result<(), String>) {
+    let mut notices = Vec::new();
+    let result = (|| {
+        let me = worker(cwd)?;
+        if shared(root) {
+            sync(root, &mut notices);
+        }
+        let listing = git::run(
+            root,
+            &["for-each-ref", "--format=%(refname)", LOCAL, ORIGIN],
+        )?;
+        let ids: std::collections::BTreeSet<&str> = listing
+            .lines()
+            .filter_map(|r| r.strip_prefix(LOCAL).or_else(|| r.strip_prefix(ORIGIN)))
+            .collect();
+        for id in ids {
+            if id == keep {
+                continue;
+            }
+            let (local_ref, origin_ref) = (format!("{LOCAL}{id}"), format!("{ORIGIN}{id}"));
+            if let Some(c) = read(root, &local_ref).filter(|c| c.worker == me) {
+                git::run(root, &["update-ref", "-d", &local_ref, &c.oid])?;
+            }
+            if let Some(c) = read(root, &origin_ref).filter(|c| c.worker == me) {
+                match git::run(
+                    root,
+                    &[
+                        "push",
+                        "-q",
+                        "--no-verify",
+                        &format!("--force-with-lease={local_ref}:{}", c.oid),
+                        "origin",
+                        &format!(":{local_ref}"),
+                    ],
+                ) {
+                    Ok(_) => {
+                        git::run(root, &["update-ref", "-d", &origin_ref])?;
+                    }
+                    Err(e) => warn(&mut notices, "claim release not published to origin", &e),
+                }
+            }
+        }
+        Ok(())
+    })();
+    (notices, result)
 }
 // A held claim as the viewer shows it.
 #[derive(serde::Serialize)]

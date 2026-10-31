@@ -74,7 +74,7 @@ fn viewer_labels_current_and_ineligible_proofs() {
     assert_eq!(goals["goals"][0]["state"], "done");
     assert_eq!(goals["goals"][0]["proof"]["current"], true);
     commit(root);
-    r::instrument(root, &["false"]);
+    r::check_command(root, &["false"]);
     commit(root);
     let goal = viewer.json("/api/goals", &cookie)["goals"][0].clone();
     assert_eq!(goal["proof"]["current"], false);

@@ -1,7 +1,6 @@
 mod common;
 use common::process::*;
 use common::{records as r, *};
-use serde_json::json;
 use std::fs;
 
 #[test]
@@ -14,15 +13,11 @@ fn prune_keeps_selected_proof_and_is_idempotent() {
     let kept = r::proof(root, &at, 2, 0);
     commit(root);
     let before = cli(root, &["goals"]);
-    assert!(cli(root, &["check"]).contains("superseded proofs"));
     assert!(cli(root, &["prune"]).contains("1 proofs"));
     assert!(!old.exists() && kept.exists());
     assert_eq!(cli(root, &["goals"]), before);
     commit(root);
-    assert_eq!(
-        cli(root, &["prune"]),
-        "prune: 0 proofs, 0 asks, 0 media archived\n"
-    );
+    assert_eq!(cli(root, &["prune"]), "prune: 0 proofs, 0 media archived\n");
 }
 
 #[test]
@@ -65,19 +60,12 @@ fn retired_goals_remove_events_but_keep_git_history() {
 
     let proof = r::proof(root, &head(root), 1, 0);
     let image = r::media(root, &png("retired"), "png", 1);
-    r::put(
-        root,
-        "asks",
-        "",
-        &json!({"goal":"g","said":"request","ran_at":1,"commit":head(root)}),
-    );
     commit(root);
     let at = head(root);
     fs::remove_file(root.join(".whosaidso/goals/g.json")).unwrap();
     commit(root);
     cli(root, &["prune"]);
     assert!(!proof.exists() && !image.exists());
-    assert!(paths(&root.join(".whosaidso/asks")).is_empty());
     assert!(
         git(
             root,
@@ -88,29 +76,7 @@ fn retired_goals_remove_events_but_keep_git_history() {
         )
         .contains("output_sha256")
     );
-    assert!(paths(&root.join(".whosaidso/instruments")).is_empty());
     cli(root, &["check"]);
-}
-
-#[test]
-fn superseded_instruments_retire_their_proofs() {
-    let f = Fixture::new();
-    let root = &f.root;
-
-    r::proof(root, &head(root), 1, 0);
-    r::put(
-        root,
-        "instruments",
-        "new",
-        &json!({"run":["false"],"answers":"new"}),
-    );
-    let mut g = value(&root.join(".whosaidso/goals/g.json"));
-    g["check"] = "new".into();
-    r::put(root, "goals", "g", &g);
-    commit(root);
-    cli(root, &["prune"]);
-    assert!(paths(&root.join(".whosaidso/proofs")).is_empty());
-    assert!(!root.join(".whosaidso/instruments/test.json").exists());
 }
 
 #[test]
@@ -129,34 +95,6 @@ fn uncommitted_records_refuse_before_any_collection() {
         bad(root, &["prune"], "commit or stash");
         assert_eq!(fs::read(&p).unwrap(), bytes);
     }
-}
-
-#[test]
-fn ask_retention_uses_timestamp_then_record_hash() {
-    let f = Fixture::new();
-    let root = &f.root;
-
-    let mut asks = Vec::new();
-    for n in 0..9 {
-        let p = r::put(
-            root,
-            "asks",
-            "",
-            &json!({"goal":"g","said":format!("ask-{n}"),"ran_at":42+n%3,"commit":head(root)}),
-        );
-        asks.push((value(&p)["ran_at"].as_i64().unwrap(), p));
-    }
-    asks.sort_by(|a, b| b.cmp(a));
-    let shown = cli(root, &["show", "g"]);
-    commit(root);
-    cli(root, &["prune"]);
-    assert_eq!(cli(root, &["show", "g"]), shown);
-    assert_eq!(paths(&root.join(".whosaidso/asks")).len(), 5);
-    assert!(
-        asks.iter()
-            .enumerate()
-            .all(|(i, (_, p))| p.exists() == (i < 5))
-    );
 }
 
 #[test]

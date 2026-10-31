@@ -1,90 +1,74 @@
 # Usage
 
-`whosaidso --version` prints the version. Every other command runs inside a Git worktree (`ui` can also open registered projects). Arguments are positional except the options shown; quote arguments containing spaces. Exit status is 0 on success and 1 on error. A successful `prove` can record a failing result, so read its output. A search with no match exits 0.
+WhoSaidSo keeps goals and evidence in Git. Commands run inside a Git worktree, except `help`, `--version` and the project picker. Exit status is 0 on success and 1 on error. A successful `prove` can record a failed check: read its output.
 
-## Commands
+## Goals
 
-| Command | Does |
+Create `.whosaidso/goals/<id>.json`:
+
+```json
+{"title":"Export a report","done_when":"A report is produced","parent":null,"order":1,"after":[],"check":["sh","-c","test -f report.pdf"]}
+```
+
+`title`, `done_when`, `order` and `after` are required. `parent` names another goal, or is null for a milestone. `check` is optional and contains a direct argument list, with no shell parsing. Use a short check of real behavior, such as one existing end-to-end test or a benchmark. Goals never require a new test or a full suite. IDs use 1–64 lowercase letters, digits and hyphens; `none` is reserved. Records are limited to 64 KiB. Unknown fields, missing references and cycles are reported together. Invalid records remain visible as `broken` and count in progress.
+
+`.whosaidso/config.json` is optional. The default branch name comes from `origin/HEAD`, then `config.main`, then `main`. The corresponding local branch supplies landed history. Fetch before viewing other machines' work.
+
+| Command | Behavior |
 | --- | --- |
-| `check` | Validates records, references, checks and media. Prints problems, or counts. Missing media bytes and superseded proofs are warnings. |
-| `install-hooks` | Installs a `prepare-commit-msg` hook and sets `core.hooksPath`. Once per clone. |
-| `start <goal-id>` | Selects the goal whose `Goal:` trailer this worktree's commits carry (`none` selects `Goal: none`) and claims it through `refs/whosaidso/claims/<goal-id>` on `origin`. Refuses, naming branch, author, age and path, while another worktree on any machine holds a live claim. A claim lapses 72 hours after the holder last ran `start` and binds nothing once the goal has landed. Starting another goal releases the claim. Without `origin`, a claim binds only this clone's worktrees. |
-| `gate [<base>]` | Checks every non-merge commit in `base..HEAD` for exactly one known `Goal:` trailer or `none`. `base` defaults to local `main`; it may be a local branch, local tag, `HEAD` or full commit ID. Refuses while records are uncommitted. |
-| `ask <goal-id> <words...>` | Records a question on the goal. |
-| `show <id>` | Prints up to 40 lines for a goal, phase or instrument. A goal shows its state, check, branches, the five newest asks, latest proof and latest media. |
-| `goals` | Prints phases, goals, states, branches (name, author, age, worktree path) and counts. Needs local `main`. |
-| `prove <goal-id>` | Runs the goal's check and records its output and exit code at `HEAD`. Needs a clean tree before and after, and a readable `HEAD` reflog (`core.logAllRefUpdates`). Records nothing if `HEAD` moved during the run. |
-| `prune` | Run by whoever lands work, on local `main`; commit the deletions with the landing. Keeps each goal's selected proof, the newest proof per goal, check and commit on live local refs, and the newest 5 asks per goal. Deletes other proofs and asks, unused instruments and proofs, and unreferenced media bytes. Older media is archived (see Media). If interrupted, run it again. |
-| `media <goal-id> <file> <title>` | Stores the file and records it as evidence. Title: one argument, 1-80 characters. |
-| `sync [<remote>]` | Shares media bytes and archive bundles through `refs/whosaidso/blobs` on the remote (default `origin`). |
-| `ui [--port N] [--open]` | Serves the read-only viewer (Goals and Gallery) on 127.0.0.1 and prints its URL. `--open` launches a browser. |
+| `help` | Lists commands and the testing rule. Works outside Git. |
+| `check` | Checks record structure, references and media. Reports every problem. |
+| `goals` | Shows milestones, nested goals, progress, broken records and branch details. |
+| `show <id>` | Shows one goal, its check, state, children and selected evidence. |
+| `install-hooks` | Installs the commit trailer hook in this clone. |
+| `start <goal>` | Claims a goal and adds its `Goal:` trailer to subsequent commits. `none` releases the selection. |
+| `gate [base]` | Checks non-merge commit trailers and refuses uncommitted records. Defaults to the destination branch. |
+| `prove <goal>` | Runs the committed check and keeps its commit, exit code, output hash and output tail. Commit the resulting proof record. |
+| `media <goal> <file> <title>` | Attaches media, addressed by its content hash. |
+| `prune` | Collects superseded evidence and archives older media. Run on the destination branch with committed records. Interrupted collection can resume. |
+| `sync [remote]` | Shares media and archives through Git refs; default remote is `origin`. |
+| `ui [--port N] [--open]` | Opens the read-only Goals and Gallery viewer on 127.0.0.1. |
 
-## Search
+Claims name the holder and lapse after 72 hours. Without a remote, claims still exclude sibling worktrees. Local checks help prevent accidental mistakes; a determined bypass needs host enforcement.
 
-| Command | Does |
+## Evidence and state
+
+Proofs in `.whosaidso/proofs` and media records in `.whosaidso/media` are named by the SHA-256 of their serialized bytes. Commit records to share them. Media bytes live outside tracked files, under the Git common directory; `sync` shares them.
+
+State is derived. A goal with no work or evidence is `open`; branch work is `active` or `idle`; work on the destination branch without evidence is `landed`. A qualifying run on that branch is `done` when it passed, `failing` when it failed, and `stale` after later work on the same goal. Changing the check makes a previous run ineligible. Work that changes only records does not count as implementation.
+
+## Notes
+
+Keep one topic in `.whosaidso/notes/<slug>.md`. JSON front matter between `---` lines precedes ordinary Markdown:
+
+```text
+---
+{"type":"decision","status":"open","title":"Storage choice","goal":"export"}
+---
+Use an embedded database.
+```
+
+Types are `decision`, `idea`, `question`, `claim`, `said` and `doc`; statuses are `open`, `resolved` and `retired`. `goal` is optional. A claim must name a goal or cite evidence record hashes in `evidence`. `note show <slug>` prints the revision to use for an edit. `note put <slug> <revision|new> <file>` refuses stale revisions. `note open|resolve|retire <slug> <revision>` changes the lifecycle status. `note list` and `note history <slug>` show current topics and Git history; `find` searches the text.
+
+When both branches changed a topic since their merge base, `gate` requires explicit reconciliation, including when Git would merge the text cleanly. Review both versions, update the note, then use `note reconcile <slug> <revision> <destination-note-revision>` with the revision named by the refusal. Decisions and documents stay live until retired.
+
+## Search and flows
+
+| Command | Behavior |
 | --- | --- |
-| `find <words...> [--limit N]` | Searches records, files and main history, ranked, with typo correction. `kind:<kind>` restricts the type. Prints 8 matches by default and `shown K of N`. |
-| `grep <text...> [--in <path>]...` | Case-insensitive text search over visible files (3+ characters). Repeated `--in` takes the union of path prefixes. Prints up to 20 lines of at most 160 characters and lists skipped files (over 1 MiB, binary or not UTF-8). |
-| `code defs <name>` / `code refs <name>` | Up to 20 definitions or references. Qualified names (`a::b::name`, `Type.name`) match a suffix of the enclosing scopes. |
-| `code deps <path>` / `code includers <path>` | Up to 20 includes from a file, or the files that include it (matched by basename). |
-| `code import-scip <file>` | Imports a SCIP index. Prints document, occurrence, symbol and stale counts. |
+| `find <words...> [--limit N]` | Searches records, files and destination history; `kind:<kind>` filters results. |
+| `grep <text...> [--in <path>]...` | Searches visible file text. |
+| `code defs <name>` / `code refs <name>` | Finds definitions or references, with evidence strength shown. |
+| `code deps <path>` / `code includers <path>` | Shows includes and reverse includes. |
+| `code import-scip <file>` | Imports precise code information. |
+| `flow <command>` | Authors and reads feature flows; see `flow help`. Flow progress never completes a goal. |
 
-Search indexes tracked files, working-tree changes and unignored untracked files on demand into a disposable SQLite cache in `<git dir>/whosaidso/cache/`, one per worktree; delete it any time. Symlinks and submodules are not followed. Code answers are `syntactic` (tree-sitter: C, C++, Rust, Python; no type or import resolution) or `precise`. A `precise` answer needs an imported SCIP index whose occurrences still match the file's current text.
+Search caches are disposable. Records remain the source of truth. Symlinks and submodules are not followed. Built-in code extraction is syntactic; precise results require a fresh SCIP index.
 
-## Records
+## Media and viewer
 
-JSON files under `.whosaidso/`. All fields are required unless marked optional; unknown fields are rejected. Phases, goals and instruments are named `<id>.json`; an ID is 1-64 lowercase letters, digits or hyphens, unique across record kinds, and `none` is reserved. Proofs, asks and media are named by the SHA-256 of their bytes and are created by their commands; commit them to share them.
-
-| Directory | Fields |
-| --- | --- |
-| `phases` | `title`, `order` (unique integer). |
-| `goals` | `title`, `done_when` (nonempty), `check` (instrument ID), `broader` (phase or goal ID; chains must not loop). |
-| `instruments` | `run` (nonempty argument list, e.g. `["cargo", "test"]`), `answers`. The executable must resolve; no two instruments may share a `run`. |
-| `proofs` | `goal`, `instrument`, `commit`, `exit_code`, `output_sha256`, `output_tail` (at most 16 KiB), `ran_at` (Unix nanoseconds). Exit code 0 passes. |
-| `asks` | `goal`, `said` (nonempty), `ran_at`, `commit`. |
-| `media` | `goal`, `shows` (title), `media_sha256`, `ext`, `byte_size`, `commit`, `ran_at`. |
-
-A goal has one check, and it must cover everything the goal needs. To check several things, make `run` a script (`["sh", "-c", "..."]` or a path). `run` is a direct argument list with no shell parsing.
-
-Invalid records are left out of every answer and reported by `check`. Limits: 50 phases, 200 goals (100 not done), 64 KiB per record file.
-
-## States
-
-State is never stored. It comes from non-merge commits with `Goal:` trailers on local `main`, local branches and fetched remote branches, and from the goal's proofs. Commits that change only `.whosaidso/` do not count as work. A local branch shadows a remote one of the same name. Only reachability from local `main` counts as landed.
-
-A proof counts only if its commit is on local `main` and the instrument file at that commit is byte-identical to the current one. The newest such proof decides, by `ran_at` and then record hash.
-
-- `open`: no proof, no landed commit, no branch work.
-- `active` / `idle`: branch work exists and its newest commit is under 72 hours old (`active`) or older (`idle`).
-- `landed`: a goal commit is on `main`, no proof.
-- `done`: the newest proof passed and no later `main` commit carries the goal.
-- `stale`: the proof passed, but a later `main` commit carries the goal.
-- `failing`: the newest proof failed.
-
-Fetch before `goals` to see other machines' branches.
-
-## Media
-
-`media` accepts PNG, JPEG, GIF, WebP, MP4, MOV, WebM and PDF (detected from the bytes), up to 64 MiB. Bytes live in `<git common dir>/whosaidso/blobs`, shared by the clone's worktrees (`WHOSAIDSO_BLOBS` overrides), not in Git. `check` verifies them against each record.
-
-`prune` keeps the newest 100 media records live. Older ones, and media of retired goals, move with their bytes into monthly bundles `media-YYYY-MM.tar` in `<git common dir>/whosaidso/archive/` (`WHOSAIDSO_ARCHIVE` overrides). Bundles are never deleted; `tar -tf` lists one and `tar -xf` restores from it. Unreferenced bytes older than 14 days go to a trash folder and are deleted 14 days later.
-
-To share media: commit and push the records, then run `whosaidso sync` on each machine. Sync verifies every hash before publishing and retries a rejected push up to five times. `check` stays offline and warns about bytes missing here.
-
-Landing: pull, prune, commit the deletions, push, `whosaidso sync`. If the push is rejected, pull and prune again.
-
-## Viewer
-
-`whosaidso ui` prints a URL with a one-use token; open it once and keep the process running. It serves GET requests only and writes nothing to the repository. Goals shows phases, goal states, branches, and each goal's proof, asks and media. Gallery shows the newest 100 media. The project picker reads `$WHOSAIDSO_HOME/projects` (default `$HOME/.whosaidso/projects`), which `ui` and `install-hooks` add the current repository to.
+The gallery shows the newest 100 media items. Older media moves into monthly tar bundles and stays retrievable. Missing local bytes are warnings; use `sync` to fetch shared media. `WHOSAIDSO_BLOBS` and `WHOSAIDSO_ARCHIVE` can override storage locations. The viewer reads registered projects from `WHOSAIDSO_HOME/projects` and makes no changes to them.
 
 ## Tests
 
-Run the default end-to-end suite in debug mode with `cargo test --locked`. Its fixed fault seeds exercise every prune fault hook and verify that the hook ran before checking recovery.
-
-When claim or landing code changes, run the named manual fault sweep:
-
-```sh
-WHOSAIDSO_SEEDS=all cargo test --locked --test invariant manual_all_recorded_fault_seeds -- --ignored --nocapture
-```
-
-Large indexing and result-memory fixtures are separate manual checks: `cargo test --locked --test search_scale -- --ignored`. Large output and media-boundary fixtures use `cargo test --locked --test output_scale -- --ignored`. These manual runs are outside CI.
+Use simple end-to-end tests of the real binary in isolated Git projects. Run one nearby test with `cargo test --locked --test <name>`. Run the whole suite only when needed, with `FULL_SUITE=<reason> cargo test --locked`. Large indexing and output fixtures are named ignored tests, outside the default suite. This project supports macOS and Linux.

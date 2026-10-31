@@ -11,29 +11,7 @@ fn documented_quick_start_runs_verbatim() {
         os::unix::fs::{PermissionsExt, symlink},
         path::Path,
     };
-    fs::create_dir_all(root.join("src")).unwrap();
-    fs::write(
-        root.join("Cargo.toml"),
-        "[package]\nname = 'example'\nversion = '0.1.0'\nedition = '2024'\n",
-    )
-    .unwrap();
-    fs::write(
-        root.join("src/lib.rs"),
-        "#[test] fn example() { assert_eq!(2 + 2, 4); }\n",
-    )
-    .unwrap();
-    fs::write(root.join(".gitignore"), "/target/\n").unwrap();
-    success(
-        command(root, "cargo", &["generate-lockfile", "--offline"])
-            .output()
-            .unwrap(),
-    );
-    success(command(root, "git", &["add", "."]).output().unwrap());
-    success(
-        command(root, "git", &["commit", "-m", "fixture"])
-            .output()
-            .unwrap(),
-    );
+    commit(root);
     let bin = root.join(".git/readme-bin");
     fs::create_dir_all(&bin).unwrap();
     symlink(env!("CARGO_BIN_EXE_whosaidso"), bin.join("whosaidso")).unwrap();
@@ -77,13 +55,12 @@ fn documented_quick_start_runs_verbatim() {
                 .unwrap(),
         );
         if n == 0 {
-            assert!(out.contains("check: ok (1 phases, 1 goals, 1 instruments, 0 proofs)"));
+            assert!(out.contains("check: ok (1 goals, 0 proofs)"));
             assert!(out.contains("hooks: installed"));
-            let instrument: serde_json::Value = serde_json::from_slice(
-                &fs::read(root.join(".whosaidso/instruments/test.json")).unwrap(),
-            )
-            .unwrap();
-            assert_eq!(instrument["run"], serde_json::json!(["cargo", "test"]));
+            assert_eq!(
+                value(&root.join(".whosaidso/goals/first-goal.json"))["check"],
+                serde_json::json!(["sh", "-c", "test -f feature.txt"])
+            );
             assert!(
                 success(
                     command(root, "git", &["log", "-1", "--format=%s"])
@@ -101,7 +78,7 @@ fn documented_quick_start_runs_verbatim() {
                 .is_empty()
             );
         } else if n == 1 {
-            assert!(out.contains("open    first-goal"));
+            assert!(out.contains("landed  first-goal"));
             assert!(out.contains("prove: first-goal pass"));
             let proofs: Vec<_> = fs::read_dir(root.join(".whosaidso/proofs"))
                 .unwrap()

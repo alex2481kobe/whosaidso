@@ -9,7 +9,6 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-pub const MAX_ASKS_PER_GOAL: usize = 5;
 pub fn newest<'a, T>(items: impl Iterator<Item = (&'a T, i64, &'a str)>) -> Vec<&'a T> {
     let mut items: Vec<_> = items.collect();
     items.sort_by(|a, b| (b.1, b.2).cmp(&(a.1, a.2)));

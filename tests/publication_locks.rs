@@ -13,11 +13,7 @@ fn exclusive_collection_excludes_all_record_publishers() {
     let lock = fs::File::open(root.join(".git/whosaidso/blobs/.lock")).unwrap();
     lock.lock().unwrap();
     write(&root.join(".git/input"), png("race"));
-    for args in [
-        &["prove", "g"][..],
-        &["ask", "g", "request"],
-        &["media", "g", ".git/input", "race"],
-    ] {
+    for args in [&["prove", "g"][..], &["media", "g", ".git/input", "race"]] {
         let before = snapshot(&root.join(".whosaidso"));
         let mut child = command(root, BIN, args)
             .stdout(Stdio::piped())
