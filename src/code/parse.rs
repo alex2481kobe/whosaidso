@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use tree_sitter::{Parser, Query, QueryCursor, StreamingIterator};
 
 #[path = "names.rs"]
-mod names;
+pub(super) mod names;
 use names::*;
 mod imports;
 

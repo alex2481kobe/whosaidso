@@ -202,3 +202,26 @@ pub(super) fn caller(mut node: Node<'_>, bytes: &[u8]) -> String {
     }
     String::new()
 }
+
+pub(in crate::code) fn rust_aliases(bytes: &[u8]) -> Result<Vec<String>, String> {
+    use tree_sitter::{Parser, Query, QueryCursor, StreamingIterator};
+    let language = (super::super::languages::for_name("Rust")
+        .ok_or("Rust grammar missing")?
+        .grammar)();
+    let mut parser = Parser::new();
+    parser.set_language(&language).map_err(|e| e.to_string())?;
+    let query =
+        Query::new(&language, "(use_as_clause alias: (_) @alias)").map_err(|e| e.to_string())?;
+    let tree = parser
+        .parse(bytes, None)
+        .ok_or("failed to read Rust aliases")?;
+    let mut cursor = QueryCursor::new();
+    let mut matches = cursor.matches(&query, tree.root_node(), bytes);
+    let mut aliases = Vec::new();
+    while let Some(m) = matches.next() {
+        for c in m.captures() {
+            aliases.push(c.node.utf8_text(bytes).map_err(|e| e.to_string())?.to_owned());
+        }
+    }
+    Ok(aliases)
+}
