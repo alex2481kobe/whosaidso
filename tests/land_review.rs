@@ -252,3 +252,55 @@ fn interrupted_unfolding_resumes_before_the_cleanliness_check() {
     cli(&lane, &["land", "--reason", "shared check"]);
     assert!(git(&lane, &["status", "--porcelain"]).is_empty());
 }
+
+#[test]
+fn prune_recovery_preserves_edited_notes_and_generated_bundles() {
+    let f = Fixture::new();
+    let note = f.root.join(".whosaidso/notes/choice.md");
+    let original = "---\n{\"type\":\"idea\",\"status\":\"resolved\",\"title\":\"Choice\",\"goal\":\"g\"}\n---\noriginal\n";
+    write(&note, original);
+    commit(&f.root);
+    r::proof(&f.root, &head(&f.root), 1, 0);
+    commit(&f.root);
+    let real = success(
+        command(&f.root, "sh", &["-c", "command -v git"])
+            .output()
+            .unwrap(),
+    );
+    let bin = f.root.join(".git/fault-bin");
+    executable(
+        &bin.join("git"),
+        "#!/bin/sh\nif [ -f \"$JOURNAL\" ] && grep -q notes/choice.md \"$JOURNAL\"; then kill -KILL \"$PPID\"; exit 1; fi\nexec \"$REAL_GIT\" \"$@\"\n",
+    );
+    assert!(
+        !command(&f.root, BIN, &["prune"])
+            .env("REAL_GIT", real.trim())
+            .env("JOURNAL", f.root.join(".git/whosaidso/prune.journal"))
+            .env(
+                "PATH",
+                format!("{}:{}", bin.display(), tool_path().to_string_lossy())
+            )
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    let bundle = f.root.join(".whosaidso/done/g.jsonl");
+    let encoded = std::fs::read(&bundle).unwrap();
+    write(&note, original.replace("original", "owner edit"));
+    bad(&f.root, &["prune"], "divergent edit");
+    assert!(
+        std::fs::read_to_string(&note)
+            .unwrap()
+            .contains("owner edit")
+    );
+    write(&note, original);
+    write(&bundle, "owner bundle edit");
+    bad(&f.root, &["prune"], "divergent edit");
+    assert_eq!(
+        std::fs::read_to_string(&bundle).unwrap(),
+        "owner bundle edit"
+    );
+    write(&bundle, encoded);
+    cli(&f.root, &["prune"]);
+}
