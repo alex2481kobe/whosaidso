@@ -116,7 +116,7 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
         }
         worktree::hook(root, "check")?;
         let proven = record::load(&tree)?;
-        let states = state::states_at(&tree, &proven, &candidate)?;
+        let states = state::candidate_states(&tree, &proven, &candidate)?;
         for id in &goals {
             if !states
                 .iter()
@@ -128,7 +128,7 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
             }
         }
         // Folding is generated in disposable inputs; the receipt verifier independently checks every byte.
-        for plan in crate::prune::fold::plan(&tree, &candidate)? {
+        for plan in crate::prune::fold::candidate_plan(&tree, &candidate)? {
             crate::publish::write_bytes(&plan.target, &record::fold::encode(&plan.entries)?)?;
             for e in plan.entries {
                 fs::remove_file(tree.join(".whosaidso").join(e.path)).map_err(|e| e.to_string())?;

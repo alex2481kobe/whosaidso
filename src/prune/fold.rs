@@ -51,11 +51,21 @@ pub struct Plan {
     pub entries: Vec<Entry>,
 }
 pub fn plan(root: &Path, tip: &str) -> Result<Vec<Plan>, String> {
+    plan_for(root, tip, false)
+}
+pub fn candidate_plan(root: &Path, tip: &str) -> Result<Vec<Plan>, String> {
+    plan_for(root, tip, true)
+}
+fn plan_for(root: &Path, tip: &str, pending: bool) -> Result<Vec<Plan>, String> {
     let store = record::load(root)?;
     if !store.errors.is_empty() {
         return Ok(Vec::new());
     }
-    let states = state::states_at(root, &store, tip)?;
+    let states = if pending {
+        state::candidate_states(root, &store, tip)?
+    } else {
+        state::states_at(root, &store, tip)?
+    };
     let milestones: Vec<_> = store
         .goals
         .iter()

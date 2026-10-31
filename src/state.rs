@@ -1,4 +1,5 @@
 mod branches;
+mod evidence;
 mod rules;
 // Goal states derived from Git history and recorded proofs.
 use crate::{
@@ -96,11 +97,21 @@ pub fn newest_proof<'a>(
     goal: &str,
     check: Option<&[String]>,
 ) -> Option<&'a Proof> {
+    select_proof(store, commits, goal, check, |_| true)
+}
+fn select_proof<'a>(
+    store: &'a Store,
+    commits: &HashSet<&str>,
+    goal: &str,
+    check: Option<&[String]>,
+    eligible: impl Fn(&str) -> bool,
+) -> Option<&'a Proof> {
     store
         .proofs
         .iter()
         .filter(|p| {
-            p.goal == goal
+            eligible(&p.sha)
+                && p.goal == goal
                 && Some(p.check.as_slice()) == check
                 && !store
                     .broken
@@ -121,6 +132,18 @@ pub fn states(root: &Path, store: &Store) -> Result<Vec<GoalState>, String> {
     states_at(root, store, &git::main_tip(root)?)
 }
 pub fn states_at(root: &Path, store: &Store, tip: &str) -> Result<Vec<GoalState>, String> {
+    derive(root, store, tip, false)
+}
+pub fn candidate_states(root: &Path, store: &Store, tip: &str) -> Result<Vec<GoalState>, String> {
+    derive(root, store, tip, true)
+}
+fn derive(root: &Path, store: &Store, tip: &str, pending: bool) -> Result<Vec<GoalState>, String> {
+    let landed = if pending {
+        None
+    } else {
+        Some(evidence::landed(root, tip)?)
+    };
+
     let format = "--format=%H%x09%(trailers:key=Goal,valueonly,separator=%x2C)";
     let revisions = git::run(root, &["rev-list", &tip])?;
     if store.goals.is_empty() {
@@ -133,7 +156,8 @@ pub fn states_at(root: &Path, store: &Store, tip: &str) -> Result<Vec<GoalState>
     let changed = rules::changed(root, &tip, store)?;
     let mut result = Vec::new();
     for goal in &store.goals {
-        let proof = newest_proof(store, &commits, &goal.id, goal.check.as_deref());
+        let eligible = |sha: &str| landed.as_ref().is_none_or(|set| set.contains(sha));
+        let proof = select_proof(store, &commits, &goal.id, goal.check.as_deref(), eligible);
         let proof_index =
             proof.and_then(|p| store.proofs.iter().position(|item| std::ptr::eq(item, p)));
         let bs = branches.get(&goal.id);
@@ -154,7 +178,8 @@ pub fn states_at(root: &Path, store: &Store, tip: &str) -> Result<Vec<GoalState>
                     }
                 }
                 None if store.media.iter().any(|m| {
-                    m.goal == goal.id
+                    eligible(&m.sha)
+                        && m.goal == goal.id
                         && commits.contains(m.commit.as_str())
                         && !store
                             .broken

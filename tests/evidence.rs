@@ -92,6 +92,8 @@ fn a_new_check_can_fail_on_main_and_still_prove_the_candidate() {
     commit(root);
     git(root, &["checkout", "-q", "main"]);
     git(root, &["merge", "-q", "worker"]);
+    assert!(!cli(root, &["goals"]).contains("done    g"));
+    commit(root);
     assert!(cli(root, &["goals"]).contains("done    g"));
 }
 
@@ -117,6 +119,8 @@ fn attached_text_report_is_gallery_evidence_by_hash() {
     let gallery = viewer.json("/api/gallery", &viewer.cookie());
     assert_eq!(gallery["entries"][0]["media_sha256"], sha);
     assert!(cli(root, &["show", "g"]).contains("attached"));
+    assert!(!cli(root, &["goals"]).contains("done    g"));
+    commit(root);
     assert!(cli(root, &["goals"]).contains("done    g"));
 }
 

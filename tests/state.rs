@@ -20,6 +20,7 @@ fn states_follow_work_and_only_landed_proofs() {
     work(root, "later", "g");
     assert!(cli(root, &["goals"]).contains("stale   g"));
     cli(root, &["prove", "g", "--reason", "behavior unchanged"]);
+    commit(root);
     assert!(cli(root, &["goals"]).contains("done    g"));
 }
 
@@ -52,9 +53,11 @@ fn newest_proof_uses_nanoseconds_then_hash() {
     let at = head(root);
     r::proof(root, &at, 1, 0);
     r::proof(root, &at, 2, 1);
+    commit(root);
     assert!(cli(root, &["goals"]).contains("failing g"));
     let pass = r::proof(root, &at, 3, 0);
     let fail = r::proof(root, &at, 3, 1);
+    commit(root);
     assert!(cli(root, &["show", "g"]).contains(if pass > fail {
         "proof: ran pass"
     } else {
@@ -67,6 +70,7 @@ fn changing_the_current_check_invalidates_the_old_run() {
     let f = Fixture::new();
     let root = &f.root;
     r::proof(root, &head(root), 1, 0);
+    commit(root);
     assert!(cli(root, &["goals"]).contains("done    g"));
     r::check_command(root, &["false"]);
     assert!(cli(root, &["goals"]).contains("open    g"));
@@ -80,6 +84,7 @@ fn remote_main_never_changes_local_verdict() {
     let at = head(root);
     work(root, "work", "g");
     r::proof(root, &head(root), 1, 0);
+    commit(root);
     let before = cli(root, &["goals"]);
     let shown = cli(root, &["show", "g"]);
     git(root, &["update-ref", "refs/remotes/origin/main", &at]);
