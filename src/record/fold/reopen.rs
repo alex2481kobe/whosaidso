@@ -20,24 +20,7 @@ pub fn reopen(root: &Path, id: &str, revision: &str) -> Result<(), String> {
         );
     }
     let bundle = decode(id, &bytes)?;
-    for entry in &bundle.entries {
-        publish::record_dir(
-            root,
-            entry.path.split_once('/').ok_or("invalid folded path")?.0,
-        )?;
-        let target = root.join(".whosaidso").join(&entry.path);
-        if target.exists()
-            && fs::read(&target).map_err(|e| e.to_string())? != entry.content.as_bytes()
-        {
-            return Err(format!("reopen: existing edit at {}", entry.path));
-        }
-    }
-    for entry in &bundle.entries {
-        publish::write_bytes(
-            &root.join(".whosaidso").join(&entry.path),
-            entry.content.as_bytes(),
-        )?;
-    }
+    restore(root, &bundle)?;
     publish::record_dir(root, "reopens")?;
     publish::write_bytes(
         &root.join(format!(".whosaidso/reopens/{id}.json")),
@@ -85,4 +68,26 @@ pub fn required(root: &Path, destination: &str) -> Result<Vec<String>, String> {
         }
     }
     Ok(errors)
+}
+
+pub fn restore(root: &Path, bundle: &Bundle) -> Result<(), String> {
+    for entry in &bundle.entries {
+        publish::record_dir(
+            root,
+            entry.path.split_once('/').ok_or("invalid folded path")?.0,
+        )?;
+        let target = root.join(".whosaidso").join(&entry.path);
+        if target.exists()
+            && fs::read(&target).map_err(|e| e.to_string())? != entry.content.as_bytes()
+        {
+            return Err(format!("reopen: existing edit at {}", entry.path));
+        }
+    }
+    for entry in &bundle.entries {
+        publish::write_bytes(
+            &root.join(".whosaidso").join(&entry.path),
+            entry.content.as_bytes(),
+        )?;
+    }
+    Ok(())
 }

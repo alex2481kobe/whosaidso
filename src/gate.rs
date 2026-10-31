@@ -23,6 +23,7 @@ pub fn gate(root: &Path, base: &str) -> Result<(), String> {
             &range,
         ],
     )?;
+    crate::land::receipt::check_range(root, &range)?;
     let mut count = 0;
     // Records left out of the commit would be lost at the merge, so landing waits for them.
     let folders: Vec<String> = record::FOLDERS
