@@ -1,12 +1,12 @@
 mod author;
-mod model;
-mod map;
-mod compare;
 pub mod check;
+mod compare;
 mod hops;
+mod map;
+mod model;
 mod pattern;
-pub mod screen;
 mod schema;
+pub mod screen;
 mod store;
 mod validate;
 mod view;
@@ -16,10 +16,18 @@ use std::path::Path;
 pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
     let mut values = args.to_vec();
     let mut branch = None;
-    if values.first().is_some_and(|s| ["view","map","compare"].contains(&s.as_str())) {
+    if values
+        .first()
+        .is_some_and(|s| ["view", "map", "compare"].contains(&s.as_str()))
+    {
         if let Some(i) = values.iter().position(|s| s == "--branch") {
-            branch = Some(values.get(i+1).ok_or("--branch needs a revision")?.clone());
-            values.drain(i..=i+1);
+            branch = Some(
+                values
+                    .get(i + 1)
+                    .ok_or("--branch needs a revision")?
+                    .clone(),
+            );
+            values.drain(i..=i + 1);
         }
     }
     let args = values.as_slice();
@@ -39,8 +47,7 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
             Ok(())
         }
         [cmd, rest @ ..] if cmd == "map" && rest.len() <= 1 => {
-            let snapshot = if let Some(branch) = &branch { crate::code::facts::Snapshot::branch(root, &crate::git::local_revision(root,branch)?)? } else {crate::code::facts::Snapshot::current(root)?};
-            println!("{}", map::layer(&snapshot, rest.first().map(String::as_str), 0)?);
+            println!("{}", screen::screen(root,Some("$map"),rest.first().map(String::as_str),0,branch.as_deref())?);
             Ok(())
         }
         [cmd, rest @ ..] if cmd == "check" && rest.len() <= 1 => {

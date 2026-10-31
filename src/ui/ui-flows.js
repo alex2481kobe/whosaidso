@@ -11,7 +11,7 @@ export function flowsScreen() {
   const node = el("div", "screen", toolbar, list);
   const link = (label, id, parent = "", page = 0) => Object.assign(el("a", "button", label), {href:route(id, parent, branch, page)});
   const row = n => {
-    const label = el("span", "goal-title", n.name || n.id), data = [chip(n.state || "unknown"), label, el("span", "muted", n.type), n.evidence && el("span", "muted", n.evidence)];
+    const label = el("span", "goal-title", n.name || n.id), data = [chip(n.state), label, el("span", "muted", n.type), n.evidence && el("span", "muted", n.evidence)];
     if (n.path) data.push(mono(n.path + (n.line ? ":" + n.line : "")));
     if (n.children) return Object.assign(el("a", "menu-row flow-row", data), {href:route(id, n.id, branch)});
     return el("div", "menu-row flow-row", data);
@@ -26,13 +26,14 @@ export function flowsScreen() {
       list.replaceChildren(Object.assign(el("a", "menu-row", "Code"), {href:route("$map", "", branch)}), ...(data.flows || []).map(f => Object.assign(el("a", "menu-row flow-row", chip(f.state), el("span", "goal-title", f.id), f.progress && `${f.progress.built}/${f.progress.total}`), {href:route(f.id,"",branch)})));
     } else {
       list.replaceChildren(...(data.nodes || []).map(row));
-      for (const s of data.steps || []) list.append(el("div", "menu-row flow-row", chip(s.state || "unknown"), mono(s.from), " → ", mono(Array.isArray(s.to) ? s.to.join(", ") : s.to), s.when && el("span", "muted", s.when), el("span", "muted", s.evidence)));
+      for (const s of data.steps || []) list.append(el("div", "menu-row flow-row", chip(s.state), mono(s.from), " → ", mono(Array.isArray(s.to) ? s.to.join(", ") : s.to), s.when && el("span", "muted", s.when), el("span", "muted", s.evidence)));
       for (const r of data.risks || []) list.append(el("details", "goal", el("summary", "menu-row", r.risk.id), el("div", "goal-detail", r.risk.note, Object.entries(r.risk.mitigation).map(([type,id]) => el("span", "muted", `${type}:${id}`)))));
       for (const p of data.problems || []) list.append(message(p, "error"));
       for (const p of data.unknown || []) list.append(el("div", "menu-row", chip("unknown"), mono(p)));
-      for (const u of data.unplanned || []) list.append(el("div", "menu-row flow-row", chip(u.state || "unplanned"), mono(u.path), mono(u.to)));
+      for (const u of data.unplanned || []) list.append(el("div", "menu-row flow-row", chip(u.state), mono(u.path), mono(u.to)));
       if (data.next != null) list.append(link("Next", id, parent, data.next));
     }
+    if (!id && data.next != null) list.append(link("Next", "", "", data.next));
     return data.version;
   }};
 }
