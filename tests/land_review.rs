@@ -472,3 +472,60 @@ fn a_thousand_goals_and_ten_thousand_events_stay_bounded() {
         samples[3]
     );
 }
+
+#[test]
+fn a_failed_push_retries_when_the_remote_destination_moved() {
+    for resume in [false, true] {
+        let f = Fixture::new();
+        let remote = f.remote();
+        let lane = f.worktree("worker");
+        work(&lane, "feature", "g");
+        if resume {
+            failure(
+                command(&lane, BIN, &["land", "--reason", "shared check"])
+                    .env(
+                        "WHOSAIDSO_LAND_HOOK",
+                        "[ \"$WHOSAIDSO_LAND_STEP\" != before-push ]",
+                    )
+                    .output()
+                    .unwrap(),
+                "before-push",
+            );
+        }
+        work(&f.root, "raced", "none");
+        git(&f.root, &["push", "origin", "main:race"]);
+        executable(
+            &remote.join("hooks/update"),
+            "#!/bin/sh\nif [ \"$1\" = refs/heads/main ] && [ ! -f moved ]; then\n touch moved\n git update-ref refs/heads/main refs/heads/race \"$2\" || exit 1\n echo 'destination advanced inside the update hook' >&2\n exit 1\nfi\n",
+        );
+        let text = cli(&lane, &["land", "--reason", "shared check"]);
+        assert!(text.contains("testing again"), "{text}");
+        assert_eq!(
+            text.matches("ran: g pass").count(),
+            if resume { 1 } else { 2 },
+            "{text}"
+        );
+        assert!(lane.join("raced").is_file());
+        assert_eq!(git(&remote, &["rev-parse", "main"]).trim(), head(&lane));
+    }
+}
+
+#[test]
+fn a_failed_push_reports_the_error_when_the_destination_did_not_move() {
+    let f = Fixture::new();
+    let remote = f.remote();
+    let lane = f.worktree("worker");
+    work(&lane, "feature", "g");
+    let original = head(&f.root);
+    executable(
+        &remote.join("hooks/update"),
+        "#!/bin/sh\nif [ \"$1\" = refs/heads/main ]; then echo 'publication policy refused' >&2; exit 1; fi\n",
+    );
+    let text = bad(
+        &lane,
+        &["land", "--reason", "shared check"],
+        "publication policy refused",
+    );
+    assert!(!text.contains("testing again"), "{text}");
+    assert_eq!(git(&remote, &["rev-parse", "main"]).trim(), original);
+}
