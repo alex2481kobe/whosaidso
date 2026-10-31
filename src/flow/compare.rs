@@ -1,8 +1,8 @@
 use super::{
     code::{inside, selected},
     map::strength,
-    pattern::matches,
     model::{Flow, Node},
+    pattern::matches,
 };
 use crate::code::facts::{Snapshot, edges::Graph, reads::Row};
 use serde_json::{Value, json};
