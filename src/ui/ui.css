@@ -122,3 +122,13 @@ h1, h2, h3, p { margin: 0; }
   .page { position: static; flex: 1; padding: 4px 12px 24px; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
+
+/* Flow layers reuse the viewer's rows and state chips. */
+.flow-row { flex-wrap: wrap; cursor: default; }
+a.flow-row { cursor: pointer; }
+.flow-row .goal-title { flex: 1 1 160px; }
+.flow-row .mono { overflow-wrap: anywhere; }
+.s-built { --tone: var(--green); }
+.s-drifted, .s-missing, .s-unplanned, .s-broken { --tone: var(--red); }
+.s-unknown, .s-ambiguous { --tone: var(--amber); }
+.s-planned, .s-authored { --tone: var(--slate); }

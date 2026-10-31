@@ -4,6 +4,7 @@ mod map;
 mod compare;
 mod hops;
 mod pattern;
+pub mod screen;
 mod schema;
 mod store;
 mod validate;
@@ -13,6 +14,11 @@ use std::path::Path;
 
 pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
     match args {
+        [cmd, rest @ ..] if cmd == "view" && rest.len() <= 3 => {
+            let offset = rest.get(2).map_or(Ok(0), |s| s.parse::<usize>().map_err(|_| "invalid offset"))?;
+            println!("{}", screen::screen(root,rest.first().map(String::as_str),rest.get(1).map(String::as_str),offset,None)?);
+            Ok(())
+        }
         [cmd, id] if cmd == "compare" => {
             let record = store::load(root, Some(id))?.pop().ok_or("unknown flow")?;
             if !record.problems.is_empty() { return Err(record.problems.join("\n")); }
