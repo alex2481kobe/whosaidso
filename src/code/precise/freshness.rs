@@ -40,7 +40,9 @@ fn offset(line: &[u8], column: usize, encoding: u64) -> Option<usize> {
     }
     (units == column).then_some(line.len())
 }
-fn aliases<'a>(d: &'a Doc, bytes: &[u8], lines: &[&[u8]]) -> HashMap<&'a str, HashSet<String>> {
+// A re-exported alias is declared in one document and spelled in others.
+pub(super) fn aliases(d: &Doc, bytes: &[u8]) -> HashMap<String, HashSet<String>> {
+    let lines: Vec<_> = bytes.split(|&b| b == b'\n').collect();
     let mut spellings = HashMap::new();
     if !d.path.ends_with(".rs") || !d.occ.iter().any(|o| o.symbol.starts_with("rust-analyzer ")) {
         return spellings;
@@ -66,7 +68,7 @@ fn aliases<'a>(d: &'a Doc, bytes: &[u8], lines: &[&[u8]]) -> HashMap<&'a str, Ha
                     .any(|a| !a.def && a.symbol == o.symbol && at(a, alias.range))
             {
                 spellings
-                    .entry(o.symbol.as_str())
+                    .entry(o.symbol.clone())
                     .or_insert_with(HashSet::new)
                     .insert(alias.name.clone());
             }
@@ -74,7 +76,7 @@ fn aliases<'a>(d: &'a Doc, bytes: &[u8], lines: &[&[u8]]) -> HashMap<&'a str, Ha
     }
     spellings
 }
-pub(super) fn check(d: &Doc, bytes: &[u8]) -> bool {
+pub(super) fn check(d: &Doc, bytes: &[u8], aliases: &HashMap<String, HashSet<String>>) -> bool {
     let source_lines: Vec<_> = bytes.split(|&b| b == b'\n').collect();
     let enclosing_valid = d.occ.iter().all(|o| {
         o.enclosing.is_none_or(|e| {
@@ -104,7 +106,6 @@ pub(super) fn check(d: &Doc, bytes: &[u8]) -> bool {
         .filter(|o| o.symbol.ends_with('!'))
         .map(range)
         .collect();
-    let aliases = aliases(d, bytes, &source_lines);
     let (mut valid, mut checked) = (enclosing_valid, 0);
     for o in &d.occ {
         let in_source = |line: i64, column: usize| {

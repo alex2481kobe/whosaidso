@@ -2,7 +2,7 @@
 use super::{
     decode::*,
     err,
-    freshness::check,
+    freshness::{self, check},
     symbols::{descriptors, name},
     wire::*,
 };
@@ -105,16 +105,29 @@ pub(in crate::code) fn import_run(
         .collect();
     let by_path: HashMap<_, _> = docs.iter().map(|d| (d.path.as_str(), d)).collect();
     let mut validated = HashSet::new();
+    let mut aliases = HashMap::<String, HashSet<String>>::new();
+    let mut retry = Vec::new();
     tree::read(root, &sources, usize::MAX - 1, |file, bytes| {
         blobs.insert(file.path.clone(), file.blob.clone());
         if let Some(bytes) = bytes {
             let d = by_path[file.path.as_str()];
-            if check(d, &bytes) {
+            for (symbol, names) in freshness::aliases(d, &bytes) {
+                aliases.entry(symbol).or_default().extend(names);
+            }
+            if check(d, &bytes, &aliases) {
                 validated.insert(file.path.clone());
+            } else {
+                retry.push((file.path.clone(), bytes));
             }
         }
         Ok(())
     })?;
+    // Files read before an alias's declaration get a second look with every alias known.
+    for (path, bytes) in retry {
+        if check(by_path[path.as_str()], &bytes, &aliases) {
+            validated.insert(path);
+        }
+    }
     for f in &mut files.entries {
         if let Some(blob) = blobs.get(&f.path) {
             f.blob = blob.clone();

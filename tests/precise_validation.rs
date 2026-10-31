@@ -145,3 +145,38 @@ fn rust_import_alias_spelling_is_validated_against_its_symbol() {
     scip::import(&f.root, &wrong);
     assert!(!cli(&f.root, &["code", "refs", "real"]).contains("[precise]"));
 }
+
+#[test]
+fn a_re_exported_alias_validates_where_another_file_calls_it() {
+    let f = Fixture::sources(&[
+        ("a_client.rs", "fn entry() { crate::z_api::stored(); }\n"),
+        ("real.rs", "pub fn real() {}\n"),
+        ("z_api.rs", "pub use crate::real::real as stored;\n"),
+    ]);
+    commit(&f.root);
+    let symbol = "rust-analyzer cargo app 1 real/real().";
+    scip::import(
+        &f.root,
+        &[
+            scip::doc("real.rs", symbol, "real", &[(&[0, 7, 11], true)]),
+            scip::doc(
+                "a_client.rs",
+                "rust-analyzer cargo app 1 a_client/entry().",
+                "entry",
+                &[(&[0, 3, 8], true)],
+            ),
+            scip::doc("a_client.rs", symbol, "real", &[(&[0, 27, 33], false)]),
+            scip::doc(
+                "z_api.rs",
+                symbol,
+                "real",
+                &[(&[0, 21, 25], false), (&[0, 29, 35], false)],
+            ),
+        ],
+    );
+    let refs = cli(&f.root, &["code", "refs", "real"]);
+    assert!(
+        refs.contains("a_client.rs:1") && refs.contains("[precise]"),
+        "{refs}"
+    );
+}
