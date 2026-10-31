@@ -22,6 +22,10 @@ const SKILLS: &[(&str, &str)] = &[
         "whosaidso-gallery",
         include_str!("../../skills/whosaidso-gallery/SKILL.md"),
     ),
+    (
+        "whosaidso-languages",
+        include_str!("../../skills/whosaidso-languages/SKILL.md"),
+    ),
 ];
 
 pub(super) fn check(folder: &Path) -> Result<(), String> {

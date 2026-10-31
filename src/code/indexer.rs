@@ -33,10 +33,11 @@ pub(super) fn run(root: &Path, language: &str, args: &[String]) -> Result<String
             lock_path.display()
         )
     })?;
-    let entry = languages::for_name(language).ok_or("language not indexed")?;
-    let adapter = entry
-        .indexer
-        .ok_or("no pinned indexer for this language; syntax remains available")?;
+    let entry = languages::for_name(language)
+        .ok_or("language not indexed; to add it, see the whosaidso-languages skill")?;
+    let adapter = entry.indexer.ok_or(
+        "no pinned indexer for this language; syntax remains available; to add one, see the whosaidso-languages skill",
+    )?;
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|e| e.to_string())?
@@ -70,13 +71,15 @@ pub(super) fn run(root: &Path, language: &str, args: &[String]) -> Result<String
     if actual.len() > 16384 {
         return Err("indexer version output exceeds 16 KiB".into());
     }
-    let expected = format!("{} {}", adapter.tool, adapter.version);
     let normalized = actual.trim().replace(" v", " ");
-    if !version.success() || (normalized != expected && normalized != adapter.version) {
+    let accepted = adapter.version.is_none_or(|pinned| {
+        normalized == pinned || normalized == format!("{} {pinned}", adapter.tool)
+    });
+    if !version.success() || !accepted {
         return Err(format!(
             "{} requires {}; found {}",
             adapter.tool,
-            adapter.version,
+            adapter.version.unwrap_or("a working install"),
             crate::text::cut(actual.trim(), 200)
         ));
     }
@@ -89,14 +92,18 @@ pub(super) fn run(root: &Path, language: &str, args: &[String]) -> Result<String
         .current_dir(root)
         .arg(adapter.subcommand)
         .args(adapter.defaults);
-    if adapter.tool == "scip-typescript" && !root.join("tsconfig.json").is_file() {
-        command.arg("--infer-tsconfig");
+    if let Some((file, flag)) = adapter.without
+        && !root.join(file).is_file()
+    {
+        command.arg(flag);
     }
-    if let Some(flag) = adapter.root_flag {
-        command.arg(flag).arg(root);
-    }
-    if adapter.tool == "rust-analyzer" {
-        command.arg(root);
+    match adapter.root {
+        languages::Root::Flag(flag) => {
+            command.arg(flag).arg(root);
+        }
+        languages::Root::Argument => {
+            command.arg(root);
+        }
     }
     command
         .arg("--output")
@@ -119,9 +126,13 @@ pub(super) fn run(root: &Path, language: &str, args: &[String]) -> Result<String
     let report =
         precise::storage::import_run(root, &artifact, Some((&input, &context, entry.name)))?;
     Ok(format!(
-        "{report}\nindexer: {} {} timeout={}s",
-        adapter.tool,
-        adapter.version,
+        "{report}\nindexer: {} timeout={}s",
+        adapter
+            .version
+            .map_or(actual.trim().to_owned(), |v| format!(
+                "{} {v}",
+                adapter.tool
+            )),
         deadline.seconds()
     ))
 }

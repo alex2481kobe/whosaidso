@@ -12,6 +12,8 @@ cargo build --release --locked
 
 Tests are end-to-end tests that run the real binary in isolated temporary Git projects. Give each fixture its own records and home; never use a real project's `.whosaidso` directory. Test observable success and failure behavior. Keep the dependency lockfile current and avoid introducing unnecessary dependencies.
 
+To add a language, follow [the languages skill](skills/whosaidso-languages/SKILL.md).
+
 To try the viewer on a sample project: `WHOSAIDSO="$PWD/target/release/whosaidso" sh scripts/sample-project.sh target/ui-sample`, then run `whosaidso ui` inside `target/ui-sample/game-engine`. The README screenshots come from it.
 
 CI has read-only permissions. Workflow, dependency and release changes receive particular scrutiny. See [AGENTS.md](AGENTS.md) for guidance for coding agents.

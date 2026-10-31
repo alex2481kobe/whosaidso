@@ -185,6 +185,9 @@ fn every_skill_example_is_accepted_by_the_real_binary() {
                 "whosaidso-search" => {
                     assert!(cli(&f.root, &["code", "callers", "lib.rs::report"]).contains("main"))
                 }
+                "whosaidso-languages" => {
+                    assert!(cli(&f.root, &["code", "help", "coverage"]).contains("Rust: syntax:"))
+                }
                 _ => panic!("add an outcome for {skill}"),
             }
         }

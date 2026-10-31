@@ -1,5 +1,6 @@
 // The pinned build context gates the run; source bytes gate each document.
 use super::err;
+use crate::code::languages::Root;
 use rusqlite::{Connection, OptionalExtension};
 use std::os::unix::ffi::OsStrExt;
 
@@ -11,11 +12,15 @@ pub(in crate::code) fn context(language: &str) -> String {
         bytes.extend_from_slice(part);
     };
     if let Some(profile) = profile {
+        let root = match profile.root {
+            Root::Flag(flag) => flag,
+            Root::Argument => "argument",
+        };
         for value in [
             profile.tool,
-            profile.version,
+            profile.version.unwrap_or(""),
             profile.subcommand,
-            profile.root_flag.unwrap_or(""),
+            root,
         ]
         .into_iter()
         .chain(profile.defaults.iter().copied())

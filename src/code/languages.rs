@@ -1,4 +1,6 @@
 // One registration owns each language's extensions, grammar and extraction query.
+// To add a language, follow the whosaidso-languages skill.
+use sha2::{Digest, Sha256};
 use std::path::Path;
 use tree_sitter::Language;
 
@@ -11,22 +13,30 @@ pub struct Registration {
     pub indexer: Option<&'static Indexer>,
     pub query: &'static str,
 }
+pub enum Root {
+    Flag(&'static str),
+    Argument,
+}
 pub struct Indexer {
     pub tool: &'static str,
-    pub version: &'static str,
+    // None accepts any version: the tool ships with the language's own toolchain.
+    pub version: Option<&'static str>,
     pub subcommand: &'static str,
-    pub root_flag: Option<&'static str>,
+    pub root: Root,
     pub defaults: &'static [&'static str],
+    // Passed only when this file is absent from the project root.
+    pub without: Option<(&'static str, &'static str)>,
     pub build_env: &'static [&'static str],
     pub manifests: &'static [&'static str],
 }
 const GO_INDEX: Indexer = Indexer {
     manifests: &["go.mod", "go.sum", "go.work", "go.work.sum"],
     tool: "scip-go",
-    version: "0.2.7",
+    version: Some("0.2.7"),
     subcommand: "index",
-    root_flag: Some("--module-root"),
+    root: Root::Flag("--module-root"),
     defaults: &["--module-version=v0.0.0"],
+    without: None,
     build_env: &[
         "GOFLAGS",
         "GOOS",
@@ -54,10 +64,11 @@ const TS_INDEX: Indexer = Indexer {
         "jsconfig.json",
     ],
     tool: "scip-typescript",
-    version: "0.4.0",
+    version: Some("0.4.0"),
     subcommand: "index",
-    root_flag: Some("--cwd"),
+    root: Root::Flag("--cwd"),
     defaults: &["--no-progress-bar"],
+    without: Some(("tsconfig.json", "--infer-tsconfig")),
     build_env: &["NODE_OPTIONS"],
 };
 const PY_INDEX: Indexer = Indexer {
@@ -72,10 +83,11 @@ const PY_INDEX: Indexer = Indexer {
         "setup.cfg",
     ],
     tool: "scip-python",
-    version: "0.6.6",
+    version: Some("0.6.6"),
     subcommand: "index",
-    root_flag: Some("--cwd"),
+    root: Root::Flag("--cwd"),
     defaults: &["--project-version=0.0.0"],
+    without: None,
     build_env: &["PYTHONPATH", "VIRTUAL_ENV"],
 };
 const RUST_INDEX: Indexer = Indexer {
@@ -88,10 +100,11 @@ const RUST_INDEX: Indexer = Indexer {
         "rust-toolchain.toml",
     ],
     tool: "rust-analyzer",
-    version: "1.96.0 (ac68faa2 2026-05-25)",
+    version: None,
     subcommand: "scip",
-    root_flag: None,
+    root: Root::Argument,
     defaults: &[],
+    without: None,
     build_env: &[
         "RUSTFLAGS",
         "CARGO_ENCODED_RUSTFLAGS",
@@ -99,21 +112,6 @@ const RUST_INDEX: Indexer = Indexer {
         "RUSTUP_TOOLCHAIN",
         "CC",
         "CXX",
-        "CFLAGS",
-        "CXXFLAGS",
-    ],
-};
-const SWIFT_INDEX: Indexer = Indexer {
-    manifests: &["Package.swift", "Package.resolved"],
-    tool: "scip-swift",
-    version: "0.3.0-sapline.3",
-    subcommand: "index",
-    root_flag: None,
-    defaults: &[],
-    build_env: &[
-        "SDKROOT",
-        "DEVELOPER_DIR",
-        "SWIFT_EXEC",
         "CFLAGS",
         "CXXFLAGS",
     ],
@@ -215,7 +213,7 @@ pub static LANGUAGES: &[Registration] = &[
         name: "Swift",
         syntax_gap: "overloads, protocol dispatch and generated declarations remain unresolved",
         precise_gap: "build configuration, generated code and protocol relationships may be incomplete",
-        indexer: Some(&SWIFT_INDEX),
+        indexer: None,
         extensions: &["swift"],
         grammar: || tree_sitter_swift::LANGUAGE.into(),
         query: SWIFT,
@@ -230,6 +228,25 @@ pub static LANGUAGES: &[Registration] = &[
         query: JAVA,
     },
 ];
+
+// A change to this table must reach projects whose extraction is already cached.
+pub fn fingerprint() -> String {
+    let mut hash = Sha256::new();
+    for language in LANGUAGES {
+        for part in [language.name, language.query]
+            .into_iter()
+            .chain(language.extensions.iter().copied())
+        {
+            hash.update(part.len().to_le_bytes());
+            hash.update(part);
+        }
+    }
+    hash.finalize()[..8]
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
 pub fn for_path(path: &str) -> Option<&'static Registration> {
     let extension = Path::new(path).extension()?.to_str()?;
     LANGUAGES.iter().find(|l| l.extensions.contains(&extension))

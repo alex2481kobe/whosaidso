@@ -17,7 +17,7 @@ Install WhoSaidSo from https://github.com/alex2481kobe/whosaidso and set it up i
 Or install it yourself (needs Rust, Cargo and Git):
 
 ```text
-cargo install --git https://github.com/alex2481kobe/whosaidso --tag v0.3.1 --locked
+cargo install --git https://github.com/alex2481kobe/whosaidso --tag v0.3.2 --locked
 ```
 
 ## Quick start

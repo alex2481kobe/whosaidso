@@ -124,11 +124,16 @@ fn err(e: impl std::fmt::Display) -> String {
 }
 const EXTRACTOR_VERSION: &str = "syntax-6";
 fn manifest_stamp(files: &tree::Files) -> String {
-    format!("{EXTRACTOR_VERSION}:{}", tree::fingerprint(files))
+    format!(
+        "{EXTRACTOR_VERSION}:{}:{}",
+        super::languages::fingerprint(),
+        tree::fingerprint(files)
+    )
 }
 fn extractor(path: &str) -> String {
     format!(
-        "{EXTRACTOR_VERSION}:{}",
+        "{EXTRACTOR_VERSION}:{}:{}",
+        super::languages::fingerprint(),
         Path::new(path)
             .extension()
             .and_then(|s| s.to_str())
