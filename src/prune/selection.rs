@@ -10,6 +10,16 @@ use std::{
 pub fn proofs_to_remove<'a>(root: &Path, store: &'a Store) -> Result<Vec<&'a Proof>, String> {
     let mut pairs = BTreeMap::new();
     for proof in &store.proofs {
+        if !root
+            .join(format!(".whosaidso/proofs/{}.json", proof.sha))
+            .exists()
+            || store
+                .notes
+                .iter()
+                .any(|n| n.header.evidence.contains(&proof.sha))
+        {
+            continue;
+        }
         pairs
             .entry(proof.goal.as_str())
             .or_insert_with(Vec::new)
@@ -88,7 +98,17 @@ pub(super) fn select<'a>(
         .into_iter()
         .enumerate()
         .filter_map(|(i, m)| {
-            (i >= gallery::LIVE_MEDIA || !goals.contains(m.goal.as_str())).then_some(m)
+            (root
+                .join(format!(".whosaidso/media/{}.json", m.sha))
+                .exists()
+                && !store.notes.iter().any(|n| {
+                    n.header
+                        .evidence
+                        .iter()
+                        .any(|e| e == &m.sha || e == &m.media_sha256)
+                })
+                && (i >= gallery::LIVE_MEDIA || !goals.contains(m.goal.as_str())))
+            .then_some(m)
         })
         .collect();
     for m in &archived {

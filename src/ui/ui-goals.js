@@ -32,7 +32,7 @@ function detail(g) {
   return el("div", "goal-detail",
     el("div", "", g.check && [mono(g.check.join(" ")), " · "],
       p ? [el("b", "verdict " + verdict + (p.current ? "" : " old"), "ran " + (p.current ? "" : "old ") + verdict), " · ", mono(p.commit.slice(0, 7)), " · " + stamp(p.ran_at)] : "no proof"),
-    p && p.reason && el("div", "muted", p.reason),
+    p && p.main && el("div", "muted", p.main.exit_code === 0 ? "passed on main" : "failed on main", p.reason && ` · ${p.reason}`),
     fail && p.current && p.output_tail && el("pre", "output", p.output_tail),
     g.media.length > 0 && [el("span", "muted", "attached"), thumbs(g.media)]);
 }

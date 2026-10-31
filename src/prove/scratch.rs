@@ -38,15 +38,22 @@ impl Scratch {
         }
         Ok(Self { dir, _lock: lock })
     }
-    pub fn run(&self, commit: &str, check: &[String]) -> Result<Run, String> {
+    pub fn run(&self, commit: &str, check: &[String], limit: Option<f64>) -> Result<Run, String> {
         let tree = self.dir.join("worktree");
         // These destructive operations are confined to the tool-owned disposable scratch.
-        git::run(&tree, &["reset", "--hard", commit])?;
+        let actual = git::root(&tree)?;
+        if actual != tree {
+            return Err("prove: scratch worktree identity changed".into());
+        }
+        git::run(&tree, &["checkout", "--detach", "--force", commit])?;
         git::run(&tree, &["clean", "-ffdqx"])?;
-        let output = self.dir.join("generated");
+        let output = self
+            .dir
+            .join("generated")
+            .join(crate::publish::ran_at()?.to_string());
         fs::create_dir_all(&output).map_err(|e| e.to_string())?;
         let reflog = git::run(&tree, &["reflog", "show", "--format=%H%x00%gs", "HEAD"])?;
-        let result = super::capture::run(&tree, &output, commit, check)?;
+        let result = super::capture::run(&tree, &output, commit, check, limit)?;
         if git::run(&tree, &["rev-parse", "HEAD"])?.trim() != commit {
             return Err("prove: HEAD changed during check".into());
         }

@@ -91,7 +91,9 @@ pub(super) fn changed(root: &Path, tip: &str, store: &Store) -> Result<HashSet<S
         crate::record::MAX_RECORD_BYTES as usize,
         |i, bytes, _| {
             if let Some(bytes) = bytes {
-                let goal: Goal = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+                let Ok(goal) = serde_json::from_slice::<Goal>(&bytes) else {
+                    return Ok(());
+                };
                 if store
                     .goals
                     .iter()

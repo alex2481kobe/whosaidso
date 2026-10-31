@@ -1,19 +1,20 @@
 // Display the milestone and goal tree with states derived from Git.
 use crate::goal_tree::children;
 use crate::{
-    record::{self, model::Goal},
+    record::{self, model::Store},
     state::{self, GoalState, State},
 };
 use std::{collections::HashSet, path::Path};
 
 fn walk(
-    goals: &[Goal],
+    store: &Store,
     states: &[GoalState],
     parent: &str,
     depth: usize,
     seen: &mut HashSet<String>,
     output: &mut String,
 ) {
+    let goals = &store.goals;
     for goal in children(goals, parent) {
         if !seen.insert(goal.id.clone()) {
             continue;
@@ -22,6 +23,17 @@ fn walk(
             continue;
         };
         let label = label(current.state);
+        let evidence = if current.proof.is_some() {
+            " · ran"
+        } else if record::newest_media(store, &goal.id).is_some() {
+            " · attached"
+        } else {
+            ""
+        };
+        let reason = current
+            .proof
+            .and_then(|i| store.proofs[i].reason.as_ref())
+            .map_or(String::new(), |r| format!(" · {r}"));
         let changed = if current.check_changed {
             " · check changed"
         } else {
@@ -56,15 +68,17 @@ fn walk(
             }
         }
         output.push_str(&format!(
-            "{}{:7} {}  {}{}{}\n",
+            "{}{:7} {}  {}{}{}{}{}\n",
             "  ".repeat(depth),
             label,
             goal.id,
             goal.title,
             branches,
-            changed
+            changed,
+            reason,
+            evidence
         ));
-        walk(goals, states, &goal.id, depth + 1, seen, output);
+        walk(store, states, &goal.id, depth + 1, seen, output);
     }
 }
 pub fn label(state: State) -> &'static str {
@@ -88,14 +102,7 @@ pub fn output(root: &Path) -> Result<String, String> {
     for (kind, id) in &store.broken {
         output.push_str(&format!("broken  {id} ({kind})\n"));
     }
-    walk(
-        &store.goals,
-        &states,
-        "",
-        0,
-        &mut HashSet::new(),
-        &mut output,
-    );
+    walk(&store, &states, "", 0, &mut HashSet::new(), &mut output);
     for error in &store.errors {
         output.push_str(&format!("{error}\n"));
     }

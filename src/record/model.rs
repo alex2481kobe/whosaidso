@@ -28,6 +28,8 @@ pub struct Proof {
     pub output_sha256: String,
     pub output_tail: String,
     pub ran_at: i64,
+    pub elapsed_ms: u64,
+    pub timed_out: bool,
     pub main: Run,
     pub reason: Option<String>,
 }
@@ -39,9 +41,11 @@ pub struct Run {
     pub output_sha256: String,
     pub output_tail: String,
     pub elapsed_ms: u64,
+    pub timed_out: bool,
 }
 #[derive(Default)]
 pub struct Store {
+    pub folded: std::collections::HashMap<String, String>,
     pub broken: Vec<(String, String)>,
     pub notes: Vec<crate::note::model::Note>,
     pub goals: Vec<Goal>,

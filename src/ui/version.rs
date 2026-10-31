@@ -50,7 +50,10 @@ pub fn token(root: &Path) -> Result<String, String> {
     // Which worktree has which branch checked out (Goals shows it), and which media bytes are here (Gallery shows it).
     git::run(root, &["worktree", "list", "--porcelain"])?.hash(&mut hash);
     listing(&blob::dir(root)?).hash(&mut hash);
-    for folder in record::FOLDERS {
+    for folder in record::FOLDERS
+        .into_iter()
+        .chain(["notes", "done", "reopens"])
+    {
         listing(&root.join(".whosaidso").join(folder)).hash(&mut hash);
     }
     listing(&gallery::archive_dir(root)?).hash(&mut hash);

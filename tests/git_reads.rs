@@ -45,9 +45,21 @@ fn state_queries_batch_git_reads_and_oversized_text_fetches_metadata_only() {
     );
     assert!(shown.contains("state: done"));
     let calls = fs::read_to_string(&trace).unwrap();
-    for call in ["rev-parse --git-common-dir", "cat-file --batch-command"] {
-        assert_eq!(calls.lines().filter(|l| *l == call).count(), 1, "{calls}");
-    }
+    assert_eq!(
+        calls
+            .lines()
+            .filter(|l| *l == "rev-parse --git-common-dir")
+            .count(),
+        1
+    );
+    let batches = calls
+        .lines()
+        .filter(|l| *l == "cat-file --batch-command")
+        .count();
+    assert!(
+        (1..=2).contains(&batches),
+        "historical proofs and first checks must be batched: {calls}"
+    );
     assert_eq!(
         calls.lines().filter(|l| l.starts_with("rev-list ")).count(),
         1

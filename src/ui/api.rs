@@ -19,6 +19,7 @@ fn media(root: &Path, m: &gallery::Media, store: &Store) -> Result<Value, String
     let path = blob::path(root, &m.media_sha256, &m.ext)?;
     let mut value = json!(m);
     value["id"] = json!(m.sha);
+    value["label"] = json!("attached");
     value["kind"] = json!(match kind.tag {
         "img" => "image",
         "video" => "video",
@@ -244,7 +245,6 @@ fn media_file(root: &Path, sha: &str, params: &HashMap<String, String>) -> Reply
             return Err("media changed while reading".into());
         }
         let mut reply = Reply::bytes(gallery::media_type(&m.ext)?.mime, &bytes);
-        reply.header("Accept-Ranges", "bytes");
         if params.get("download").is_some_and(|v| v == "1") {
             reply.header(
                 "Content-Disposition",

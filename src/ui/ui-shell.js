@@ -99,7 +99,7 @@ async function route() {
   if (mine !== state.renders) return;
   current = shown; last = key; main.scrollTop = positions.get(key) || 0;
 }
-// Ask the server for its cheap change token; load a screen again only when it moved.
+// Poll the server for its cheap change token; load a screen again only when it moved.
 async function poll() {
   if (document.hidden || !current || checking) return;
   checking = true;

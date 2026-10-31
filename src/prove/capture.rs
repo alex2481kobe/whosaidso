@@ -1,19 +1,23 @@
-// Bounded combined output, with a digest of the whole stream.
+// Bounded combined output, a digest of the whole stream, and a process-group deadline.
 use crate::record::{self, model::Run};
 use sha2::{Digest, Sha256};
 use std::{
     collections::VecDeque,
     io::Read,
-    os::{fd::OwnedFd, unix::net::UnixStream},
+    os::{
+        fd::OwnedFd,
+        unix::{net::UnixStream, process::CommandExt},
+    },
     path::Path,
     process::{Command, Stdio},
-    time::Instant,
+    time::{Duration, Instant},
 };
 pub(super) fn run(
     tree: &Path,
     output_dir: &Path,
     commit: &str,
     argv: &[String],
+    limit: Option<f64>,
 ) -> Result<Run, String> {
     let (mut output, pipe) = UnixStream::pair().map_err(|e| e.to_string())?;
     let stderr = pipe.try_clone().map_err(|e| e.to_string())?;
@@ -24,42 +28,73 @@ pub(super) fn run(
         .env("WHOSAIDSO_OUTPUT", output_dir)
         .env("TMPDIR", output_dir)
         .env("CARGO_TARGET_DIR", output_dir.join("target"))
+        .process_group(0)
         .stdin(Stdio::null())
         .stdout(Stdio::from(OwnedFd::from(pipe)))
         .stderr(Stdio::from(OwnedFd::from(stderr)))
         .spawn();
-    let mut hash = Sha256::new();
-    let mut tail = VecDeque::with_capacity(record::MAX_OUTPUT_TAIL_BYTES);
-    let exit_code = match child {
+    let (exit_code, hash, text, timed_out) = match child {
         Ok(mut child) => {
-            let mut buf = [0; 8192];
-            loop {
-                let n = output.read(&mut buf).map_err(|e| e.to_string())?;
-                if n == 0 {
+            let reader = std::thread::spawn(move || {
+                let mut hash = Sha256::new();
+                let mut tail = VecDeque::new();
+                let mut buf = [0; 8192];
+                loop {
+                    let n = output.read(&mut buf).map_err(|e| e.to_string())?;
+                    if n == 0 {
+                        break;
+                    }
+                    hash.update(&buf[..n]);
+                    let excess = (tail.len() + n).saturating_sub(record::MAX_OUTPUT_TAIL_BYTES);
+                    tail.drain(..excess);
+                    tail.extend(&buf[..n]);
+                }
+                Ok::<_, String>((
+                    hash,
+                    String::from_utf8_lossy(&tail.into_iter().collect::<Vec<_>>()).into_owned(),
+                ))
+            });
+            let mut status = None;
+            let mut timeout = false;
+            while status.is_none() || !reader.is_finished() {
+                if status.is_none() {
+                    status = child.try_wait().map_err(|e| e.to_string())?;
+                }
+                if limit.is_some_and(|s| start.elapsed().as_secs_f64() >= s) {
+                    unsafe extern "C" {
+                        fn kill(pid: i32, signal: i32) -> i32;
+                    }
+                    unsafe {
+                        kill(-(child.id() as i32), 9);
+                    }
+                    status = Some(child.wait().map_err(|e| e.to_string())?);
+                    timeout = true;
                     break;
                 }
-                hash.update(&buf[..n]);
-                let excess = (tail.len() + n).saturating_sub(record::MAX_OUTPUT_TAIL_BYTES);
-                tail.drain(..excess);
-                tail.extend(&buf[..n]);
+                if status.is_none() || !reader.is_finished() {
+                    std::thread::sleep(Duration::from_millis(2));
+                }
             }
-            i64::from(
-                child
-                    .wait()
-                    .map_err(|e| e.to_string())?
-                    .code()
-                    .unwrap_or(-1),
+            let (hash, text) = reader.join().map_err(|_| "check output reader failed")??;
+            (
+                if timeout {
+                    -1
+                } else {
+                    i64::from(status.ok_or("missing check exit")?.code().unwrap_or(-1))
+                },
+                hash,
+                text,
+                timeout,
             )
         }
         Err(e) => {
-            let bytes = format!("start check: {e}");
-            hash.update(bytes.as_bytes());
-            tail.extend(bytes.bytes());
-            -1
+            let text = format!("start check: {e}");
+            let mut hash = Sha256::new();
+            hash.update(text.as_bytes());
+            (-1, hash, text, false)
         }
     };
-    let text = String::from_utf8_lossy(&tail.into_iter().collect::<Vec<_>>()).into_owned();
-    // Escaping can expand each byte to six bytes; both runs must fit in one record.
+    // Both escaped tails must fit in a single evidence record.
     let mut tail = String::new();
     let mut size = 0;
     for c in text.chars().rev() {
@@ -79,5 +114,6 @@ pub(super) fn run(
         output_sha256: hash.finalize().iter().map(|b| format!("{b:02x}")).collect(),
         output_tail: tail.chars().rev().collect(),
         elapsed_ms: start.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
+        timed_out,
     })
 }

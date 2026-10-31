@@ -33,6 +33,11 @@ pub fn prove(root: &Path, id: &str, reason: Option<&str>) -> Result<String, Stri
     if !store.errors.is_empty() {
         return Err(store.errors.join("\n"));
     }
+    if let Some(milestone) = store.folded.get(id) {
+        return Err(format!(
+            "prove: reopen {milestone} before updating folded evidence"
+        ));
+    }
     let goal = store
         .goals
         .iter()
@@ -63,12 +68,14 @@ pub fn prove(root: &Path, id: &str, reason: Option<&str>) -> Result<String, Stri
         return Err("prove: uncommitted check".into());
     }
     let main = git::main_tip(root)?;
+    let limit = crate::config::load(root)?.limits.check_seconds;
     let scratch = scratch::Scratch::lock(root)?;
     let inputs = serde_json::to_vec(&(
         &commit,
         &main,
         id,
         &check,
+        &limit,
         std::env::vars_os()
             .collect::<Vec<_>>()
             .iter()
@@ -83,8 +90,8 @@ pub fn prove(root: &Path, id: &str, reason: Option<&str>) -> Result<String, Stri
         serde_json::from_slice::<Pair>(&fs::read(&kept).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?
     } else {
-        let candidate = scratch.run(&commit, &check)?;
-        let baseline = scratch.run(&main, &check)?;
+        let candidate = scratch.run(&commit, &check, limit.value())?;
+        let baseline = scratch.run(&main, &check, limit.value())?;
         let pair = Pair {
             candidate,
             main: baseline,
@@ -110,10 +117,18 @@ pub fn prove(root: &Path, id: &str, reason: Option<&str>) -> Result<String, Stri
         output_sha256: pair.candidate.output_sha256,
         output_tail: pair.candidate.output_tail,
         ran_at: pair.ran_at,
+        elapsed_ms: pair.candidate.elapsed_ms,
+        timed_out: pair.candidate.timed_out,
         main: pair.main,
         reason: reason.map(str::to_owned),
     };
     let sha = publish::write_new(&root.join(".whosaidso/proofs"), &proof)?;
+    if proof.timed_out {
+        return Err(format!(
+            "limits.check_seconds: slow check {id} ({} ms); ran result kept",
+            proof.elapsed_ms
+        ));
+    }
     Ok(format!(
         "ran: {id} {} {} · {}{}",
         record::result(proof.exit_code),

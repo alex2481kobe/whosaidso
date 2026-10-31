@@ -18,10 +18,18 @@ pub fn time(seconds: i64) -> String {
 }
 pub fn proof(p: &Proof) -> String {
     format!(
-        "ran {} · {} · {}",
+        "ran {} · {} · {} · {}{}",
         record::result(p.exit_code),
         time(p.ran_at / 1_000_000_000),
-        p.commit.chars().take(7).collect::<String>()
+        p.commit.chars().take(7).collect::<String>(),
+        if p.main.exit_code == 0 {
+            "passed on main"
+        } else {
+            "failed on main"
+        },
+        p.reason
+            .as_ref()
+            .map_or(String::new(), |r| format!(" · {r}"))
     )
 }
 pub fn show(root: &Path, id: &str) -> Result<(), String> {
@@ -35,6 +43,14 @@ pub fn show(root: &Path, id: &str) -> Result<(), String> {
             .ok_or("missing goal state")?;
         lines.push(format!("{}: {}", goal.id, goal.title));
         lines.push(format!("done when: {}", goal.done_when));
+        if let Some(milestone) = store.folded.get(id) {
+            let bytes = std::fs::read(root.join(format!(".whosaidso/done/{milestone}.jsonl")))
+                .map_err(|e| e.to_string())?;
+            lines.push(format!(
+                "folded: {milestone} destination revision={}",
+                record::sha256_hex(&bytes)
+            ));
+        }
         lines.push(format!("state: {}", goals::label(current.state)));
         if current.check_changed {
             lines.push("check changed".into());

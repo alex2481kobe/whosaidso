@@ -7,17 +7,15 @@ use std::fs;
 fn paired_runs_keep_results_and_restore_the_shared_scratch() {
     let f = Fixture::new();
     let root = &f.root;
-    r::check_command(
-        root,
-        &[
-            "sh",
-            "-c",
-            "echo run >> \"$WHOSAIDSO_OUTPUT/count\"; test ! -f dirt",
-        ],
+    let counter = root.join(".git/count");
+    let script = format!(
+        "echo run >> '{}'; test ! -f dirt && test ! -f \"$WHOSAIDSO_OUTPUT/marker\" && touch \"$WHOSAIDSO_OUTPUT/marker\"",
+        counter.display()
     );
+    r::check_command(root, &["sh", "-c", &script]);
     commit(root);
     bad(root, &["prove", "g"], "--reason");
-    let output = root.join(".git/whosaidso/prove/generated");
+    let output = root.join(".git");
     assert_eq!(
         fs::read_to_string(output.join("count"))
             .unwrap()
@@ -36,13 +34,18 @@ fn paired_runs_keep_results_and_restore_the_shared_scratch() {
     let p = value(&paths(&root.join(".whosaidso/proofs"))[0]);
     assert_eq!(p["main"]["exit_code"], 0);
     assert_eq!(p["reason"], "behavior unchanged");
+    assert!(cli(root, &["goals"]).contains("behavior unchanged"));
     assert!(cli(root, &["show", "g"]).contains("ran"));
     commit(root);
     let scratch = root.join(".git/whosaidso/prove/worktree");
     write(&scratch.join("dirt"), "left by an interrupted check");
     write(&scratch.join(".whosaidso/goals/g.json"), "corrupted");
+    let keep = head(root);
+    git(root, &["branch", "keep"]);
+    git(&scratch, &["symbolic-ref", "HEAD", "refs/heads/keep"]);
     work(root, "new-input", "g");
     cli(root, &["prove", "g", "--reason", "behavior unchanged"]);
+    assert_eq!(git(root, &["rev-parse", "keep"]).trim(), keep);
     assert_eq!(
         fs::read_to_string(output.join("count"))
             .unwrap()
@@ -57,6 +60,7 @@ fn a_new_check_can_fail_on_main_and_still_prove_the_candidate() {
     let f = Fixture::new();
     let root = &f.root;
     assert!(cli(root, &["goals"]).contains("open    g"));
+    work(root, "implemented", "g");
     git(root, &["checkout", "-q", "-b", "worker"]);
     executable(
         &root.join("run"),
@@ -66,7 +70,10 @@ fn a_new_check_can_fail_on_main_and_still_prove_the_candidate() {
     commit(root);
     assert!(cli(root, &["prove", "g"]).contains("fail"));
     assert!(!cli(root, &["goals"]).contains("done    g"));
-    executable(&root.join("run"), "#!/bin/sh\nprintf passed\n");
+    executable(
+        &root.join("run"),
+        "#!/bin/sh\ntest -f implemented && printf passed\n",
+    );
     commit(root);
     assert!(cli(root, &["prove", "g"]).contains("failed on main"));
     let proofs = paths(&root.join(".whosaidso/proofs"));

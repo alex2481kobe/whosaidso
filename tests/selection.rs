@@ -38,7 +38,7 @@ fn roadmap_is_unbounded_but_focus_dependencies_and_active_work_are_limited() {
 }
 
 #[test]
-fn next_workers_take_different_goals_and_assignment_names_the_agent() {
+fn next_workers_take_different_goals() {
     let f = Fixture::new();
     let root = &f.root;
     cli(root, &["install-hooks"]);
@@ -52,8 +52,21 @@ fn next_workers_take_different_goals_and_assignment_names_the_agent() {
     let lane = f.worktree("lane");
     assert!(cli(root, &["next"]).contains("a"));
     assert!(cli(&lane, &["next"]).contains("b"));
-    cli(root, &["start", "none"]);
-    cli(&lane, &["start", "none"]);
+}
+
+#[test]
+fn assignments_name_the_agent_and_allow_the_named_branch() {
+    let f = Fixture::new();
+    let root = &f.root;
+    cli(root, &["install-hooks"]);
+    for id in ["a", "b"] {
+        let p = r::goal(root, id);
+        let mut g = value(&p);
+        g["parent"] = json!("g");
+        r::put(root, "goals", id, &g);
+    }
+    commit(root);
+    let lane = f.worktree("lane");
     cli(root, &["assign", "a", "agent:alice"]);
     failure(
         command(&lane, BIN, &["start", "a"])
