@@ -9,22 +9,26 @@ pub(super) struct Claim {
     pub author: String,
     pub since: i64,
 }
-// One worker per worktree: its id lives in the worktree's own git dir.
-fn worktree_id(cwd: &Path) -> Result<String, String> {
-    let file = Path::new(git::run(cwd, &["rev-parse", "--absolute-git-dir"])?.trim())
-        .join("whosaidso-worker");
-    if let Ok(id) = fs::read_to_string(&file)
-        && id.trim().len() == 32
-    {
-        return Ok(id.trim().to_owned());
+// A worktree's git dir holds its worker id; the common dir holds the id an agent name uses.
+fn git_dir_id(dir: &Path) -> Result<String, String> {
+    let file = dir.join("whosaidso-worker");
+    let stored = || {
+        fs::read_to_string(&file)
+            .ok()
+            .map(|id| id.trim().to_owned())
+            .filter(|id| id.len() == 32)
+    };
+    if let Some(id) = stored() {
+        return Ok(id);
     }
     let mut bytes = [0u8; 16];
     fs::File::open("/dev/urandom")
         .and_then(|mut f| f.read_exact(&mut bytes))
         .map_err(|e| e.to_string())?;
     let id: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
-    fs::write(&file, format!("{id}\n")).map_err(|e| e.to_string())?;
-    Ok(id)
+    crate::publish::write_bytes(&file, format!("{id}\n").as_bytes())?;
+    // Whoever wrote last won a race to create it.
+    Ok(stored().unwrap_or(id))
 }
 pub(super) fn parse(oid: String, text: &str) -> Claim {
     let field = |key: &str| {
@@ -118,11 +122,26 @@ pub(super) fn worker(cwd: &Path) -> Result<String, String> {
         && !agent.trim().is_empty()
         && !agent.contains(['\n', '\r'])
     {
-        return Ok(format!("agent:{agent}"));
+        // One name is one worker across a clone's worktrees, never across machines.
+        let clone = git::run(cwd, &["rev-parse", "--git-common-dir"])?;
+        return Ok(format!(
+            "agent:{agent}@{}",
+            git_dir_id(&cwd.join(clone.trim()))?
+        ));
     }
+    let dir = git::run(cwd, &["rev-parse", "--absolute-git-dir"])?;
     let user = git::run(cwd, &["config", "user.name"]).unwrap_or_else(|_| "unknown".into());
-    Ok(format!("{}@{}", user.trim(), worktree_id(cwd)?))
+    Ok(format!(
+        "{}@{}",
+        user.trim(),
+        git_dir_id(Path::new(dir.trim()))?
+    ))
+}
+// `assign` names an agent with no clone, and whichever clone runs that agent takes it up.
+pub fn same_worker(held: &str, me: &str) -> bool {
+    held == me
+        || held.starts_with("agent:") && me.rsplit_once('@').is_some_and(|(name, _)| name == held)
 }
 pub(super) fn owns(c: &Claim, me: &str, branch: &str) -> bool {
-    c.worker == me || c.worker == format!("branch:{branch}")
+    same_worker(&c.worker, me) || c.worker == format!("branch:{branch}")
 }

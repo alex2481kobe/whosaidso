@@ -35,10 +35,13 @@ pub fn run_bytes(dir: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
         .output()
         .map_err(|e| format!("git: {e}"))?;
     if !out.status.success() {
-        return Err(format!(
-            "git: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        ));
+        // Some failures, such as a merge conflict, are reported on stdout alone.
+        let message = if out.stderr.is_empty() {
+            &out.stdout
+        } else {
+            &out.stderr
+        };
+        return Err(format!("git: {}", String::from_utf8_lossy(message).trim()));
     }
     if immutable {
         let mut reads = reads.lock().map_err(|e| e.to_string())?;

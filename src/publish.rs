@@ -14,6 +14,10 @@ pub fn newest<'a, T>(items: impl Iterator<Item = (&'a T, i64, &'a str)>) -> Vec<
     items.sort_by(|a, b| (b.1, b.2).cmp(&(a.1, a.2)));
     items.into_iter().map(|(item, _, _)| item).collect()
 }
+// Stamped after everything already known, so a slow clock cannot put a new result behind an old one.
+pub fn after(time: i64, known: impl Iterator<Item = i64>) -> i64 {
+    known.map(|ran_at| ran_at + 1).fold(time, i64::max)
+}
 pub fn ran_at() -> Result<i64, String> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

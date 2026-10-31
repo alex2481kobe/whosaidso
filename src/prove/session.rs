@@ -64,6 +64,11 @@ impl<'a> Prover<'a> {
         }
         let limit = crate::config::load(root)?.limits.check_seconds;
         let scratch = scratch::Scratch::lock(root)?;
+        let known_runs = store
+            .proofs
+            .iter()
+            .map(|p| (p.goal.clone(), p.ran_at))
+            .collect();
         Ok(Self {
             root,
             main,
@@ -71,6 +76,7 @@ impl<'a> Prover<'a> {
             checks,
             limit,
             scratch,
+            known_runs,
         })
     }
 }

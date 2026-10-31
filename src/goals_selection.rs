@@ -53,7 +53,7 @@ pub fn eligible(root: &Path, id: &str, store: &Store, states: &[GoalState]) -> R
         .collect();
     active.extend(
         held.iter()
-            .filter(|c| c.worker != me)
+            .filter(|c| !claims::storage::same_worker(&c.worker, &me))
             .map(|c| c.goal.as_str()),
     );
     if !active.contains(id) && active.len() >= config.limits.active {
@@ -65,6 +65,7 @@ pub fn eligible(root: &Path, id: &str, store: &Store, states: &[GoalState]) -> R
     Ok(())
 }
 pub fn next(root: &Path) -> Result<(), String> {
+    claims::refresh(root);
     let store = crate::record::load(root)?;
     let states = state::states(root, &store)?;
     let mut goals: Vec<_> = store.goals.iter().collect();

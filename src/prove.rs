@@ -43,6 +43,7 @@ pub struct Prover<'a> {
     checks: std::collections::HashMap<String, Vec<String>>,
     limit: crate::config::Limit,
     scratch: scratch::Scratch,
+    known_runs: Vec<(String, i64)>,
 }
 impl Prover<'_> {
     pub fn prove(&self, id: &str, reason: Option<&str>) -> Result<(Proof, String), String> {
@@ -81,7 +82,13 @@ impl Prover<'_> {
             let pair = Pair {
                 candidate,
                 main: baseline,
-                ran_at: publish::ran_at()?,
+                ran_at: publish::after(
+                    publish::ran_at()?,
+                    self.known_runs
+                        .iter()
+                        .filter(|(goal, _)| goal == id)
+                        .map(|(_, ran_at)| *ran_at),
+                ),
             };
             publish::write_bytes(
                 &kept,

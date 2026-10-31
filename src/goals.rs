@@ -2,6 +2,7 @@ pub mod view;
 // Display the milestone and goal tree with states derived from Git.
 use crate::goal_tree::children;
 use crate::{
+    claims,
     record::{self, model::Store},
     state::{self, GoalState, State},
 };
@@ -12,6 +13,7 @@ fn walk(
     states: &[GoalState],
     parent: &str,
     depth: usize,
+    held: &[claims::view::Held],
     seen: &mut HashSet<String>,
     output: &mut String,
 ) {
@@ -68,8 +70,14 @@ fn walk(
                 output.push_str(&format!("{}  {counts}\n", goal.title));
             }
         }
+        let claimed = held
+            .iter()
+            .find(|c| c.goal == goal.id)
+            .map_or(String::new(), |c| {
+                format!(" · claimed by {} on {}", c.author, c.branch)
+            });
         output.push_str(&format!(
-            "{}{:7} {}  {}{}{}{}{}\n",
+            "{}{:7} {}  {}{}{}{}{}{}\n",
             "  ".repeat(depth),
             label,
             goal.id,
@@ -77,9 +85,10 @@ fn walk(
             branches,
             changed,
             reason,
-            evidence
+            evidence,
+            claimed
         ));
-        walk(store, states, &goal.id, depth + 1, seen, output);
+        walk(store, states, &goal.id, depth + 1, held, seen, output);
     }
 }
 pub fn label(state: State) -> &'static str {
@@ -102,13 +111,23 @@ fn output(root: &Path, store: &Store, tip: &str) -> Result<String, String> {
     for (kind, id) in &store.broken {
         output.push_str(&format!("broken  {id} ({kind})\n"));
     }
-    walk(store, &states, "", 0, &mut HashSet::new(), &mut output);
+    let held = claims::view::held(root, &states, state::now()?)?;
+    walk(
+        store,
+        &states,
+        "",
+        0,
+        &held,
+        &mut HashSet::new(),
+        &mut output,
+    );
     for error in &store.errors {
         output.push_str(&format!("{error}\n"));
     }
     Ok(output)
 }
 pub fn goals(root: &Path) -> Result<(), String> {
+    claims::refresh(root);
     let (store, tip) = std::thread::scope(|scope| {
         let store = scope.spawn(|| record::load(root));
         let tip = crate::git::main_tip(root);

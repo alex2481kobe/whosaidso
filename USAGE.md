@@ -56,11 +56,11 @@ The default `limits.land_lines` is 400 added plus removed implementation lines r
 
 For a protected host merge queue, set `"land":"branch"` in `.whosaidso/config.json`. Landing publishes `land/<goal>` and keeps the goal claimed until its receipt reaches main; require `gate --ci <base>..<queued-tip>` on the host so combined work is checked on the actual queued commit. This reruns checks for goals named by queued work or receipts even when their state was already done at the base; a queued edit cannot reuse an earlier passing result. Hooks stop accidental bypasses. Without required host checks, bypasses can only be detected afterward.
 
-Claims name the holder and lapse after 72 hours. Without a remote, claims still exclude sibling worktrees. Local checks help prevent accidental mistakes; a determined bypass needs host enforcement.
+Claims name the holder and lapse after 72 hours. `goals`, `show` and `next` fetch them, so another machine's claim shows there; a warning means the remote could not be reached. Without a remote, claims still exclude sibling worktrees. Each worktree is one worker. An agent name is one worker per clone, so the same name on two machines still excludes itself. Give each machine its own clone: a copied repository keeps the worker id of the one it was copied from. Local checks help prevent accidental mistakes; a determined bypass needs host enforcement.
 
 ## Evidence and state
 
-Proofs in `.whosaidso/proofs` and media records in `.whosaidso/media` are named by the SHA-256 of their serialized bytes. Commit records to share them. Media bytes live outside tracked files, under the Git common directory; `sync` shares them.
+Proofs in `.whosaidso/proofs` and media records in `.whosaidso/media` are named by the SHA-256 of their serialized bytes. Commit records to share them. A new record is stamped after any record for its goal that this clone already has, so a slow clock cannot put a new result behind an old one. Media bytes live outside tracked files, under the Git common directory; `sync` shares them.
 
 State is derived. A goal with no work or evidence is `open`; branch work is `active` or `idle`; work on the destination branch without evidence is `landed`. A qualifying run on that branch is `done` when it passed, `failing` when it failed, and `stale` after later work on the same goal. Changing the check makes a previous run ineligible. Work that changes only records does not count as implementation.
 
@@ -94,6 +94,7 @@ When both branches changed a topic since their merge base, `gate` requires expli
 | `grep <text...> [--in <path>]...` | Searches visible file text. |
 | `code defs <name>` / `code refs <name>` | Finds definitions or references, with evidence strength shown. |
 | `code deps <path>` / `code includers <path>` | Shows includes and reverse includes. |
+| `code index <language>` | Builds precise code information with the language's pinned indexer. C and C++ need `scip-clang` 0.4.1 on `PATH` and a `compile_commands.json` in the project root or `build/`. |
 | `code import-scip <file>` | Imports precise code information. |
 
 Grep accelerates ASCII literals and basic ASCII extended regexes; context, backreferences, POSIX character classes, non-ASCII case matching and custom Git output or binary settings use `git grep`.

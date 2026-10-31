@@ -2,7 +2,7 @@
 use crate::{cache, git, state};
 use std::{fs, path::Path};
 pub(crate) mod publication;
-mod storage;
+pub(crate) mod storage;
 pub mod view;
 use storage::*;
 const LOCAL: &str = "refs/whosaidso/claims/";
@@ -172,10 +172,10 @@ pub fn release(root: &Path, cwd: &Path, keep: &str) -> (Vec<String>, Result<(), 
                 continue;
             }
             let (local_ref, origin_ref) = (format!("{LOCAL}{id}"), format!("{ORIGIN}{id}"));
-            if let Some(c) = read(root, &local_ref).filter(|c| c.worker == me) {
+            if let Some(c) = read(root, &local_ref).filter(|c| same_worker(&c.worker, &me)) {
                 git::run(root, &["update-ref", "-d", &local_ref, &c.oid])?;
             }
-            if let Some(c) = read(root, &origin_ref).filter(|c| c.worker == me) {
+            if let Some(c) = read(root, &origin_ref).filter(|c| same_worker(&c.worker, &me)) {
                 match git::run(
                     root,
                     &[
@@ -205,6 +205,21 @@ pub fn release(root: &Path, cwd: &Path, keep: &str) -> (Vec<String>, Result<(), 
 
 pub fn identity(cwd: &Path) -> Result<String, String> {
     worker(cwd)
+}
+// Read commands show other machines' claims, so they fetch them first, but never wait long:
+// a slow fetch carries on behind them and the next read sees its result.
+pub fn refresh(root: &Path) {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let cloned = root.to_owned();
+    std::thread::spawn(move || {
+        let mut notices = Vec::new();
+        sync(&cloned, &mut notices);
+        let _ = sender.send(notices);
+    });
+    match receiver.recv_timeout(std::time::Duration::from_secs(3)) {
+        Ok(notices) => notices.iter().for_each(|notice| eprintln!("{notice}")),
+        Err(_) => eprintln!("warning: claims not synced: the remote did not answer in 3 seconds"),
+    }
 }
 pub fn selection_lock(root: &Path) -> Result<fs::File, String> {
     let dir = root

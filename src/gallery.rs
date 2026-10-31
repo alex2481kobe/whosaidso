@@ -47,7 +47,14 @@ pub fn attach(
         ext,
         byte_size,
         commit,
-        ran_at: publish::ran_at()?,
+        ran_at: publish::after(
+            publish::ran_at()?,
+            store
+                .media
+                .iter()
+                .filter(|m| m.goal == goal)
+                .map(|m| m.ran_at),
+        ),
     };
     let sha = publish::write_new(&root.join(".whosaidso/media"), &media)?;
     Ok(sha)

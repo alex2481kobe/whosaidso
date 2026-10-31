@@ -122,7 +122,7 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
         if !notes.is_empty() {
             return Err(notes.join("\n"));
         }
-        git::run(root, &["merge", "--no-edit", &baseline])?;
+        git::run(root, &["merge", "--no-edit", &baseline]).map_err(|e| conflict(root, e))?;
         worktree::unfold_unpublished(root, &dir, &baseline)?;
         head = git::run(root, &["rev-parse", "HEAD"])?.trim().into();
         let candidate = head.clone();
@@ -256,4 +256,16 @@ fn clean(root: &Path) -> Result<(), String> {
         return Err("land: commit your changes first".into());
     }
     Ok(())
+}
+// The merge stays in the tree, so resolving it and landing again carries on from here.
+fn conflict(root: &Path, error: String) -> String {
+    let files = git::run(root, &["diff", "--name-only", "--diff-filter=U"]).unwrap_or_default();
+    if files.trim().is_empty() {
+        return error;
+    }
+    let files: Vec<_> = files.lines().collect();
+    format!(
+        "land: main changed and these files conflict: {}\nresolve them, commit, then land again",
+        files.join(", ")
+    )
 }

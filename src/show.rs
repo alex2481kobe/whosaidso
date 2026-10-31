@@ -1,6 +1,6 @@
 // Concise record details; state and milestone rollups come from their shared modules.
 use crate::{
-    goals,
+    claims, goals,
     record::{self, model::Proof},
     state,
 };
@@ -36,6 +36,7 @@ pub fn show(root: &Path, id: &str) -> Result<(), String> {
     let store = record::load(root)?;
     let mut lines = Vec::new();
     if let Some(goal) = store.goals.iter().find(|g| g.id == id) {
+        claims::refresh(root);
         let states = state::states(root, &store)?;
         let current = states
             .iter()
@@ -62,6 +63,10 @@ pub fn show(root: &Path, id: &str) -> Result<(), String> {
             ));
         }
         lines.push(format!("branches: {}", current.branch_names().join(", ")));
+        let held = claims::view::held(root, &states, state::now()?)?;
+        if let Some(c) = held.iter().find(|c| c.goal == id) {
+            lines.push(format!("claimed: {} on {}", c.author, c.branch));
+        }
         if let Some(index) = current.proof {
             lines.push(format!("proof: {}", proof(&store.proofs[index])));
         }
