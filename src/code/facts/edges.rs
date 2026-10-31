@@ -4,7 +4,7 @@ use super::{
     reads::{Layer, Row},
     relationships::Relationship,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 #[derive(Clone, Copy)]
 pub enum Direction {
@@ -73,8 +73,13 @@ impl Snapshot {
             ))
         });
         let mut relationships = Vec::new();
-        for row in definitions.iter().filter(|r| r.layer == Layer::Precise) {
-            relationships.extend(self.relationships(&row.symbol, Direction::Forward)?);
+        let sources: BTreeSet<_> = definitions
+            .iter()
+            .filter(|r| r.layer == Layer::Precise && source_paths.binary_search(&r.path).is_ok())
+            .map(|r| r.symbol.as_str())
+            .collect();
+        for source in sources {
+            relationships.extend(self.relationships(source, Direction::Forward)?);
         }
         Ok(assemble(definitions, refs.rows, relationships, refs.gaps))
     }

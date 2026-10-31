@@ -34,7 +34,12 @@ impl Snapshot {
             Direction::Forward => "source",
             Direction::Reverse => "target",
         };
-        let mut stmt = self.db.prepare(&format!("SELECT r.source,r.target,r.is_reference,r.is_implementation,r.is_type_definition,r.is_definition FROM scip_relationships r WHERE (?1 IS NULL OR r.{column}=?1) AND (SELECT status='fresh' FROM precise_freshness) AND (r.path='' OR EXISTS (SELECT 1 FROM precise_documents d WHERE d.path=r.path AND d.status='fresh')) ORDER BY r.path,r.source,r.target")).map_err(err)?;
+        let filter = if symbol.is_some() {
+            format!("r.{column}=?1")
+        } else {
+            "?1 IS NULL".into()
+        };
+        let mut stmt = self.db.prepare(&format!("SELECT r.source,r.target,r.is_reference,r.is_implementation,r.is_type_definition,r.is_definition FROM scip_relationships r WHERE {filter} AND (SELECT status='fresh' FROM precise_freshness) AND (r.path='' OR EXISTS (SELECT 1 FROM precise_documents d WHERE d.path=r.path AND d.status='fresh')) ORDER BY r.path,r.source,r.target")).map_err(err)?;
         stmt.query_map(params![symbol], |r| {
             Ok(Relationship {
                 source: format!("{prefix}{}", r.get::<_, String>(0)?),
