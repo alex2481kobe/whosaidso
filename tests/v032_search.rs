@@ -4,6 +4,85 @@ use common::*;
 use std::fs;
 
 #[test]
+fn code_vocabulary_and_live_edits_are_searchable() {
+    let f = Fixture::empty();
+    for (path, body, name) in [
+        (
+            "billing.rs",
+            "/// Validates renewable subscriptions.\nfn calculateInvoice(customer: Customer) {}\n",
+            "calculateInvoice",
+        ),
+        (
+            "billing.py",
+            "def calculate_invoice(customer: Customer):\n    \"\"\"Validates renewable subscriptions.\"\"\"\n    pass\n",
+            "calculate_invoice",
+        ),
+        (
+            "billing.cpp",
+            "/** Validates renewable subscriptions. */\nMoney calculateInvoice(Customer customer) {}\n",
+            "calculateInvoice",
+        ),
+        (
+            "billing.c",
+            "/** Validates renewable subscriptions. */\nMoney calculate_invoice(Customer customer) {}\n",
+            "calculate_invoice",
+        ),
+    ] {
+        write(&f.root.join(path), body);
+        assert!(cli(&f.root, &["code", "defs", name]).contains(path));
+        for query in [
+            name,
+            "renewable subscriptions",
+            "calculate invoice",
+            "validating subscription",
+            "Customer",
+        ] {
+            let found = cli(&f.root, &["find", query, "--limit", "100"]);
+            assert!(found.contains(path), "{path} {query}: {found}");
+        }
+    }
+    commit(&f.root);
+    write(
+        &f.root.join("billing.rs"),
+        "fn uncommittedWithdrawal() {}\n",
+    );
+    assert!(cli(&f.root, &["find", "uncommitted withdrawal"]).contains("billing.rs"));
+    assert!(!cli(&f.root, &["find", "kind:symbol", "calculateInvoice"]).contains("billing.rs"));
+}
+
+#[test]
+fn retrieval_payloads_are_shared_but_worktree_membership_is_private() {
+    let f = Fixture::empty();
+    write(
+        &f.root.join("shared.rs"),
+        "/// Recurring payment.\nfn renewSubscription() {}\n",
+    );
+    commit(&f.root);
+    cli(&f.root, &["find", "renew subscription"]);
+    let path = f.root.join(".git/whosaidso/search/search.db");
+    let db = rusqlite::Connection::open(&path).unwrap();
+    let count = || {
+        db.query_row("SELECT count(*) FROM payloads", [], |r| r.get::<_, i64>(0))
+            .unwrap()
+    };
+    let before = count();
+    let other = f.worktree("other");
+    assert!(cli(&other, &["find", "renew subscription"]).contains("shared.rs"));
+    assert_eq!(
+        count(),
+        before,
+        "a second worktree re-indexed unchanged payloads"
+    );
+    write(&other.join("private.rs"), "fn privateWithdrawal() {}\n");
+    assert!(cli(&other, &["find", "private withdrawal"]).contains("private.rs"));
+    assert!(cli(&f.root, &["find", "private withdrawal"]).contains("no indexed match"));
+    fs::rename(other.join("private.rs"), other.join("renamed.rs")).unwrap();
+    assert!(cli(&other, &["find", "private withdrawal"]).contains("renamed.rs"));
+    fs::remove_file(other.join("renamed.rs")).unwrap();
+    assert!(cli(&other, &["find", "private withdrawal"]).contains("no indexed match"));
+}
+
+#[test]
 #[ignore = "manual: compares grep with the rg executable; requires ripgrep on PATH"]
 fn grep_agrees_with_live_rg() {
     let f = Fixture::empty();

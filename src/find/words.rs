@@ -4,12 +4,7 @@ pub(super) const STOP: &[&str] = &[
     "a", "an", "the", "of", "to", "in", "on", "for", "and", "or", "is", "are", "was", "what",
     "where", "how", "why", "which", "who", "does", "do", "with", "by", "it", "this", "that",
 ];
-pub(super) fn tokens(s: &str) -> Vec<String> {
-    s.split(|c: char| !c.is_alphanumeric())
-        .filter(|w| !w.is_empty())
-        .map(str::to_lowercase)
-        .collect()
-}
+pub(super) use crate::index::terms::tokens;
 // Typo distance is optimal string alignment (a transposition is one edit), with a budget by word length.
 fn distance(a: &[char], b: &[char], max: usize) -> Option<usize> {
     if a.len().abs_diff(b.len()) > max {
@@ -96,12 +91,15 @@ pub(super) fn correct(db: &Connection, words: &[String]) -> Result<Vec<(String, 
                     continue;
                 }
                 if let Some(edits) = distance(&chars, &have, budget) {
-                    let df = db
+                    let df: Option<i64> = db
                         .query_row("SELECT doc FROM vocab WHERE term=?1", [&candidate], |r| {
                             r.get(0)
                         })
+                        .optional()
                         .map_err(|e| e.to_string())?;
-                    consider(candidate, edits, df);
+                    if let Some(df) = df {
+                        consider(candidate, edits, df);
+                    }
                 }
             }
         }

@@ -2,7 +2,7 @@ use super::{
     pool::{Hit, Pool},
     words::{STOP, correct, drop_order, tokens},
 };
-use crate::{cache, index};
+use crate::index;
 use std::{collections::HashMap, path::Path};
 
 fn exactness(hit: &Hit, words: &[String], corrected: &[(String, usize)]) -> u8 {
@@ -48,8 +48,7 @@ pub(super) fn search(
     kind: Option<&str>,
     limit: usize,
 ) -> Result<Results, String> {
-    index::sync(root)?;
-    let db = cache::db(root)?;
+    let db = index::sync(root)?;
     let candidates = limit.saturating_mul(10).max(200).min(i64::MAX as usize);
     let mut corrected: Vec<_> = words.iter().map(|w| (w.clone(), 0)).collect();
     let mut pool = Pool::new(words, &corrected, kind, candidates);

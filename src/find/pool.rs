@@ -33,7 +33,7 @@ impl Pool {
         let mut edits = Vec::new();
         let mut terms = Vec::new();
         for (original, (fixed, cost)) in words.iter().zip(corrected) {
-            let term = format!("\"{original}\"*");
+            let term = expression(original);
             values.push(Value::Text(format!("{{title body}} : ({term})")));
             let exact = format!(
                 "docs.id IN (SELECT rowid FROM docs_fts WHERE docs_fts MATCH ?{})",
@@ -43,7 +43,7 @@ impl Pool {
                 coverage.push(format!("({exact})"));
                 terms.push(term);
             } else {
-                let fix = format!("\"{fixed}\"*");
+                let fix = expression(fixed);
                 values.push(Value::Text(format!("{{title body}} : ({fix})")));
                 let fuzzy = format!(
                     "docs.id IN (SELECT rowid FROM docs_fts WHERE docs_fts MATCH ?{})",
@@ -119,5 +119,14 @@ impl Pool {
             |r| r.get(0),
         )
         .map_err(|e| e.to_string())
+    }
+}
+
+fn expression(word: &str) -> String {
+    let stem = crate::index::terms::stem(word);
+    if stem == word {
+        format!("\"{word}\"*")
+    } else {
+        format!("(\"{word}\"* OR \"{stem}\"*)")
     }
 }
