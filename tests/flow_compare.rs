@@ -89,3 +89,18 @@ fn layered_parts_do_not_invent_internal_crossings_and_high_level_steps_cover_des
     f.write("feature", &flow);
     assert_eq!(compare(&f)["state"], "built");
 }
+
+#[test]
+fn planned_absence_does_not_hide_unknown_coverage_in_parent_rollup() {
+    let f = Fixture::sources(&[("app.xyz", "unsupported source")]);
+    f.write(
+        "feature",
+        &json!({"covers":{"paths":["app.*"]},"nodes":[
+        {"id":"feature","type":"feature"},
+        {"id":"future","type":"screen","parent":"feature","symbols":["future"]}
+    ],"steps":[]}),
+    );
+    let v = compare(&f);
+    assert_eq!(v["state"], "unknown");
+    assert_eq!(v["nodes"]["feature"]["state"], "unknown");
+}

@@ -165,18 +165,30 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<Value, String> {
     for node in flow.nodes.iter().filter(|n| n.parent.is_none()) {
         visit(&node.id, flow, &mut nodes, &steps);
     }
+    let has_unplanned = unplanned.iter().any(|r| r["state"] != "unknown");
+    let has_unknown = !gaps.is_empty() || unplanned.iter().any(|r| r["state"] == "unknown");
+    for node in flow
+        .nodes
+        .iter()
+        .filter(|n| n.parent.is_none() && n.paths.is_empty() && n.symbols.is_empty())
+    {
+        let own = nodes[&node.id]["state"].as_str().unwrap();
+        let state = rollup([
+            own,
+            if has_unplanned { "unplanned" } else { "built" },
+            if has_unknown { "unknown" } else { "built" },
+        ]);
+        nodes.get_mut(&node.id).unwrap()["state"] = json!(state);
+    }
     let mut states: Vec<_> = nodes
         .values()
         .map(|v| v["state"].as_str().unwrap())
         .collect();
     states.extend(steps.values().map(|v| v["state"].as_str().unwrap()));
-    if unplanned.iter().any(|r| r["state"] != "unknown") {
+    if has_unplanned {
         states.push("unplanned");
     }
-    if unplanned.iter().any(|r| r["state"] == "unknown") {
-        states.push("unknown");
-    }
-    if !gaps.is_empty() {
+    if has_unknown {
         states.push("unknown");
     }
     let state = if states.is_empty() {

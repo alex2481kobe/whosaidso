@@ -39,11 +39,7 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
             Ok(())
         }
         [cmd, id] if cmd == "compare" => {
-            let records = if let Some(branch) = &branch { store::committed(root,&crate::git::local_revision(root,branch)?,Some(id))? } else {store::load(root,Some(id))?};
-            let record = records.into_iter().next().ok_or("unknown flow")?;
-            if !record.problems.is_empty() { return Err(record.problems.join("\n")); }
-            let snapshot = if let Some(branch) = &branch { crate::code::facts::Snapshot::branch(root, &crate::git::local_revision(root,branch)?)? } else {crate::code::facts::Snapshot::current(root)?};
-            println!("{}", compare::compare(&record.flow.ok_or("unreadable flow")?, &snapshot)?);
+            println!("{}", screen::comparison(root,id,branch.as_deref())?);
             Ok(())
         }
         [cmd, rest @ ..] if cmd == "map" && rest.len() <= 1 => {
@@ -130,6 +126,6 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
             println!("{id} removed {kind} {item}");
             Ok(())
         }
-        _ => Err("usage: flow check [<id>] | show [<id> [<parent>]] | put <id> [covers|node|step] <json> | rm <id> [node|step <item>]".into()),
+        _ => Err("usage: flow check [<id>] | map [<file-id>] | compare <id> | view [<id> [<parent> [<offset>]]] [--branch <revision>] | drift-check | show [<id> [<parent>]] | put <id> [covers|node|step] <json> | rm <id> [node|step <item>]".into()),
     }
 }
