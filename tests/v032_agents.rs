@@ -203,3 +203,6 @@ mod gate;
 
 #[path = "v032_agents/native.rs"]
 mod native;
+
+#[path = "v032_agents/help.rs"]
+mod help;
