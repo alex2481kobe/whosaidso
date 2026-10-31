@@ -150,3 +150,12 @@ pub fn prove_on(root: &Path, id: &str, reason: Option<&str>, main: &str) -> Resu
             .map_or(String::new(), |r| format!(" · {r}"))
     ))
 }
+
+pub fn verify_at(root: &Path, tip: &str, check: &[String]) -> Result<Run, String> {
+    let argv = command::arguments(root, check)?;
+    scratch::Scratch::lock(root)?.run(
+        tip,
+        &argv,
+        crate::config::load(root)?.limits.check_seconds.value(),
+    )
+}

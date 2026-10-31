@@ -68,6 +68,7 @@ fn run() -> Result<(), String> {
         "assign <goal> <agent:name|branch:name>", [cmd, id, target] if cmd == "assign" => { let (notices, result) = claims::assign(&root, &cwd, id, target); for n in notices { println!("{n}"); } result };
         "start <goal-id>", [cmd, id] if cmd == "start" => hooks::start(&root, &cwd, id);
         "land [--reason <why>]", [cmd, rest @ ..] if cmd == "land" => land::command(&root, rest);
+        "gate --ci <range>", [cmd, flag, range] if cmd == "gate" && flag == "--ci" => gate::ci::check(&root, range);
         "gate [<base>]", [cmd, rest @ ..] if cmd == "gate" && rest.len() <= 1 => gate::gate(&root, rest.first().map(String::as_str).unwrap_or(&config::main(&root)?));
         "show <id>", [cmd, id] if cmd == "show" => show::show(&root, id);
         "goals", [cmd] if cmd == "goals" => goals::goals(&root);

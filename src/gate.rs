@@ -1,3 +1,4 @@
+pub mod ci;
 // Commit trailer gate.
 use crate::{git, record};
 use std::path::Path;

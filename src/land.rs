@@ -1,17 +1,27 @@
 // Optimistic publication: test each merged candidate, then push its scoped receipt by fast-forward.
 mod attempt;
 pub mod receipt;
-mod worktree;
+pub(crate) mod worktree;
 use crate::{config, git, record, state};
 use attempt::Attempt;
 use std::{collections::BTreeSet, fs, path::Path};
 
 pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
-    let reason = match args {
-        [] => None,
-        [flag, reason] if flag == "--reason" && !reason.trim().is_empty() => Some(reason.as_str()),
-        _ => return Err("usage: land [--reason <why>]".into()),
-    };
+    let mut reason = None;
+    let mut line_override = None;
+    for pair in args.chunks(2) {
+        match pair {
+            [flag, value] if flag == "--reason" && !value.trim().is_empty() && reason.is_none() => {
+                reason = Some(value.as_str())
+            }
+            [flag, value]
+                if flag == "--override" && !value.trim().is_empty() && line_override.is_none() =>
+            {
+                line_override = Some(value.as_str())
+            }
+            _ => return Err("usage: land [--reason <why>] [--override <name>]".into()),
+        }
+    }
     let dir = worktree::directory(root)?;
     let lock = fs::File::options()
         .create(true)
@@ -32,7 +42,7 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
     let remote = "origin";
     git::run(root, &["remote", "get-url", remote])
         .map_err(|_| "land: no destination remote".to_owned())?;
-    let destination = format!("refs/heads/{main}");
+    let main_destination = format!("refs/heads/{main}");
     for _ in 0..20 {
         let tracking = "refs/whosaidso/land-main";
         git::run(
@@ -41,10 +51,20 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
                 "fetch",
                 "--no-tags",
                 remote,
-                &format!("+{destination}:{tracking}"),
+                &format!("+{main_destination}:{tracking}"),
             ],
         )?;
         let baseline = git::run(root, &["rev-parse", tracking])?.trim().to_owned();
+        let destination = if config::load(root)?.land == Some(config::Land::Branch) {
+            format!(
+                "refs/heads/land/{}",
+                goals(root, &baseline)?
+                    .first()
+                    .map_or("maintenance", String::as_str)
+            )
+        } else {
+            main_destination.clone()
+        };
         worktree::hook(root, "fetch")?;
         // Resume only an exact, unpublished receipt. Later edits get a fresh candidate and run.
         if let Some(a) = attempts
@@ -80,6 +100,7 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
         worktree::hook(root, "merge")?;
         crate::gate::gate(root, &baseline)?;
         crate::flow::command(root, &["check".into()])?;
+        limits(root, &baseline, line_override)?;
         let store = record::load(root)?;
         let problems = crate::check::budgets::problems(root, &store)?;
         if !store.errors.is_empty() || !problems.is_empty() {
@@ -154,6 +175,7 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
                 .map(|p| p.sha.clone())
                 .collect(),
             goals,
+            line_override: line_override.map(str::to_owned),
         };
         let metadata = format!(
             "Goal: none\nWhoSaidSo-Receipt: {}",
@@ -257,4 +279,35 @@ fn goals(root: &Path, baseline: &str) -> Result<Vec<String>, String> {
         ids.insert(id.trim().into());
     }
     Ok(ids.into_iter().collect())
+}
+
+fn limits(root: &Path, baseline: &str, named: Option<&str>) -> Result<(), String> {
+    let Some(limit) = config::load(root)?.limits.land_lines.value() else {
+        return Ok(());
+    };
+    let stat = git::run(
+        root,
+        &[
+            "diff",
+            "--numstat",
+            baseline,
+            "HEAD",
+            "--",
+            ".",
+            ":(exclude).whosaidso",
+        ],
+    )?;
+    let mut count = 0.0;
+    for line in stat.lines() {
+        let fields: Vec<_> = line.splitn(3, '\t').collect();
+        for field in fields.iter().take(2) {
+            count += field.parse::<f64>().unwrap_or(f64::INFINITY);
+        }
+    }
+    if count > limit && named.is_none() {
+        return Err(format!(
+            "limits.land_lines {limit}: {count} changed lines; use --override <name> for an intentional exception"
+        ));
+    }
+    Ok(())
 }

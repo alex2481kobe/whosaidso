@@ -10,6 +10,7 @@ pub struct Receipt {
     pub baseline: String,
     pub proofs: Vec<String>,
     pub goals: Vec<String>,
+    pub line_override: Option<String>,
 }
 fn tree(root: &Path, revision: &str) -> Result<BTreeMap<String, (String, Vec<u8>)>, String> {
     let rows = git::run(root, &["ls-tree", "-rz", revision])?;

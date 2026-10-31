@@ -7,7 +7,7 @@ pub struct Config {
     pub main: Option<String>,
     pub focus: usize,
     pub limits: Limits,
-    pub land: Option<serde_json::Value>,
+    pub land: Option<Land>,
     pub test_paths: Vec<String>,
 }
 impl Default for Config {
@@ -33,6 +33,7 @@ pub struct Limits {
     pub proofs: usize,
     pub tests: Limit,
     pub check_seconds: Limit,
+    pub land_lines: Limit,
 }
 impl Default for Limits {
     fn default() -> Self {
@@ -42,6 +43,7 @@ impl Default for Limits {
             proofs: 20,
             tests: Limit::Number(1.0),
             check_seconds: Limit::Number(60.0),
+            land_lines: Limit::Number(400.0),
         }
     }
 }
@@ -53,6 +55,7 @@ pub fn load(root: &Path) -> Result<Config, String> {
             for (name, limit) in [
                 ("tests", &config.limits.tests),
                 ("check_seconds", &config.limits.check_seconds),
+                ("land_lines", &config.limits.land_lines),
             ] {
                 if limit.value().is_some_and(|n| !n.is_finite() || n < 0.0) {
                     return Err(format!("config: limits.{name} must be nonnegative or off"));
@@ -95,4 +98,11 @@ impl Limit {
             Self::Disabled(_) => None,
         }
     }
+}
+
+#[derive(Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Land {
+    Main,
+    Branch,
 }

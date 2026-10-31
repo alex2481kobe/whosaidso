@@ -65,7 +65,7 @@ impl Fixture {
             &self.root,
             &["remote", "add", "origin", origin.to_str().unwrap()],
         );
-        git(&self.root, &["push", "-q", "-u", "origin", "main"]);
+        git(&self.root, &["push", "--no-verify", "-q", "-u", "origin", "main"]);
         origin
     }
 

@@ -2,12 +2,25 @@
 use crate::{claims, git, record, state};
 use std::{fs, os::unix::fs::PermissionsExt, path::Path};
 const HOOK: &str = "#!/bin/sh\n# Appends the worktree's goal as a Goal: trailer. Merge commits carry no trailer.\ncase \"$2\" in merge) exit 0 ;; esac\nf=\"$(git rev-parse --git-dir)/whosaidso-goal\"\n[ -f \"$f\" ] || exit 0\ngoal=\"$(cat \"$f\")\"\n[ -n \"$goal\" ] || exit 0\ngit interpret-trailers --in-place --if-exists doNothing --trailer \"Goal: $goal\" \"$1\"\n";
+const PRE_PUSH: &str = r#"#!/bin/sh
+while read -r local_ref local_oid remote_ref remote_oid; do
+  case "$remote_ref" in refs/heads/*) ;; *) continue ;; esac
+  case "$local_oid" in 0000000000000000000000000000000000000000) continue ;; esac
+  receipt=$(git show -s --format='%(trailers:key=WhoSaidSo-Receipt,valueonly)' "$local_oid")
+  [ -n "$receipt" ] || { echo 'push: use whosaidso land' >&2; exit 1; }
+  case "$remote_oid" in 0000000000000000000000000000000000000000) remote_oid=$(git rev-parse "$local_oid^") || exit 1 ;; esac
+  "${WHOSAIDSO_BIN:-whosaidso}" gate --ci "$remote_oid..$local_oid" || exit 1
+done
+"#;
 pub fn install(root: &Path) -> Result<(), String> {
     let dir = root.join(".whosaidso/hooks");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = dir.join("prepare-commit-msg");
     fs::write(&path, HOOK).map_err(|e| e.to_string())?;
     fs::set_permissions(path, fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
+    let push = dir.join("pre-push");
+    fs::write(&push, PRE_PUSH).map_err(|e| e.to_string())?;
+    fs::set_permissions(push, fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
     git::run(root, &["config", "core.hooksPath", ".whosaidso/hooks"])?;
     println!("hooks: installed");
     Ok(())
