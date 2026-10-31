@@ -16,19 +16,18 @@ use std::path::Path;
 pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
     let mut values = args.to_vec();
     let mut branch = None;
-    if values
+    let viewing = values
         .first()
-        .is_some_and(|s| ["view", "map", "compare"].contains(&s.as_str()))
-    {
-        if let Some(i) = values.iter().position(|s| s == "--branch") {
-            branch = Some(
-                values
-                    .get(i + 1)
-                    .ok_or("--branch needs a revision")?
-                    .clone(),
-            );
-            values.drain(i..=i + 1);
-        }
+        .is_some_and(|s| ["view", "map", "compare"].contains(&s.as_str()));
+    let flag = values.iter().position(|s| s == "--branch");
+    if let (true, Some(i)) = (viewing, flag) {
+        branch = Some(
+            values
+                .get(i + 1)
+                .ok_or("--branch needs a revision")?
+                .clone(),
+        );
+        values.drain(i..=i + 1);
     }
     let args = values.as_slice();
     match args {

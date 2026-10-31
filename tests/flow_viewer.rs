@@ -44,7 +44,12 @@ fn viewer_version_moves_after_code_edit_within_three_seconds() {
     assert!(start.elapsed().as_secs_f64() < 3.0);
     let map = viewer.json("/api/flows?id=%24map", &cookie);
     assert_eq!(map["freshness"], "fresh");
-    write(&f.root.join("app.xyz"), "unsupported language");
+    write(&f.root.join("notes.xyz"), "no supported language");
+    assert_eq!(
+        viewer.json("/api/flows?id=%24map", &cookie)["freshness"],
+        "fresh"
+    );
+    std::fs::write(f.root.join("app.rs"), [0xff, 0xfe]).unwrap();
     assert_eq!(
         viewer.json("/api/flows?id=%24map", &cookie)["freshness"],
         "unknown"

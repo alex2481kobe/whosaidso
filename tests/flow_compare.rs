@@ -44,7 +44,7 @@ fn compares_coverage_and_rolls_up_without_judging_outside() {
         "fn ready() {}\nfn duplicate() {}\nfn surprise() {}\nfn ready2() { surprise(); }\n",
     );
     let v = compare(&f);
-    assert!(v["unplanned"].as_array().unwrap().len() > 0, "{v}");
+    assert!(!v["unplanned"].as_array().unwrap().is_empty(), "{v}");
 }
 
 #[test]
