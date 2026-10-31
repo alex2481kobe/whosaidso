@@ -4,6 +4,13 @@ use crate::tree;
 use rusqlite::Connection;
 use std::path::Path;
 pub fn open_snapshot(root: &Path, branch: &str) -> Result<Connection, String> {
+    open_snapshot_in(root, branch, |_| true)
+}
+pub fn open_snapshot_in(
+    root: &Path,
+    branch: &str,
+    include: impl Fn(&str) -> bool,
+) -> Result<Connection, String> {
     let commit = crate::git::run(
         root,
         &[
@@ -28,6 +35,9 @@ pub fn open_snapshot(root: &Path, branch: &str) -> Result<Connection, String> {
             skipped += 1;
             continue;
         };
+        if !include(path) {
+            continue;
+        }
         if meta.len() != 3 || !matches!(meta[0], "100644" | "100755") {
             skipped += 1;
             continue;

@@ -45,6 +45,13 @@ impl Snapshot {
     pub fn branch(root: &Path, branch: &str) -> Result<Self, String> {
         Self::from_db(store::branch::open_snapshot(root, branch)?)
     }
+    pub fn branch_in(
+        root: &Path,
+        branch: &str,
+        include: impl Fn(&str) -> bool,
+    ) -> Result<Self, String> {
+        Self::from_db(store::branch::open_snapshot_in(root, branch, include)?)
+    }
     fn from_db(db: Connection) -> Result<Self, String> {
         precise::storage::schema(&db)?;
         db.execute_batch("BEGIN DEFERRED").map_err(err)?;

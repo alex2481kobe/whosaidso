@@ -28,3 +28,30 @@ fn landing_refuses_a_symlinked_flow_record() {
         git(&lane, &["ls-remote", "origin", "refs/heads/main"])
     );
 }
+
+#[test]
+fn landing_refuses_regression_of_unchanged_destination_anchors() {
+    let f = Fixture::new();
+    write(&f.root.join("app.rs"), "fn old() {}\n");
+    let mut plan = json!({"covers":{"paths":["app.rs"]},"nodes":[{"id":"entry","type":"function","symbols":["old"]}],"steps":[]});
+    f.write("app", &plan);
+    commit(&f.root);
+    f.remote();
+    let lane = f.worktree("worker");
+    write(&lane.join("app.rs"), "fn renamed() {}\n");
+    commit(&lane);
+    let before = git(&lane, &["ls-remote", "origin", "refs/heads/main"]);
+    bad(
+        &lane,
+        &["land", "--reason", "unchanged behavior"],
+        "app drifted",
+    );
+    assert_eq!(
+        before,
+        git(&lane, &["ls-remote", "origin", "refs/heads/main"])
+    );
+    plan["nodes"][0]["symbols"] = json!(["renamed"]);
+    write(&lane.join(".whosaidso/flows/app.json"), plan.to_string());
+    commit(&lane);
+    cli(&lane, &["land", "--reason", "updated plan"]);
+}
