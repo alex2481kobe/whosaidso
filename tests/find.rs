@@ -21,8 +21,8 @@ fn records_files_and_main_history_are_searchable() {
     let mut v = value(&p);
     fs::remove_file(p).unwrap();
     v["output_tail"] = format!("{} proofneedle", "x".repeat(2100)).into();
-    r::put(root, "proofs", "", &v);
-    assert!(cli(root, &["find", "proofneedle"]).contains("proof g"));
+    let p = r::put(root, "proofs", "", &v);
+    assert!(cli(root, &["find", "proofneedle"]).contains(p.file_stem().unwrap().to_str().unwrap()));
 }
 
 #[test]
@@ -99,7 +99,7 @@ fn invalid_records_are_evicted_from_a_warm_search() {
     fs::remove_file(p).unwrap();
     v["output_tail"] = "validatorneedle".into();
     let p = r::put(root, "proofs", "", &v);
-    assert!(cli(root, &["find", "validatorneedle"]).contains("proof g"));
+    assert!(cli(root, &["find", "validatorneedle"]).contains(p.file_stem().unwrap().to_str().unwrap()));
     fs::rename(&p, p.with_file_name("wrong.json")).unwrap();
     assert!(cli(root, &["find", "validatorneedle"]).contains("no indexed match"));
     r::clear(root, "proofs");

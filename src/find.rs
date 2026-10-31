@@ -92,7 +92,7 @@ pub(crate) fn label(hit: &Hit) -> String {
         .strip_prefix(&format!("{}:", hit.kind))
         .unwrap_or(&hit.key);
     let key = if hit.kind == "proof" {
-        key.split_once(':').map_or(key, |(goal, _)| goal)
+        key.split_once(':').map_or(key, |(_, record)| record)
     } else {
         key
     };

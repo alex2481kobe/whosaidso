@@ -78,6 +78,9 @@ pub fn show(root: &Path, id: &str) -> Result<(), String> {
                 ));
             }
         }
+    } else if let Some(proof) = store.proofs.iter().find(|p| p.sha == id) {
+        println!("proof {}\n{}", proof.sha, serde_json::to_string_pretty(proof).map_err(|e| e.to_string())?);
+        return Ok(());
     } else {
         return Err(format!("show: no record {id}"));
     }
