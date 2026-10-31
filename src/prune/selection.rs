@@ -88,7 +88,8 @@ pub(super) fn select<'a>(
         .into_iter()
         .enumerate()
         .filter_map(|(i, m)| {
-            (i >= gallery::LIVE_MEDIA || !goals.contains(m.goal.as_str())).then_some(m)
+            let orphan = !m.goal.is_empty() && !goals.contains(m.goal.as_str());
+            (i >= gallery::LIVE_MEDIA || orphan).then_some(m)
         })
         .collect();
     for m in &archived {
