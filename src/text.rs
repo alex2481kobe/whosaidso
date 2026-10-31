@@ -12,6 +12,14 @@ use std::{
     path::Path,
 };
 
+pub(crate) fn prefix(text: &str, bytes: usize) -> &str {
+    let mut end = bytes.min(text.len());
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
+}
+
 pub fn cut(line: &str, limit: usize) -> String {
     if line.chars().count() <= limit {
         return line.to_owned();
