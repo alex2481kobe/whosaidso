@@ -102,6 +102,9 @@ pub fn layer(
         .max(comparison["unknown"].as_array().unwrap().len())
         .max(comparison["unowned"].as_array().unwrap().len())
         .max(layer.risks.len());
+    if offset > 0 {
+        result["previous"] = json!(offset.saturating_sub(map::PAGE));
+    }
     if offset + map::PAGE < detail_total {
         result["next"] = json!(offset + map::PAGE);
     }

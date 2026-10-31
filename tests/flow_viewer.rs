@@ -57,6 +57,82 @@ fn viewer_drills_from_screen_to_function_in_bounded_layers() {
 }
 
 #[test]
+fn file_layer_shows_only_the_functions_defined_there() {
+    let f = Fixture::sources(&[
+        (
+            "app.rs",
+            "fn show() { let count = 1; print(count); save(); helper(); }\nfn save() {}\n",
+        ),
+        ("other.rs", "fn helper() {}\n"),
+    ]);
+    f.write(
+        "app",
+        &json!({"covers":{"paths":["app.rs"]},"nodes":[
+        {"id":"screen","type":"screen","paths":["app.rs"]}
+    ],"steps":[]}),
+    );
+    let viewer = Viewer::start(&f.root);
+    let cookie = viewer.cookie();
+    let names = |value: &serde_json::Value| -> Vec<String> {
+        let nodes = value["nodes"].as_array().unwrap();
+        let mut names: Vec<_> = nodes
+            .iter()
+            .map(|n| n["name"].as_str().unwrap().to_owned())
+            .collect();
+        names.sort();
+        names
+    };
+    let file = viewer.json("/api/flows?id=app&parent=screen", &cookie);
+    let file = file["nodes"][0]["id"].as_str().unwrap();
+    let functions = viewer.json(&format!("/api/flows?id=app&parent={file}"), &cookie);
+    assert_eq!(names(&functions), ["save", "show"]);
+    let show = functions["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["name"] == "show")
+        .unwrap();
+    let calls = viewer.json(
+        &format!("/api/flows?id=app&parent={}", show["id"].as_str().unwrap()),
+        &cookie,
+    );
+    assert_eq!(names(&calls), ["helper", "save", "show"]);
+}
+
+#[test]
+fn file_layer_leaves_out_precise_locals() {
+    let f = Fixture::sources(&[("app.rs", "fn show() { let count = 1; }\n")]);
+    f.write(
+        "app",
+        &json!({"covers":{"paths":["app.rs"]},"nodes":[
+        {"id":"screen","type":"screen","paths":["app.rs"]}
+    ],"steps":[]}),
+    );
+    commit(&f.root);
+    scip::import(
+        &f.root,
+        &[scip::doc(
+            "app.rs",
+            "local 1",
+            "count",
+            &[(&[0, 16, 21], true)],
+        )],
+    );
+    let viewer = Viewer::start(&f.root);
+    let cookie = viewer.cookie();
+    let file = viewer.json("/api/flows?id=app&parent=screen", &cookie);
+    let file = file["nodes"][0]["id"].as_str().unwrap();
+    let functions = viewer.json(&format!("/api/flows?id=app&parent={file}"), &cookie);
+    assert!(
+        !functions["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n["name"] == "count")
+    );
+}
+
+#[test]
 fn viewer_version_moves_after_code_edit_within_three_seconds() {
     let f = Fixture::new();
     write(&f.root.join("app.rs"), "fn show() {}\n");

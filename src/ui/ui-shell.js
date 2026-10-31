@@ -17,7 +17,7 @@ function initTheme() {
   let saved;
   try { saved = localStorage.getItem("whosaidso-theme"); } catch {}
   toggle.addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
-  setTheme(["light","dark"].includes(saved) ? saved : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  setTheme(["light","dark"].includes(saved) ? saved : "light");
 }
 function renderMenu() {
   const chosen = state.projects.find(p => p.id === state.project);
@@ -109,10 +109,12 @@ async function route() {
       return version;
     };
   }
-  main.replaceChildren(shown.node);
+  // Keep the old screen up, while the next one is laid out at full width but unseen.
+  shown.node.classList.add("pending"); main.append(shown.node);
   try { seen = await shown.load(); }
   catch (error) { if (mine === state.renders) main.replaceChildren(message(error.message, "error")); return; }
   if (mine !== state.renders) return;
+  shown.node.classList.remove("pending"); main.replaceChildren(shown.node);
   current = shown; last = key; main.scrollTop = positions.get(key) || 0;
 }
 // Poll the server for its cheap change token; load a screen again only when it moved.
