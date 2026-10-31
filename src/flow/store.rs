@@ -32,7 +32,14 @@ pub fn load(root: &Path, selected: Option<&str>) -> Result<Vec<Record>, String> 
     let mut records = vec![];
     for path in files {
         let id = path.file_stem().unwrap().to_string_lossy().into_owned();
-        records.push(decode(id, fs::read(&path).map_err(|e| e.to_string())));
+        let bytes = match fs::symlink_metadata(&path) {
+            Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {
+                crate::record::read_record(root, &path)
+            }
+            Ok(_) => Err("flow is not a regular file".into()),
+            Err(e) => Err(e.to_string()),
+        };
+        records.push(decode(id, bytes));
     }
     Ok(records)
 }
