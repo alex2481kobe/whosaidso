@@ -99,7 +99,9 @@ fn invalid_records_are_evicted_from_a_warm_search() {
     fs::remove_file(p).unwrap();
     v["output_tail"] = "validatorneedle".into();
     let p = r::put(root, "proofs", "", &v);
-    assert!(cli(root, &["find", "validatorneedle"]).contains(p.file_stem().unwrap().to_str().unwrap()));
+    assert!(
+        cli(root, &["find", "validatorneedle"]).contains(p.file_stem().unwrap().to_str().unwrap())
+    );
     fs::rename(&p, p.with_file_name("wrong.json")).unwrap();
     assert!(cli(root, &["find", "validatorneedle"]).contains("no indexed match"));
     r::clear(root, "proofs");

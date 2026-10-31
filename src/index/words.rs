@@ -41,6 +41,9 @@ pub(super) fn finish(tx: &Transaction<'_>, before: i64) -> Result<(), String> {
 }
 
 pub(super) fn collect(tx: &Transaction<'_>) -> Result<(), String> {
-    tx.execute_batch("DELETE FROM search_trigrams WHERE term NOT IN (SELECT term FROM all_vocab);
-        DELETE FROM trigram_terms WHERE term NOT IN (SELECT term FROM all_vocab);").map_err(err)
+    tx.execute_batch(
+        "DELETE FROM search_trigrams WHERE term NOT IN (SELECT term FROM all_vocab);
+        DELETE FROM trigram_terms WHERE term NOT IN (SELECT term FROM all_vocab);",
+    )
+    .map_err(err)
 }

@@ -32,7 +32,11 @@ pub(super) fn location(row: &Row) -> String {
         r.stop.unwrap_or(0)
     )
 }
-pub(super) fn answer(snapshot: &Snapshot, command: &str, args: &[String]) -> Result<String, String> {
+pub(super) fn answer(
+    snapshot: &Snapshot,
+    command: &str,
+    args: &[String],
+) -> Result<String, String> {
     let (value, filter, offset, limit) = if command == "outline" {
         outline::parse(args)?
     } else {
@@ -122,7 +126,10 @@ pub(super) fn answer(snapshot: &Snapshot, command: &str, args: &[String]) -> Res
     }
     let shown = rows.len().saturating_sub(offset).min(limit);
     if command == "outline" && (offset > 0 || shown < rows.len()) {
-        out.push(format!("shown {shown} of {} rows; offset {offset}; limit {limit}", rows.len()));
+        out.push(format!(
+            "shown {shown} of {} rows; offset {offset}; limit {limit}",
+            rows.len()
+        ));
     } else if rows.len() > limit {
         out.push(format!("shown {limit} of {}", rows.len()));
     }
@@ -166,7 +173,9 @@ fn select(snapshot: &Snapshot, value: &str) -> Result<Vec<Row>, String> {
     {
         let location = rest.split(" [").next().unwrap_or(rest);
         let (name, line) = if let Ok(line) = location.parse::<i64>() {
-            if line <= 0 { return Err(invalid()); }
+            if line <= 0 {
+                return Err(invalid());
+            }
             ("", Some(line))
         } else if let Some(name) = rest.strip_prefix(':') {
             (name, None)

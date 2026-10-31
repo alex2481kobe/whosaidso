@@ -1,5 +1,5 @@
 mod common;
-use common::{process::cli, write, Fixture};
+use common::{Fixture, process::cli, write};
 
 #[test]
 fn long_search_labels_round_trip_into_code_show() {

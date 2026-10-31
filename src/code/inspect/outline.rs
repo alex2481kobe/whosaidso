@@ -9,14 +9,18 @@ pub(super) fn parse(args: &[String]) -> Result<(String, Option<String>, usize, u
             "--limit" | "--offset" => {
                 let n = rest.next().and_then(|s| s.parse::<usize>().ok());
                 if arg == "--limit" {
-                    limit = n.filter(|n| *n > 0).ok_or("code outline: --limit needs a positive integer")?;
+                    limit = n
+                        .filter(|n| *n > 0)
+                        .ok_or("code outline: --limit needs a positive integer")?;
                 } else {
                     offset = n.ok_or("code outline: --offset needs a nonnegative integer")?;
                 }
             }
             _ if arg.starts_with('-') => return Err(format!("code outline: unknown option {arg}")),
             _ if filter.is_none() => filter = Some(arg.clone()),
-            _ => return Err("code outline: takes PATH [NAME-PART] [--limit N] [--offset N]".into()),
+            _ => {
+                return Err("code outline: takes PATH [NAME-PART] [--limit N] [--offset N]".into());
+            }
         }
     }
     Ok((path, filter, offset, limit))

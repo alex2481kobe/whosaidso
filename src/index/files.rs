@@ -67,8 +67,12 @@ pub(super) fn sync(
     seen: &mut HashSet<String>,
 ) -> Result<bool, String> {
     let features_ready = stamp(tx, "features:files")?.as_deref() == Some(features::VERSION);
-    let extractor_ready = stamp(tx, "extractor:files")?.as_deref() == Some(snapshot.extractor_version());
-    if features_ready && extractor_ready && stamp(tx, "tree:files")?.as_deref() == Some(&snapshot.change_token) {
+    let extractor_ready =
+        stamp(tx, "extractor:files")?.as_deref() == Some(snapshot.extractor_version());
+    if features_ready
+        && extractor_ready
+        && stamp(tx, "tree:files")?.as_deref() == Some(&snapshot.change_token)
+    {
         return Ok(true);
     }
     let coverage = snapshot.coverage()?;
