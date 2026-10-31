@@ -1,65 +1,156 @@
-// Transactional incremental storage of the code index for tracked Git blobs.
-use crate::{cache, tree};
+// Immutable syntax facts and atomic worktree generations.
 use super::parse;
-use rusqlite::{Connection, params};
-use std::{collections::HashMap, path::Path};
+use crate::tree;
+use rusqlite::{Connection, OptionalExtension};
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+};
+
+pub mod branch;
+mod collection;
+mod database;
+mod publish;
+pub mod reads;
 
 pub fn open(root: &Path) -> Result<Connection, String> {
-    let mut db = cache::db(root)?;
-    db.execute_batch("CREATE TABLE IF NOT EXISTS files(path TEXT PRIMARY KEY, blob TEXT);
-        CREATE TABLE IF NOT EXISTS defs(path TEXT, name TEXT, kind TEXT, line INTEGER);
-        CREATE TABLE IF NOT EXISTS calls(path TEXT, callee TEXT, line INTEGER, caller TEXT);
-        CREATE TABLE IF NOT EXISTS includes(path TEXT, target TEXT, line INTEGER);
-        CREATE INDEX IF NOT EXISTS defs_name ON defs(name);
-        CREATE INDEX IF NOT EXISTS calls_callee ON calls(callee);
-        CREATE INDEX IF NOT EXISTS includes_target ON includes(target);").map_err(|e| e.to_string())?;
-    // Old syntax rows lack enclosing scopes; rebuild only this disposable index.
-    let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(|e| e.to_string())?;
-    let qualified: i64 = tx.query_row("SELECT count(*) FROM pragma_table_info('defs') WHERE name='qualified'", [], |r| r.get(0)).map_err(|e| e.to_string())?;
-    if qualified == 0 {
-        tx.execute_batch("ALTER TABLE defs ADD COLUMN qualified TEXT; ALTER TABLE calls ADD COLUMN qualified TEXT;
-            DELETE FROM files; DELETE FROM defs; DELETE FROM calls; DELETE FROM includes;
-            CREATE TABLE IF NOT EXISTS tree_warm(source TEXT PRIMARY KEY, stamp TEXT, unchanged INTEGER, skipped INTEGER);
-            DELETE FROM tree_warm WHERE source='files';").map_err(|e| e.to_string())?;
-    }
-    tx.commit().map_err(|e| e.to_string())?;
-    Ok(db)
+    database::open(root)
 }
-pub fn index(root: &Path) -> Result<((usize, usize, usize, usize), tree::Files), String> {
+type Counts = (usize, usize, usize, usize);
+pub fn index(root: &Path) -> Result<(Counts, tree::Files), String> {
+    let (_, counts, files) = indexed(root)?;
+    Ok((counts, files))
+}
+pub fn indexed(root: &Path) -> Result<(Connection, Counts, tree::Files), String> {
     let mut db = open(root)?;
-    let mut files = tree::files(root)?;
-    let mut parsed_stamps = HashMap::new();
-    let n = tree::reconcile(root, &mut db, &files, "files", parse::supported, tree::BATCH_BYTES, clear, |tx, batch| {
-        for (file, _) in &batch { parsed_stamps.insert(file.path.clone(), file.blob.clone()); }
-        let (pairs, blobs): (Vec<_>, Vec<_>) = batch.into_iter().map(|(file, bytes)| ((file.path, file.blob), bytes)).unzip();
-        let data = parse_blobs(&pairs, &blobs)?;
-        let mut parsed = 0; let mut skipped = 0;
-        for ((path, blob), data) in pairs.into_iter().zip(data) {
-            let Some(data) = data else { tree::skip(tx, "files", &tree::File { path, blob, on_disk: false })?; skipped += 1; continue; };
-            tx.prepare_cached("INSERT INTO files VALUES (?1, ?2)").map_err(|e| e.to_string())?.execute(params![path, blob]).map_err(|e| e.to_string())?;
-            for (name, kind, line, qualified) in data.defs { tx.prepare_cached("INSERT INTO defs VALUES (?1, ?2, ?3, ?4, ?5)").map_err(|e| e.to_string())?.execute(params![path, name, kind, line as i64, qualified]).map_err(|e| e.to_string())?; }
-            for (callee, line, caller, qualified) in data.calls { tx.prepare_cached("INSERT INTO calls VALUES (?1, ?2, ?3, ?4, ?5)").map_err(|e| e.to_string())?.execute(params![path, callee, line as i64, caller, qualified]).map_err(|e| e.to_string())?; }
-            for (target, line) in data.includes { tx.prepare_cached("INSERT INTO includes VALUES (?1, ?2, ?3)").map_err(|e| e.to_string())?.execute(params![path, target, line as i64]).map_err(|e| e.to_string())?; }
-            parsed += 1;
-        }
-        Ok((parsed, skipped))
-    })?;
-    // Reconciliation may read newer bytes than the initial listing stamped.
-    for file in &mut files.entries { if let Some(blob) = parsed_stamps.remove(&file.path) { file.blob = blob; } }
-    drop(db);
-    Ok(((n.indexed, n.unchanged, n.removed, n.skipped), files))
+    let files = tree::files(root)?;
+    let (counts, files) = index_files(root, &mut db, files)?;
+    Ok((db, counts, files))
 }
-
-fn clear(tx: &rusqlite::Transaction<'_>, path: &str) -> Result<(), String> {
-    for table in ["files", "defs", "calls", "includes"] {
-        tx.execute(&format!("DELETE FROM {table} WHERE path = ?1"), [path]).map_err(|e| e.to_string())?;
+pub fn indexed_in(
+    root: &Path,
+    include: impl Fn(&str) -> bool,
+) -> Result<(Connection, Counts, tree::Files), String> {
+    let mut db = open(root)?;
+    let files = tree::files_in(root, include)?;
+    let (counts, files) = index_files(root, &mut db, files)?;
+    Ok((db, counts, files))
+}
+fn index_files(
+    root: &Path,
+    db: &mut Connection,
+    mut files: tree::Files,
+) -> Result<(Counts, tree::Files), String> {
+    let tx = db
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(err)?;
+    let stamp = manifest_stamp(&files);
+    let old: Option<String> = tx.query_row("SELECT stamp FROM generations WHERE worktree=(SELECT worktree FROM selection) OR branch=(SELECT branch FROM selection)", [], |r| r.get(0)).optional().map_err(err)?;
+    if old.as_ref() == Some(&stamp) {
+        return Ok(((0, files.entries.len(), 0, files.skipped), files));
     }
-    Ok(())
+    let known: HashSet<(String, String)> = {
+        let mut stmt = tx
+            .prepare("SELECT blob,extractor FROM facts")
+            .map_err(err)?;
+        stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map_err(err)?
+            .collect::<Result<_, _>>()
+            .map_err(err)?
+    };
+    let missing: Vec<_> = files
+        .entries
+        .iter()
+        .filter(|f| {
+            parse::supported(&f.path)
+                && (f.on_disk || !known.contains(&(f.blob.clone(), extractor(&f.path))))
+        })
+        .cloned()
+        .collect();
+    let mut buffers = Vec::new();
+    let mut size = 0;
+    let mut stamps = HashMap::new();
+    let mut skipped = files.skipped;
+    tree::read(root, &missing, tree::BATCH_BYTES, |file, bytes| {
+        let n = bytes.as_ref().map_or(0, Vec::len);
+        if size + n > tree::BATCH_BYTES {
+            skipped += batch(&tx, std::mem::take(&mut buffers), &mut stamps)?;
+            size = 0;
+        }
+        size += n;
+        buffers.push((file.clone(), bytes));
+        Ok(())
+    })?;
+    skipped += batch(&tx, buffers, &mut stamps)?;
+    for file in &mut files.entries {
+        if let Some(blob) = stamps.remove(&file.path) {
+            file.blob = blob;
+        }
+    }
+    publish::generation(root, &tx, &files)?;
+    tx.commit().map_err(err)?;
+    let count = tree::Counts {
+        indexed: missing.len(),
+        unchanged: files.entries.len() - missing.len(),
+        removed: 0,
+        skipped,
+    };
+    Ok((
+        (count.indexed, count.unchanged, count.removed, count.skipped),
+        files,
+    ))
+}
+fn batch(
+    tx: &rusqlite::Transaction<'_>,
+    buffers: Vec<(tree::File, Option<Vec<u8>>)>,
+    stamps: &mut HashMap<String, String>,
+) -> Result<usize, String> {
+    let pairs = buffers
+        .iter()
+        .map(|(f, _)| (f.path.clone(), f.blob.clone()))
+        .collect::<Vec<_>>();
+    let (files, bytes): (Vec<_>, Vec<_>) = buffers.into_iter().unzip();
+    let parsed = parse_blobs(&pairs, &bytes)?;
+    let mut skipped = 0;
+    for ((file, data), body) in files.into_iter().zip(parsed).zip(bytes) {
+        stamps.insert(file.path.clone(), file.blob.clone());
+        skipped += usize::from(data.is_none());
+        publish::fact(tx, &file, data, body)?;
+    }
+    Ok(skipped)
+}
+fn err(e: impl std::fmt::Display) -> String {
+    e.to_string()
+}
+const EXTRACTOR_VERSION: &str = "syntax-6";
+fn manifest_stamp(files: &tree::Files) -> String {
+    format!(
+        "{EXTRACTOR_VERSION}:{}:{}",
+        super::languages::fingerprint(),
+        tree::fingerprint(files)
+    )
+}
+fn extractor(path: &str) -> String {
+    format!(
+        "{EXTRACTOR_VERSION}:{}:{}",
+        super::languages::fingerprint(),
+        Path::new(path)
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+    )
 }
 
-fn parse_blobs(files: &[(String, String)], blobs: &[Option<Vec<u8>>]) -> Result<Vec<Option<parse::Parsed>>, String> {
-    if files.is_empty() { return Ok(Vec::new()); }
-    let workers = std::thread::available_parallelism().map_or(1, |n| n.get()).min(files.len());
+fn parse_blobs(
+    files: &[(String, String)],
+    blobs: &[Option<Vec<u8>>],
+) -> Result<Vec<Option<parse::Parsed>>, String> {
+    if files.is_empty() {
+        return Ok(Vec::new());
+    }
+    let workers = std::thread::available_parallelism()
+        .map_or(1, |n| n.get())
+        .min(files.len());
     let chunk = files.len().div_ceil(workers);
     std::thread::scope(|scope| {
         let mut handles = Vec::new();
@@ -69,9 +160,15 @@ fn parse_blobs(files: &[(String, String)], blobs: &[Option<Vec<u8>>]) -> Result<
                 let mut queries = HashMap::new();
                 let mut results = Vec::with_capacity(files.len());
                 for ((path, _), bytes) in files.iter().zip(blobs) {
-                    let Some(bytes) = bytes else { results.push(None); continue; };
-                    if std::str::from_utf8(bytes).is_err() { results.push(None); }
-                    else { results.push(Some(parse::parse(&mut parser, &mut queries, path, bytes)?)); }
+                    let Some(bytes) = bytes else {
+                        results.push(None);
+                        continue;
+                    };
+                    if std::str::from_utf8(bytes).is_err() {
+                        results.push(None);
+                    } else {
+                        results.push(Some(parse::parse(&mut parser, &mut queries, path, bytes)?));
+                    }
                 }
                 Ok(results)
             }));
@@ -83,4 +180,8 @@ fn parse_blobs(files: &[(String, String)], blobs: &[Option<Vec<u8>>]) -> Result<
         }
         Ok(results)
     })
+}
+
+pub fn snapshot(db: &Connection) -> Result<(), String> {
+    database::select(db)
 }

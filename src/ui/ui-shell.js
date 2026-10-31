@@ -3,6 +3,7 @@ import { main, state, el, api, icon } from "./ui.js";
 import { message } from "./ui-components.js";
 import { place } from "./ui-parts.js";
 import { goalsScreen } from "./ui-goals.js";
+import { flowsScreen } from "./ui-flows.js";
 import { galleryScreen } from "./ui-gallery.js";
 const toggle = document.getElementById("theme-toggle");
 function setTheme(theme) {
@@ -16,7 +17,7 @@ function initTheme() {
   let saved;
   try { saved = localStorage.getItem("whosaidso-theme"); } catch {}
   toggle.addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
-  setTheme(["light","dark"].includes(saved) ? saved : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  setTheme(["light","dark"].includes(saved) ? saved : "light");
 }
 function renderMenu() {
   const chosen = state.projects.find(p => p.id === state.project);
@@ -84,22 +85,28 @@ const positions = new Map();
 let current = null, seen = null, last = "", checking = false;
 if ("scrollRestoration" in history) history.scrollRestoration = "manual";
 async function route() {
+  if (last) positions.set(last, main.scrollTop);
+  last = "";
   const mine = ++state.renders;
-  const screen = location.hash.replace(/^#\//, "").split("?")[0] === "gallery" ? "gallery" : "goals";
+  const requested = location.hash.replace(/^#\//, "").split("?")[0];
+  const screen = ["gallery", "flows"].includes(requested) ? requested : "goals";
   for (const a of document.querySelectorAll("[data-nav]")) {
     if (a.dataset.nav === screen) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   }
   renderMenu();
+  current?.dispose?.();
   current = null;
   if (!state.project) { main.replaceChildren(message("No workspace")); return; }
-  const shown = screen === "gallery" ? galleryScreen() : goalsScreen(), key = state.project + screen;
-  main.replaceChildren(shown.node);
+  const shown = screen === "gallery" ? galleryScreen() : screen === "flows" ? flowsScreen() : goalsScreen(), key = state.project + screen + (screen === "flows" ? location.hash : "");
+  // Keep the old screen up, while the next one is laid out at full width but unseen.
+  shown.node.classList.add("pending"); main.append(shown.node);
   try { seen = await shown.load(); }
-  catch (error) { if (mine === state.renders) main.replaceChildren(message(error.message, "error")); return; }
-  if (mine !== state.renders) return;
+  catch (error) { shown.dispose?.(); if (mine === state.renders) main.replaceChildren(message(error.message, "error")); else shown.node.remove(); return; }
+  if (mine !== state.renders) { shown.dispose?.(); shown.node.remove(); return; }
+  shown.node.classList.remove("pending"); main.replaceChildren(shown.node);
   current = shown; last = key; main.scrollTop = positions.get(key) || 0;
 }
-// Ask the server for its cheap change token; load a screen again only when it moved.
+// Poll the server for its cheap change token; load a screen again only when it moved.
 async function poll() {
   if (document.hidden || !current || checking) return;
   checking = true;
@@ -123,7 +130,7 @@ export async function startViewer() {
   const usable = id => state.projects.some(p => p.id === id && p.available);
   state.project = usable(remembered) ? remembered : usable(list.current) ? list.current : state.projects.find(p => p.available)?.id || "";
   window.addEventListener("hashchange", route);
-  setInterval(poll, 2500);
+  setInterval(poll, 1000);
   document.addEventListener("visibilitychange", poll);
   await route();
 }

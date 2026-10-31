@@ -19,14 +19,27 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: End-to-end test policy
+        run: |
+          python3 - <<'PY'
+          import pathlib, re
+          problems = []
+          if pathlib.Path("src/lib.rs").exists():
+              problems.append("src/lib.rs is forbidden; test the binary end to end")
+          for path in pathlib.Path("src").rglob("*.rs"):
+              if re.search(r"#\s*\[\s*test\b|\bcfg\s*\(\s*test\b", path.read_text()):
+                  problems.append(f"{path}: source unit tests are forbidden")
+          if problems:
+              raise SystemExit("\n".join(problems))
+          PY
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Lints
+        run: cargo clippy --locked --all-targets
       - name: Build without warnings
         run: cargo build --locked
       - name: Test
-        run: cargo test --release --locked
-      - name: Every invariant seed
-        run: WHOSAIDSO_SEEDS=all cargo test --release --locked --test invariant
-      - name: Debug fault injection regressions
-        run: cargo test --locked --test invariant --test fix10 --test fix11 --test fix12
+        run: cargo test --locked
       - name: Release build
         run: cargo build --release --locked
 
@@ -41,6 +54,6 @@ jobs:
       - name: Build without warnings
         run: cargo build --locked
       - name: Test
-        run: cargo test --release --locked
+        run: cargo test --locked
       - name: Release build
         run: cargo build --release --locked

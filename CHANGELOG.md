@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.2
+
+- Land small changes with checks on the merged candidate, recorded evidence and safe retries after concurrent pushes.
+- Keep decisions and questions as revision-checked notes in Git.
+- Plan features as layered flows, compare them with code and check for drift before landing. Flow checks now print a verdict.
+- Search code and records with lexical and optional local semantic search; inspect callers and change impact across supported languages.
+- Install agent skills with runnable examples for goals, landing, search, flows and gallery evidence. Examples include goal creation and explain check limits and model setup.
+- Read a flow as one left-to-right flowchart: drag, zoom, open a box in place, and follow every arrow from whole features down to functions.
+- Add a language with one table entry and one test row: the new whosaidso-languages skill walks through it, and cached projects reindex by themselves. `rust-analyzer` follows your toolchain instead of one pinned release. Swift no longer has a precise indexer.
+- Attach reports and other files as evidence, share their bytes and restore them by hash. Missing goals now point to the record format.
+
 ## 0.3.1
 
 - README and USAGE rewritten to be short and plain; code search is documented.
