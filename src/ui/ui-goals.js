@@ -31,14 +31,15 @@ function detail(g) {
   const p = g.proof, fail = p && p.exit_code !== 0, verdict = fail ? "fail" : "pass";
   return el("div", "goal-detail",
     el("div", "", g.check && [mono(g.check.join(" ")), " · "],
-      p ? [el("b", "verdict " + verdict + (p.current ? "" : " old"), (p.current ? "" : "old ") + verdict), " · ", mono(p.commit.slice(0, 7)), " · " + stamp(p.ran_at)] : "no proof"),
+      p ? [el("b", "verdict " + verdict + (p.current ? "" : " old"), "ran " + (p.current ? "" : "old ") + verdict), " · ", mono(p.commit.slice(0, 7)), " · " + stamp(p.ran_at)] : "no proof"),
+    p && p.reason && el("div", "muted", p.reason),
     fail && p.current && p.output_tail && el("pre", "output", p.output_tail),
-    g.media.length > 0 && thumbs(g.media));
+    g.media.length > 0 && [el("span", "muted", "attached"), thumbs(g.media)]);
 }
 function row(g) {
   const d = el("details", "goal");
   d.dataset.id = g.id; d.open = kept.open.has(g.id);
-  d.append(el("summary", "goal-head", chip(g.state), el("span", "goal-title", g.title), el("span", "mono muted goal-id", g.id), work(g)));
+  d.append(el("summary", "goal-head", chip(g.state), el("span", "goal-title", g.title, g.check_changed && " · check changed"), el("span", "mono muted goal-id", g.id), work(g)));
   const fill = () => { if (!d.querySelector(".goal-detail")) d.append(detail(g)); };
   if (d.open) fill();
   d.addEventListener("toggle", () => { if (d.open) { kept.open.add(g.id); fill(); } else kept.open.delete(g.id); });
@@ -50,7 +51,7 @@ function milestone(p, rows) {
   const bar = el("div", "bar", fill);
   bar.setAttribute("role", "progressbar"); bar.setAttribute("aria-label", `${p.title}: ${done} of ${total} done`);
   bar.setAttribute("aria-valuemin", "0"); bar.setAttribute("aria-valuemax", String(total)); bar.setAttribute("aria-valuenow", String(done));
-  return el("section", "phase", el("header", "phase-head", el("h2", "", p.title), bar, el("span", "muted", `${done}/${total}`)), rows.map(row));
+  return el("section", "milestone", el("header", "milestone-head", el("h2", "", p.title), bar, el("span", "muted", `${done}/${total}`)), rows.map(row));
 }
 export function goalsScreen() {
   if (kept.project !== state.project) Object.assign(kept, {project: state.project, search: "", state: ""}), kept.open.clear();

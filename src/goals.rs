@@ -1,4 +1,4 @@
-// Display the phase and goal tree with states derived from Git.
+// Display the milestone and goal tree with states derived from Git.
 use crate::goal_tree::children;
 use crate::{
     record::{self, model::Goal},
@@ -22,6 +22,11 @@ fn walk(
             continue;
         };
         let label = label(current.state);
+        let changed = if current.check_changed {
+            " · check changed"
+        } else {
+            ""
+        };
         let branches = if current.branches.is_empty() {
             String::new()
         } else {
@@ -51,12 +56,13 @@ fn walk(
             }
         }
         output.push_str(&format!(
-            "{}{:7} {}  {}{}\n",
+            "{}{:7} {}  {}{}{}\n",
             "  ".repeat(depth),
             label,
             goal.id,
             goal.title,
-            branches
+            branches,
+            changed
         ));
         walk(goals, states, &goal.id, depth + 1, seen, output);
     }

@@ -1,4 +1,4 @@
-// Concise record details; state and phase rollups come from their shared modules.
+// Concise record details; state and milestone rollups come from their shared modules.
 use crate::{
     goals,
     record::{self, model::Proof},
@@ -36,6 +36,9 @@ pub fn show(root: &Path, id: &str) -> Result<(), String> {
         lines.push(format!("{}: {}", goal.id, goal.title));
         lines.push(format!("done when: {}", goal.done_when));
         lines.push(format!("state: {}", goals::label(current.state)));
+        if current.check_changed {
+            lines.push("check changed".into());
+        }
         if let Some(check) = &goal.check {
             lines.push(format!(
                 "check: {}",

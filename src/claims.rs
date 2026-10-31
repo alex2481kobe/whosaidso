@@ -99,7 +99,7 @@ fn holder(root: &Path, id: &str) -> Option<Claim> {
     read(root, &format!("{ORIGIN}{id}")).or_else(|| read(root, &format!("{LOCAL}{id}")))
 }
 // A claim binds for 72 hours after its holder last ran start, and not at all once the goal has landed.
-// `start` and the viewer both ask this, so they agree on what is held.
+// `start` and the viewer both use this, so they agree on what is held.
 fn binds(c: &Claim, now: i64, settled: bool) -> bool {
     !settled && state::active(c.since, now)
 }

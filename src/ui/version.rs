@@ -1,4 +1,4 @@
-// The change token the viewer polls: a hash of everything its screens read, cheap enough to ask every few seconds.
+// The change token the viewer polls: a hash of everything its screens read, cheap enough to poll every few seconds.
 use crate::{blob, gallery, git, record};
 use std::{
     collections::hash_map::DefaultHasher,
