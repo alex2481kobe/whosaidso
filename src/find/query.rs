@@ -34,6 +34,7 @@ fn exactness(hit: &Hit, words: &[String], corrected: &[(String, usize)]) -> u8 {
 pub(crate) struct Results {
     pub hits: Vec<Hit>,
     pub total: i64,
+    pub notice: Option<String>,
     db: rusqlite::Connection,
 }
 impl Results {
@@ -60,7 +61,13 @@ pub(crate) fn search(
     kinds: &[&str],
     limit: usize,
 ) -> Result<Results, String> {
-    let db = index::sync(root)?;
+    let model = index::embedding::Model::load();
+    let notice = model.as_ref().err().map(|e| {
+        format!(
+            "search: embeddings unavailable ({e}); lexical results only; run whosaidso model fetch"
+        )
+    });
+    let db = index::sync(root, model.as_ref().ok())?;
     let candidates = limit.saturating_mul(10).max(200).min(i64::MAX as usize);
     let mut corrected: Vec<_> = words.iter().map(|w| (w.clone(), 0)).collect();
     let mut pool = Pool::new(words, &corrected, kinds, candidates);
@@ -81,7 +88,7 @@ pub(crate) fn search(
         collect(&mut hits, pool.fetch(&db, &any, None)?);
     }
     let terms = pool.terms.join(if widened { " OR " } else { " AND " });
-    let total = pool.total(&db, &terms)?;
+    let mut total = pool.total(&db, &terms)?;
     let mut ranked: Vec<_> = hits
         .into_values()
         .map(|hit| (exactness(&hit, words, &corrected), hit))
@@ -94,9 +101,15 @@ pub(crate) fn search(
             .then_with(|| b.bm.total_cmp(&a.bm))
             .then_with(|| a.key.cmp(&b.key))
     });
+    let mut hits: Vec<_> = ranked.into_iter().map(|(_, hit)| hit).collect();
+    if let Ok(model) = &model {
+        hits = super::fusion::fuse(&db, words, kinds, hits, model, candidates)?;
+        total = total.max(hits.len() as i64);
+    }
     Ok(Results {
-        hits: merge(ranked.into_iter().map(|(_, hit)| hit).collect()),
+        hits: merge(hits),
         total,
+        notice,
         db,
     })
 }
@@ -105,17 +118,26 @@ pub(crate) fn search(
 fn merge(hits: Vec<Hit>) -> Vec<Hit> {
     let mut best_symbols = HashMap::new();
     for hit in &hits {
-        if hit.kind == "symbol" { best_symbols.entry(hit.source.clone()).or_insert(hit.key.clone()); }
+        if hit.kind == "symbol" {
+            best_symbols
+                .entry(hit.source.clone())
+                .or_insert(hit.key.clone());
+        }
     }
     let mut representatives = HashMap::new();
     let mut order = Vec::new();
     for hit in hits {
         let source = hit.source.clone();
         let first = !representatives.contains_key(&source);
-        if first { order.push(source.clone()); }
+        if first {
+            order.push(source.clone());
+        }
         if first || best_symbols.get(&source) == Some(&hit.key) {
             representatives.insert(source, hit);
         }
     }
-    order.into_iter().filter_map(|source| representatives.remove(&source)).collect()
+    order
+        .into_iter()
+        .filter_map(|source| representatives.remove(&source))
+        .collect()
 }

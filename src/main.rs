@@ -43,6 +43,12 @@ fn run() -> Result<(), String> {
         );
         return Ok(());
     }
+    if let [cmd, rest @ ..] = args.as_slice()
+        && cmd == "model"
+    {
+        println!("{}", index::embedding::command(rest)?);
+        return Ok(());
+    }
     let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
     let root = if args.first().is_some_and(|cmd| cmd == "ui") {
         cwd.clone()

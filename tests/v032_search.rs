@@ -424,5 +424,7 @@ fn typo_budgets_cover_long_words_and_short_transpositions() {
     assert!(cli(root, &["find", "kind:file", "tranxxction"]).contains("no indexed match"));
 }
 
+#[path = "v032_search/embedding.rs"]
+mod embedding;
 #[path = "v032_search/ranking.rs"]
 mod ranking;

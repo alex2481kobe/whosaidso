@@ -1,4 +1,5 @@
 // CLI parsing and rendering for ranked search.
+mod fusion;
 mod pool;
 mod query;
 mod words;
@@ -55,6 +56,9 @@ pub fn find(root: &Path, args: &[String]) -> Result<(), String> {
         &kind.as_deref().into_iter().collect::<Vec<_>>(),
         limit,
     )?;
+    if let Some(notice) = &results.notice {
+        eprintln!("{notice}");
+    }
     if results.hits.is_empty() {
         println!("find: no indexed match");
         return Ok(());
@@ -99,7 +103,7 @@ pub(crate) fn label(hit: &Hit) -> String {
         key
     };
     let title = hit.title.replace(['\n', '\r'], " ");
-    match hit.kind.as_str() {
+    let label = match hit.kind.as_str() {
         "file" => key.to_string(),
         "symbol" => format!("symbol {key}"),
         "commit" => format!(
@@ -108,5 +112,9 @@ pub(crate) fn label(hit: &Hit) -> String {
             crate::text::cut(&title, 72)
         ),
         _ => format!("{} {}  {}", hit.kind, key, title),
+    };
+    match hit.method {
+        Some(method) => format!("{label} [{method}]"),
+        None => label,
     }
 }
