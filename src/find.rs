@@ -1,4 +1,5 @@
 // CLI parsing and rendering for ranked search.
+mod pool;
 mod query;
 mod words;
 use std::path::Path;

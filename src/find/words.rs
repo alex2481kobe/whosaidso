@@ -59,24 +59,92 @@ pub(super) fn correct(db: &Connection, words: &[String]) -> Result<Vec<(String, 
             out.push((w.clone(), 0));
             continue;
         }
-        let first = chars[0].to_string();
-        let mut stmt = db
-            .prepare("SELECT term FROM vocab WHERE term>=?1 AND term<?1 || char(1114111)")
-            .map_err(|e| e.to_string())?;
-        let candidates = stmt
-            .query_map([first], |r| r.get::<_, String>(0))
-            .map_err(|e| e.to_string())?;
-        let mut best: Option<(usize, String)> = None;
-        for candidate in candidates {
-            let candidate = candidate.map_err(|e| e.to_string())?;
-            if let Some(d) = distance(&chars, &candidate.chars().collect::<Vec<_>>(), budget) {
-                let pair = (d, candidate);
-                if best.as_ref().is_none_or(|b| pair < *b) {
-                    best = Some(pair);
+        let mut best: Option<(usize, i64, String)> = None;
+        let mut consider = |candidate: String, edits: usize, frequency: i64| {
+            let pair = (edits, -frequency, candidate);
+            if best.as_ref().is_none_or(|b| pair < *b) {
+                best = Some(pair);
+            }
+        };
+        if budget == 1 {
+            let mut stmt = db
+                .prepare_cached("SELECT doc FROM vocab WHERE term=?1")
+                .map_err(|e| e.to_string())?;
+            for candidate in one_edit(&chars) {
+                if let Some(df) = stmt
+                    .query_row([&candidate], |r| r.get(0))
+                    .optional()
+                    .map_err(|e| e.to_string())?
+                {
+                    consider(candidate, 1, df);
+                }
+            }
+        } else {
+            let expression = chars
+                .windows(3)
+                .map(|w| format!("\"{}\"", w.iter().collect::<String>()))
+                .collect::<Vec<_>>()
+                .join(" OR ");
+            let mut stmt = db.prepare("SELECT term FROM search_trigrams WHERE search_trigrams MATCH ?1 ORDER BY rank LIMIT 50").map_err(|e| e.to_string())?;
+            let candidates = stmt
+                .query_map([expression], |r| r.get::<_, String>(0))
+                .map_err(|e| e.to_string())?;
+            for candidate in candidates {
+                let candidate = candidate.map_err(|e| e.to_string())?;
+                let have: Vec<_> = candidate.chars().collect();
+                if have.first() != chars.first() {
+                    continue;
+                }
+                if let Some(edits) = distance(&chars, &have, budget) {
+                    let df = db
+                        .query_row("SELECT doc FROM vocab WHERE term=?1", [&candidate], |r| {
+                            r.get(0)
+                        })
+                        .map_err(|e| e.to_string())?;
+                    consider(candidate, edits, df);
                 }
             }
         }
-        out.push(best.map(|(d, w)| (w, d)).unwrap_or((w.clone(), 0)));
+        out.push(best.map(|(d, _, w)| (w, d)).unwrap_or((w.clone(), 0)));
     }
     Ok(out)
+}
+
+fn one_edit(word: &[char]) -> std::collections::HashSet<String> {
+    let mut out = std::collections::HashSet::new();
+    let mut add = |chars: Vec<char>| {
+        out.insert(chars.into_iter().collect());
+    };
+    for i in 1..=word.len() {
+        for c in 'a'..='z' {
+            let mut v = word.to_vec();
+            v.insert(i, c);
+            add(v);
+            if i < word.len() {
+                let mut v = word.to_vec();
+                v[i] = c;
+                add(v);
+            }
+        }
+        if i < word.len() {
+            let mut v = word.to_vec();
+            v.remove(i);
+            add(v);
+        }
+        if i + 1 < word.len() {
+            let mut v = word.to_vec();
+            v.swap(i, i + 1);
+            add(v);
+        }
+    }
+    out
+}
+pub(super) fn drop_order(db: &Connection, words: &[(String, usize)]) -> Result<Vec<usize>, String> {
+    let mut frequencies = Vec::new();
+    for (i, (word, _)) in words.iter().enumerate() {
+        let frequency: i64 = db.query_row("SELECT coalesce((SELECT doc FROM vocab WHERE term=?1),(SELECT max(doc) FROM vocab WHERE term>=?1 AND term<?1||char(1114111)),0)", [word], |r| r.get(0)).map_err(|e| e.to_string())?;
+        frequencies.push((i, frequency));
+    }
+    frequencies.sort_by_key(|(i, df)| (*df != 0, std::cmp::Reverse(*df), *i));
+    Ok(frequencies.into_iter().map(|(i, _)| i).collect())
 }

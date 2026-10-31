@@ -177,3 +177,84 @@ fn pages_and_file_lists_are_complete() {
     assert!(!invalid.status.success());
 }
 
+#[test]
+fn widening_ranks_all_stages_together_and_rejects_weak_matches() {
+    let root = fixture();
+    for i in 0..220 {
+        fs::write(root.join(format!("common{i}.md")), "# common absentword\n").unwrap();
+        fs::write(
+            root.join(format!("absent{i}.md")),
+            "# absentword distractword\n",
+        )
+        .unwrap();
+    }
+    for i in 0..40 {
+        fs::write(root.join(format!("unrelated{i}.md")), "# unrelated\n").unwrap();
+    }
+    fs::write(
+        root.join("target.md"),
+        format!(
+            "# common rarekeyword distractword {}\n",
+            "filler ".repeat(50000)
+        ),
+    )
+    .unwrap();
+    commit(&root);
+    let ranked = cli(
+        &root,
+        &[
+            "find",
+            "kind:file",
+            "common",
+            "rarekeyword",
+            "absentword",
+            "distractword",
+            "--limit",
+            "1",
+        ],
+    );
+    assert_eq!(ranked.lines().next(), Some("target.md"), "{ranked}");
+    assert!(
+        cli(
+            &root,
+            &["find", "kind:file", "common", "qzxv", "qzzq", "zxqq"]
+        )
+        .contains("no indexed match")
+    );
+    assert!(cli(&root, &["find", "kind:file", "qzxvzzqq"]).contains("no indexed match"));
+    assert!(cli(&root, &["find", "kind:file", "rarekeyword", "missingword"]).contains("target.md"));
+}
+
+#[test]
+fn typo_budgets_cover_long_words_and_short_transpositions() {
+    let root = fixture();
+    fs::write(
+        root.join("words.md"),
+        "# words roof transaction module123\n",
+    )
+    .unwrap();
+    fs::write(root.join("small.md"), "# small\n").unwrap();
+    for i in 0..3 {
+        fs::write(root.join(format!("spell{i}.md")), "# spell\n").unwrap();
+    }
+    commit(&root);
+    let spelling = cli(&root, &["find", "kind:file", "spall"]);
+    assert!(
+        spelling.contains("spell0.md") && !spelling.contains("small.md"),
+        "{spelling}"
+    );
+    for word in ["wrods", "tranxxction"] {
+        assert!(
+            cli(&root, &["find", "kind:file", word]).contains("words.md"),
+            "{word}"
+        );
+    }
+    for word in ["rofo", "wxxds", "trxxxxction", "module124", "xords"] {
+        assert!(
+            cli(&root, &["find", "kind:file", word]).contains("no indexed match"),
+            "{word}"
+        );
+    }
+    fs::write(root.join("words.md"), "# other\n").unwrap();
+    assert!(cli(&root, &["find", "kind:file", "tranxxction"]).contains("no indexed match"));
+}

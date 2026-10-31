@@ -2,6 +2,7 @@
 mod files;
 mod history;
 mod records;
+mod words;
 use crate::cache;
 use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
 use std::{collections::HashSet, path::Path};
@@ -12,6 +13,7 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 fn remove(tx: &Transaction<'_>, key: &str) -> Result<(), String> {
+    words::touch(tx, key)?;
     tx.prepare_cached("INSERT INTO docs_fts(docs_fts,rowid,kind,title,body) SELECT 'delete',id,kind,title,body FROM docs WHERE key=?1").map_err(err)?.execute([key]).map_err(err)?;
     tx.prepare_cached("DELETE FROM docs WHERE key=?1")
         .map_err(err)?
@@ -26,6 +28,7 @@ fn put(tx: &Transaction<'_>, kind: &str, key: &str, title: &str, body: &str) -> 
         .execute(params![kind, key, title, body])
         .map_err(err)?;
     tx.prepare_cached("INSERT INTO docs_fts(rowid,kind,title,body) SELECT id,kind,title,body FROM docs WHERE key=?1").map_err(err)?.execute([key]).map_err(err)?;
+    words::touch(tx, key)?;
     Ok(())
 }
 fn stamp(tx: &Transaction<'_>, source: &str) -> Result<Option<String>, String> {
@@ -68,6 +71,7 @@ pub fn sync(root: &Path) -> Result<(), String> {
     let tx = db
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(err)?;
+    words::init(&tx)?;
     let mut seen = HashSet::new();
     records::sync(root, &tx, &mut seen)?;
     let same_files = files::sync(root, &tx, &mut seen)?;
@@ -92,6 +96,7 @@ pub fn sync(root: &Path) -> Result<(), String> {
                 .map_err(err)?;
         }
     }
+    words::finish(&tx)?;
     tx.commit().map_err(err)?;
     Ok(())
 }
