@@ -31,6 +31,32 @@ fn source_evidence_survives_data_floods_and_generated_code() {
 }
 
 #[test]
+fn find_shows_source_signatures_with_utf8_and_answer_byte_limits() {
+    let f = Fixture::empty();
+    for i in 0..30 {
+        write(
+            &f.root.join(format!("file{i}.rs")),
+            format!(
+                "/// Comment that is not the signature.\nfn selected({}: i32) {{ let PRIVATE_SENTINEL = 42; }}\n",
+                "雪".repeat(100)
+            ),
+        );
+    }
+    let out = cli(&f.root, &["find", "selected", "--limit", "100"]);
+    assert!(
+        out.lines().any(|line| line.starts_with("  fn selected(")),
+        "{out}"
+    );
+    assert!(!out.contains("PRIVATE_SENTINEL"), "{out}");
+    assert!(
+        out.len() <= 4096 && out.contains("output budget"),
+        "{}: {out}",
+        out.len()
+    );
+    assert!(out.lines().all(|line| line.len() <= 384), "{out}");
+}
+
+#[test]
 fn grep_diagnoses_regex_forms_instead_of_claiming_absence() {
     let f = Fixture::empty();
     write(

@@ -39,6 +39,12 @@ pub(crate) struct Results {
     db: rusqlite::Connection,
 }
 impl Results {
+    pub fn source_line(&self, source: &str, line: usize) -> Result<Option<String>, String> {
+        self.db.query_row(
+            "SELECT detail FROM docs WHERE source=?1 AND kind='file' ORDER BY length(detail) DESC LIMIT 1",
+            [source], |r| r.get::<_, String>(0),
+        ).map(|body| body.lines().nth(line - 1).map(str::to_owned)).map_err(|e| e.to_string())
+    }
     pub fn detail(&self, hit: &Hit) -> Result<String, String> {
         self.db
             .query_row(

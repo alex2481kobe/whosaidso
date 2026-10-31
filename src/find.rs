@@ -1,6 +1,7 @@
 // CLI parsing and rendering for ranked search.
 mod fusion;
 mod pool;
+mod preview;
 mod query;
 mod words;
 use crate::index::terms::tokens;
@@ -63,15 +64,7 @@ pub fn find(root: &Path, args: &[String]) -> Result<(), String> {
         println!("find: no indexed match");
         return Ok(());
     }
-    for hit in results.hits.iter().take(limit) {
-        println!("{}", crate::text::cut(&label(hit), 200));
-    }
-    let bound = if results.lower_bound { "at least " } else { "" };
-    println!(
-        "shown {} of {bound}{}",
-        results.hits.len().min(limit),
-        results.total
-    );
+    print!("{}", preview::answer(&results, limit)?);
     Ok(())
 }
 
