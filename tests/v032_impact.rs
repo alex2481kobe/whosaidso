@@ -119,3 +119,136 @@ if (root/'.git/edit').exists(): (root/'main.go').write_text('package example\nfu
         }
     }
 }
+
+#[test]
+fn impact_walks_chains_diamonds_cycles_and_honors_depth_and_pages() {
+    let fixture = Fixture::sources(&[
+        (
+            "graph.rs",
+            "fn top() { left(); right(); }\nfn left() { leaf(); }\nfn right() { leaf(); }\nfn leaf() { top(); }\n",
+        ),
+        ("same.rs", "fn duplicate() {}\n"),
+        ("other.rs", "fn duplicate() {}\n"),
+    ]);
+    let root = &fixture.root;
+    let answer = cli(root, &["code", "callees", "top", "--depth", "2"]);
+    for name in ["left", "right", "leaf"] {
+        assert!(answer.contains(&format!(" {name} [syntactic]")), "{answer}");
+    }
+    assert_eq!(answer.matches(" leaf [syntactic]").count(), 1, "{answer}");
+    assert!(
+        answer.contains("depth limit") && answer.contains("coverage:"),
+        "{answer}"
+    );
+    let shallow = cli(root, &["code", "callees", "top", "--depth", "1"]);
+    assert!(!shallow.contains(" leaf [syntactic]"), "{shallow}");
+    let reverse = cli(root, &["code", "callers", "leaf", "--depth", "3"]);
+    assert!(
+        reverse.contains(" top [syntactic]") && reverse.contains("rows=3"),
+        "{reverse}"
+    );
+    let path = cli(root, &["code", "affected", "graph.rs", "--depth", "3"]);
+    assert!(path.contains("seeds=4"), "{path}");
+    let ambiguous = cli(root, &["code", "callers", "duplicate"]);
+    assert!(
+        ambiguous.contains("ambiguous: 2")
+            && ambiguous.contains("same.rs")
+            && ambiguous.contains("other.rs"),
+        "{ambiguous}"
+    );
+    let page = cli(
+        root,
+        &[
+            "code", "callees", "top", "--depth", "3", "--limit", "1", "--offset", "1",
+        ],
+    );
+    assert!(
+        page.contains("shown 1 of 3") && page.contains("offset=1"),
+        "{page}"
+    );
+    let token = page
+        .lines()
+        .next()
+        .unwrap()
+        .split_whitespace()
+        .find_map(|s| s.strip_prefix("snapshot="))
+        .unwrap();
+    let stable = cli(
+        root,
+        &[
+            "code",
+            "callees",
+            "top",
+            "--depth",
+            "3",
+            "--offset",
+            "2",
+            "--snapshot",
+            token,
+        ],
+    );
+    assert!(stable.contains("offset=2"));
+    write(&root.join("graph.rs"), "fn changed() {}\n");
+    failure(
+        command(
+            root,
+            BIN,
+            &["code", "callees", "changed", "--snapshot", token],
+        )
+        .output()
+        .unwrap(),
+        "snapshot expired",
+    );
+}
+
+#[test]
+fn graph_combines_fresh_precise_and_syntax_and_reports_implementations() {
+    let fixture = Fixture::sources(&[
+        ("api.rs", "fn api() {}\nfn implementation() { api(); }\n"),
+        ("use.rs", "fn user() { api(); }\n"),
+    ]);
+    let root = &fixture.root;
+    let api = "scip-test pkg project 1 api().";
+    let implementation = "scip-test pkg project 1 implementation().";
+    let mut document = field(1, b"api.rs");
+    for (symbol, range, enclosing, def) in [
+        (api, &[0, 3, 6][..], &[0, 0, 11][..], true),
+        (implementation, &[1, 3, 17][..], &[1, 0, 30][..], true),
+        (api, &[1, 22, 25][..], &[1, 22, 27][..], false),
+    ] {
+        let mut occ = field(1, range);
+        occ.extend(field(2, symbol.as_bytes()));
+        occ.extend([24, u8::from(def)]);
+        occ.extend(field(7, enclosing));
+        document.extend(field(2, &occ));
+    }
+    let mut info = field(1, implementation.as_bytes());
+    let mut relationship = field(1, api.as_bytes());
+    relationship.extend([24, 1]);
+    info.extend(field(4, &relationship));
+    document.extend(field(3, &info));
+    import(root, &[field(2, &document)]);
+    let answer = cli(root, &["code", "callers", "api", "--implementations"]);
+    assert!(
+        answer.contains("implementation [precise]") && answer.contains("user [syntactic]"),
+        "{answer}"
+    );
+    assert!(
+        answer.contains("implementations: 1 recorded") && answer.contains("precise=1 syntactic=1"),
+        "{answer}"
+    );
+    assert_eq!(
+        answer.matches("implementation [precise]").count(),
+        1,
+        "{answer}"
+    );
+    write(
+        &root.join("api.rs"),
+        "fn api() {}\nfn replacement() { api(); }\n",
+    );
+    let stale = cli(root, &["code", "callers", "api"]);
+    assert!(
+        stale.contains("replacement [syntactic]") && stale.contains("precise documents are stale"),
+        "{stale}"
+    );
+}

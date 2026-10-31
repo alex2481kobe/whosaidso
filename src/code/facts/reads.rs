@@ -19,6 +19,7 @@ pub struct Range {
     pub end_line: i64,
     pub stop: Option<i64>,
 }
+#[derive(Clone)]
 pub struct Row {
     pub symbol: String,
     pub path: String,

@@ -1,6 +1,7 @@
 // Code search commands; parsing, storage and presentation live in their own modules.
 mod contracts;
 pub mod facts;
+mod impact;
 mod indexer;
 mod inspect;
 mod languages;
@@ -23,6 +24,10 @@ pub fn import_scip(root: &Path, file: &Path) -> Result<(), String> {
 
 pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
     match args {
+        [sub, value, rest @ ..] if ["callers", "callees", "affected"].contains(&sub.as_str()) => {
+            println!("{}", impact::answer(root, sub, value, rest)?);
+            Ok(())
+        }
         [sub, language] if sub == "index" => {
             println!("{}", indexer::run(root, language)?);
             Ok(())

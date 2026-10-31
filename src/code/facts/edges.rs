@@ -1,13 +1,18 @@
-// Precise edges retain symbol identity; syntax edges retain every name-matched candidate.
+// A hybrid graph retains exact precise identities and every syntax-name candidate.
 use super::{
     Snapshot,
-    reads::{Complete, Layer, Row},
+    reads::{Layer, Row},
+    relationships::Relationship,
 };
+use crate::code::contracts::matches;
+use std::collections::{HashMap, HashSet};
 
+#[derive(Clone, Copy)]
 pub enum Direction {
     Forward,
     Reverse,
 }
+#[derive(Clone)]
 pub struct Edge {
     pub source: Option<String>,
     pub targets: Vec<String>,
@@ -17,49 +22,77 @@ pub struct Edges {
     pub rows: Vec<Edge>,
     pub gaps: Vec<String>,
 }
+pub struct Graph {
+    pub definitions: Vec<Row>,
+    pub edges: Vec<Edge>,
+    pub relationships: Vec<Relationship>,
+    pub gaps: Vec<String>,
+}
 impl Snapshot {
-    pub fn edges(&self, symbol: &str, direction: Direction) -> Result<Edges, String> {
-        let definitions = self.definitions("")?;
-        let Some(target) = definitions.rows.iter().find(|r| r.symbol == symbol) else {
-            return Err("symbol is not in this snapshot".into());
-        };
-        let name = if target.qualified.is_empty() {
-            &target.name
-        } else {
-            &target.qualified
-        };
-        let Complete { rows, mut gaps } = match direction {
-            Direction::Reverse => self.references(name)?,
-            Direction::Forward => self.all_references()?,
-        };
+    pub fn graph(&self) -> Result<Graph, String> {
+        let definitions = self.definitions("")?.rows;
+        let refs = self.all_references()?;
+        let mut names: HashMap<&str, Vec<&Row>> = HashMap::new();
+        for d in &definitions {
+            names.entry(&d.name).or_default().push(d);
+        }
         let mut edges = Vec::new();
-        for mut row in rows {
-            if matches!(direction, Direction::Forward) && row.container.as_deref() != Some(symbol) {
-                continue;
-            }
-            if matches!(direction, Direction::Reverse)
-                && row.layer == Layer::Precise
-                && row.symbol != symbol
-            {
-                continue;
-            }
-            let candidates = if row.layer == Layer::Precise {
+        for row in refs.rows {
+            let targets = if row.layer == Layer::Precise {
                 vec![row.symbol.clone()]
             } else {
-                self.definitions(&row.qualified)?
-                    .rows
-                    .into_iter()
-                    .map(|r| r.symbol)
-                    .collect::<Vec<_>>()
+                let candidates = names.get(row.name.as_str()).cloned().unwrap_or_default();
+                let scoped: Vec<_> = candidates
+                    .iter()
+                    .filter(|d| matches(&d.qualified, &row.qualified))
+                    .copied()
+                    .collect();
+                let selected = if scoped.is_empty() {
+                    candidates
+                } else {
+                    scoped
+                };
+                let mut ids: Vec<_> = selected.iter().map(|r| r.symbol.clone()).collect();
+                ids.sort();
+                ids.dedup();
+                ids
             };
-            row.ambiguous = row.layer == Layer::Syntactic || candidates.len() != 1;
             edges.push(Edge {
                 source: row.container.clone(),
-                targets: candidates,
+                targets,
                 occurrence: row,
             });
         }
-        gaps.push("unresolved and ambiguous references retain candidate targets".into());
-        Ok(Edges { rows: edges, gaps })
+        let mut relationships = Vec::new();
+        let mut seen = HashSet::new();
+        for row in &definitions {
+            if row.layer == Layer::Precise && seen.insert(&row.symbol) {
+                relationships.extend(self.relationships(&row.symbol, Direction::Forward)?);
+            }
+        }
+        Ok(Graph {
+            definitions,
+            edges,
+            relationships,
+            gaps: refs.gaps,
+        })
+    }
+    pub fn edges(&self, symbol: &str, direction: Direction) -> Result<Edges, String> {
+        let graph = self.graph()?;
+        if !graph.definitions.iter().any(|r| r.symbol == symbol) {
+            return Err("symbol is not in this snapshot".into());
+        }
+        let rows = graph
+            .edges
+            .into_iter()
+            .filter(|e| match direction {
+                Direction::Forward => e.source.as_deref() == Some(symbol),
+                Direction::Reverse => e.targets.iter().any(|t| t == symbol),
+            })
+            .collect();
+        Ok(Edges {
+            rows,
+            gaps: graph.gaps,
+        })
     }
 }
