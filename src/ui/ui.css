@@ -87,8 +87,10 @@ h1, h2, h3, p { margin: 0; }
 .milestone { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
 .milestone-head { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--line-2); font-size: 12.5px; }
 .milestone-head h2 { font-size: 14px; font-weight: 650; }
-.bar { flex: 0 1 140px; min-width: 60px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
-.bar i { display: block; height: 100%; background: var(--green); }
+.bar { appearance: none; border: 0; flex: 0 1 140px; min-width: 60px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.bar::-webkit-progress-bar { background: var(--line); }
+.bar::-webkit-progress-value { background: var(--green); }
+.bar::-moz-progress-bar { background: var(--green); }
 .goal + .goal { border-top: 1px solid var(--line-2); }
 .goal-head { display: grid; grid-template-columns: 64px minmax(120px,1.2fr) minmax(60px,.5fr) minmax(0,2.2fr); align-items: start; gap: 4px 10px; padding: 6px 12px; list-style: none; cursor: pointer; }
 .goal-head::-webkit-details-marker { display: none; }
@@ -122,3 +124,13 @@ h1, h2, h3, p { margin: 0; }
   .page { position: static; flex: 1; padding: 4px 12px 24px; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
+
+/* Flow layers reuse the viewer's rows and state chips. */
+.flow-row { flex-wrap: wrap; cursor: default; }
+a.flow-row { cursor: pointer; }
+.flow-row .goal-title { flex: 1 1 160px; }
+.flow-row .mono { overflow-wrap: anywhere; }
+.s-built { --tone: var(--green); }
+.s-drifted, .s-missing, .s-unplanned, .s-broken { --tone: var(--red); }
+.s-unknown, .s-ambiguous { --tone: var(--amber); }
+.s-planned, .s-authored { --tone: var(--slate); }

@@ -3,6 +3,7 @@ import { main, state, el, api, icon } from "./ui.js";
 import { message } from "./ui-components.js";
 import { place } from "./ui-parts.js";
 import { goalsScreen } from "./ui-goals.js";
+import { flowsScreen } from "./ui-flows.js";
 import { galleryScreen } from "./ui-gallery.js";
 const toggle = document.getElementById("theme-toggle");
 function setTheme(theme) {
@@ -85,14 +86,15 @@ let current = null, seen = null, last = "", checking = false;
 if ("scrollRestoration" in history) history.scrollRestoration = "manual";
 async function route() {
   const mine = ++state.renders;
-  const screen = location.hash.replace(/^#\//, "").split("?")[0] === "gallery" ? "gallery" : "goals";
+  const requested = location.hash.replace(/^#\//, "").split("?")[0];
+  const screen = ["gallery", "flows"].includes(requested) ? requested : "goals";
   for (const a of document.querySelectorAll("[data-nav]")) {
     if (a.dataset.nav === screen) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   }
   renderMenu();
   current = null;
   if (!state.project) { main.replaceChildren(message("No workspace")); return; }
-  const shown = screen === "gallery" ? galleryScreen() : goalsScreen(), key = state.project + screen;
+  const shown = screen === "gallery" ? galleryScreen() : screen === "flows" ? flowsScreen() : goalsScreen(), key = state.project + screen;
   main.replaceChildren(shown.node);
   try { seen = await shown.load(); }
   catch (error) { if (mine === state.renders) main.replaceChildren(message(error.message, "error")); return; }
@@ -123,7 +125,7 @@ export async function startViewer() {
   const usable = id => state.projects.some(p => p.id === id && p.available);
   state.project = usable(remembered) ? remembered : usable(list.current) ? list.current : state.projects.find(p => p.available)?.id || "";
   window.addEventListener("hashchange", route);
-  setInterval(poll, 2500);
+  setInterval(poll, 1000);
   document.addEventListener("visibilitychange", poll);
   await route();
 }
