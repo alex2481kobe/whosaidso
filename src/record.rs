@@ -489,7 +489,7 @@ fn validate(root: &Path, s: &mut Store) {
         s.errors.len() == before
     });
     s.media.retain(|i| {
-        if goals.contains(i.goal.as_str()) {
+        if i.goal.is_empty() || goals.contains(i.goal.as_str()) {
             true
         } else {
             if !rejected.contains(&i.goal) {

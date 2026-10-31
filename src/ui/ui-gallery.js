@@ -11,7 +11,9 @@ function galleryCard(entry) {
   stage.tabIndex = 0; stage.setAttribute("role", "button"); stage.setAttribute("aria-label", "Open " + entry.shows);
   stage.addEventListener("click", e => { if (!e.target.closest("button,video")) inspect(entry, stage); });
   stage.addEventListener("keydown", e => { if (e.target === stage && ["Enter"," "].includes(e.key)) { e.preventDefault(); inspect(entry, stage); } });
-  const node = card(stage, el("div", "gallery-card-body", el("h2", "gallery-title", titleButton(entry))));
+  const body = el("div", "gallery-card-body", el("h2", "gallery-title", titleButton(entry)));
+  if (entry.goal) body.append(el("span", "muted", entry.goal_title || entry.goal));
+  const node = card(stage, body);
   node.classList.add("gallery-card"); node.dataset.kind = entry.kind; return node;
 }
 export function galleryScreen() {

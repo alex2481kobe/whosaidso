@@ -65,7 +65,9 @@ pub fn put(root: &Path, source: &Path) -> Result<(String, String, u64), String> 
     if bytes.len() as u64 > MAX_MEDIA_BYTES {
         return Err("media byte cap 64 MiB exceeded".into());
     }
-    let ext = crate::gallery::types::detect(&bytes)?.ext.to_owned();
+    let ext = crate::gallery::types::detect(&bytes)
+        .map_or("bin", |t| t.ext)
+        .to_owned();
     let sha = record::sha256_hex(&bytes);
     let target = dir(root)?.join(format!("{sha}.{ext}"));
     // Serialize quota accounting while publishers retain the shared collection lock.
@@ -122,7 +124,9 @@ pub fn verify(root: &Path, sha: &str, ext: &str, byte_size: u64) -> Result<bool,
             Err("media byte cap 64 MiB exceeded".into())
         }
         Ok(bytes) if record::sha256_hex(&bytes) == sha => {
-            if crate::gallery::types::detect(&bytes)?.ext != ext {
+            if !crate::gallery::types::media_type(ext)?.download_only()
+                && crate::gallery::types::detect(&bytes)?.ext != ext
+            {
                 return Err("media signature does not match record type".into());
             }
             if bytes.len() as u64 != byte_size {

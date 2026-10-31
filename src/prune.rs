@@ -317,7 +317,7 @@ fn collect(root: &Path, journal_path: &Path, journal: &mut Journal) -> Result<()
         .into_iter()
         .enumerate()
         .filter_map(|(i, m)| {
-            (i >= gallery::LIVE_MEDIA || !goals.contains(m.goal.as_str())).then_some(m)
+            (i >= gallery::LIVE_MEDIA || (!m.goal.is_empty() && !goals.contains(m.goal.as_str()))).then_some(m)
         })
         .collect();
     for m in &archived {

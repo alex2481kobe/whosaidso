@@ -10,6 +10,7 @@ use std::path::Path;
 pub struct Media {
     #[serde(skip)]
     pub sha: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub goal: String,
     pub shows: String,
     pub media_sha256: String,
@@ -27,7 +28,7 @@ pub fn attach(
 ) -> Result<String, String> {
     publish::record_dir(root, "media")?;
     let store = record::load(root)?;
-    if !store.goals.iter().any(|g| g.id == goal) {
+    if !goal.is_empty() && !store.goals.iter().any(|g| g.id == goal) {
         return Err(format!("unknown goal {goal}"));
     }
     if let Some(reason) = title::title_problem(shows) {

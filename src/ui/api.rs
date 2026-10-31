@@ -257,9 +257,10 @@ fn media_file(root: &Path, sha: &str, params: &HashMap<String, String>) -> Reply
         if bytes.len() as u64 != m.byte_size || record::sha256_hex(&bytes) != sha {
             return Err("media changed while reading".into());
         }
-        let mut reply = Reply::bytes(gallery::types::media_type(&m.ext)?.mime, &bytes);
+        let kind = gallery::types::media_type(&m.ext)?;
+        let mut reply = Reply::bytes(kind.mime, &bytes);
         reply.header("Accept-Ranges", "bytes");
-        if params.get("download").is_some_and(|v| v == "1") {
+        if kind.download_only() || params.get("download").is_some_and(|v| v == "1") {
             reply.header(
                 "Content-Disposition",
                 format!("attachment; filename=\"{}.{}\"", m.media_sha256, m.ext),

@@ -75,9 +75,21 @@ const TYPES: &[MediaType] = &[
         signature: |b| b.starts_with(b"%PDF-"),
     },
 ];
+const DOWNLOAD: MediaType = MediaType {
+    ext: "bin",
+    mime: "application/octet-stream",
+    tag: "a",
+    signature: |_| false,
+};
+impl MediaType {
+    pub fn download_only(&self) -> bool {
+        self.mime == DOWNLOAD.mime
+    }
+}
 pub fn media_type(ext: &str) -> Result<&'static MediaType, String> {
     TYPES
         .iter()
+        .chain(std::iter::once(&DOWNLOAD))
         .find(|t| t.ext == ext)
         .ok_or_else(|| format!("bad media type {ext}"))
 }
