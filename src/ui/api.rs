@@ -1,5 +1,5 @@
 // Screen JSON is a projection of validated records and the shared derived states.
-use super::{Reply, version};
+use super::{response::Reply, version};
 use crate::{
     blob, gallery, goals,
     record::{self, model::Store},
