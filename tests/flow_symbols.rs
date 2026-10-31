@@ -66,3 +66,28 @@ fn module_paths_and_imports_are_not_crossings_but_type_uses_count() {
     assert_eq!(v["unplanned"][0]["count"], 1, "{v}");
     assert_eq!(v["unplanned"][0]["example"]["to"], "Thing");
 }
+
+#[test]
+fn explicit_rust_module_paths_narrow_candidates_without_hiding_unqualified_ambiguity() {
+    let f = Fixture::sources(&[
+        ("src/main.rs", "fn entry() { crate::api::run(); run(); }\n"),
+        ("src/api.rs", "pub fn run() {}\n"),
+        ("src/other.rs", "pub fn run() {}\n"),
+    ]);
+    f.write(
+        "app",
+        &json!({"covers":{"paths":["src/**"]},"nodes":[
+        {"id":"caller","type":"part","paths":["src/main.rs"]},
+        {"id":"api","type":"part","paths":["src/api.rs"]},
+        {"id":"other","type":"part","paths":["src/other.rs"]}
+    ],"steps":[]}),
+    );
+    let v = comparison(&f);
+    let rows = v["unplanned"].as_array().unwrap();
+    assert_eq!(rows.iter().find(|r| r["to"] == "api").unwrap()["count"], 2);
+    assert_eq!(
+        rows.iter().find(|r| r["to"] == "other").unwrap()["count"],
+        1
+    );
+    assert!(rows.iter().all(|r| r["state"] == "unknown"));
+}

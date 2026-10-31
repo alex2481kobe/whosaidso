@@ -124,12 +124,26 @@ fn assemble(
     for d in &definitions {
         names.entry(&d.name).or_default().push(d);
     }
+    let mut rust: HashMap<Vec<String>, Vec<&Row>> = HashMap::new();
+    for d in &definitions {
+        if let Some(mut path) = rust_module(&d.path) {
+            path.extend(d.qualified.split("::").map(str::to_owned));
+            for at in 0..path.len().saturating_sub(1) {
+                rust.entry(path[at..].to_vec()).or_default().push(d);
+            }
+        }
+    }
+    let containers: HashMap<_, _> = definitions.iter().map(|d| (d.symbol.as_str(), d)).collect();
     let mut edges = Vec::new();
     for row in references {
         let targets = if row.layer == Layer::Precise {
             vec![row.symbol.clone()]
         } else {
-            let candidates = names.get(row.name.as_str()).cloned().unwrap_or_default();
+            let candidates = rust_target(&row, &containers)
+                .and_then(|path| rust.get(&path))
+                .or_else(|| names.get(row.name.as_str()))
+                .cloned()
+                .unwrap_or_default();
             let mut ids: Vec<_> = candidates
                 .iter()
                 .filter(|r| {
@@ -154,4 +168,39 @@ fn assemble(
         relationships,
         gaps,
     }
+}
+
+// Concrete qualifiers match conventional Rust module paths; aliases remain name-only.
+fn rust_module(path: &str) -> Option<Vec<String>> {
+    let path = path.strip_prefix("src/")?.strip_suffix(".rs")?;
+    if path.starts_with("bin/") {
+        return None;
+    }
+    let mut parts: Vec<_> = path.split('/').map(str::to_owned).collect();
+    if parts
+        .last()
+        .is_some_and(|p| matches!(p.as_str(), "main" | "lib" | "mod"))
+    {
+        parts.pop();
+    }
+    Some(parts)
+}
+fn rust_target(row: &Row, definitions: &HashMap<&str, &Row>) -> Option<Vec<String>> {
+    rust_module(&row.path)?;
+    let scope = row
+        .container
+        .as_deref()
+        .and_then(|id| definitions.get(id))
+        .and_then(|d| d.qualified.rsplit_once("::"))
+        .map(|(scope, _)| format!("{scope}::"));
+    let target = scope
+        .as_ref()
+        .and_then(|s| row.qualified.strip_prefix(s))
+        .unwrap_or(&row.qualified);
+    let parts: Vec<_> = target
+        .split("::")
+        .filter(|p| !p.is_empty())
+        .map(str::to_owned)
+        .collect();
+    (parts.len() > 1).then_some(parts)
 }
