@@ -187,7 +187,7 @@ fn pages_count_every_match_across_parallel_batches_and_git_fallbacks() {
         .take(3)
         .map(|r| format!("{r}\n"))
         .collect::<String>()
-        + "shown 3 of 130 rows; offset 65\n";
+        + "shown 3 of 130 rows; offset 65; limit 3\n";
     assert_eq!(
         cli(
             &f.root,

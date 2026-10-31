@@ -77,7 +77,7 @@ fn grep_rows_are_paged_and_find_and_code_answers_are_truncated() {
         write(&root.join(format!("repeat{n:02}.txt")), "repeatword\n");
     }
     let text = cli(root, &["grep", "repeatword"]);
-    assert!(text.ends_with("shown 20 of 25 rows; offset 0\n"));
+    assert!(text.ends_with("shown 20 of 25 rows; offset 0; limit 20\n"));
     write(
         &root.join("long.txt"),
         format!("cutneedle{}", "é".repeat(240)),

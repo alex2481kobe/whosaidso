@@ -39,8 +39,8 @@ pub fn grep(root: &Path, args: &[String]) -> Result<(), String> {
     if options.offset > 0 || shown < total {
         writeln!(
             out,
-            "shown {shown} of {total} rows; offset {}",
-            options.offset
+            "shown {shown} of {total} rows; offset {}; limit {}",
+            options.offset, options.limit
         )
         .map_err(|e| e.to_string())?;
     }
