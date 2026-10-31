@@ -16,6 +16,7 @@ pub struct Edge {
     pub source: Option<String>,
     pub targets: Vec<String>,
     pub occurrence: Row,
+    pub unresolved: bool,
 }
 pub struct Edges {
     pub rows: Vec<Edge>,
@@ -32,12 +33,14 @@ impl Snapshot {
         let definitions = self.definitions("")?.rows;
         let refs = self.all_references()?;
         let aliases = self.rust_aliases(&refs.rows)?;
+        let unvalidated = self.unvalidated_targets(&refs.rows)?;
         Ok(assemble(
             definitions,
             self.symbol_uses(refs.rows)?,
             self.all_relationships()?,
             refs.gaps,
             aliases,
+            unvalidated,
         ))
     }
     // Only selected callers and requested inbound names supply references. Name candidates
@@ -95,13 +98,46 @@ impl Snapshot {
             .collect();
         let relationships = self.relationships_from(&sources.into_iter().collect::<Vec<_>>())?;
         let aliases = self.rust_aliases(&refs.rows)?;
+        let unvalidated = self.unvalidated_targets(&refs.rows)?;
         Ok(assemble(
             definitions,
             refs.rows,
             relationships,
             refs.gaps,
             aliases,
+            unvalidated,
         ))
+    }
+    // Preserve uncertainty when a precise reference's definition fell back to syntax.
+    fn unvalidated_targets(&self, references: &[Row]) -> Result<HashSet<String>, String> {
+        let incomplete: bool = self
+            .db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM precise_documents WHERE status<>'fresh')",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(super::err)?;
+        if !incomplete {
+            return Ok(HashSet::new());
+        }
+        let prefix = self.precise_prefix()?;
+        let symbols: HashSet<_> = references
+            .iter()
+            .filter(|r| r.layer == Layer::Precise)
+            .filter_map(|r| r.symbol.strip_prefix(&prefix))
+            .collect();
+        if symbols.is_empty() {
+            return Ok(HashSet::new());
+        }
+        let mut stmt = self.db.prepare("SELECT DISTINCT o.symbol FROM json_each(?1) n CROSS JOIN scip_occ o INDEXED BY scip_occ_symbol ON o.symbol=n.value JOIN precise_documents d ON d.path=o.path WHERE o.is_def=1 AND d.status<>'fresh'").map_err(super::err)?;
+        stmt.query_map(
+            [serde_json::to_string(&symbols).map_err(super::err)?],
+            |r| r.get::<_, String>(0),
+        )
+        .map_err(super::err)?
+        .map(|r| r.map(|s| format!("{prefix}{s}")).map_err(super::err))
+        .collect()
     }
     pub fn edges(&self, symbol: &str, direction: Direction) -> Result<Edges, String> {
         let graph = self.graph()?;
@@ -129,6 +165,7 @@ fn assemble(
     relationships: Vec<Relationship>,
     gaps: Vec<String>,
     aliases: HashMap<String, HashSet<String>>,
+    unvalidated: HashSet<String>,
 ) -> Graph {
     let mut names: HashMap<&str, Vec<&Row>> = HashMap::new();
     for d in &definitions {
@@ -146,6 +183,7 @@ fn assemble(
     let containers: HashMap<_, _> = definitions.iter().map(|d| (d.symbol.as_str(), d)).collect();
     let mut edges = Vec::new();
     for row in references {
+        let unresolved = unvalidated.contains(&row.symbol);
         let targets = if row.layer == Layer::Precise {
             vec![row.symbol.clone()]
         } else {
@@ -175,6 +213,7 @@ fn assemble(
             source: row.container.clone(),
             targets,
             occurrence: row,
+            unresolved,
         });
     }
     Graph {

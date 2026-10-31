@@ -105,6 +105,21 @@ pub fn compare(flow: &Flow, snapshot: &Snapshot) -> Result<(Value, Graph), Strin
         .map(|c| c.path.clone())
         .collect();
     gaps.extend(super::coverage::excluded(flow, snapshot)?);
+    gaps.extend(
+        bindings
+            .iter()
+            .filter(|b| {
+                b.edge.unresolved
+                    && (inside(flow, &b.edge.occurrence.path) || !flow.covers.boundaries.is_empty())
+            })
+            .map(|b| {
+                format!(
+                    "{}:{} unresolved target {}",
+                    b.edge.occurrence.path, b.edge.occurrence.range.line, b.edge.occurrence.name
+                )
+            }),
+    );
+
     // Children are evaluated first, with step faults rolled into both endpoint layers.
     fn visit(
         id: &str,
