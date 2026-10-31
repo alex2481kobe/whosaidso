@@ -1,12 +1,11 @@
 // Shared database, persistent identities, and snapshot-scoped syntax views.
 use super::err;
-use crate::{cache, git};
+use crate::{cache, database, git};
 use rusqlite::Connection;
 use std::{
     fs,
     io::{Read, Write},
     path::Path,
-    time::Duration,
 };
 
 pub(super) fn open(root: &Path) -> Result<Connection, String> {
@@ -16,9 +15,7 @@ pub(super) fn open(root: &Path) -> Result<Connection, String> {
     )?;
     let dir = Path::new(common.trim_end_matches('\n')).join("whosaidso/code");
     fs::create_dir_all(&dir).map_err(err)?;
-    let db = Connection::open(dir.join("facts.db")).map_err(err)?;
-    db.busy_timeout(Duration::from_secs(60)).map_err(err)?;
-    db.pragma_update(None, "journal_mode", "WAL").map_err(err)?;
+    let db = database::open(&dir.join("facts.db"))?;
     db.pragma_update(None, "foreign_keys", true).map_err(err)?;
     db.execute_batch(SCHEMA).map_err(err)?;
     let project = identity(&dir.join("project-identity"))?;
@@ -48,6 +45,7 @@ pub(super) fn open(root: &Path) -> Result<Connection, String> {
         [precise.to_str().ok_or("non-UTF-8 cache path")?],
     )
     .map_err(err)?;
+    database::wal(&db, Some("precise"))?;
     Ok(db)
 }
 pub(super) fn select(db: &Connection) -> Result<(), String> {

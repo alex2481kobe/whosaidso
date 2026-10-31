@@ -1,6 +1,6 @@
 mod cleanup;
 use cleanup::{hook, verify};
-mod fold;
+pub mod fold;
 mod journal;
 pub mod selection;
 use journal::Journal;

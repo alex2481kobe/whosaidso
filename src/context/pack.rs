@@ -34,10 +34,14 @@ fn footer(names: &[String], outside: usize, budget: usize) -> String {
     out.push('\n');
     out
 }
-pub(super) fn build(root: &Path, topic: &[String], budget: usize) -> Result<String, String> {
+pub(super) fn build(
+    root: &Path,
+    topic: &[String],
+    budget: usize,
+) -> Result<(String, Option<String>), String> {
     let results = find::ranked(root, topic, &["file", "symbol", "goal", "note"], 64)?;
     if results.hits.is_empty() {
-        return Ok("context: no indexed match\n".into());
+        return Ok(("context: no indexed match\n".into(), results.notice));
     }
     let reserve = (budget / 3).clamp(64, 512);
     let capacity = budget - reserve;
@@ -57,6 +61,12 @@ pub(super) fn build(root: &Path, topic: &[String], budget: usize) -> Result<Stri
         }
         output.push_str(&label);
         output.push('\n');
+        if hit.kind == "symbol" {
+            output.push_str(&format!(
+                "file {}\n",
+                hit.source.strip_prefix("file:").unwrap_or(&hit.source)
+            ));
+        }
         let detail = results.detail(hit)?;
         let available = capacity.saturating_sub(output.len() + 25).min(1600);
         output.push_str(prefix(&detail, available));
@@ -67,6 +77,18 @@ pub(super) fn build(root: &Path, topic: &[String], budget: usize) -> Result<Stri
         output.push_str("\n\n");
     }
     let outside = (results.total as usize).saturating_sub(results.hits.len().min(64));
-    output.push_str(&footer(&omitted, outside, reserve));
-    Ok(output)
+    if results.lower_bound && omitted.is_empty() && outside == 0 {
+        output.push_str("omitted: more matches may exist\n");
+    } else {
+        let suffix = if results.lower_bound {
+            " [lower bound]"
+        } else {
+            ""
+        };
+        let summary = footer(&omitted, outside, reserve.saturating_sub(suffix.len()));
+        output.push_str(summary.trim_end_matches('\n'));
+        output.push_str(suffix);
+        output.push('\n');
+    }
+    Ok((output, results.notice))
 }

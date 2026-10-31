@@ -1,4 +1,5 @@
 mod branches;
+pub(crate) mod evidence;
 mod rules;
 // Goal states derived from Git history and recorded proofs.
 use crate::{
@@ -24,9 +25,9 @@ pub enum State {
     Stale,
 }
 impl State {
-    // A landed or done goal has nothing left to claim.
+    // Only completed work settles a claim; landed work may still need evidence.
     pub fn settled(self) -> bool {
-        matches!(self, State::Landed | State::Done)
+        self == State::Done
     }
 }
 #[derive(Clone, PartialEq, Eq, serde::Serialize)]
@@ -96,11 +97,21 @@ pub fn newest_proof<'a>(
     goal: &str,
     check: Option<&[String]>,
 ) -> Option<&'a Proof> {
+    select_proof(store, commits, goal, check, |_| true)
+}
+fn select_proof<'a>(
+    store: &'a Store,
+    commits: &HashSet<&str>,
+    goal: &str,
+    check: Option<&[String]>,
+    eligible: impl Fn(&str) -> bool,
+) -> Option<&'a Proof> {
     store
         .proofs
         .iter()
         .filter(|p| {
             p.goal == goal
+                && eligible(&p.sha)
                 && Some(p.check.as_slice()) == check
                 && !store
                     .broken
@@ -110,6 +121,33 @@ pub fn newest_proof<'a>(
         })
         .max_by(|a, b| (a.ran_at, &a.sha).cmp(&(b.ran_at, &b.sha)))
 }
+pub fn newest_media<'a>(
+    store: &'a Store,
+    commits: &HashSet<&str>,
+    goal: &str,
+) -> Option<&'a crate::gallery::Media> {
+    select_media(store, commits, goal, |_| true)
+}
+fn select_media<'a>(
+    store: &'a Store,
+    commits: &HashSet<&str>,
+    goal: &str,
+    eligible: impl Fn(&str) -> bool,
+) -> Option<&'a crate::gallery::Media> {
+    store
+        .media
+        .iter()
+        .filter(|m| {
+            eligible(&m.sha)
+                && m.goal == goal
+                && commits.contains(m.commit.as_str())
+                && !store
+                    .broken
+                    .iter()
+                    .any(|(k, id)| k == "media" && id == &m.sha)
+        })
+        .max_by_key(|m| (m.ran_at, &m.sha))
+}
 fn stale(root: &Path, proof: &Proof, goal: &str, format: &str, main: &str) -> Result<bool, String> {
     let later = work_log(
         root,
@@ -118,20 +156,35 @@ fn stale(root: &Path, proof: &Proof, goal: &str, format: &str, main: &str) -> Re
     Ok(trailers(&later).any(|g| g == goal))
 }
 pub fn states(root: &Path, store: &Store) -> Result<Vec<GoalState>, String> {
+    states_at(root, store, &git::main_tip(root)?)
+}
+pub fn states_at(root: &Path, store: &Store, tip: &str) -> Result<Vec<GoalState>, String> {
+    derive(root, store, tip, false)
+}
+pub fn candidate_states(root: &Path, store: &Store, tip: &str) -> Result<Vec<GoalState>, String> {
+    derive(root, store, tip, true)
+}
+fn derive(root: &Path, store: &Store, tip: &str, pending: bool) -> Result<Vec<GoalState>, String> {
+    let landed = if pending {
+        None
+    } else {
+        Some(evidence::landed(root, tip)?)
+    };
+
     let format = "--format=%H%x09%(trailers:key=Goal,valueonly,separator=%x2C)";
-    let tip = git::main_tip(root)?;
-    let revisions = git::run(root, &["rev-list", &tip])?;
+    let revisions = git::run(root, &["rev-list", tip])?;
     if store.goals.is_empty() {
         return Ok(Vec::new());
     }
     let commits: HashSet<_> = revisions.lines().collect();
-    let main = work_log(root, &["log", &tip, "--no-merges", format])?;
+    let main = work_log(root, &["log", tip, "--no-merges", format])?;
     let now = now()?;
-    let branches = branches::collect(root, store, &tip)?;
-    let changed = rules::changed(root, &tip, store)?;
+    let branches = branches::collect(root, store, tip)?;
+    let changed = rules::changed(root, tip, store)?;
     let mut result = Vec::new();
     for goal in &store.goals {
-        let proof = newest_proof(store, &commits, &goal.id, goal.check.as_deref());
+        let eligible = |sha: &str| landed.as_ref().is_none_or(|set| set.contains(sha));
+        let proof = select_proof(store, &commits, &goal.id, goal.check.as_deref(), eligible);
         let proof_index =
             proof.and_then(|p| store.proofs.iter().position(|item| std::ptr::eq(item, p)));
         let bs = branches.get(&goal.id);
@@ -145,23 +198,13 @@ pub fn states(root: &Path, store: &Store) -> Result<Vec<GoalState>, String> {
             match proof {
                 Some(p) if p.exit_code != 0 => State::Failing,
                 Some(p) => {
-                    if stale(root, p, &goal.id, format, &tip)? {
+                    if stale(root, p, &goal.id, format, tip)? {
                         State::Stale
                     } else {
                         State::Done
                     }
                 }
-                None if store.media.iter().any(|m| {
-                    m.goal == goal.id
-                        && commits.contains(m.commit.as_str())
-                        && !store
-                            .broken
-                            .iter()
-                            .any(|(k, id)| k == "media" && id == &m.sha)
-                }) =>
-                {
-                    State::Done
-                }
+                None if select_media(store, &commits, &goal.id, eligible).is_some() => State::Done,
                 None if trailers(&main).any(|g| g == goal.id) => State::Landed,
                 None => match bs {
                     Some(bs) if bs.iter().any(|b| active(b.time, now)) => State::Active,

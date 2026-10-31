@@ -68,6 +68,7 @@ fn broken_check_stays_in_progress_and_invalid_json_is_visible() {
     r::goal(root, "h");
     commit(root);
     r::proof(root, &head(root), 1, 0);
+    commit(root);
     let mut h = value(&root.join(".whosaidso/goals/h.json"));
     h["check"] = json!(["nonexistent-command-for-fixture"]);
     r::put(root, "goals", "h", &h);

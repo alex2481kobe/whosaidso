@@ -136,12 +136,3 @@ fn one_edit(word: &[char]) -> std::collections::HashSet<String> {
     }
     out
 }
-pub(super) fn drop_order(db: &Connection, words: &[(String, usize)]) -> Result<Vec<usize>, String> {
-    let mut frequencies = Vec::new();
-    for (i, (word, _)) in words.iter().enumerate() {
-        let frequency: i64 = db.query_row("SELECT coalesce((SELECT doc FROM vocab WHERE term=?1),(SELECT max(doc) FROM vocab WHERE term>=?1 AND term<?1||char(1114111)),0)", [word], |r| r.get(0)).map_err(|e| e.to_string())?;
-        frequencies.push((i, frequency));
-    }
-    frequencies.sort_by_key(|(i, df)| (*df != 0, std::cmp::Reverse(*df), *i));
-    Ok(frequencies.into_iter().map(|(i, _)| i).collect())
-}

@@ -6,6 +6,7 @@ mod claims;
 pub mod code;
 mod config;
 mod context;
+mod database;
 mod evidence;
 mod find;
 mod flow;
@@ -17,6 +18,7 @@ mod goals;
 mod goals_selection;
 mod hooks;
 mod index;
+mod land;
 mod note;
 mod projects;
 mod prove;
@@ -39,8 +41,14 @@ fn run() -> Result<(), String> {
     }
     if args.as_slice() == ["help"] || args.as_slice() == ["--help"] || args.as_slice() == ["-h"] {
         println!(
-            "WhoSaidSo: goals and evidence in Git\n\ncheck | goals | show <id> | start <goal> | next | assign <goal> <agent:name|branch:name> | prove <goal> [--reason <why>] | gate [base] | prune\nevidence add <goal> <file> <shows> | reopen <milestone> <destination-revision> | media <goal> <file> <title> | sync [remote] | note | flow | context | find | grep | code | ui\n\nUse short end-to-end checks of real behavior. Tests stay smaller than source; checks default to 60 seconds. Run a full suite only when needed. See USAGE.md for formats and options."
+            "WhoSaidSo: goals and evidence in Git\n\ncheck | goals | show <id> | start <goal> | next | assign <goal> <agent:name|branch:name> | land [--reason <why>] [--override <name>] | prove <goal> [--reason <why>] | gate [base] | gate --ci <base>..<tip> | prune\nevidence add <goal> <file> <shows> | reopen <milestone> <destination-revision> | media <goal> <file> <title> | sync [remote] | note | flow | context | find | grep | code | model fetch | ui\n\nUse short end-to-end checks of real behavior. Tests stay smaller than source; checks default to 60 seconds. Run a full suite only when needed. See USAGE.md for formats and options."
         );
+        return Ok(());
+    }
+    if let [cmd, rest @ ..] = args.as_slice()
+        && cmd == "model"
+    {
+        println!("{}", index::embedding::command(rest)?);
         return Ok(());
     }
     let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
@@ -67,6 +75,8 @@ fn run() -> Result<(), String> {
         "next", [cmd] if cmd == "next" => goals_selection::next(&root);
         "assign <goal> <agent:name|branch:name>", [cmd, id, target] if cmd == "assign" => { let (notices, result) = claims::assign(&root, &cwd, id, target); for n in notices { println!("{n}"); } result };
         "start <goal-id>", [cmd, id] if cmd == "start" => hooks::start(&root, &cwd, id);
+        "land [--reason <why>]", [cmd, rest @ ..] if cmd == "land" => land::command(&root, rest);
+        "gate --ci <range>", [cmd, flag, range] if cmd == "gate" && flag == "--ci" => gate::ci::check(&root, range);
         "gate [<base>]", [cmd, rest @ ..] if cmd == "gate" && rest.len() <= 1 => gate::gate(&root, rest.first().map(String::as_str).unwrap_or(&config::main(&root)?));
         "show <id>", [cmd, id] if cmd == "show" => show::show(&root, id);
         "goals", [cmd] if cmd == "goals" => goals::goals(&root);

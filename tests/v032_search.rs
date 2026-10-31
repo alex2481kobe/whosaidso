@@ -331,7 +331,7 @@ fn pages_and_file_lists_are_complete() {
     assert_eq!(cli(root, &["grep", "--files", "-g", "*.rs"]), "src/a.rs\n");
     assert_eq!(
         cli(root, &["grep", "needle", "--offset", "99"]),
-        "shown 0 of 8 rows; offset 99\n"
+        "shown 0 of 8 rows; offset 99; limit 20\n"
     );
     let invalid = command(root, BIN, &["grep", "--regex", "["])
         .output()
@@ -424,3 +424,8 @@ fn typo_budgets_cover_long_words_and_short_transpositions() {
     fs::write(root.join("words.md"), "# other\n").unwrap();
     assert!(cli(root, &["find", "kind:file", "tranxxction"]).contains("no indexed match"));
 }
+
+#[path = "v032_search/embedding.rs"]
+mod embedding;
+#[path = "v032_search/ranking.rs"]
+mod ranking;
