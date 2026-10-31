@@ -249,3 +249,33 @@ fn precise_import_retains_containers_relationships_and_docs() {
 
 #[path = "v032_index/languages.rs"]
 mod languages;
+
+#[test]
+fn branch_snapshot_survives_another_worktrees_head_query() {
+    let fixture = Fixture::sources(&[("one.rs", "fn original() {}\n")]);
+    let root = &fixture.root;
+    let other = fixture.worktree("other");
+    fs::write(other.join("one.rs"), "fn different() {}\n").unwrap();
+    common::commit(&other);
+    let first = cli(root, &["review", "--base", "HEAD"]);
+    let before = first
+        .lines()
+        .next()
+        .unwrap()
+        .split_whitespace()
+        .find_map(|s| s.strip_prefix("before="))
+        .unwrap();
+    cli(&other, &["review", "--base", "HEAD"]);
+    let result = command(
+        root,
+        BIN,
+        &["review", "--base", "HEAD", "--before-snapshot", before],
+    )
+    .output()
+    .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+}
