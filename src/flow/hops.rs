@@ -31,12 +31,14 @@ pub fn compare(
                     .any(|s| s == literal.as_bytes());
             }
         }
-        let state = if from["state"] == "planned" || to["state"] == "planned" {
-            "planned"
-        } else if !readable || from["state"] == "unknown" || to["state"] == "unknown" {
+        let state = if from["state"] == "unknown" || to["state"] == "unknown" {
             "unknown"
         } else if from["state"] == "ambiguous" || to["state"] == "ambiguous" {
             "ambiguous"
+        } else if from["state"] == "planned" || to["state"] == "planned" {
+            "planned"
+        } else if !readable {
+            "unknown"
         } else if found && to["state"] == "built" {
             "built"
         } else {

@@ -130,3 +130,18 @@ fn authoring_refuses_a_flow_that_committed_reads_cannot_load() {
     commit(&f.root);
     cli(&f.root, &["flow", "view", "app", "--branch", "main"]);
 }
+
+#[test]
+fn literal_planning_never_masks_unknown_source_evidence() {
+    let f = Fixture::sources(&[("bad.rs", "fn incomplete() {}\n")]);
+    std::fs::write(f.root.join("bad.rs"), [0xff, 0xfe]).unwrap();
+    f.write(
+        "app",
+        &json!({"covers":{"paths":["bad.rs"]},"nodes":[
+        {"id":"bad","type":"function","paths":["bad.rs"]},
+        {"id":"future","type":"function","symbols":["future"]}
+    ],"steps":[{"id":"request","from":"bad","to":"future","when":"ready","literal":"/route"}]}),
+    );
+    let report: Value = serde_json::from_str(&cli(&f.root, &["flow", "compare", "app"])).unwrap();
+    assert_eq!(report["steps"]["request"]["state"], "unknown");
+}
