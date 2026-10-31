@@ -394,3 +394,29 @@ fn changed_build_environment_invalidates_the_precise_run() {
         "{answer}"
     );
 }
+
+#[test]
+fn unbound_old_artifact_cannot_hide_a_new_syntax_definition() {
+    let fixture = Fixture::sources(&[("one.rs", "fn original() {}\n")]);
+    let root = &fixture.root;
+    let mut artifact = field(1, &[]);
+    artifact.extend(common::scip::doc(
+        "one.rs",
+        "scip-test pkg project 1 original().",
+        "original",
+        &[(&[0, 3, 11], true)],
+    ));
+    fs::write(root.join(".git/old.scip"), artifact).unwrap();
+    fs::write(root.join("one.rs"), "fn original() {}\nfn added() {}\n").unwrap();
+    cli(root, &["code", "import-scip", ".git/old.scip"]);
+    for (name, location) in [("added", "one.rs:2"), ("original", "one.rs:1")] {
+        let answer = cli(root, &["code", "defs", name]);
+        assert!(
+            answer.contains(location)
+                && answer.contains("[syntactic]")
+                && answer.contains("unknown freshness")
+                && !answer.contains("[precise]"),
+            "{answer}"
+        );
+    }
+}

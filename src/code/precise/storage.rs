@@ -143,20 +143,30 @@ pub(in crate::code) fn import_run(
     let context = super::binding::context();
     tx.execute(
         "INSERT INTO scip_run VALUES (?1,?2,?3,?4)",
-        params![worktree, tree::fingerprint(&files), context, artifact],
+        params![
+            worktree,
+            expected.map(|(input, _)| input),
+            expected.map(|_| context),
+            artifact
+        ],
     )
     .map_err(err)?;
     let mut symbols = HashMap::new();
     let mut count = 0;
     let mut stale = 0;
+    let mut unknown = 0;
     let mut insert_doc = tx
         .prepare("INSERT INTO scip_docs VALUES (?1,?2)")
         .map_err(err)?;
     for d in &docs {
-        let blob = blobs.get(&d.path);
-        if blob.is_none() {
+        let checked = blobs.get(&d.path);
+        if checked.is_none() {
             stale += 1;
         }
+        if expected.is_none() && checked.is_some() {
+            unknown += 1;
+        }
+        let blob = checked.filter(|_| expected.is_some());
         insert_doc.execute(params![d.path, blob]).map_err(err)?;
         for o in &d.occ {
             super::details::occurrence(&tx, d, o)?;
@@ -210,6 +220,7 @@ pub(in crate::code) fn import_run(
         occurrences: count,
         symbols: symbols.len(),
         stale,
+        unknown,
     })
 }
 
@@ -218,13 +229,14 @@ pub struct Report {
     pub occurrences: usize,
     pub symbols: usize,
     pub stale: usize,
+    pub unknown: usize,
 }
 impl std::fmt::Display for Report {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "scip: {} documents, {} occurrences, {} symbols, {} stale documents",
-            self.documents, self.occurrences, self.symbols, self.stale
+            "scip: {} documents, {} occurrences, {} symbols, {} stale documents, {} unknown documents",
+            self.documents, self.occurrences, self.symbols, self.stale, self.unknown
         )
     }
 }
