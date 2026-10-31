@@ -1,3 +1,4 @@
+pub mod view;
 // Display the milestone and goal tree with states derived from Git.
 use crate::goal_tree::children;
 use crate::{
