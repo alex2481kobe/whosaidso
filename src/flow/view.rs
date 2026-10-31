@@ -62,6 +62,11 @@ pub fn layer<'a>(flow: &'a Flow, parent: Option<&str>) -> Result<Layer<'a>, Stri
             if from.is_none() && to.is_none() {
                 return None;
             }
+            // A step inside one node belongs to that node's own layer.
+            let within = |id: &str| flow.nodes.iter().any(|n| n.parent.as_deref() == Some(id));
+            if from.is_some() && from == to && within(from.unwrap_or_default()) {
+                return None;
+            }
             Some(VisibleStep {
                 step,
                 from: from
