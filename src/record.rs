@@ -1,5 +1,6 @@
 // Bounded record loading; invalid records retain their identity for every reader.
 pub mod fold;
+pub mod historical;
 pub mod model;
 mod validate;
 use crate::{blob, gallery::Media, publish, title, tree};

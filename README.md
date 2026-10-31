@@ -22,7 +22,7 @@ cargo install --git https://github.com/alex2481kobe/whosaidso --tag v0.3.1 --loc
 
 ## Quick start
 
-In a Git repository with an initial commit, create a goal:
+In a Git repository with an initial commit and a configured destination remote, create a goal:
 
 ```sh
 mkdir -p .whosaidso/goals
@@ -30,21 +30,22 @@ printf '%s\n' '{"title":"First goal","done_when":"The feature file exists","pare
 whosaidso check
 whosaidso install-hooks
 git add .whosaidso
-git commit -m 'Add records'
+git commit -m 'Add records' -m 'Goal: none'
 ```
 
-Claim the goal, commit the work, and keep its evidence:
+Create a branch, claim the goal, commit the work, and land it:
 
 ```sh
+git switch -c first-goal
 whosaidso start first-goal
 printf '%s\n' 'Example feature' > feature.txt
 git add feature.txt
 git commit -m 'Add feature'
+whosaidso land
 whosaidso goals
-whosaidso prove first-goal --reason "demonstration on main"
-git add .whosaidso/proofs
-git commit -m 'Record evidence'
 ```
+
+`land` fetches and merges main, runs the goal’s short check, records evidence, and publishes a tested receipt. If the same check already passes on main, pass `land --reason "<why>"`; unchanged runs are reused. It never prompts or runs a full suite. Offline work stays local until the remote is available.
 
 Run `install-hooks` once per clone. Goal state is derived from Git; evidence on the default branch completes a goal. A check is optional: a file attachment can also provide evidence. Keep checks short and focused on real behavior.
 

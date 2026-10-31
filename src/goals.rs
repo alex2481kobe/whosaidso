@@ -93,24 +93,24 @@ pub fn label(state: State) -> &'static str {
         State::Stale => "stale",
     }
 }
-pub fn output(root: &Path) -> Result<String, String> {
+fn output(root: &Path, store: &Store) -> Result<String, String> {
     let mut output = String::new();
-    let store = record::load(root)?;
-    let states = state::states(root, &store)?;
+    let states = state::states(root, store)?;
     let done = states.iter().filter(|s| s.state == State::Done).count();
     output.push_str(&format!("{done}/{} done\n", store.goals.len()));
     for (kind, id) in &store.broken {
         output.push_str(&format!("broken  {id} ({kind})\n"));
     }
-    walk(&store, &states, "", 0, &mut HashSet::new(), &mut output);
+    walk(store, &states, "", 0, &mut HashSet::new(), &mut output);
     for error in &store.errors {
         output.push_str(&format!("{error}\n"));
     }
     Ok(output)
 }
 pub fn goals(root: &Path) -> Result<(), String> {
-    print!("{}", output(root)?);
-    if record::load(root)?.errors.is_empty() {
+    let store = record::load(root)?;
+    print!("{}", output(root, &store)?);
+    if store.errors.is_empty() {
         Ok(())
     } else {
         Err(String::new())

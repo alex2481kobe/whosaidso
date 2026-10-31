@@ -12,6 +12,7 @@ fn documented_quick_start_runs_verbatim() {
         path::Path,
     };
     commit(root);
+    f.remote();
     let bin = root.join(".git/readme-bin");
     fs::create_dir_all(&bin).unwrap();
     symlink(env!("CARGO_BIN_EXE_whosaidso"), bin.join("whosaidso")).unwrap();
@@ -78,15 +79,17 @@ fn documented_quick_start_runs_verbatim() {
                 .is_empty()
             );
         } else if n == 1 {
-            assert!(out.contains("landed  first-goal"));
+            assert!(out.contains("land: published"));
+            assert!(out.contains("done    first-goal"));
             assert!(out.contains("ran: first-goal pass"));
-            let proofs: Vec<_> = fs::read_dir(root.join(".whosaidso/proofs"))
-                .unwrap()
-                .collect();
-            assert_eq!(proofs.len(), 1);
+            let bundle = fs::read_to_string(root.join(".whosaidso/done/first-goal.jsonl")).unwrap();
+            let entry = bundle
+                .lines()
+                .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+                .find(|e| e["path"].as_str().unwrap().starts_with("proofs/"))
+                .unwrap();
             let p: serde_json::Value =
-                serde_json::from_slice(&fs::read(proofs[0].as_ref().unwrap().path()).unwrap())
-                    .unwrap();
+                serde_json::from_str(entry["content"].as_str().unwrap()).unwrap();
             assert_eq!(p["exit_code"], 0);
         } else {
             assert!(out.contains("goal first-goal  First goal"));

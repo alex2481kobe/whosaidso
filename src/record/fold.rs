@@ -50,84 +50,86 @@ pub fn decode(milestone: &str, bytes: &[u8]) -> Result<Bundle, String> {
     })
 }
 pub fn bundles(root: &Path) -> Result<Vec<Bundle>, String> {
+    scan(root)?.into_iter().map(|(_, bundle)| bundle).collect()
+}
+type Scanned = Vec<(String, Result<Bundle, String>)>;
+fn scan(root: &Path) -> Result<Scanned, String> {
     publish::record_dir(root, "done")?;
-    let mut paths: Vec<_> = fs::read_dir(root.join(".whosaidso/done"))
-        .into_iter()
-        .flatten()
-        .map(|e| e.map(|e| e.path()))
-        .collect::<Result<_, _>>()
-        .map_err(|e| e.to_string())?;
+    let mut paths = match fs::read_dir(root.join(".whosaidso/done")) {
+        Ok(paths) => paths
+            .map(|e| e.map(|e| e.path()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(e) => return Err(e.to_string()),
+    };
     paths.sort();
-    let mut found = Vec::new();
-    for path in paths {
-        if crate::tree::temporary(&path) {
-            continue;
-        }
-        let id = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .ok_or("invalid bundle id")?;
-        if path.extension().is_none_or(|e| e != "jsonl") {
-            return Err("invalid bundle filename".into());
-        }
-        let relative = path
-            .strip_prefix(root)
-            .map_err(|e| e.to_string())?
-            .to_str()
-            .ok_or("invalid bundle path")?;
-        let mut input = BufReader::new(crate::tree::open(root, relative)?);
-        let mut bytes = Vec::new();
-        loop {
-            let mut line = Vec::new();
-            let n = Read::by_ref(&mut input)
-                .take(MAX_RECORD_BYTES * 6 + 1024)
-                .read_until(b'\n', &mut line)
-                .map_err(|e| e.to_string())?;
-            if n == 0 {
-                break;
-            }
-            if line.last() != Some(&b'\n') {
-                return Err("oversized or truncated folded entry".into());
-            }
-            bytes.extend(line);
-        }
-        found.push(decode(id, &bytes)?);
+    Ok(paths
+        .into_iter()
+        .filter(|p| !crate::tree::temporary(p))
+        .map(|path| {
+            let id = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("bundle")
+                .to_owned();
+            (id, read_bundle(root, &path))
+        })
+        .collect())
+}
+fn read_bundle(root: &Path, path: &Path) -> Result<Bundle, String> {
+    let id = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or("invalid bundle id")?;
+    if path.extension().is_none_or(|e| e != "jsonl") {
+        return Err("invalid bundle filename".into());
     }
-    Ok(found)
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|e| e.to_string())?
+        .to_str()
+        .ok_or("invalid bundle path")?;
+    let mut input = BufReader::new(crate::tree::open(root, relative)?);
+    let mut bytes = Vec::new();
+    loop {
+        let mut line = Vec::new();
+        let n = Read::by_ref(&mut input)
+            .take(MAX_RECORD_BYTES * 6 + 1024)
+            .read_until(b'\n', &mut line)
+            .map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        if line.last() != Some(&b'\n') {
+            return Err("oversized or truncated folded entry".into());
+        }
+        bytes.extend(line);
+    }
+    decode(id, &bytes)
 }
 pub(super) fn load(root: &Path, store: &mut Store) -> Result<(), String> {
-    let bundles = match bundles(root) {
-        Ok(b) => b,
-        Err(e) => {
-            if let Ok(paths) = fs::read_dir(root.join(".whosaidso/done")) {
-                for entry in paths.flatten() {
-                    let name = entry.path();
-                    let Some(id) = name.file_stem().and_then(|s| s.to_str()) else {
-                        continue;
-                    };
-                    if !super::valid_id(id) {
-                        continue;
-                    }
-                    if !store.goals.iter().any(|g| g.id == id) {
-                        store.goals.push(super::model::Goal {
-                            id: id.into(),
-                            title: id.into(),
-                            done_when: String::new(),
-                            parent: None,
-                            order: 0,
-                            after: Vec::new(),
-                            check: None,
-                        });
-                    }
-                    store.broken.push(("goal".into(), id.into()));
+    for (id, bundle) in scan(root)? {
+        let bundle = match bundle {
+            Ok(bundle) => bundle,
+            Err(error) => {
+                if super::valid_id(&id) && !store.goals.iter().any(|g| g.id == id) {
+                    store.goals.push(super::model::Goal {
+                        id: id.clone(),
+                        title: id.clone(),
+                        done_when: String::new(),
+                        parent: None,
+                        order: 0,
+                        after: Vec::new(),
+                        check: None,
+                    });
                 }
+                store.broken.push(("goal".into(), id.clone()));
+                store.broken.push(("done".into(), id.clone()));
+                store.errors.push(format!("done {id}: {error}"));
+                continue;
             }
-            store.errors.push(format!("done: {e}"));
-            store.broken.push(("done".into(), "bundle".into()));
-            return Ok(());
-        }
-    };
-    for bundle in bundles {
+        };
         for entry in bundle
             .entries
             .iter()
@@ -155,7 +157,10 @@ pub(super) fn load(root: &Path, store: &mut Store) -> Result<(), String> {
 }
 pub fn notes(root: &Path) -> Result<Vec<note::store::Record>, String> {
     let mut records = Vec::new();
-    for bundle in bundles(root)? {
+    for (_, bundle) in scan(root)? {
+        let Ok(bundle) = bundle else {
+            continue;
+        };
         for entry in bundle
             .entries
             .iter()
@@ -179,4 +184,39 @@ pub fn encode(entries: &[Entry]) -> Result<Vec<u8>, String> {
         bytes.push(b'\n');
     }
     Ok(bytes)
+}
+
+// Reconciliation follows a note's exact bytes into an immutable destination bundle.
+pub fn at(root: &Path, revision: &str, path: &str) -> Result<Option<Vec<u8>>, String> {
+    let paths = crate::git::run(
+        root,
+        &[
+            "ls-tree",
+            "-r",
+            "--name-only",
+            revision,
+            "--",
+            ".whosaidso/done",
+        ],
+    )?;
+    let entries: Vec<_> = paths.lines().collect();
+    let names: Vec<_> = entries.iter().map(|p| format!("{revision}:{p}")).collect();
+    let mut found = None;
+    crate::git::read_objects(root, &names, usize::MAX - 1, |i, bytes, _| {
+        let id = Path::new(entries[i])
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
+        if let Some(bytes) = bytes
+            && let Ok(bundle) = decode(id, &bytes)
+        {
+            for entry in bundle.entries {
+                if entry.path == path {
+                    found = Some(entry.content.into_bytes());
+                }
+            }
+        }
+        Ok(())
+    })?;
+    Ok(found)
 }

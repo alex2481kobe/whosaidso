@@ -1,6 +1,7 @@
-// Goal claims shared as refs/whosaidso/claims/<goal> in this clone and on origin, so two workers never hold one goal.
+// Goal claims shared as refs/whosaidso/claims/<goal> in this clone and on the destination remote, so two workers never hold one goal.
 use crate::{cache, git, state};
 use std::{fs, path::Path};
+pub(crate) mod publication;
 mod storage;
 pub mod view;
 use storage::*;
@@ -20,7 +21,8 @@ fn write_claim(
         let branch = git::run(cwd, &["branch", "--show-current"])?
             .trim()
             .to_owned();
-        let published = shared(root);
+        let destination = crate::config::remote(root)?;
+        let published = destination.is_some();
         if published {
             sync(root, &mut notices);
         }
@@ -86,7 +88,7 @@ fn write_claim(
                     "-q",
                     "--no-verify",
                     &lease,
-                    "origin",
+                    destination.as_deref().ok_or("no destination remote")?,
                     &format!("{oid}:{local_ref}"),
                 ],
             ) {
@@ -98,7 +100,11 @@ fn write_claim(
                     sync(root, &mut notices);
                     return Err(lost(root, id));
                 }
-                Err(e) => warn(&mut notices, "claim not published to origin", &e),
+                Err(e) => warn(
+                    &mut notices,
+                    "claim not published to the destination remote",
+                    &e,
+                ),
             }
         }
         // Only this clone's refs bind here. They are shared by its worktrees, so the write expects the value that was checked.
@@ -118,13 +124,14 @@ fn write_claim(
     })();
     (notices, result)
 }
-// Releases every claim this worktree holds except `keep`, here and on origin. Origin's copy is judged by its own
+// Releases every claim this worktree holds except `keep`, here and on the destination remote. Origin's copy is judged by its own
 // worker id, so a release does not depend on this clone's local ref having survived a race between its worktrees.
 pub fn release(root: &Path, cwd: &Path, keep: &str) -> (Vec<String>, Result<(), String>) {
     let mut notices = Vec::new();
     let result = (|| {
         let me = worker(cwd)?;
-        if shared(root) {
+        let destination = crate::config::remote(root)?;
+        if destination.is_some() {
             sync(root, &mut notices);
         }
         let listing = git::run(
@@ -151,14 +158,18 @@ pub fn release(root: &Path, cwd: &Path, keep: &str) -> (Vec<String>, Result<(), 
                         "-q",
                         "--no-verify",
                         &format!("--force-with-lease={local_ref}:{}", c.oid),
-                        "origin",
+                        destination.as_deref().ok_or("no destination remote")?,
                         &format!(":{local_ref}"),
                     ],
                 ) {
                     Ok(_) => {
                         git::run(root, &["update-ref", "-d", &origin_ref])?;
                     }
-                    Err(e) => warn(&mut notices, "claim release not published to origin", &e),
+                    Err(e) => warn(
+                        &mut notices,
+                        "claim release not published to the destination remote",
+                        &e,
+                    ),
                 }
             }
         }

@@ -24,10 +24,12 @@ pub(super) fn open(root: &Path, worktree: &str) -> Result<Connection, String> {
         CREATE VIRTUAL TABLE IF NOT EXISTS instances USING fts5vocab(docs_fts,'instance');
         CREATE VIRTUAL TABLE IF NOT EXISTS search_trigrams USING fts5(term,tokenize='trigram');
         CREATE TEMP TABLE selection(worktree TEXT);
-        CREATE TEMP VIEW docs AS SELECT p.id,p.kind,m.key,CASE WHEN p.kind='file' THEN substr(m.key,6) ELSE p.title END AS title,p.body,p.detail FROM members m INDEXED BY member_lookup JOIN payloads p ON p.id=m.payload WHERE m.worktree=(SELECT worktree FROM selection);
+        CREATE TEMP VIEW docs AS SELECT p.id,p.kind,m.key,m.source,CASE WHEN p.kind='file' THEN substr(m.key,6) ELSE p.title END AS title,p.body,p.detail FROM members m INDEXED BY member_lookup JOIN payloads p ON p.id=m.payload WHERE m.worktree=(SELECT worktree FROM selection);
         CREATE TEMP VIEW manifest AS SELECT source,stamp FROM stamps WHERE worktree=(SELECT worktree FROM selection);
         CREATE TEMP VIEW source_docs AS SELECT DISTINCT source,key FROM members WHERE worktree=(SELECT worktree FROM selection);
-        CREATE TEMP VIEW vocab AS SELECT v.term,count(DISTINCT m.key) AS doc,count(*) AS cnt FROM instances v JOIN members m ON m.payload=v.doc WHERE m.worktree=(SELECT worktree FROM selection) GROUP BY v.term;" )).map_err(err)?;
+        CREATE TEMP VIEW vocab AS SELECT v.term,
+            (SELECT count(DISTINCT m.key) FROM docs_fts CROSS JOIN members m INDEXED BY member_lookup WHERE docs_fts MATCH ('\"'||replace(v.term,'\"','\"\"')||'\"') AND m.worktree=(SELECT worktree FROM selection) AND m.payload=docs_fts.rowid) AS doc
+            FROM all_vocab v WHERE EXISTS(SELECT 1 FROM docs_fts CROSS JOIN members m INDEXED BY member_lookup WHERE docs_fts MATCH ('\"'||replace(v.term,'\"','\"\"')||'\"') AND m.worktree=(SELECT worktree FROM selection) AND m.payload=docs_fts.rowid);" )).map_err(err)?;
     db.execute("INSERT INTO selection VALUES (?1)", [worktree])
         .map_err(err)?;
     Ok(db)
@@ -59,8 +61,10 @@ pub(super) fn payload(
     .execute(params![address, kind, title, body, detail])
     .map_err(err)?;
     let id = tx.last_insert_rowid();
-    tx.prepare_cached("INSERT INTO docs_fts(rowid,kind,title,body) SELECT id,kind,title,body FROM payloads WHERE id=?1").map_err(err)?.execute([id]).map_err(err)?;
-    super::words::touch(tx, id)?;
+    tx.prepare_cached("INSERT INTO docs_fts(rowid,kind,title,body) VALUES (?1,?2,?3,?4)")
+        .map_err(err)?
+        .execute(params![id, kind, title, body])
+        .map_err(err)?;
     Ok(id)
 }
 pub(super) fn link(

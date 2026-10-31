@@ -13,11 +13,59 @@ pub(super) fn closed(
     journal_path: &Path,
     journal: &mut Journal,
 ) -> Result<usize, String> {
+    let plans = plan(root, &crate::git::main_tip(root)?)?;
+    let before = goal_tree::snapshot(root)?;
+    let store = record::load(root)?;
+    for plan in &plans {
+        journal.records.extend(
+            plan.entries
+                .iter()
+                .map(|e| root.join(".whosaidso").join(&e.path)),
+        );
+        journal.created.push(plan.target.clone());
+        journal.save(journal_path)?;
+        let mut available = Vec::new();
+        for m in store.media.iter().filter(|m| {
+            plan.entries
+                .iter()
+                .any(|e| e.path == format!("media/{}.json", m.sha))
+        }) {
+            if blob::verify(root, &m.media_sha256, &m.ext, m.byte_size)? {
+                available.push(m);
+            }
+        }
+        gallery::archive::archive(root, &available)?;
+        publish::write_bytes(&plan.target, &record::fold::encode(&plan.entries)?)?;
+        for e in &plan.entries {
+            fs::remove_file(root.join(".whosaidso").join(&e.path)).map_err(|e| e.to_string())?;
+        }
+    }
+    if goal_tree::snapshot(root)? != before {
+        return Err("fold: verdict changed; run prune to recover".into());
+    }
+    Ok(plans.len())
+}
+
+pub struct Plan {
+    pub target: std::path::PathBuf,
+    pub entries: Vec<Entry>,
+}
+pub fn plan(root: &Path, tip: &str) -> Result<Vec<Plan>, String> {
+    plan_for(root, tip, false)
+}
+pub fn candidate_plan(root: &Path, tip: &str) -> Result<Vec<Plan>, String> {
+    plan_for(root, tip, true)
+}
+fn plan_for(root: &Path, tip: &str, pending: bool) -> Result<Vec<Plan>, String> {
     let store = record::load(root)?;
     if !store.errors.is_empty() {
-        return Ok(0);
+        return Ok(Vec::new());
     }
-    let states = state::states(root, &store)?;
+    let states = if pending {
+        state::candidate_states(root, &store, tip)?
+    } else {
+        state::states_at(root, &store, tip)?
+    };
     let milestones: Vec<_> = store
         .goals
         .iter()
@@ -30,9 +78,9 @@ pub(super) fn closed(
         })
         .collect();
     if milestones.is_empty() {
-        return Ok(0);
+        return Ok(Vec::new());
     }
-    let before = goal_tree::snapshot(root)?;
+    let mut plans = Vec::new();
     for milestone in &milestones {
         publish::record_dir(root, "done")?;
         let target = root.join(format!(".whosaidso/done/{}.jsonl", milestone.id));
@@ -96,26 +144,7 @@ pub(super) fn closed(
                 })
             })
             .collect::<Result<Vec<_>, String>>()?;
-        journal
-            .records
-            .extend(paths.iter().map(|p| root.join(".whosaidso").join(p)));
-        journal.created.push(target.clone());
-        journal.save(journal_path)?;
-        // The existing media archive owns byte transport; the bundle retains verdict metadata.
-        let mut available = Vec::new();
-        for m in &media {
-            if blob::verify(root, &m.media_sha256, &m.ext, m.byte_size)? {
-                available.push(*m);
-            }
-        }
-        gallery::archive::archive(root, &available)?;
-        publish::write_bytes(&target, &record::fold::encode(&entries)?)?;
-        for p in &paths {
-            fs::remove_file(root.join(".whosaidso").join(p)).map_err(|e| e.to_string())?;
-        }
+        plans.push(Plan { target, entries });
     }
-    if goal_tree::snapshot(root)? != before {
-        return Err("fold: verdict changed; run prune to recover".into());
-    }
-    Ok(milestones.len())
+    Ok(plans)
 }

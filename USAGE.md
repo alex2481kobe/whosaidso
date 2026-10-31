@@ -2,6 +2,18 @@
 
 WhoSaidSo keeps goals and evidence in Git. Commands run inside a Git worktree, except `help`, `--version` and the project picker. Exit status is 0 on success and 1 on error. A successful `prove` can record a failed check: read its output.
 
+## Quick start
+
+```sh
+whosaidso install-hooks
+git switch -c feature
+whosaidso start <goal>
+# Commit the work with the installed trailer hook.
+whosaidso land
+```
+
+A check that already passes on main needs only `land --reason "<why>"`. There is no separate evidence-commit or merge step. See [README.md](README.md#quick-start) for a complete example.
+
 ## Goals
 
 Create `.whosaidso/goals/<id>.json`:
@@ -12,7 +24,7 @@ Create `.whosaidso/goals/<id>.json`:
 
 `title`, `done_when`, `order` and `after` are required. `parent` names another goal, or is null for a milestone. `check` is optional and contains a direct argument list, with no shell parsing. Use a short check of real behavior, such as one existing end-to-end test or a benchmark. Goals never require a new test or a full suite. IDs use 1–64 lowercase letters, digits and hyphens; `none` is reserved. Records are limited to 64 KiB. Unknown fields, missing references and cycles are reported together. Invalid records remain visible as `broken` and count in progress.
 
-`.whosaidso/config.json` is optional. The default branch name comes from `origin/HEAD`, then `config.main`, then `main`. The corresponding local branch supplies landed history. Fetch before viewing other machines' work.
+`.whosaidso/config.json` is optional. The default branch name comes from `origin/HEAD`, then `config.main`, then `main`. The destination supplies landed history. Fetch before viewing other machines' work.
 
 | Command | Behavior |
 | --- | --- |
@@ -20,14 +32,22 @@ Create `.whosaidso/goals/<id>.json`:
 | `check` | Checks record structure, references and media. Reports every problem. |
 | `goals` | Shows milestones, nested goals, progress, broken records and branch details. |
 | `show <id>` | Shows one goal, its check, state, children and selected evidence. |
-| `install-hooks` | Installs the commit trailer hook in this clone. |
+| `install-hooks` | Installs commit trailers and the pre-push landing guard in this clone. |
 | `start <goal>` | Claims a goal and adds its `Goal:` trailer to subsequent commits. `none` releases the selection. |
-| `gate [base]` | Checks non-merge commit trailers and refuses uncommitted records. Defaults to the destination branch. |
-| `prove <goal>` | Runs the committed check and keeps its commit, exit code, output hash and output tail. Commit the resulting proof record. |
+| `land [--reason <why>] [--override <name>]` | Fetches and merges destination main, checks the candidate, records proof and lossless folds in a receipt, publishes referenced media, and pushes by fast-forward. Retries re-merge and re-test. |
+| `gate --ci <base>..<tip>` | Compares derived verdicts and reruns checks for goals that became done on the queued tip. |
+| `gate [base]` | Checks non-merge commit trailers, receipt scope and note reconciliation, and refuses uncommitted records. Defaults to the destination branch. |
+| `prove <goal> [--reason <why>]` | Optionally runs the committed check and keeps its commit, exit code, output hash and output tail. Commit the resulting proof record. |
 | `media <goal> <file> <title>` | Attaches media, addressed by its content hash. |
 | `prune` | Collects superseded evidence and archives older media. Run on the destination branch with committed records. Interrupted collection can resume. |
 | `sync [remote]` | Shares media and archives through Git refs; default remote is `origin`. |
 | `ui [--port N] [--open]` | Opens the read-only Goals and Gallery viewer on 127.0.0.1. |
+
+`land` chooses the current branch’s upstream remote, then `origin`, then a sole remote. With multiple remotes and no default, set an upstream. Without a reachable remote, work and proofs remain local; retry `land` when connected.
+
+The default `limits.land_lines` is 400 added plus removed implementation lines relative to fetched main. Records are excluded. A named `land --override "<why>"` is kept in the receipt; a numeric limit or `"off"` can be set in config. Branch age is shown in Goals and the viewer and never blocks landing.
+
+For a protected host merge queue, set `"land":"branch"` in `.whosaidso/config.json`. Landing publishes `land/<goal>` and keeps the goal claimed until its receipt reaches main; require `gate --ci <base>..<queued-tip>` on the host so combined work is checked on the actual queued commit. Hooks stop accidental bypasses. Without required host checks, bypasses can only be detected afterward.
 
 Claims name the holder and lapse after 72 hours. Without a remote, claims still exclude sibling worktrees. Local checks help prevent accidental mistakes; a determined bypass needs host enforcement.
 

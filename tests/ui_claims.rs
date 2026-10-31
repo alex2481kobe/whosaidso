@@ -37,7 +37,7 @@ fn viewer_hides_expired_claims_and_keeps_live_claims() {
 }
 
 #[test]
-fn viewer_hides_a_claim_after_its_goal_lands() {
+fn viewer_keeps_a_claim_until_its_goal_is_done() {
     let f = Fixture::new();
     let root = &f.root;
     let lane = f.worktree("worker");
@@ -59,5 +59,5 @@ fn viewer_hides_a_claim_after_its_goal_lands() {
     git(root, &["merge", "-q", "--no-ff", "worker", "-m", "land"]);
     let goal = viewer.json("/api/goals", &cookie)["goals"][0].clone();
     assert_eq!(goal["state"], "landed");
-    assert_eq!(goal["claim"], serde_json::Value::Null);
+    assert_eq!(goal["claim"]["author"], "Ghost");
 }

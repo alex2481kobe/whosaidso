@@ -1,11 +1,13 @@
 // Paired evidence runs; results survive a non-interactive request for a reason.
 mod capture;
+mod command;
 mod scratch;
+mod session;
 use crate::{
     git, publish,
     record::{
         self,
-        model::{Goal, Proof, Run},
+        model::{Proof, Run},
     },
 };
 use serde::{Deserialize, Serialize};
@@ -27,120 +29,115 @@ pub fn command(root: &Path, args: &[String]) -> Result<String, String> {
         _ => Err("usage: prove <goal> [--reason <why>]".into()),
     }
 }
-pub fn prove(root: &Path, id: &str, reason: Option<&str>) -> Result<String, String> {
-    publish::record_dir(root, "proofs")?;
-    let store = record::load(root)?;
-    if !store.errors.is_empty() {
-        return Err(store.errors.join("\n"));
-    }
-    if let Some(milestone) = store.folded.get(id) {
-        return Err(format!(
-            "prove: reopen {milestone} before updating folded evidence"
-        ));
-    }
-    let goal = store
-        .goals
-        .iter()
-        .find(|g| g.id == id)
-        .ok_or_else(|| format!("unknown goal {id}"))?;
-    if !git::run(
-        root,
-        &[
-            "status",
-            "--porcelain",
-            "--",
-            ".",
-            ":(exclude).whosaidso/proofs",
-        ],
-    )?
-    .is_empty()
-    {
-        return Err("prove: commit or stash your changes first".into());
-    }
-    let commit = git::run(root, &["rev-parse", "HEAD"])?.trim().to_owned();
-    let bytes = git::run_bytes(
-        root,
-        &["show", &format!("{commit}:.whosaidso/goals/{id}.json")],
-    )?;
-    let recorded: Goal = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-    let check = recorded.check.ok_or("prove: goal has no check")?;
-    if goal.check.as_ref() != Some(&check) {
-        return Err("prove: uncommitted check".into());
-    }
-    let main = git::main_tip(root)?;
-    let limit = crate::config::load(root)?.limits.check_seconds;
-    let scratch = scratch::Scratch::lock(root)?;
-    let inputs = serde_json::to_vec(&(
-        &commit,
-        &main,
-        id,
-        &check,
-        &limit,
-        std::env::vars_os()
-            .collect::<Vec<_>>()
-            .iter()
-            .map(|(k, v)| (k.to_string_lossy(), v.to_string_lossy()))
-            .collect::<Vec<_>>(),
-    ))
-    .map_err(|e| e.to_string())?;
-    let kept = scratch
-        .dir
-        .join(format!("{}.json", record::sha256_hex(&inputs)));
-    let pair = if kept.exists() {
-        serde_json::from_slice::<Pair>(&fs::read(&kept).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?
-    } else {
-        let candidate = scratch.run(&commit, &check, limit.value())?;
-        let baseline = scratch.run(&main, &check, limit.value())?;
-        let pair = Pair {
-            candidate,
-            main: baseline,
-            ran_at: publish::ran_at()?,
-        };
-        publish::write_bytes(
-            &kept,
-            &serde_json::to_vec(&pair).map_err(|e| e.to_string())?,
-        )?;
-        pair
-    };
-    if pair.main.exit_code == 0 && reason.is_none() {
-        return Err(
-            "prove: passed on main; pass --reason <why>; results kept for unchanged inputs".into(),
-        );
-    }
-    let proof = Proof {
-        sha: String::new(),
-        goal: id.into(),
-        check,
-        commit: pair.candidate.commit,
-        exit_code: pair.candidate.exit_code,
-        output_sha256: pair.candidate.output_sha256,
-        output_tail: pair.candidate.output_tail,
-        ran_at: pair.ran_at,
-        elapsed_ms: pair.candidate.elapsed_ms,
-        timed_out: pair.candidate.timed_out,
-        main: pair.main,
-        reason: reason.map(str::to_owned),
-    };
-    let sha = publish::write_new(&root.join(".whosaidso/proofs"), &proof)?;
-    if proof.timed_out {
-        return Err(format!(
-            "limits.check_seconds: slow check {id} ({} ms); ran result kept",
-            proof.elapsed_ms
-        ));
-    }
-    Ok(format!(
-        "ran: {id} {} {} · {}{}",
-        record::result(proof.exit_code),
-        &sha[..12],
-        if proof.main.exit_code == 0 {
-            "passed on main"
+fn prove(root: &Path, id: &str, reason: Option<&str>) -> Result<String, String> {
+    Prover::open(root, &git::main_tip(root)?, &[id.to_owned()])?.prove(id, reason)
+}
+
+// One committed snapshot and scratch lock for all checks in a landing.
+pub struct Prover<'a> {
+    root: &'a Path,
+    main: &'a str,
+    commit: String,
+    checks: std::collections::HashMap<String, Vec<String>>,
+    limit: crate::config::Limit,
+    scratch: scratch::Scratch,
+}
+impl Prover<'_> {
+    pub fn prove(&self, id: &str, reason: Option<&str>) -> Result<String, String> {
+        let root = self.root;
+        let main = self.main;
+        let commit = &self.commit;
+        let check = self
+            .checks
+            .get(id)
+            .ok_or_else(|| format!("unknown goal {id}"))?
+            .clone();
+        let run_check = command::arguments(root, &check)?;
+        let limit = &self.limit;
+        let scratch = &self.scratch;
+        let inputs = serde_json::to_vec(&(
+            &commit,
+            &main,
+            &check,
+            &run_check,
+            command::identity(root, &check)?,
+            &limit,
+            std::env::vars_os()
+                .collect::<Vec<_>>()
+                .iter()
+                .map(|(k, v)| (k.to_string_lossy(), v.to_string_lossy()))
+                .collect::<Vec<_>>(),
+        ))
+        .map_err(|e| e.to_string())?;
+        let kept = scratch
+            .dir
+            .join(format!("{}.json", record::sha256_hex(&inputs)));
+        let pair = if kept.exists() {
+            serde_json::from_slice::<Pair>(&fs::read(&kept).map_err(|e| e.to_string())?)
+                .map_err(|e| e.to_string())?
         } else {
-            "failed on main"
-        },
-        proof
-            .reason
-            .as_ref()
-            .map_or(String::new(), |r| format!(" · {r}"))
-    ))
+            let candidate = scratch.run(commit, &run_check, limit.value())?;
+            let baseline = scratch.run(main, &run_check, limit.value())?;
+            let pair = Pair {
+                candidate,
+                main: baseline,
+                ran_at: publish::ran_at()?,
+            };
+            publish::write_bytes(
+                &kept,
+                &serde_json::to_vec(&pair).map_err(|e| e.to_string())?,
+            )?;
+            pair
+        };
+        if pair.main.exit_code == 0 && reason.is_none() {
+            return Err(
+                "prove: passed on main; pass --reason <why>; results kept for unchanged inputs"
+                    .into(),
+            );
+        }
+        let proof = Proof {
+            sha: String::new(),
+            goal: id.into(),
+            check,
+            commit: pair.candidate.commit,
+            exit_code: pair.candidate.exit_code,
+            output_sha256: pair.candidate.output_sha256,
+            output_tail: pair.candidate.output_tail,
+            ran_at: pair.ran_at,
+            elapsed_ms: pair.candidate.elapsed_ms,
+            timed_out: pair.candidate.timed_out,
+            main: pair.main,
+            reason: reason.map(str::to_owned),
+        };
+        let sha = publish::write_new(&root.join(".whosaidso/proofs"), &proof)?;
+        if proof.timed_out {
+            return Err(format!(
+                "limits.check_seconds: slow check {id} ({} ms); ran result kept",
+                proof.elapsed_ms
+            ));
+        }
+        Ok(format!(
+            "ran: {id} {} {} · {}{}",
+            record::result(proof.exit_code),
+            &sha[..12],
+            if proof.main.exit_code == 0 {
+                "passed on main"
+            } else {
+                "failed on main"
+            },
+            proof
+                .reason
+                .as_ref()
+                .map_or(String::new(), |r| format!(" · {r}"))
+        ))
+    }
+}
+
+pub fn verify_at(root: &Path, tip: &str, check: &[String]) -> Result<Run, String> {
+    let argv = command::arguments(root, check)?;
+    scratch::Scratch::lock(root)?.run(
+        tip,
+        &argv,
+        crate::config::load(root)?.limits.check_seconds.value(),
+    )
 }

@@ -1,4 +1,5 @@
 // Retrieval synchronization publishes payloads and membership in one transaction.
+pub mod embedding;
 mod files;
 mod history;
 mod records;
@@ -14,13 +15,13 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
-pub fn sync(root: &Path) -> Result<Connection, String> {
+pub fn sync(root: &Path, model: Option<&embedding::Model>) -> Result<Connection, String> {
     let snapshot = Snapshot::current(root)?;
     let mut db = store::open(root, &snapshot.worktree)?;
     let tx = db
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(err)?;
-    words::init(&tx)?;
+    let vocabulary = words::init(&tx)?;
     let mut seen = HashSet::new();
     records::sync(root, &tx, &mut seen)?;
     let same_files = files::sync(root, &snapshot, &tx, &mut seen)?;
@@ -32,7 +33,10 @@ pub fn sync(root: &Path) -> Result<Connection, String> {
             store::forget(&tx, &source)?;
         }
     }
-    words::finish(&tx)?;
+    words::finish(&tx, vocabulary)?;
+    if let Some(model) = model {
+        embedding::sync(&tx, model, &snapshot.change_token)?;
+    }
     tx.commit().map_err(err)?;
     // Every stage of ranking sees one membership generation.
     db.execute_batch("BEGIN DEFERRED; SELECT count(*) FROM stamps;")
