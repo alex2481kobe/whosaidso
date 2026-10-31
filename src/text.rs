@@ -1,8 +1,11 @@
 // Text-search command boundary.
 mod attributes;
+mod git;
 mod index;
+mod matcher;
 mod options;
 mod parallel;
+mod scan;
 mod search;
 use std::path::Path;
 
