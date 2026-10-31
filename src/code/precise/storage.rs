@@ -18,6 +18,7 @@ pub(in crate::code) fn schema(db: &Connection) -> Result<(), String> {
         .query_row("PRAGMA precise.user_version", [], |r| r.get(0))
         .map_err(err)?;
     if version == 2 {
+        db.execute_batch("CREATE INDEX IF NOT EXISTS precise.scip_occ_path ON scip_occ(path,is_def)").map_err(err)?;
         return Ok(());
     }
     let tx =
@@ -37,6 +38,7 @@ pub(in crate::code) fn schema(db: &Connection) -> Result<(), String> {
         CREATE INDEX IF NOT EXISTS precise.scip_rel_source ON scip_relationships(source);
         CREATE INDEX IF NOT EXISTS precise.scip_rel_target ON scip_relationships(target);
         CREATE INDEX IF NOT EXISTS precise.scip_occ_symbol ON scip_occ(symbol);
+        CREATE INDEX IF NOT EXISTS precise.scip_occ_path ON scip_occ(path,is_def);
         CREATE INDEX IF NOT EXISTS precise.scip_syms_name ON scip_syms(name);
         CREATE INDEX IF NOT EXISTS precise.scip_descriptor_name ON scip_syms(descriptor_name); PRAGMA precise.user_version=2;").map_err(err)?;
     }
