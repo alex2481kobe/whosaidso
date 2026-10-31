@@ -137,6 +137,9 @@ fn show_accepts_printed_locations_and_rejects_invalid_selectors() {
         "// leading comment\nfn selected() { let answer = 42; }\n",
     );
     let printed = cli(&f.root, &["find", "selected"]);
+    let mut pasted = vec!["code", "show"];
+    pasted.extend(printed.lines().next().unwrap().split_whitespace());
+    assert!(cli(&f.root, &pasted).contains("let answer = 42"));
     for selector in [
         "lib.rs:selected",
         "lib.rs:2:selected",

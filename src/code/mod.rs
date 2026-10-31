@@ -45,9 +45,9 @@ pub fn command(root: &Path, args: &[String]) -> Result<(), String> {
             println!("{}", indexer::run(root, language)?);
             Ok(())
         }
-        [sub, value] if ["show", "outline"].contains(&sub.as_str()) => {
+        [sub, values @ ..] if (sub == "show" && !values.is_empty()) || (sub == "outline" && values.len() == 1) => {
             let snapshot = facts::Snapshot::current(root)?;
-            println!("{}", inspect::answer(&snapshot, sub, value)?);
+            println!("{}", inspect::answer(&snapshot, sub, &values.join(" "))?);
             Ok(())
         }
         [sub, value] => query(root, sub, value),
