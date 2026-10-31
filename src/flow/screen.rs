@@ -80,13 +80,13 @@ pub fn screen(
                         .as_bytes()
                 )
             );
-            let rows: Vec<_> = records.into_iter().map(|r| {
+            let total = records.len();
+            let rows: Vec<_> = records.into_iter().skip(offset).take(map::PAGE).map(|r| {
                 if !r.problems.is_empty() { return Ok(json!({"id":r.id,"state":"unknown","problems":r.problems})); }
                 let comparison = compare::compare(&r.flow.ok_or("unreadable flow")?,&snapshot)?.0;
                 Ok(json!({"id":r.id,"state":comparison["state"],"progress":comparison["progress"]}))
             }).collect::<Result<_,String>>()?;
-            let total = rows.len();
-            json!({"flows":rows.into_iter().skip(offset).take(map::PAGE).collect::<Vec<_>>(),"revision":revision,"next":(offset+map::PAGE<total).then_some(offset+map::PAGE)})
+            json!({"flows":rows,"revision":revision,"next":(offset+map::PAGE<total).then_some(offset+map::PAGE)})
         }
     };
     result["freshness"] = json!(snapshot.freshness()?);

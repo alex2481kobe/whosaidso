@@ -29,7 +29,7 @@ pub fn layer(snapshot: &Snapshot, parent: Option<&str>, offset: usize) -> Result
                 .ok_or("unknown map layer")
         })
         .transpose()?;
-    if selected.is_none() {
+    let Some(path) = selected else {
         let page = snapshot.file_page(offset, PAGE)?;
         let nodes: Vec<_> = page.rows.iter().map(|f| json!({"id":file_id(&f.path),"name":f.path,"path":f.path,"type":"file",
             "state":if f.precise=="fresh" || f.syntax=="indexed" {"built"} else {"unknown"},"children":f.definitions})).collect();
@@ -37,29 +37,25 @@ pub fn layer(snapshot: &Snapshot, parent: Option<&str>, offset: usize) -> Result
             json!({"id":"derived","parent":parent,"revision":snapshot.id,"change_token":snapshot.change_token,"nodes":nodes,"steps":[],
             "frontier":page.total.saturating_sub(offset+PAGE),"next":(offset+PAGE<page.total).then_some(offset+PAGE),"gaps":[]}),
         );
-    }
-    let graph = snapshot.graph_in(&[selected.unwrap().to_string()], &[])?;
-    let nodes: Vec<_> = if let Some(path) = selected {
-        graph
-            .definitions
-            .iter()
-            .filter(|r| r.path == path)
-            .map(|r| {
-                json!({
-                    "id":symbol_id(&r.path, &r.qualified, r.range.line), "symbol":r.symbol,
-                    "name":r.qualified, "type":"function", "path":r.path, "line":r.range.line,
-                    "evidence":strength(r.layer), "state":"built", "children":0
-                })
-            })
-            .collect()
-    } else {
-        unreachable!("top map returned above")
     };
+    let graph = snapshot.graph_in(&[path.to_string()], &[])?;
+    let nodes: Vec<_> = graph
+        .definitions
+        .iter()
+        .filter(|r| r.path == path)
+        .map(|r| {
+            json!({
+                "id":symbol_id(&r.path, &r.qualified, r.range.line), "symbol":r.symbol,
+                "name":r.qualified, "type":"function", "path":r.path, "line":r.range.line,
+                "evidence":strength(r.layer), "state":"built", "children":0
+            })
+        })
+        .collect();
     let visible: Vec<_> = nodes.iter().skip(offset).take(PAGE).cloned().collect();
     let edges: Vec<_> = graph
         .edges
         .iter()
-        .filter(|e| selected.is_some_and(|p| p == e.occurrence.path))
+        .filter(|e| path == e.occurrence.path)
         .collect();
     let name = |symbol: &str| {
         graph

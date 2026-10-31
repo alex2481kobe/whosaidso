@@ -1,27 +1,56 @@
 // Source slices preserve the selected snapshot's bytes and the range's position encoding.
 use super::{
     Snapshot,
-    reads::{Layer, Range, Row},
+    reads::{Layer, Range, Row, SYNTAX},
 };
 impl Snapshot {
     pub fn select(&self, value: &str) -> Result<Vec<Row>, String> {
+        if value.starts_with(&format!("{}:", self.project)) {
+            let paths = self.identifier_paths(value)?;
+            return Ok(self
+                .definitions_in(&paths)?
+                .rows
+                .into_iter()
+                .filter(|r| r.symbol == value)
+                .collect());
+        }
         let (path, name) = value
             .split_once("::")
             .filter(|(p, _)| self.files.entries.iter().any(|f| f.path == *p))
             .map_or((None, value), |(p, n)| (Some(p), n));
         Ok(self
-            .definitions(if value.starts_with(&format!("{}:", self.project)) {
-                ""
-            } else {
-                name
-            })?
+            .definitions(name)?
             .rows
             .into_iter()
-            .filter(|r| {
-                path.is_none_or(|p| r.path == p)
-                    && (!value.starts_with(&format!("{}:", self.project)) || r.symbol == value)
-            })
+            .filter(|r| path.is_none_or(|p| r.path == p))
             .collect())
+    }
+    fn identifier_paths(&self, value: &str) -> Result<Vec<String>, String> {
+        let (sql, key) = if let Some(raw) =
+            value.strip_prefix(&format!("{}:{SYNTAX}:", self.project))
+        {
+            let Some((blob, _)) = raw.split_once(':') else {
+                return Ok(vec![]);
+            };
+            (
+                "SELECT m.path FROM facts f JOIN manifest_files m ON m.fact=f.id WHERE f.blob=?1 AND m.manifest=(SELECT manifest FROM selection)",
+                blob,
+            )
+        } else {
+            let prefix = self.relationship_prefix()?;
+            let Some(symbol) = value.strip_prefix(&prefix) else {
+                return Ok(vec![]);
+            };
+            (
+                "SELECT DISTINCT path FROM scip_occ WHERE symbol=?1 AND is_def=1",
+                symbol,
+            )
+        };
+        let mut stmt = self.db.prepare(sql).map_err(super::err)?;
+        stmt.query_map([key], |r| r.get(0))
+            .map_err(super::err)?
+            .collect::<Result<_, _>>()
+            .map_err(super::err)
     }
     pub fn outline(&self, path: &str) -> Result<Vec<Row>, String> {
         Ok(self

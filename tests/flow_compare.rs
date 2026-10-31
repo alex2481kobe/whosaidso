@@ -156,3 +156,25 @@ fn narrow_comparison_keeps_candidates_outside_its_paths_and_boundary_callers() {
             .any(|e| e["path"] == "app.rs")
     );
 }
+
+#[test]
+fn a_narrow_flow_can_anchor_an_opaque_symbol_id() {
+    let f = Fixture::sources(&[
+        ("app.rs", "fn selected() {}\n"),
+        ("outside.rs", "fn unrelated() {}\n"),
+    ]);
+    let top: Value = serde_json::from_str(&cli(&f.root, &["flow", "map"])).unwrap();
+    let file = top["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["path"] == "app.rs")
+        .unwrap();
+    let layer: Value = serde_json::from_str(&cli(
+        &f.root,
+        &["flow", "map", file["id"].as_str().unwrap()],
+    ))
+    .unwrap();
+    f.write("feature",&json!({"covers":{"paths":["app.rs"]},"nodes":[{"id":"selected","type":"function","symbols":[layer["nodes"][0]["symbol"]]}],"steps":[]}));
+    assert_eq!(compare(&f)["state"], "built");
+}

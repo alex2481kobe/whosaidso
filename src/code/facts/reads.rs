@@ -34,6 +34,8 @@ pub struct Row {
     pub documentation: Vec<String>,
     pub enclosing: Option<Range>,
 }
+pub(super) const SYNTAX: &str = "syntax";
+
 pub struct Complete {
     pub rows: Vec<Row>,
     pub gaps: Vec<String>,
@@ -145,7 +147,7 @@ impl Snapshot {
             let extractor: String = r.get(10)?;
             Ok(Row {
                 symbol: format!(
-                    "{}:syntax:{blob}:{extractor}:{path}:{qualified}:{line}:{}",
+                    "{}:{SYNTAX}:{blob}:{extractor}:{path}:{qualified}:{line}:{}",
                     self.project,
                     r.get::<_, i64>(6)?
                 ),

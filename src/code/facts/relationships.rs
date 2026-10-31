@@ -24,7 +24,7 @@ impl Snapshot {
     pub(super) fn all_relationships(&self) -> Result<Vec<Relationship>, String> {
         self.read_relationships(None, Direction::Forward, &self.relationship_prefix()?)
     }
-    fn relationship_prefix(&self) -> Result<String, String> {
+    pub(super) fn relationship_prefix(&self) -> Result<String, String> {
         let run: String = self
             .db
             .query_row(
