@@ -103,9 +103,10 @@ fn effective_reasons_are_logged_without_claiming_index_completeness() {
             "deny"
         );
     }
-    assert_eq!(
-        hook(&f, "claude", "FULL_SUITE=merge cargo test; rg -i x .")["hookSpecificOutput"]["permissionDecision"],
-        "deny"
+    assert!(
+        hook(&f, "claude", "FULL_SUITE=merge cargo test; rg -i x .")["hookSpecificOutput"]
+            .get("permissionDecision")
+            .is_none()
     );
     let log = std::fs::read_to_string(
         f.root
@@ -118,7 +119,7 @@ fn effective_reasons_are_logged_without_claiming_index_completeness() {
         .lines()
         .map(|l| serde_json::from_str(l).unwrap())
         .collect();
-    assert_eq!(rows.len(), 10, "{log}");
+    assert_eq!(rows.len(), 11, "{log}");
     assert!(
         rows.iter()
             .all(|v| v["complete"] == false && !v["reason"].as_str().unwrap().trim().is_empty())

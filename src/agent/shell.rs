@@ -107,8 +107,29 @@ fn finish(words: &mut Vec<Word>, text: &mut String, active: &mut bool, literal: 
     *literal = true;
 }
 pub(super) fn search_or_read(words: &[Word]) -> bool {
-    matches!(
-        words.first().map(|w| w.text.as_str()),
-        Some("cat" | "rg" | "grep" | "head" | "tail" | "sed" | "awk")
-    ) || matches!(words, [a,b,..] if a.text == "git" && b.text == "grep")
+    let args: Vec<_> = words.iter().map(|w| w.text.as_str()).collect();
+    match args.as_slice() {
+        ["cat", paths @ ..] => {
+            !paths.is_empty()
+                && paths.iter().any(|p| !p.starts_with('-'))
+                && paths.iter().all(|p| *p == "--" || !p.starts_with('-'))
+        }
+        ["rg" | "grep", args @ ..] | ["git", "grep", args @ ..] => {
+            let mut positional = 0;
+            let mut options = true;
+            for arg in args {
+                if options && *arg == "--" {
+                    options = false;
+                } else if options && arg.starts_with('-') {
+                    if !["-n", "-i", "-s", "-F", "-E", "-l", "--files", "--hidden"].contains(arg) {
+                        return false;
+                    }
+                } else {
+                    positional += 1;
+                }
+            }
+            positional >= 2
+        }
+        _ => false,
+    }
 }
