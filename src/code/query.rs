@@ -5,6 +5,10 @@ use std::path::Path;
 pub fn run(root: &Path, command: &str, value: &str) -> Result<(), String> {
     let snapshot = super::facts::Snapshot::current(root)?;
     let db = &snapshot.db;
+    if ["deps", "includers"].contains(&command) && super::languages::for_path(value).is_none() {
+        println!("code: {value}: not indexed (unsupported language)");
+        return Ok(());
+    }
     let mut answers = Answers::default();
     match command {
         "defs" | "refs" => {
@@ -65,8 +69,25 @@ pub fn run(root: &Path, command: &str, value: &str) -> Result<(), String> {
         }
         _ => return Err("unknown code query".into()),
     }
+    let coverage = snapshot.coverage()?;
     if answers.total == 0 {
-        println!("code: none recorded [syntactic]");
+        for c in coverage
+            .iter()
+            .filter(|c| c.syntax == "not indexed" && c.precise != "fresh")
+            .take(5)
+        {
+            println!("coverage: {}: not indexed", c.path);
+        }
+    }
+    if answers.total == 0
+        && !coverage.is_empty()
+        && !coverage
+            .iter()
+            .any(|c| c.syntax == "indexed" || c.precise == "fresh")
+    {
+        println!("code: not indexed; no searchable code coverage");
+    } else if answers.total == 0 {
+        println!("code: none recorded in indexed files; absence is not proven [hybrid]");
     } else {
         for line in &answers.lines {
             println!("{line}");

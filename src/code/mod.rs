@@ -1,6 +1,7 @@
 // Code search commands; parsing, storage and presentation live in their own modules.
 mod contracts;
 pub mod facts;
+mod languages;
 mod parse;
 mod precise;
 mod query;

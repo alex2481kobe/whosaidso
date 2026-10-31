@@ -14,7 +14,12 @@ pub(super) fn last_identifier(node: Node<'_>, bytes: &[u8]) -> String {
     }
     if matches!(
         node.kind(),
-        "identifier" | "field_identifier" | "type_identifier" | "namespace_identifier"
+        "identifier"
+            | "field_identifier"
+            | "type_identifier"
+            | "namespace_identifier"
+            | "simple_identifier"
+            | "property_identifier"
     ) {
         return text(node, bytes).to_string();
     }
@@ -48,6 +53,15 @@ pub(super) fn definition(node: Node<'_>, bytes: &[u8]) -> Option<(String, String
         "enum_specifier" | "enum_item" => "enum",
         "namespace_definition" => "namespace",
         "function_item" => "fn",
+        "function_declaration" | "generator_function_declaration" | "variable_declarator" => {
+            "function"
+        }
+        "method_declaration" | "method_definition" => "method",
+        "constructor_declaration" => "constructor",
+        "class_declaration" | "record_declaration" => "class",
+        "interface_declaration" | "protocol_declaration" => "interface",
+        "enum_declaration" => "enum",
+        "type_spec" | "type_alias_declaration" => "type",
         "trait_item" => "trait",
         "impl_item" => "impl",
         "mod_item" => "mod",
@@ -134,7 +148,12 @@ pub(super) fn qualified(node: Node<'_>, name: &str, bytes: &[u8]) -> String {
             | "class_specifier"
             | "struct_specifier"
             | "mod_item"
-            | "trait_item" => Some("name"),
+            | "trait_item"
+            | "class_declaration"
+            | "interface_declaration"
+            | "protocol_declaration"
+            | "enum_declaration"
+            | "record_declaration" => Some("name"),
             "impl_item" => Some("type"),
             _ => None,
         };
@@ -167,21 +186,8 @@ pub(super) fn definition_scope(node: Node<'_>, name: &str, bytes: &[u8]) -> Stri
 }
 pub(super) fn caller(mut node: Node<'_>, bytes: &[u8]) -> String {
     while let Some(parent) = node.parent() {
-        if matches!(
-            parent.kind(),
-            "function_definition"
-                | "class_definition"
-                | "class_specifier"
-                | "struct_specifier"
-                | "struct_item"
-                | "enum_specifier"
-                | "enum_item"
-                | "namespace_definition"
-                | "function_item"
-                | "trait_item"
-                | "impl_item"
-                | "mod_item"
-        ) && let Some(name) = definition_name(parent, bytes)
+        if definition(parent, bytes).is_some()
+            && let Some(name) = definition_name(parent, bytes)
         {
             return name;
         }
