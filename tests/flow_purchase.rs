@@ -27,6 +27,12 @@ fn plans_purchase_before_code_then_progresses_and_catches_drift() {
     assert_eq!(built["state"], "built", "{built}");
     assert_eq!(built["progress"]["built"], built["progress"]["total"]);
     cli(&f.root, &["flow", "drift-check"]);
+    let view = |args: &[&str]| -> Value {
+        let args = [&["flow", "view", "checkout"], args].concat();
+        serde_json::from_str(&cli(&f.root, &args)).unwrap()
+    };
+    assert_eq!(view(&[])["steps"].as_array().unwrap().len(), 0);
+    assert!(!view(&["purchase"])["steps"].as_array().unwrap().is_empty());
     assert!(
         cli(&f.root, &["goals"])
             .lines()

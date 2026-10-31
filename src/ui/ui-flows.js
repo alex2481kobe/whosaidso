@@ -19,8 +19,8 @@ export function flowsScreen() {
   return {node, async load() {
     const data = await api("/api/flows", {id, parent, offset, branch});
     node.dataset.revision = data.revision || "";
-    status.replaceChildren(data.state && chip(data.state), data.progress && ` ${data.progress.built}/${data.progress.total}`, data.committed_only && " · committed-only", data.freshness && data.freshness !== "fresh" && ` · ${data.freshness}`);
-    toolbar.replaceChildren(link("Flows", ""), id && link(id === "$map" ? "Code" : id, id), parent && el("span", "muted", parent), status);
+    status.replaceChildren(...[data.state && chip(data.state), data.progress && ` ${data.progress.built}/${data.progress.total}`, data.committed_only && " · committed-only", data.freshness && data.freshness !== "fresh" && ` · ${data.freshness}`].filter(Boolean));
+    toolbar.replaceChildren(...[link("Flows", ""), id && link(id === "$map" ? "Code" : id, id), parent && el("span", "muted", parent), status].filter(Boolean));
     if (data.branches) toolbar.append(dropdown({options:[["", "Worktree"], ...data.branches.map(b => [b,b])], value:branch, onPick:b => { location.hash = route(id,"",b); }}));
     if (!id) {
       list.replaceChildren(Object.assign(el("a", "menu-row", "Code"), {href:route("$map", "", branch)}), ...(data.flows || []).map(f => Object.assign(el("a", "menu-row flow-row", chip(f.state), el("span", "goal-title", f.id), f.progress && `${f.progress.built}/${f.progress.total}`), {href:route(f.id,"",branch)})));

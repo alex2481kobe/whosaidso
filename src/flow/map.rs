@@ -1,5 +1,6 @@
 use crate::code::facts::{Snapshot, reads::Layer};
 use serde_json::{Value, json};
+use std::collections::HashMap;
 
 pub const PAGE: usize = 100;
 pub fn file_id(path: &str) -> String {
@@ -45,11 +46,20 @@ pub fn layer(snapshot: &Snapshot, parent: Option<&str>, offset: usize) -> Result
             })
             .collect()
     } else {
-        snapshot.files.entries.iter().map(|f| {
-            let c = coverage.iter().find(|c| c.path == f.path);
-            let state = if c.is_some_and(|c| c.precise == "fresh" || c.syntax == "indexed") { "built" } else { "unknown" };
-            json!({"id":file_id(&f.path),"name":f.path,"path":f.path,"type":"file","state":state,
-                "children":graph.definitions.iter().filter(|r| r.path == f.path).count()})
+        let covered: HashMap<_, _> = coverage.iter().map(|c| (c.path.as_str(), c)).collect();
+        let mut children = HashMap::new();
+        for definition in &graph.definitions {
+            *children.entry(definition.path.as_str()).or_insert(0usize) += 1;
+        }
+        snapshot.files.entries.iter().filter_map(|f| {
+            let c = covered.get(f.path.as_str())?;
+            // Files in no supported language are not code the map can describe.
+            if c.syntax == "not indexed" && c.precise != "fresh" {
+                return None;
+            }
+            let state = if c.precise == "fresh" || c.syntax == "indexed" { "built" } else { "unknown" };
+            Some(json!({"id":file_id(&f.path),"name":f.path,"path":f.path,"type":"file","state":state,
+                "children":children.get(f.path.as_str()).copied().unwrap_or(0)}))
         }).collect()
     };
     let visible: Vec<_> = nodes.iter().skip(offset).take(PAGE).cloned().collect();
