@@ -25,7 +25,7 @@ fn secret() -> Result<String, String> {
     let mut bytes = [0; 16];
     fs::File::open("/dev/urandom")
         .and_then(|mut f| f.read_exact(&mut bytes))
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("/dev/urandom: {e}"))?;
     Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 pub fn serve(cwd: &Path, args: &[String]) -> Result<(), String> {

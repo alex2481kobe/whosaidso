@@ -75,9 +75,13 @@ pub(super) fn local(root: &Path, stores: &Stores) -> Result<Entries, String> {
         if !dir.exists() {
             continue;
         }
-        for entry in fs::read_dir(dir).map_err(err)? {
-            let entry = entry.map_err(err)?;
-            if !entry.file_type().map_err(err)?.is_file() {
+        for entry in fs::read_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))? {
+            let entry = entry.map_err(|e| format!("{}: {e}", dir.display()))?;
+            if !entry
+                .file_type()
+                .map_err(|e| format!("{}: {e}", entry.path().display()))?
+                .is_file()
+            {
                 continue;
             }
             let name = entry
@@ -89,7 +93,8 @@ pub(super) fn local(root: &Path, stores: &Stores) -> Result<Entries, String> {
             }
             let path = format!("{prefix}/{name}");
             destination(stores, &path)?;
-            let bytes = fs::read(entry.path()).map_err(err)?;
+            let bytes =
+                fs::read(entry.path()).map_err(|e| format!("{}: {e}", entry.path().display()))?;
             verify(&path, &bytes)?;
             paths.entry(path).or_insert(entry.path());
         }
@@ -151,7 +156,10 @@ pub(super) fn receive(
         verify(&file.path, &bytes)?;
         let target = destination(stores, &file.path)?;
         let bytes = if file.path.starts_with("archive/") && target.exists() {
-            gallery::archive::merge_archives(&fs::read(&target).map_err(err)?, &bytes)?
+            gallery::archive::merge_archives(
+                &fs::read(&target).map_err(|e| format!("{}: {e}", target.display()))?,
+                &bytes,
+            )?
         } else {
             bytes
         };

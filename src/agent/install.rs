@@ -27,7 +27,7 @@ pub(super) fn command(args: &[String]) -> Result<String, String> {
     let previous = match fs::read(&path) {
         Ok(bytes) => Some(bytes),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
-        Err(e) => return Err(e.to_string()),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
     };
     if uninstall && previous.is_none() {
         super::skills::apply(&skills, true)?;
@@ -78,9 +78,9 @@ pub(super) fn command(args: &[String]) -> Result<String, String> {
     bytes.push(b'\n');
     super::skills::apply(&skills, uninstall)?;
     if previous.as_deref() != Some(&bytes) {
-        fs::create_dir_all(path.parent().ok_or("missing configuration directory")?)
-            .map_err(|e| e.to_string())?;
-        fs::write(&path, bytes).map_err(|e| e.to_string())?;
+        let parent = path.parent().ok_or("missing configuration directory")?;
+        fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        fs::write(&path, bytes).map_err(|e| format!("{}: {e}", path.display()))?;
     }
     Ok(if uninstall {
         "Agent hook and skills removed".into()
