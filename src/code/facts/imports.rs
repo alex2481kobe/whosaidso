@@ -101,3 +101,51 @@ impl Snapshot {
         Ok(rows)
     }
 }
+
+impl Snapshot {
+    pub(super) fn rust_aliases(
+        &self,
+        rows: &[super::reads::Row],
+    ) -> Result<std::collections::HashMap<String, std::collections::HashSet<String>>, String> {
+        use std::collections::{BTreeSet, HashMap};
+        use tree_sitter::{Parser, Query, QueryCursor, StreamingIterator};
+        let paths: BTreeSet<_> = rows
+            .iter()
+            .filter(|r| r.layer == super::reads::Layer::Syntactic && r.path.ends_with(".rs"))
+            .map(|r| r.path.as_str())
+            .collect();
+        let mut aliases = HashMap::new();
+        if paths.is_empty() {
+            return Ok(aliases);
+        }
+        let language = (super::super::languages::for_name("Rust")
+            .ok_or("Rust grammar missing")?
+            .grammar)();
+        let mut parser = Parser::new();
+        parser.set_language(&language).map_err(super::err)?;
+        let query =
+            Query::new(&language, "(use_as_clause alias: (_) @alias)").map_err(super::err)?;
+        for path in paths {
+            if !self.dependencies(path)?.iter().any(|p| p.contains("as")) {
+                continue;
+            }
+            let bytes = self
+                .body(path)?
+                .ok_or("missing Rust source for alias resolution")?;
+            let tree = parser
+                .parse(&bytes, None)
+                .ok_or("failed to read Rust aliases")?;
+            let mut cursor = QueryCursor::new();
+            let mut matches = cursor.matches(&query, tree.root_node(), bytes.as_slice());
+            while let Some(m) = matches.next() {
+                for c in m.captures() {
+                    aliases
+                        .entry(path.to_owned())
+                        .or_insert_with(std::collections::HashSet::new)
+                        .insert(c.node.utf8_text(&bytes).map_err(super::err)?.to_owned());
+                }
+            }
+        }
+        Ok(aliases)
+    }
+}

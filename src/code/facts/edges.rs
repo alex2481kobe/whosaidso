@@ -31,11 +31,13 @@ impl Snapshot {
     pub fn graph(&self) -> Result<Graph, String> {
         let definitions = self.definitions("")?.rows;
         let refs = self.all_references()?;
+        let aliases = self.rust_aliases(&refs.rows)?;
         Ok(assemble(
             definitions,
             self.symbol_uses(refs.rows)?,
             self.all_relationships()?,
             refs.gaps,
+            aliases,
         ))
     }
     // Only selected callers and requested inbound names supply references. Name candidates
@@ -92,7 +94,14 @@ impl Snapshot {
             .map(|r| r.symbol.as_str())
             .collect();
         let relationships = self.relationships_from(&sources.into_iter().collect::<Vec<_>>())?;
-        Ok(assemble(definitions, refs.rows, relationships, refs.gaps))
+        let aliases = self.rust_aliases(&refs.rows)?;
+        Ok(assemble(
+            definitions,
+            refs.rows,
+            relationships,
+            refs.gaps,
+            aliases,
+        ))
     }
     pub fn edges(&self, symbol: &str, direction: Direction) -> Result<Edges, String> {
         let graph = self.graph()?;
@@ -119,6 +128,7 @@ fn assemble(
     references: Vec<Row>,
     relationships: Vec<Relationship>,
     gaps: Vec<String>,
+    aliases: HashMap<String, HashSet<String>>,
 ) -> Graph {
     let mut names: HashMap<&str, Vec<&Row>> = HashMap::new();
     for d in &definitions {
@@ -140,6 +150,11 @@ fn assemble(
             vec![row.symbol.clone()]
         } else {
             let candidates = rust_target(&row, &containers)
+                .filter(|parts| {
+                    !aliases
+                        .get(&row.path)
+                        .is_some_and(|names| names.contains(&parts[0]))
+                })
                 .and_then(|path| rust.get(&path))
                 .or_else(|| names.get(row.name.as_str()))
                 .cloned()
